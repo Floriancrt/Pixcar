@@ -1302,7 +1302,23 @@ select {
   background: hsl(var(--h, 255) var(--av-bg));
   color: hsl(var(--h, 255) var(--av-fg));
 }
-/* Avatar d'une enseigne : le logo remplace l'initiale, sur fond blanc (lisible aussi en thème sombre) */
+/* Avatar d'une enseigne : monogramme de marque, remplacé par le logo (sur fond blanc, lisible aussi en sombre) */
+.avatar.mono {
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 0.95rem;
+  letter-spacing: -0.02em;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+.avatar.mono.m2 {
+  font-size: 0.8rem;
+}
+.ref-chain .avatar.mono {
+  font-size: 0.8rem;
+}
+.ref-chain .avatar.mono.m2 {
+  font-size: 0.66rem;
+}
 .avatar .lg {
   position: absolute;
   inset: 0;
@@ -1314,6 +1330,17 @@ select {
 }
 .avatar.lg-wide .lg {
   padding: 0 5%;
+}
+.avatar .lg.fade {
+  animation: lgin 0.28s ease-out both;
+}
+@keyframes lgin {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .avatar.has-logo {
   color: transparent;
@@ -3339,8 +3366,13 @@ html.dlg-open {
             (ODbL). Fond de carte : Plan IGN (Géoplateforme). Avis : le bouton « Avis Google » ouvre la fiche du garage
             sur Google Maps. Contrôle technique : prix déclarés par les centres, publiés par la DGCCRF sur
             <a href="https://prix.conso.gouv.fr/controle-technique" target="_blank" rel="noopener">prix.conso.gouv.fr</a
-            >. Registre : INSEE, via l'API Recherche d'entreprises. Licence Ouverte pour les données publiques. Logos des enseignes : Wikimedia Commons, via
-            Wikidata, et marques de leurs propriétaires.
+            >. Registre : INSEE, via l'API Recherche d'entreprises. Licence Ouverte pour les données publiques.
+          </p>
+          <p>
+            <b>Logos des enseignes.</b> Wikimedia Commons, via Wikidata ; à défaut, l'icône du site de l'enseigne ; sans
+            logo, un monogramme aux couleurs de l'interface (ce ne sont pas les couleurs officielles). Ces marques
+            appartiennent à leurs propriétaires. Pour les charger, votre navigateur contacte ces services, qui voient
+            son adresse IP.
           </p>
           <p>
             <b>Prix et promotions des enseignes.</b> Relevés sur leurs sites le 1<sup>er</sup> octobre 2026. Promotions
@@ -5690,27 +5722,115 @@ html.dlg-open {
     String(e.phone || "")
       .split(/[;,]/)[0]
       .trim();
-  // ----- Logos d'enseignes ---------------------------------------------------------------------
-  // Wikidata fournit l'icône (P8972) ou, à défaut, le logo (P154) de chaque enseigne ; l'image vient de
-  // Wikimedia Commons. Résolu une seule fois (réponse gardée 30 jours) et jamais bloquant : sans logo,
-  // l'avatar garde son initiale. Pour imposer un logo : window.JG_LOGOS = { norauto: "https://…/logo.png" }.
-  const logoKey = "jg.logos.v1",
+  // ----- Enseignes : monogramme de marque, puis vrai logo dès qu'on le trouve --------------------------
+  // Toute enseigne a toujours un avatar « de marque » : monogramme coloré (teintes propres à l'interface, pas les
+  // couleurs officielles). Le logo le remplace dès qu'il est trouvé, dans cet ordre :
+  //   1. Wikidata : icône (P8972) ou logo (P154) de l'enseigne, image de Wikimedia Commons ;
+  //   2. à défaut, l'icône du site officiel (Wikidata P856, ou les sites déjà cités par les prix et promotions de
+  //      la page), acceptée seulement si elle fait au moins 32 px.
+  // Réponse gardée 30 jours, jamais bloquant. Imposer un logo : window.JG_LOGOS = { norauto: "https://…/logo.png" }.
+  // Ne pas contacter les sites des enseignes : window.JG_SITE_ICONS = false (reste Wikidata). Diagnostic : jgLogos().
+  const logoKey = "jg.logos.v2",
+    logoBrand = {
+      norauto: ["#e2231a", "N"],
+      feuvert: ["#00853f", "FV"],
+      speedy: ["#ffd100", "S"],
+      midas: ["#c8102e", "M"],
+      roady: ["#f26522", "R"],
+      euromaster: ["#0057b8", "E"],
+      points: ["#004a99", "PS"],
+      firststop: ["#f2a900", "FS"],
+      vulco: ["#00778a", "V"],
+      profilplus: ["#0072ce", "P+"],
+      siligom: ["#6d28d9", "SG"],
+      eurotyre: ["#a61c2b", "ET"],
+      bestdrive: ["#2f3a4a", "BD"],
+      driver: ["#1396d8", "DC"],
+      eleclerc: ["#0066b3", "L"],
+      cartercash: ["#e8b100", "CC"],
+      eurorepar: ["#1e5bb8", "ER"],
+      motrio: ["#d97706", "MO"],
+      ad: ["#d1001c", "AD"],
+      bosch: ["#e20015", "B"],
+      topgarage: ["#e8590c", "TG"],
+      precisium: ["#0f766e", "PR"],
+      delko: ["#4338ca", "D"],
+      autoprimo: ["#db2777", "AP"],
+      avatacar: ["#059669", "AV"],
+      glass: ["#9b1c31", "CG"],
+    },
+    // réseaux de contrôle technique (clé : nom sans accents ni ponctuation)
+    ctBrand = {
+      autosur: ["#1d4ed8", "A"],
+      dekra: ["#15803d", "D"],
+      securitest: ["#b91c1c", "S"],
+      autovision: ["#0e7490", "AV"],
+      norisko: ["#7c3aed", "N"],
+      verifauto: ["#b45309", "V"],
+      autosecurite: ["#0369a1", "AS"],
+      controleauto: ["#4d7c0f", "CA"],
+    },
     logoMap = {},
-    logoOk = new Set(),
+    logoSite = {},
+    logoWork = {},
+    logoGot = {},
+    logoOwn = {},
     logoTried = new Set(),
     logoWant = new Set(),
     logoWide = new Set(),
-    logoPin = window.JG_LOGOS || {};
+    logoPin = window.JG_LOGOS || {},
+    logoSites = window.JG_SITE_ICONS !== !1,
+    logoLite = !!(navigator.connection && navigator.connection.saveData);
   let logoPromise = null,
     logoReady = !1,
     logoStamp = 0;
-  const logoUrl = (id) => {
-    const u = logoPin[id] || logoMap[id];
-    return u && logoOk.has(u) ? u : "";
-  };
-  function logoShow(a, u) {
+  try {
+    localStorage.removeItem("jg.logos.v1");
+  } catch (e) {}
+  // origine https d'une URL de site (nom de domaine seulement : ni IP, ni localhost, ni port)
+  function logoOrigin(s) {
+    try {
+      const x = new URL(s);
+      return /^https?:$/.test(x.protocol) &&
+        /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(x.hostname) &&
+        !/^\d+(\.\d+){3}$/.test(x.hostname)
+        ? "https://" + x.hostname.toLowerCase()
+        : "";
+    } catch (e) {
+      return "";
+    }
+  }
+  // un site tiré de Wikidata n'est admis que si son domaine (les deux derniers libellés) porte le nom de l'enseigne :
+  // norauto.fr, carter-cash.com, e.leclerc passent ; norauto.exemple.org ou exemple.org non
+  function logoHostOk(id, host) {
+    const t = id.replace(/[^a-z0-9]/g, ""),
+      p = host.toLowerCase().split(".").slice(-2);
+    return t.length < 4
+      ? p.includes(t)
+      : p
+          .join("")
+          .replace(/[^a-z0-9]/g, "")
+          .includes(t);
+  }
+  // sites des enseignes déjà cités par les données de la page (prix, promotions) : ils font foi, avant ceux de Wikidata
+  for (const k in u)
+    for (const x of u[k]) x.c && x.src && !logoOwn[x.c] && (logoOwn[x.c] = logoOrigin(x.src));
+  for (const x of v) x.c && x.src && !logoOwn[x.c] && (logoOwn[x.c] = logoOrigin(x.src));
+  // couleur de texte (blanc ou foncé) qui contraste le mieux avec un fond #rrggbb
+  function logoFg(h) {
+    const [r, g, b] = [1, 3, 5]
+        .map((i) => parseInt(h.slice(i, i + 2), 16) / 255)
+        .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)),
+      L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return (L + 0.05) / 0.0565 > 1.05 / (L + 0.05) ? "#111315" : "#fff";
+  }
+  const logoUrl = (id) => logoGot[id] || "";
+  function logoSave() {
+    P.set(logoKey, { t: logoStamp, m: logoMap, s: logoSite, w: logoWork });
+  }
+  function logoShow(a, u, fade) {
     const i = document.createElement("img");
-    ((i.className = "lg"),
+    ((i.className = "lg" + (fade ? " fade" : "")),
       (i.alt = ""),
       (i.referrerPolicy = "no-referrer"),
       (i.src = u),
@@ -5718,79 +5838,122 @@ html.dlg-open {
       a.classList.add("has-logo"),
       logoWide.has(u) && a.classList.add("lg-wide"));
   }
-  // Pour les seules enseignes affichées : vérifie l'image une fois (un échec n'est jamais mémorisé :
-  // il peut être passager), puis remplace l'initiale des avatars déjà à l'écran
-  function logoApply() {
-    for (const id of logoWant) {
-      const u = logoPin[id] || logoMap[id];
-      if (!u || logoTried.has(u)) continue;
-      logoTried.add(u);
+  // Essaie les candidats dans l'ordre ; le premier qui se charge gagne (une icône de site doit faire >= 32 px).
+  // Un échec n'est jamais mémorisé (il peut être passager) ; on retient seulement ce qui a fonctionné.
+  function logoTry(id) {
+    const c = [];
+    if (logoPin[id]) c.push([logoPin[id], 0]);
+    else if (!logoLite) {
+      const s = logoSites ? logoOwn[id] || logoSite[id] : "",
+        w = logoSites ? logoWork[id] : "";
+      (w && c.push([w, 32]),
+        logoMap[id] && c.push([logoMap[id], 0]),
+        s && [s + "/apple-touch-icon.png", s + "/favicon.ico"].forEach((x) => x !== w && c.push([x, 32])));
+    }
+    const next = () => {
+      const e = c.shift();
+      if (!e) return;
       const i = new Image();
       ((i.referrerPolicy = "no-referrer"),
         (i.onload = () => {
+          if (i.naturalWidth < e[1] || i.naturalHeight < e[1]) return next();
           // logo très large (texte) : on lui laisse presque tout le diamètre, ses coins restent dans le cercle
-          i.naturalWidth >= 1.9 * i.naturalHeight && logoWide.add(u);
-          logoOk.add(u);
-          for (const a of document.querySelectorAll(`.avatar[data-c="${id}"]:not(.has-logo)`)) logoShow(a, u);
+          ((logoGot[id] = e[0]), i.naturalWidth >= 1.9 * i.naturalHeight && logoWide.add(e[0]));
+          e[1] && logoWork[id] !== e[0] && ((logoWork[id] = e[0]), logoSave());
+          for (const a of document.querySelectorAll(`.avatar[data-c="${id}"]:not(.has-logo)`))
+            logoShow(a, e[0], !0);
         }),
-        (i.src = u));
-    }
+        (i.onerror = next),
+        (i.src = e[0]));
+    };
+    next();
+  }
+  // Pour les seules enseignes affichées
+  function logoApply() {
+    for (const id of logoWant) logoTried.has(id) || (logoTried.add(id), logoTry(id));
   }
   function logoLoad() {
     return (
       logoPromise ||
       (logoPromise = (async () => {
-        if (navigator.connection && navigator.connection.saveData) return;
         const c = P.get(logoKey, null);
-        if (c && c.m && c.t && Date.now() - c.t < 30 * 864e5)
-          ((logoStamp = c.t), Object.assign(logoMap, c.m));
-        else
+        if (c && c.m && c.s && c.w && c.t && Date.now() - c.t < 30 * 864e5)
+          ((logoStamp = c.t),
+            Object.assign(logoMap, c.m),
+            Object.assign(logoSite, c.s),
+            Object.assign(logoWork, c.w));
+        else if (!logoLite)
           try {
             const ids = [...new Set(l.flatMap((e) => e.wd || []))],
-              q = `SELECT ?item ?kind ?file ?start WHERE { VALUES ?item { ${ids.map((x) => "wd:" + x).join(" ")} } { ?item p:P8972 ?st. ?st ps:P8972 ?file. BIND(0 AS ?kind) } UNION { ?item p:P154 ?st. ?st ps:P154 ?file. BIND(1 AS ?kind) } FILTER NOT EXISTS { ?st pq:P582 ?end } OPTIONAL { ?st pq:P580 ?start } }`,
+              q = `SELECT ?item ?kind ?val ?start WHERE { VALUES ?item { ${ids.map((x) => "wd:" + x).join(" ")} } { ?item p:P8972 ?st. ?st ps:P8972 ?val. FILTER NOT EXISTS { ?st pq:P582 ?e } OPTIONAL { ?st pq:P580 ?start } BIND(0 AS ?kind) } UNION { ?item p:P154 ?st. ?st ps:P154 ?val. FILTER NOT EXISTS { ?st pq:P582 ?e } OPTIONAL { ?st pq:P580 ?start } BIND(1 AS ?kind) } UNION { ?item wdt:P856 ?val. BIND(9 AS ?kind) } }`,
               r = await F(
                 "https://query.wikidata.org/sparql?format=json&query=" + encodeURIComponent(q),
                 {},
                 9e3,
               );
             if (!r.ok) throw new Error("wikidata " + r.status);
-            const best = {};
-            for (const b of ((await r.json()).results || {}).bindings || []) {
-              // on n'accepte que des fichiers Wikimedia Commons ; l'icône prime sur le logo, puis le plus récent
-              const f = /^https?:\/\/commons\.wikimedia\.org\/wiki\/Special:FilePath\/([^?#]+)$/.exec(
-                  (b.file && b.file.value) || "",
-                ),
-                id = String((b.item && b.item.value) || "")
-                  .split("/")
-                  .pop(),
-                k = +(b.kind && b.kind.value),
-                s = (b.start && b.start.value) || "";
-              if (!f || !(k >= 0)) continue;
-              const o = best[id];
-              (!o || k < o.k || (k === o.k && s > o.s)) &&
-                (best[id] = {
+            const owner = {},
+              best = {},
+              sites = {};
+            for (const e of l) for (const x of e.wd || []) owner[x] = e;
+            for (const row of ((await r.json()).results || {}).bindings || []) {
+              const e =
+                  owner[
+                    String((row.item && row.item.value) || "")
+                      .split("/")
+                      .pop()
+                  ],
+                val = (row.val && row.val.value) || "",
+                k = +(row.kind && row.kind.value);
+              if (!e || !(k >= 0)) continue;
+              if (9 === k) {
+                const h = logoOrigin(val);
+                h && logoHostOk(e.id, h.slice(8)) && !sites[e.id] && (sites[e.id] = h);
+                continue;
+              }
+              // seuls les fichiers de Wikimedia Commons sont acceptés ; l'icône prime sur le logo, puis le plus récent
+              const f = /^https?:\/\/commons\.wikimedia\.org\/wiki\/Special:FilePath\/([^?#]+)$/.exec(val),
+                s = (row.start && row.start.value) || "",
+                o = best[e.id];
+              f &&
+                (!o || k < o.k || (k === o.k && s > o.s)) &&
+                (best[e.id] = {
                   k,
                   s,
                   u: `https://commons.wikimedia.org/wiki/Special:FilePath/${f[1]}?width=128`,
                 });
             }
-            for (const e of l) logoMap[e.id] = ((e.wd || []).map((x) => best[x]).find(Boolean) || {}).u || "";
-            ((logoStamp = Date.now()), P.set(logoKey, { t: logoStamp, m: logoMap }));
+            for (const e of l)
+              ((logoMap[e.id] = (best[e.id] || {}).u || ""), (logoSite[e.id] = sites[e.id] || ""));
+            ((logoStamp = Date.now()), logoSave());
           } catch (e) {}
         ((logoReady = !0), logoApply());
       })())
     );
   }
-  // Pastille « avatar » : logo de l'enseigne s'il est connu, sinon initiale du nom + teinte pastel stable
+  window.jgLogos = () =>
+    Object.fromEntries(
+      l.map((c) => [
+        c.id,
+        {
+          logo: logoMap[c.id] || "",
+          site: logoOwn[c.id] || logoSite[c.id] || "",
+          shown: logoGot[c.id] || "",
+        },
+      ]),
+    );
+  // Pastille « avatar » : monogramme de l'enseigne (ou initiale pastel d'un indépendant), remplacé par son logo s'il est connu
   const AVH = [255, 330, 155, 28, 205, 285];
-  function av(name, c) {
+  function av(name, c, net) {
     const s = String(name || "").trim(),
       m = s.match(/[0-9A-Za-zÀ-ÿ]/),
-      u = c ? logoUrl(c.id) : "";
+      b = (c && logoBrand[c.id]) || (net && ctBrand[k(net).replace(/[^a-z]/g, "")]),
+      g = c ? logoUrl(c.id) : "",
+      t = b ? b[1] : (m ? m[0] : "?").toUpperCase();
     let h = 0;
     for (const ch of s) h = (31 * h + ch.charCodeAt(0)) | 0;
     c && (logoWant.add(c.id), logoReady ? logoApply() : logoLoad());
-    return `<span class="avatar${u ? " has-logo" : ""}${u && logoWide.has(u) ? " lg-wide" : ""}" style="--h:${AVH[Math.abs(h) % AVH.length]}"${c ? ` data-c="${c.id}"` : ""} aria-hidden="true">${y((m ? m[0] : "?").toUpperCase())}${u ? `<img class="lg" alt="" referrerpolicy="no-referrer" src="${y(u)}">` : ""}</span>`;
+    return `<span class="avatar${b ? " mono" : ""}${t.length > 1 ? " m2" : ""}${g ? " has-logo" : ""}${g && logoWide.has(g) ? " lg-wide" : ""}" style="--h:${AVH[Math.abs(h) % AVH.length]}${b ? `;--bg:${b[0]};--fg:${logoFg(b[0])}` : ""}"${c ? ` data-c="${c.id}"` : ""} aria-hidden="true">${y(t)}${g ? `<img class="lg" alt="" referrerpolicy="no-referrer" src="${y(g)}">` : ""}</span>`;
   }
   // Type de garage (enseigne, indépendant…) : partagé par la liste et la barre de la carte
   function kd(e) {
@@ -5812,7 +5975,7 @@ html.dlg-open {
     const i = me.openIds.has(e.id);
     return `<li class="card${i ? " is-open" : ""}${me.sel === e.id ? " is-selected" : ""}" id="c-${t}" data-id="${y(e.id)}">
     <div class="g-main" data-act="more">
-      ${av(e.name, e.chain)}
+      ${av(e.name, e.chain, e.network)}
       <div class="g-id">
         <h3><button type="button" class="g-name linkless" data-act="more" aria-expanded="${i}" aria-controls="m-${t}">${y(e.name)}</button></h3>
         <p class="g-meta"><span class="dist">${he("pin")}<span class="sr-only">à </span>${y(E(e.dist))}</span><span class="kind">${y(a)}</span>${n}</p>
@@ -6066,7 +6229,7 @@ html.dlg-open {
       <button type="button" class="mi-x" data-mi="close" aria-label="Fermer la fiche rapide">${he("close")}</button>
     </div>
     <div class="mi-row">
-      <div class="mi-who">${av(e.name, e.chain)}<span><small>Type</small><b>${y(kd(e))}</b></span></div>
+      <div class="mi-who">${av(e.name, e.chain, e.network)}<span><small>Type</small><b>${y(kd(e))}</b></span></div>
       <dl class="mi-facts">
         <div><dt>Prix</dt><dd>${y(mp(e))}</dd></div>
         <div><dt>Distance</dt><dd>${y(E(e.dist))}</dd></div>
