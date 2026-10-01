@@ -2024,6 +2024,12 @@ select {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+/* adresse en cours de recherche (géocodage inverse) */
+.is-busy {
+  color: var(--ink-3);
+  font-style: italic;
+  font-weight: 500;
+}
 .r-dist {
   justify-self: start;
   padding: 0.3rem 0.7rem;
@@ -3427,16 +3433,18 @@ html.dlg-open {
             contributeurs d'<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener"
               >OpenStreetMap</a
             >
-            (ODbL). Fond de carte : Plan IGN (Géoplateforme). Avis : le bouton « Avis Google » ouvre la fiche du garage
+            (ODbL). Quand OpenStreetMap n'indique pas l'adresse d'un garage, la page affiche l'adresse la plus proche de
+            sa position (Base Adresse Nationale, 80 m au plus), précédée de « ≈ » : c'est une approximation. Fond de
+            carte : Plan IGN (Géoplateforme). Avis : le bouton « Avis Google » ouvre la fiche du garage
             sur Google Maps. Contrôle technique : prix déclarés par les centres, publiés par la DGCCRF sur
             <a href="https://prix.conso.gouv.fr/controle-technique" target="_blank" rel="noopener">prix.conso.gouv.fr</a
             >. Registre : INSEE, via l'API Recherche d'entreprises. Licence Ouverte pour les données publiques.
           </p>
           <p>
-            <b>Logos des enseignes.</b> Wikimedia Commons, via Wikidata ; à défaut, l'icône du site de l'enseigne ; sans
-            logo, un monogramme aux couleurs de l'interface (ce ne sont pas les couleurs officielles). Ces marques
-            appartiennent à leurs propriétaires. Pour les charger, votre navigateur contacte ces services, qui voient
-            son adresse IP.
+            <b>Logos des enseignes.</b> Wikimedia Commons, via Wikidata ; à défaut, l'icône du site officiel de
+            l'enseigne ; sans logo, un monogramme aux couleurs de l'interface (ce ne sont pas les couleurs officielles).
+            Ces marques appartiennent à leurs propriétaires. Pour les charger, votre navigateur contacte ces services,
+            qui voient son adresse IP.
           </p>
           <p>
             <b>Prix et promotions des enseignes.</b> Relevés sur leurs sites le 1<sup>er</sup> octobre 2026. Promotions
@@ -4835,12 +4843,12 @@ html.dlg-open {
             ? ht()
             : dt(`Relancez la recherche pour élargir la zone à ${pe.radius.value} km.`)));
     }));
-  const Re = "jg.osm.v2";
+  const Re = "jg.osm.v3";
   try {
-    localStorage.removeItem("jg.osm.v1");
+    (localStorage.removeItem("jg.osm.v1"), localStorage.removeItem("jg.osm.v2"));
   } catch (e) {}
   const qe =
-    /^(name|brand|brand:fr|brand:wikidata|operator|operator:wikidata|shop|craft|service|phone|contact:phone|phone:mobile|contact:mobile|website|contact:website|opening_hours|addr:housenumber|addr:street|addr:postcode|addr:city|service:vehicle:.+)$/;
+    /^(name|brand|brand:fr|brand:wikidata|operator|operator:wikidata|shop|craft|service|phone|contact:phone|phone:mobile|contact:mobile|website|contact:website|opening_hours|addr:housenumber|addr:street|addr:postcode|addr:city|addr:full|addr:place|addr:suburb|contact:housenumber|contact:street|contact:postcode|contact:city|service:vehicle:.+)$/;
   function Ie(e, t, a, r = 3 * n) {
     const s = P.get(Re, {}) || {},
       i = `${e.toFixed(4)},${t.toFixed(4)}`;
@@ -4869,6 +4877,117 @@ html.dlg-open {
     return null;
   }
   const ze = (e) => Object.keys(e).some((t) => t.startsWith("service:vehicle:") && "yes" === e[t]);
+  // ----- Adresses manquantes : adresse la plus proche de la position (Base Adresse Nationale, Géoplateforme IGN) -----
+  // OpenStreetMap n'a pas toujours l'adresse d'un garage (beaucoup de Speedy, par exemple). À l'ouverture d'une fiche ou à
+  // la sélection d'un garage sans rue, on demande à la BAN l'adresse la plus proche de sa position (80 m au plus) et on
+  // l'affiche précédée de « ≈ » : c'est une approximation, pas l'adresse déclarée. Réponse gardée 90 jours (un refus, 7
+  // jours) ; un échec réseau n'est jamais mémorisé.
+  const adKey = "jg.addr.v1",
+    adRange = 80,
+    adTtl = 90 * 864e5,
+    adNoTtl = 7 * 864e5,
+    adCap = 400,
+    adWait = new Map();
+  let adMem = P.get(adKey, null);
+  adMem = adMem && "object" == typeof adMem && !Array.isArray(adMem) ? adMem : {};
+  const adId = (g) => `${g.lat.toFixed(5)},${g.lon.toFixed(5)}`,
+    adFresh = (e) => !!e && Number.isFinite(e.t) && Date.now() - e.t < (e.a ? adTtl : adNoTtl),
+    adText = (g) => (g.addr ? (g.addrApprox ? "≈ " : "") + g.addr : ""),
+    adTitle = (g) =>
+      g.addrApprox
+        ? `Adresse la plus proche de la position du garage${g.addrDist >= 0 ? " (à " + g.addrDist + " m)" : ""}, d'après la Base Adresse Nationale : à titre indicatif`
+        : "",
+    adTitleAttr = (g) => (g.addrApprox ? ` title="${y(adTitle(g))}"` : ""),
+    adHtml = (g, short) =>
+      g.addr
+        ? (g.addrApprox ? '<span aria-hidden="true">≈ </span><span class="sr-only">Environ </span>' : "") +
+          y(g.addr)
+        : g.addrBusy
+          ? "Recherche de l'adresse…"
+          : short
+            ? "Non renseignée"
+            : "Adresse non renseignée",
+    adGoogle = (e) =>
+      `https://www.google.com/maps/search/${encodeURIComponent([e.name && !/^(Garage \(nom|Spécialiste pneus \(sans)/.test(e.name) ? e.name : "garage", e.addr].filter(Boolean).join(", "))}/@${e.lat.toFixed(6)},${e.lon.toFixed(6)},17z`;
+  function adSave() {
+    const ks = Object.keys(adMem);
+    if (ks.length > adCap)
+      for (const k of ks.sort((a, b) => adMem[a].t - adMem[b].t).slice(0, ks.length - adCap)) delete adMem[k];
+    P.set(adKey, adMem);
+  }
+  function adApply(g, e) {
+    ((g.addr = e.a), (g.addrApprox = !0), (g.addrDist = e.d));
+  }
+  // à la création d'un garage OSM sans rue : reprend une réponse déjà obtenue
+  function adInit(g) {
+    if (g.addrGap) {
+      const e = adMem[adId(g)];
+      adFresh(e) && e.a && adApply(g, e);
+    }
+    return g;
+  }
+  function adRepaint(g) {
+    for (const n of document.querySelectorAll(`[data-ad="${CSS.escape(g.id)}"]`)) {
+      ((n.innerHTML = adHtml(g, !!n.parentElement && "DD" === n.parentElement.tagName)),
+        n.classList.toggle("is-busy", !!g.addrBusy));
+      g.addrApprox ? n.setAttribute("title", adTitle(g)) : n.removeAttribute("title");
+    }
+    me.sel === g.id && Mk.has(g.id) && bindTip(Mk.get(g.id), g, !0);
+    const c = pe.list.querySelector(`[data-id="${CSS.escape(g.id)}"] .act-reviews`);
+    c && (c.href = adGoogle(g));
+  }
+  function adFetch(g) {
+    const k = adId(g);
+    if (adWait.has(k)) return adWait.get(k);
+    const p = (async () => {
+      try {
+        const r = await F(
+          `https://data.geopf.fr/geocodage/reverse?lon=${g.lon}&lat=${g.lat}&limit=1`,
+          {},
+          7e3,
+        );
+        if (!r.ok) throw new Error("reverse " + r.status);
+        const f = ((await r.json()).features || [])[0] || {},
+          o = f.properties || {},
+          c = (f.geometry || {}).coordinates,
+          a = q(
+            o.name && (o.postcode || o.city)
+              ? `${o.name}, ${[o.postcode, o.city].filter(Boolean).join(" ")}`
+              : o.label || "",
+          ),
+          d =
+            Array.isArray(c) && Number.isFinite(+c[0]) && Number.isFinite(+c[1])
+              ? 1e3 * _(g, { lat: +c[1], lon: +c[0] })
+              : +o.distance,
+          e = a && d >= 0 && d <= adRange ? { a, d: Math.round(d), t: Date.now() } : { a: "", t: Date.now() };
+        return ((adMem[k] = e), adSave(), e);
+      } catch (e) {
+        return null;
+      } finally {
+        adWait.delete(k);
+      }
+    })();
+    return (adWait.set(k, p), p);
+  }
+  // Appelé à l'ouverture d'une fiche et à la sélection : une seule demande par position, une nouvelle tentative au plus
+  function adEnsure(g) {
+    if (!g || "osm" !== g.src || !g.addrGap || g.addrApprox || g.addrBusy || g.addrFin)
+      return Promise.resolve();
+    if (!Number.isFinite(g.lat) || !Number.isFinite(g.lon)) return Promise.resolve();
+    const e = adMem[adId(g)];
+    if (adFresh(e)) return ((g.addrFin = !0), e.a && (adApply(g, e), adRepaint(g)), Promise.resolve());
+    return (
+      (g.addrBusy = !0),
+      adRepaint(g),
+      adFetch(g).then((e) => {
+        ((g.addrBusy = !1),
+          e
+            ? ((g.addrFin = !0), e.a && adApply(g, e))
+            : (g.addrFail = (g.addrFail || 0) + 1) > 1 && (g.addrFin = !0),
+          adRepaint(g));
+      })
+    );
+  }
   function Be(e) {
     const t = e.tags || {},
       a = $(e.lat ?? (e.center && e.center.lat)),
@@ -4891,10 +5010,21 @@ html.dlg-open {
     if (!s) return null;
     const i = t.name || t.brand || t.operator,
       o = i ? q(i) : "tyres" === s ? "Spécialiste pneus (sans nom)" : "Garage (nom non renseigné)",
-      l = [t["addr:housenumber"], t["addr:street"]].filter(Boolean).join(" "),
-      d = [t["addr:postcode"], t["addr:city"]].filter(Boolean).join(" "),
+      l = [
+        t["addr:housenumber"] || t["contact:housenumber"],
+        t["addr:street"] || t["contact:street"] || t["addr:place"],
+      ]
+        .filter(Boolean)
+        .join(" "),
+      d = [
+        t["addr:postcode"] || t["contact:postcode"],
+        t["addr:city"] || t["contact:city"] || t["addr:suburb"],
+      ]
+        .filter(Boolean)
+        .join(" "),
+      gap = !(t["addr:street"] || t["contact:street"] || t["addr:place"] || t["addr:full"]),
       u = k(t.name || "");
-    return {
+    return adInit({
       id: `osm:${e.type}/${e.id}`,
       src: "osm",
       name: o,
@@ -4903,7 +5033,8 @@ html.dlg-open {
       tags: t,
       shop: s,
       chain: r,
-      addr: [l, d].filter(Boolean).join(", "),
+      addr: [l, d].filter(Boolean).join(", ") || q(t["addr:full"] || ""),
+      addrGap: gap,
       phone: t.phone || t["contact:phone"] || t["phone:mobile"] || t["contact:mobile"] || "",
       web: T(t.website || t["contact:website"] || ""),
       hours: t.opening_hours || "",
@@ -4912,7 +5043,7 @@ html.dlg-open {
         /carross/.test(u) &&
         !/meca|garage|pneu|entretien|reparation|service/.test(u.replace(/carross\w*/g, "")),
       osmUrl: `https://www.openstreetmap.org/${e.type}/${e.id}`,
-    };
+    });
   }
   const Ne = new Set([
     "garage",
@@ -5790,10 +5921,12 @@ html.dlg-open {
   // Toute enseigne a toujours un avatar « de marque » : monogramme coloré (teintes propres à l'interface, pas les
   // couleurs officielles). Le logo le remplace dès qu'il est trouvé, dans cet ordre :
   //   1. Wikidata : icône (P8972) ou logo (P154) de l'enseigne, image de Wikimedia Commons ;
-  //   2. à défaut, l'icône du site officiel (Wikidata P856, ou les sites déjà cités par les prix et promotions de
-  //      la page), acceptée seulement si elle fait au moins 32 px.
+  //   2. à défaut, l'icône du site officiel (apple-touch-icon, favicon.ico), acceptée seulement si elle fait au moins
+  //      32 px. Le site est celui des prix et promotions de la page, sinon celui de la table logoDom, sinon celui de
+  //      Wikidata (P856). Ce palier ne dépend pas de Wikidata : il démarre au bout de 2,5 s au plus, réponse ou non.
   // Réponse gardée 30 jours, jamais bloquant. Imposer un logo : window.JG_LOGOS = { norauto: "https://…/logo.png" }.
-  // Ne pas contacter les sites des enseignes : window.JG_SITE_ICONS = false (reste Wikidata). Diagnostic : jgLogos().
+  // Ne pas contacter les sites des enseignes : window.JG_SITE_ICONS = false. Ne pas interroger Wikidata :
+  // window.JG_WIKIDATA = false. Diagnostic : jgLogos().
   const logoKey = "jg.logos.v2",
     logoBrand = {
       norauto: ["#e2231a", "N"],
@@ -5834,6 +5967,29 @@ html.dlg-open {
       autosecurite: ["#0369a1", "AS"],
       controleauto: ["#4d7c0f", "CA"],
     },
+    // sites officiels des enseignes sans site dans les données de la page, relevés par recherche web le 1er octobre 2026
+    // (à revérifier avec jgLogos() si un logo manque ; Driver Center : aucun site français trouvé)
+    logoDom = {
+      points: "https://www.points.fr",
+      firststop: "https://www.firststop.fr",
+      vulco: "https://www.vulco.fr",
+      profilplus: "https://www.profilplus.fr",
+      siligom: "https://www.siligom.fr",
+      eurotyre: "https://www.eurotyre.fr",
+      bestdrive: "https://www.bestdrive.fr",
+      eleclerc: "https://www.auto.leclerc",
+      cartercash: "https://www.carter-cash.com",
+      eurorepar: "https://www.eurorepar.fr",
+      motrio: "https://www.motrio.fr",
+      ad: "https://www.ad.fr",
+      bosch: "https://www.boschcarservice.com",
+      topgarage: "https://www.top-garage.fr",
+      precisium: "https://www.precisium.fr",
+      delko: "https://www.delko.fr",
+      autoprimo: "https://www.autoprimo.com",
+      avatacar: "https://www.avatacar.com",
+      glass: "https://www.carglass.fr",
+    },
     logoMap = {},
     logoSite = {},
     logoWork = {},
@@ -5842,8 +5998,11 @@ html.dlg-open {
     logoTried = new Set(),
     logoWant = new Set(),
     logoWide = new Set(),
+    logoBusy = new Set(),
+    logoMiss = new Set(),
     logoPin = window.JG_LOGOS || {},
     logoSites = window.JG_SITE_ICONS !== !1,
+    logoWiki = window.JG_WIKIDATA !== !1,
     logoLite = !!(navigator.connection && navigator.connection.saveData);
   let logoPromise = null,
     logoReady = !1,
@@ -5880,6 +6039,7 @@ html.dlg-open {
   for (const k in u)
     for (const x of u[k]) x.c && x.src && !logoOwn[x.c] && (logoOwn[x.c] = logoOrigin(x.src));
   for (const x of v) x.c && x.src && !logoOwn[x.c] && (logoOwn[x.c] = logoOrigin(x.src));
+  for (const k in logoDom) logoOwn[k] || (logoOwn[k] = logoOrigin(logoDom[k]));
   // couleur de texte (blanc ou foncé) qui contraste le mieux avec un fond #rrggbb
   function logoFg(h) {
     const [r, g, b] = [1, 3, 5]
@@ -5914,20 +6074,25 @@ html.dlg-open {
         logoMap[id] && c.push([logoMap[id], 0]),
         s && [s + "/apple-touch-icon.png", s + "/favicon.ico"].forEach((x) => x !== w && c.push([x, 32])));
     }
+    // ce qui a déjà échoué pendant cette visite n'est pas redemandé (réponse tardive de Wikidata : seconde chance)
+    for (let n = c.length; n--; ) logoMiss.has(c[n][0]) && c.splice(n, 1);
+    logoBusy.add(id);
     const next = () => {
       const e = c.shift();
-      if (!e) return;
+      if (!e) return void logoBusy.delete(id);
       const i = new Image();
       ((i.referrerPolicy = "no-referrer"),
         (i.onload = () => {
-          if (i.naturalWidth < e[1] || i.naturalHeight < e[1]) return next();
+          if (i.naturalWidth < e[1] || i.naturalHeight < e[1]) return (logoMiss.add(e[0]), next());
           // logo très large (texte) : on lui laisse presque tout le diamètre, ses coins restent dans le cercle
-          ((logoGot[id] = e[0]), i.naturalWidth >= 1.9 * i.naturalHeight && logoWide.add(e[0]));
+          (logoBusy.delete(id),
+            (logoGot[id] = e[0]),
+            i.naturalWidth >= 1.9 * i.naturalHeight && logoWide.add(e[0]));
           e[1] && logoWork[id] !== e[0] && ((logoWork[id] = e[0]), logoSave());
           for (const a of document.querySelectorAll(`.avatar[data-c="${id}"]:not(.has-logo)`))
             logoShow(a, e[0], !0);
         }),
-        (i.onerror = next),
+        (i.onerror = () => (logoMiss.add(e[0]), next())),
         (i.src = e[0]));
     };
     next();
@@ -5936,17 +6101,25 @@ html.dlg-open {
   function logoApply() {
     for (const id of logoWant) logoTried.has(id) || (logoTried.add(id), logoTry(id));
   }
+  // Une réponse tardive de Wikidata donne une seconde chance aux enseignes qui n'ont toujours pas de logo
+  function logoRetry() {
+    for (const id of logoWant) logoGot[id] || logoBusy.has(id) || logoTried.delete(id);
+    logoApply();
+  }
   function logoLoad() {
     return (
       logoPromise ||
       (logoPromise = (async () => {
         const c = P.get(logoKey, null);
-        if (c && c.m && c.s && c.w && c.t && Date.now() - c.t < 30 * 864e5)
+        if (c && c.m && c.s && c.w && c.t && Date.now() - c.t < 30 * 864e5) {
           ((logoStamp = c.t),
             Object.assign(logoMap, c.m),
             Object.assign(logoSite, c.s),
             Object.assign(logoWork, c.w));
-        else if (!logoLite)
+          return ((logoReady = !0), logoApply());
+        }
+        if (logoLite || !logoWiki) return ((logoReady = !0), logoApply());
+        const wiki = (async () => {
           try {
             const ids = [...new Set(l.flatMap((e) => e.wd || []))],
               q = `SELECT ?item ?kind ?val ?start WHERE { VALUES ?item { ${ids.map((x) => "wd:" + x).join(" ")} } { ?item p:P8972 ?st. ?st ps:P8972 ?val. FILTER NOT EXISTS { ?st pq:P582 ?e } OPTIONAL { ?st pq:P580 ?start } BIND(0 AS ?kind) } UNION { ?item p:P154 ?st. ?st ps:P154 ?val. FILTER NOT EXISTS { ?st pq:P582 ?e } OPTIONAL { ?st pq:P580 ?start } BIND(1 AS ?kind) } UNION { ?item wdt:P856 ?val. BIND(9 AS ?kind) } }`,
@@ -5991,7 +6164,12 @@ html.dlg-open {
               ((logoMap[e.id] = (best[e.id] || {}).u || ""), (logoSite[e.id] = sites[e.id] || ""));
             ((logoStamp = Date.now()), logoSave());
           } catch (e) {}
+        })();
+        // le palier 2 (icône du site officiel) ne dépend pas de Wikidata : il démarre au bout de 2,5 s au plus
+        await Promise.race([wiki, new Promise((r) => setTimeout(r, 2500))]);
         ((logoReady = !0), logoApply());
+        await wiki;
+        logoRetry();
       })())
     );
   }
@@ -6072,7 +6250,7 @@ html.dlg-open {
     return me.place && Number.isFinite(e.dist)
       ? `<div class="route" role="group" aria-label="Trajet à vol d'oiseau">
       <div class="r-step r-from"><span class="r-lbl">Votre adresse</span><span class="r-val">${y(me.place.label || "Adresse de recherche")}</span></div>
-      <div class="r-step r-to"><span class="r-lbl">${"ct" === me.kind ? "Centre" : "Garage"}</span><span class="r-val">${y(e.addr || "Adresse non renseignée")}</span></div>
+      <div class="r-step r-to"><span class="r-lbl">${"ct" === me.kind ? "Centre" : "Garage"}</span><span class="r-val" data-ad="${y(e.id)}" aria-live="polite"${adTitleAttr(e)}>${adHtml(e)}</span></div>
       <span class="r-dist">${y(E(e.dist))} à vol d'oiseau</span>
     </div>`
       : "";
@@ -6081,7 +6259,12 @@ html.dlg-open {
     const a = vt(e),
       n = rb(e),
       r = [
-        n ? null : ["Adresse", y(e.addr || "Non renseignée")],
+        n
+          ? null
+          : [
+              "Adresse",
+              `<span data-ad="${y(e.id)}" aria-live="polite"${adTitleAttr(e)}>${adHtml(e, !0)}</span>`,
+            ],
         a
           ? [
               "Téléphone",
@@ -6174,6 +6357,7 @@ html.dlg-open {
       e.classList.toggle("is-open", r),
       e.querySelector(".g-name").setAttribute("aria-expanded", String(r)),
       (e.querySelector(".chev").textContent = r ? "Masquer" : "Détails"));
+    r && n && adEnsure(n);
   }
   // Une seule fiche ouverte à la fois : l'ouvrir la sélectionne (carte + barre récapitulative)
   function kt(e, t) {
@@ -6243,7 +6427,7 @@ html.dlg-open {
     (m.unbindTooltip(),
       m.bindTooltip(
         t
-          ? `<b>${y(e.name)}</b><span>${y(e.addr || mp(e))}</span>`
+          ? `<b>${y(e.name)}</b><span>${y(adText(e) || mp(e))}</span>`
           : `<b>${y(e.name)}</b><span>${y(mp(e))} · ${y(E(e.dist))}</span>`,
         {
           permanent: t,
@@ -6314,6 +6498,7 @@ html.dlg-open {
       e && e.classList.add("is-selected");
     }
     ((pe.mapInfo.innerHTML = t ? mi(t) : ""), (pe.mapInfo.hidden = !t || pe.mapPane.hidden), slMap(!0));
+    t && adEnsure(t);
   }
   // Ferme la barre : referme aussi la fiche ouverte
   function sx() {
@@ -6596,7 +6781,7 @@ html.dlg-open {
     return {
       id: e.id,
       name: e.name,
-      addr: e.addr || "",
+      addr: adText(e),
       lat: Number.isFinite(e.lat) ? e.lat : null,
       lon: Number.isFinite(e.lon) ? e.lon : null,
       chainId: e.chain ? e.chain.id : e.chainId || "",
@@ -6651,6 +6836,13 @@ html.dlg-open {
   function Nt(e) {
     const t = Pt.items[e];
     t && (Bt(), (Pt.picked = t), (Pt.garage.value = t.name), Tt(Pt.garage, Pt.gErr, ""), zt(), Dt());
+    if (t && !t.addr && "search" === t.src) {
+      const g = me.garages.find((x) => x.id === t.id);
+      g &&
+        adEnsure(g).then(() => {
+          Pt.picked === t && g.addr && ((t.addr = adText(g)), Dt());
+        });
+    }
   }
   (Pt.garage.addEventListener("input", () => {
     ((Pt.picked = null), Tt(Pt.garage, Pt.gErr, ""), Dt(), Bt());
