@@ -1290,6 +1290,8 @@ select {
   height: 11px;
 }
 .avatar {
+  position: relative;
+  overflow: hidden;
   flex: none;
   display: grid;
   place-items: center;
@@ -1299,6 +1301,24 @@ select {
   font: 800 1rem/1 var(--font);
   background: hsl(var(--h, 255) var(--av-bg));
   color: hsl(var(--h, 255) var(--av-fg));
+}
+/* Avatar d'une enseigne : le logo remplace l'initiale, sur fond blanc (lisible aussi en thème sombre) */
+.avatar .lg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 15%;
+  object-fit: contain;
+  background: #fff;
+}
+.avatar.lg-wide .lg {
+  padding: 0 5%;
+}
+.avatar.has-logo {
+  color: transparent;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line);
 }
 .stars {
   position: relative;
@@ -3319,7 +3339,8 @@ html.dlg-open {
             (ODbL). Fond de carte : Plan IGN (Géoplateforme). Avis : le bouton « Avis Google » ouvre la fiche du garage
             sur Google Maps. Contrôle technique : prix déclarés par les centres, publiés par la DGCCRF sur
             <a href="https://prix.conso.gouv.fr/controle-technique" target="_blank" rel="noopener">prix.conso.gouv.fr</a
-            >. Registre : INSEE, via l'API Recherche d'entreprises. Licence Ouverte pour les données publiques.
+            >. Registre : INSEE, via l'API Recherche d'entreprises. Licence Ouverte pour les données publiques. Logos des enseignes : Wikimedia Commons, via
+            Wikidata, et marques de leurs propriétaires.
           </p>
           <p>
             <b>Prix et promotions des enseignes.</b> Relevés sur leurs sites le 1<sup>er</sup> octobre 2026. Promotions
@@ -4519,7 +4540,7 @@ html.dlg-open {
         let n = t
           .map((t, n) => {
             const r = oe(t.c, e.id);
-            return `\n    <li>\n      <span class="ref-chain">${av(D(t.c).name)}${y(D(t.c).name)}${0 === n && a && !t.partial ? ' <span class="tag ok">Le moins cher</span>' : ""}${t.partial ? ' <span class="tag warn">Pièces en plus</span>' : ""}${r.length ? " " + ce(r) : ""}</span>\n      <span class="ref-label">${y(t.label)}</span>\n      <span class="ref-price">${t.from ? "<small>dès</small> " : ""}${t.approx ? "<small>env.</small> " : ""}${C(t.p)}${e.unit ? `<br><small>${y(e.unit)}</small>` : ""}</span>\n      ${t.note ? `<span class="ref-note">${y(t.note)}</span>` : ""}\n      ${r.length ? `<div class="ref-promos">${ue(r, e.id)}</div>` : ""}\n      <a class="ref-src" href="${y(t.src)}" target="_blank" rel="noopener">Source : ${y(R(t.src))}</a>\n    </li>`;
+            return `\n    <li>\n      <span class="ref-chain">${av(D(t.c).name, D(t.c))}${y(D(t.c).name)}${0 === n && a && !t.partial ? ' <span class="tag ok">Le moins cher</span>' : ""}${t.partial ? ' <span class="tag warn">Pièces en plus</span>' : ""}${r.length ? " " + ce(r) : ""}</span>\n      <span class="ref-label">${y(t.label)}</span>\n      <span class="ref-price">${t.from ? "<small>dès</small> " : ""}${t.approx ? "<small>env.</small> " : ""}${C(t.p)}${e.unit ? `<br><small>${y(e.unit)}</small>` : ""}</span>\n      ${t.note ? `<span class="ref-note">${y(t.note)}</span>` : ""}\n      ${r.length ? `<div class="ref-promos">${ue(r, e.id)}</div>` : ""}\n      <a class="ref-src" href="${y(t.src)}" target="_blank" rel="noopener">Source : ${y(R(t.src))}</a>\n    </li>`;
           })
           .join("");
         t.length ||
@@ -4534,7 +4555,7 @@ html.dlg-open {
           (n += s
             .map(
               (t) =>
-                `\n    <li>\n      <span class="ref-chain">${av(D(t.c).name)}${y(D(t.c).name)} ${ce(t.ps)}</span>\n      <span class="ref-label">Pas de prix national publié : tarif fixé par chaque centre.</span>\n      <div class="ref-promos">${ue(t.ps, e.id)}</div>\n    </li>`,
+                `\n    <li>\n      <span class="ref-chain">${av(D(t.c).name, D(t.c))}${y(D(t.c).name)} ${ce(t.ps)}</span>\n      <span class="ref-label">Pas de prix national publié : tarif fixé par chaque centre.</span>\n      <div class="ref-promos">${ue(t.ps, e.id)}</div>\n    </li>`,
             )
             .join(""))),
           (pe.refList.innerHTML = n));
@@ -5669,14 +5690,107 @@ html.dlg-open {
     String(e.phone || "")
       .split(/[;,]/)[0]
       .trim();
-  // Pastille « avatar » : initiale du nom + teinte pastel stable
+  // ----- Logos d'enseignes ---------------------------------------------------------------------
+  // Wikidata fournit l'icône (P8972) ou, à défaut, le logo (P154) de chaque enseigne ; l'image vient de
+  // Wikimedia Commons. Résolu une seule fois (réponse gardée 30 jours) et jamais bloquant : sans logo,
+  // l'avatar garde son initiale. Pour imposer un logo : window.JG_LOGOS = { norauto: "https://…/logo.png" }.
+  const logoKey = "jg.logos.v1",
+    logoMap = {},
+    logoOk = new Set(),
+    logoTried = new Set(),
+    logoWant = new Set(),
+    logoWide = new Set(),
+    logoPin = window.JG_LOGOS || {};
+  let logoPromise = null,
+    logoReady = !1,
+    logoStamp = 0;
+  const logoUrl = (id) => {
+    const u = logoPin[id] || logoMap[id];
+    return u && logoOk.has(u) ? u : "";
+  };
+  function logoShow(a, u) {
+    const i = document.createElement("img");
+    ((i.className = "lg"),
+      (i.alt = ""),
+      (i.referrerPolicy = "no-referrer"),
+      (i.src = u),
+      a.appendChild(i),
+      a.classList.add("has-logo"),
+      logoWide.has(u) && a.classList.add("lg-wide"));
+  }
+  // Pour les seules enseignes affichées : vérifie l'image une fois (un échec n'est jamais mémorisé :
+  // il peut être passager), puis remplace l'initiale des avatars déjà à l'écran
+  function logoApply() {
+    for (const id of logoWant) {
+      const u = logoPin[id] || logoMap[id];
+      if (!u || logoTried.has(u)) continue;
+      logoTried.add(u);
+      const i = new Image();
+      ((i.referrerPolicy = "no-referrer"),
+        (i.onload = () => {
+          // logo très large (texte) : on lui laisse presque tout le diamètre, ses coins restent dans le cercle
+          i.naturalWidth >= 1.9 * i.naturalHeight && logoWide.add(u);
+          logoOk.add(u);
+          for (const a of document.querySelectorAll(`.avatar[data-c="${id}"]:not(.has-logo)`)) logoShow(a, u);
+        }),
+        (i.src = u));
+    }
+  }
+  function logoLoad() {
+    return (
+      logoPromise ||
+      (logoPromise = (async () => {
+        if (navigator.connection && navigator.connection.saveData) return;
+        const c = P.get(logoKey, null);
+        if (c && c.m && c.t && Date.now() - c.t < 30 * 864e5)
+          ((logoStamp = c.t), Object.assign(logoMap, c.m));
+        else
+          try {
+            const ids = [...new Set(l.flatMap((e) => e.wd || []))],
+              q = `SELECT ?item ?kind ?file ?start WHERE { VALUES ?item { ${ids.map((x) => "wd:" + x).join(" ")} } { ?item p:P8972 ?st. ?st ps:P8972 ?file. BIND(0 AS ?kind) } UNION { ?item p:P154 ?st. ?st ps:P154 ?file. BIND(1 AS ?kind) } FILTER NOT EXISTS { ?st pq:P582 ?end } OPTIONAL { ?st pq:P580 ?start } }`,
+              r = await F(
+                "https://query.wikidata.org/sparql?format=json&query=" + encodeURIComponent(q),
+                {},
+                9e3,
+              );
+            if (!r.ok) throw new Error("wikidata " + r.status);
+            const best = {};
+            for (const b of ((await r.json()).results || {}).bindings || []) {
+              // on n'accepte que des fichiers Wikimedia Commons ; l'icône prime sur le logo, puis le plus récent
+              const f = /^https?:\/\/commons\.wikimedia\.org\/wiki\/Special:FilePath\/([^?#]+)$/.exec(
+                  (b.file && b.file.value) || "",
+                ),
+                id = String((b.item && b.item.value) || "")
+                  .split("/")
+                  .pop(),
+                k = +(b.kind && b.kind.value),
+                s = (b.start && b.start.value) || "";
+              if (!f || !(k >= 0)) continue;
+              const o = best[id];
+              (!o || k < o.k || (k === o.k && s > o.s)) &&
+                (best[id] = {
+                  k,
+                  s,
+                  u: `https://commons.wikimedia.org/wiki/Special:FilePath/${f[1]}?width=128`,
+                });
+            }
+            for (const e of l) logoMap[e.id] = ((e.wd || []).map((x) => best[x]).find(Boolean) || {}).u || "";
+            ((logoStamp = Date.now()), P.set(logoKey, { t: logoStamp, m: logoMap }));
+          } catch (e) {}
+        ((logoReady = !0), logoApply());
+      })())
+    );
+  }
+  // Pastille « avatar » : logo de l'enseigne s'il est connu, sinon initiale du nom + teinte pastel stable
   const AVH = [255, 330, 155, 28, 205, 285];
-  function av(name) {
+  function av(name, c) {
     const s = String(name || "").trim(),
-      m = s.match(/[0-9A-Za-zÀ-ÿ]/);
+      m = s.match(/[0-9A-Za-zÀ-ÿ]/),
+      u = c ? logoUrl(c.id) : "";
     let h = 0;
-    for (const c of s) h = (31 * h + c.charCodeAt(0)) | 0;
-    return `<span class="avatar" style="--h:${AVH[Math.abs(h) % AVH.length]}" aria-hidden="true">${y((m ? m[0] : "?").toUpperCase())}</span>`;
+    for (const ch of s) h = (31 * h + ch.charCodeAt(0)) | 0;
+    c && (logoWant.add(c.id), logoReady ? logoApply() : logoLoad());
+    return `<span class="avatar${u ? " has-logo" : ""}${u && logoWide.has(u) ? " lg-wide" : ""}" style="--h:${AVH[Math.abs(h) % AVH.length]}"${c ? ` data-c="${c.id}"` : ""} aria-hidden="true">${y((m ? m[0] : "?").toUpperCase())}${u ? `<img class="lg" alt="" referrerpolicy="no-referrer" src="${y(u)}">` : ""}</span>`;
   }
   // Type de garage (enseigne, indépendant…) : partagé par la liste et la barre de la carte
   function kd(e) {
@@ -5698,7 +5812,7 @@ html.dlg-open {
     const i = me.openIds.has(e.id);
     return `<li class="card${i ? " is-open" : ""}${me.sel === e.id ? " is-selected" : ""}" id="c-${t}" data-id="${y(e.id)}">
     <div class="g-main" data-act="more">
-      ${av(e.name)}
+      ${av(e.name, e.chain)}
       <div class="g-id">
         <h3><button type="button" class="g-name linkless" data-act="more" aria-expanded="${i}" aria-controls="m-${t}">${y(e.name)}</button></h3>
         <p class="g-meta"><span class="dist">${he("pin")}<span class="sr-only">à </span>${y(E(e.dist))}</span><span class="kind">${y(a)}</span>${n}</p>
@@ -5952,7 +6066,7 @@ html.dlg-open {
       <button type="button" class="mi-x" data-mi="close" aria-label="Fermer la fiche rapide">${he("close")}</button>
     </div>
     <div class="mi-row">
-      <div class="mi-who">${av(e.name)}<span><small>Type</small><b>${y(kd(e))}</b></span></div>
+      <div class="mi-who">${av(e.name, e.chain)}<span><small>Type</small><b>${y(kd(e))}</b></span></div>
       <dl class="mi-facts">
         <div><dt>Prix</dt><dd>${y(mp(e))}</dd></div>
         <div><dt>Distance</dt><dd>${y(E(e.dist))}</dd></div>
