@@ -10,6 +10,18 @@ import { createDb } from "./db.mjs";
 import { migrate } from "./migrate.mjs";
 
 const COMPRESSIBLE = /^(application\/json|text\/|application\/javascript|image\/svg\+xml)/i;
+// Une réponse identique (même ETag) est compressée une fois, pas à chaque requête : c'est le coût le plus lourd d'une lecture.
+const packed = new Map();
+const pack = (key, make) => {
+  if (!key) return make();
+  let hit = packed.get(key);
+  if (!hit) {
+    hit = make();
+    packed.set(key, hit);
+    if (packed.size > 200) packed.delete(packed.keys().next().value);
+  }
+  return hit;
+};
 
 // Pont entre node:http et une fonction fetch(Request) → Response
 export function toNodeListener(app, { onError = () => {} } = {}) {
@@ -27,11 +39,13 @@ export function toNodeListener(app, { onError = () => {} } = {}) {
       const type = response.headers.get("content-type") || "";
       const accept = String(req.headers["accept-encoding"] || "");
       if (body.length >= 1024 && COMPRESSIBLE.test(type) && !response.headers.has("content-encoding")) {
+        const etag = response.headers.get("etag");
+        const plain = body;
         if (/\bbr\b/.test(accept)) {
-          body = brotliCompressSync(body, { params: { [constants.BROTLI_PARAM_QUALITY]: 4 } });
+          body = pack(etag && "br|" + etag, () => brotliCompressSync(plain, { params: { [constants.BROTLI_PARAM_QUALITY]: 4 } }));
           res.setHeader("content-encoding", "br");
         } else if (/\bgzip\b/.test(accept)) {
-          body = gzipSync(body, { level: 6 });
+          body = pack(etag && "gzip|" + etag, () => gzipSync(plain, { level: 6 }));
           res.setHeader("content-encoding", "gzip");
         }
         if (res.hasHeader("content-encoding")) res.setHeader("vary", [res.getHeader("vary"), "Accept-Encoding"].filter(Boolean).join(", "));

@@ -224,6 +224,22 @@ describe("GET /v1/overpass", () => {
     }
   });
 
+  test("the in-memory copies are bounded in number and in bytes (a big city's 50 km area is several MB)", async () => {
+    const big = Array.from({ length: 400 }, (_, i) => ({ type: "node", id: i, lat: 45, lon: 4, tags: { name: "Garage numéro " + i + " ".repeat(200) } })); // ≈ 100 Ko par zone
+    const up = upstream({ [A]: { json: { elements: big } } });
+    const t = await makeApp({ fetchImpl: up.fetchImpl, overpassOptions: { ...FAST, memoryBytes: 250_000, memoryEntries: 100 }, config: { readLimitPerMinute: 1000, upstreamMissLimitPerMinute: 1000 } });
+    try {
+      for (let i = 0; i < 6; i++) assert.equal((await t.call("GET", `/v1/overpass?data=${query(45 + i / 10, 4.9)}`)).status, 200);
+      const stats = t.app.overpass.stats();
+      assert.ok(stats.memoryBytes <= 250_000 + 130_000 && stats.memory <= 3, JSON.stringify(stats)); // jamais plus que la limite, plus la dernière zone posée
+      const again = await t.call("GET", `/v1/overpass?data=${query(45, 4.9)}`); // la plus ancienne a été oubliée en mémoire, la base la sert
+      assert.equal(again.status, 200);
+      assert.equal(again.headers.get("x-pixcar-source"), "db");
+    } finally {
+      await t.close();
+    }
+  });
+
   test("a visitor can only trigger so many upstream calls per minute; cached areas stay free", async () => {
     const up = upstream();
     const t = await makeApp({ fetchImpl: up.fetchImpl, overpassOptions: FAST, config: { upstreamMissLimitPerMinute: 2, readLimitPerMinute: 1000 } });

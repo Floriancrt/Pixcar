@@ -4,7 +4,7 @@
 // Principe d'exploitation : l'API est une AMÉLIORATION de la page, pas un prérequis. Elle échoue vite et proprement
 // (503 + Retry-After), garde de quoi répondre quand la base tombe (copie de la dernière bonne réponse), et ne retient
 // aucun état en mémoire dont une autre instance aurait besoin : on en lance autant qu'on veut derrière un répartiteur.
-import { apiError, corsHeaders, etagResponse, json, readJson, withHeaders } from "./lib/http.mjs";
+import { apiError, corsHeaders, etagOf, etagResponse, json, readJson, withHeaders } from "./lib/http.mjs";
 import { hmac, randomHex, sha256 } from "./lib/crypto.mjs";
 import { RADII_KM, cellOf } from "./lib/geo.mjs";
 import { createMemoryLimiter } from "./lib/ratelimit.mjs";
@@ -55,7 +55,7 @@ export function createApp({ db, config, services, fetchImpl = globalThis.fetch, 
   const proxy = createOverpassProxy({ repo, fetchImpl, now, log, userAgent: config.overpassUserAgent, ...overpassOptions });
   const readLimiter = createMemoryLimiter({ limit: config.readLimitPerMinute, windowMs: 60_000, now });
   const missLimiter = createMemoryLimiter({ limit: config.upstreamMissLimitPerMinute, windowMs: 60_000, now });
-  const areaCache = new Map(); // « y,x,rayon » → { text, at }
+  const areaCache = new Map(); // « y,x,rayon » → { text, etag, at }
   const areaInflight = new Map();
   const textOf = new WeakMap(); // réponse Overpass (objet) → texte JSON
   let draining = false; // arrêt demandé : /readyz répond 503 pour que le répartiteur nous retire avant la fermeture
@@ -85,34 +85,35 @@ export function createApp({ db, config, services, fetchImpl = globalThis.fetch, 
     const cell = cellOf(lat, lon);
     const key = `${cell.y},${cell.x},${radius}`;
     const hit = areaCache.get(key);
-    let text, stale = false;
-    if (hit && now() - hit.at < AREA_FRESH_MS) text = hit.text;
+    let text, etag, stale = false;
+    if (hit && now() - hit.at < AREA_FRESH_MS) ({ text, etag } = hit);
     else {
       let flight = areaInflight.get(key);
       if (!flight) {
         flight = breaker
           .run(() => repo.listArea({ lat, lon, radiusKm: radius }))
-          .then((area) => {
+          .then(async (area) => {
             const body = JSON.stringify({ v: 1, cell: area.cell, radius, generatedAt: new Date(now()).toISOString(), truncated: area.truncated, garages: area.garages });
-            areaCache.set(key, { text: body, at: now() });
+            const entry = { text: body, etag: await etagOf(body), at: now() }; // sérialisé et empreinte calculés une fois pour toutes les requêtes des 10 s qui suivent
+            areaCache.set(key, entry);
             if (areaCache.size > 300) areaCache.delete(areaCache.keys().next().value);
-            return body;
+            return entry;
           })
           .finally(() => areaInflight.delete(key));
         areaInflight.set(key, flight);
       }
       try {
-        text = await flight;
+        ({ text, etag } = await flight);
       } catch (e) {
         log({ level: "error", msg: "lecture des réparations impossible", error: e.message });
         if (hit && now() - hit.at < AREA_STALE_MS) {
-          text = hit.text;
+          ({ text, etag } = hit);
           stale = true;
         } else return unavailable();
       }
     }
-    if (stale) return new Response(text, { status: 200, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=5", "x-pixcar-stale": "1" } });
-    return etagResponse(request, 200, text, { "cache-control": CACHE_REPAIRS });
+    if (stale) return new Response(text, { status: 200, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=5", "x-pixcar-stale": "1", etag } });
+    return etagResponse(request, 200, text, { "cache-control": CACHE_REPAIRS }, etag);
   }
 
   // ---- POST /v1/repairs
@@ -192,9 +193,12 @@ export function createApp({ db, config, services, fetchImpl = globalThis.fetch, 
     if (out.status === 400) return apiError(400, "bad_query", "Requête non reconnue.");
     if (out.status === 429) return apiError(429, "busy", "Serveur occupé, réessayez dans un instant.", {}, { "retry-after": "10" });
     if (out.status !== 200) return apiError(502, "upstream_unavailable", "Les serveurs OpenStreetMap ne répondent pas.", {}, { "retry-after": "15" });
-    let text = textOf.get(out.body);
-    if (!text) textOf.set(out.body, (text = JSON.stringify(out.body))); // la même réponse sert des milliers de visiteurs : on ne la sérialise qu'une fois
-    return etagResponse(request, 200, text, out.stale ? { "cache-control": "public, max-age=60", "x-pixcar-stale": "1" } : { "cache-control": CACHE_OVERPASS, "x-pixcar-source": out.source });
+    let cached = textOf.get(out.body);
+    if (!cached) {
+      const text = JSON.stringify(out.body); // la même réponse sert des milliers de visiteurs : sérialisée et empreinte calculée une seule fois
+      textOf.set(out.body, (cached = { text, etag: await etagOf(text) }));
+    }
+    return etagResponse(request, 200, cached.text, out.stale ? { "cache-control": "public, max-age=60", "x-pixcar-stale": "1" } : { "cache-control": CACHE_OVERPASS, "x-pixcar-source": out.source }, cached.etag);
   }
 
   async function route(request, ctx) {

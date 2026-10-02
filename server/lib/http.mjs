@@ -59,10 +59,15 @@ export const withHeaders = (response, headers) => {
   return response;
 };
 
-// ETag faible calculé sur le corps ; renvoie 304 si le client l'a déjà.
-export async function etagResponse(request, status, bodyText, headers) {
+// ETag faible d'un texte (empreinte SHA-256 tronquée). À calculer une fois par corps mis en cache, pas à chaque requête.
+export async function etagOf(bodyText) {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(bodyText)));
-  const etag = `W/"${[...digest.slice(0, 12)].map((b) => b.toString(16).padStart(2, "0")).join("")}"`;
+  return `W/"${[...digest.slice(0, 12)].map((b) => b.toString(16).padStart(2, "0")).join("")}"`;
+}
+
+// Répond avec ETag ; renvoie 304 si le client l'a déjà. `etag` : valeur déjà calculée (sinon elle l'est ici).
+export async function etagResponse(request, status, bodyText, headers, etag) {
+  etag = etag || (await etagOf(bodyText));
   if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: { etag, ...headers } });
   return new Response(bodyText, { status, headers: { "content-type": "application/json; charset=utf-8", etag, ...headers } });
 }

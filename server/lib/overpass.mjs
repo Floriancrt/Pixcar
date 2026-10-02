@@ -23,16 +23,26 @@ export function createOverpassProxy({
   freshSeconds = 24 * 3600, // au-delà, on réinterroge OpenStreetMap
   staleSeconds = 7 * 24 * 3600, // au-delà, on préfère ne rien servir
   memoryEntries = 100,
+  memoryBytes = 64 * 1024 * 1024, // une zone de 50 km autour d'une grande ville pèse plusieurs Mo : la mémoire d'une instance reste bornée
   maxConcurrent = 4,
 } = {}) {
-  const memory = new Map(); // key → { body, at }
+  const memory = new Map(); // key → { body, at, bytes }
+  let memoryUsed = 0;
   const inflight = new Map(); // key → Promise
   let upstreamRunning = 0;
 
-  const remember = (key, body, at) => {
+  const forget = (key) => {
+    const old = memory.get(key);
+    if (old) memoryUsed -= old.bytes;
     memory.delete(key);
-    memory.set(key, { body, at });
-    while (memory.size > memoryEntries) memory.delete(memory.keys().next().value);
+  };
+  const remember = (key, body, at) => {
+    forget(key);
+    const bytes = JSON.stringify(body).length;
+    memory.set(key, { body, at, bytes });
+    memoryUsed += bytes;
+    // les plus anciennes d'abord, jamais celle qu'on vient de poser
+    while ((memory.size > memoryEntries || memoryUsed > memoryBytes) && memory.size > 1) forget(memory.keys().next().value);
   };
   const fromMemory = (key) => {
     const hit = memory.get(key);
@@ -146,8 +156,8 @@ export function createOverpassProxy({
       }
       return flight;
     },
-    stats: () => ({ memory: memory.size, inflight: inflight.size, upstreamRunning }),
+    stats: () => ({ memory: memory.size, memoryBytes: memoryUsed, inflight: inflight.size, upstreamRunning }),
     // vide la copie en mémoire (tests, ou après correction d'une donnée en base : la copie en base reste la référence)
-    reset: () => memory.clear(),
+    reset: () => (memory.clear(), (memoryUsed = 0)),
   };
 }
