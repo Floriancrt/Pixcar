@@ -22,6 +22,7 @@ const SUITES = [
   { name: "ux", cmd: ["node", "tests/ux.js", FILE] },
   { name: "load", cmd: ["node", "tests/load.js", FILE] },
   { name: "veh", cmd: ["node", "tests/veh.js", FILE] },
+  { name: "remote", cmd: ["node", "tests/remote.js", FILE] },
   { name: "a11y", cmd: ["node", "tests/a11y.js", FILE, "new"], a11y: true },
   { name: "sizes", cmd: ["node", "tests/sizes.js"] },
   { name: "states", cmd: ["node", "tests/states.js", FILE] },

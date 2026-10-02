@@ -147,5 +147,7 @@ export function createOverpassProxy({
       return flight;
     },
     stats: () => ({ memory: memory.size, inflight: inflight.size, upstreamRunning }),
+    // vide la copie en mémoire (tests, ou après correction d'une donnée en base : la copie en base reste la référence)
+    reset: () => memory.clear(),
   };
 }

@@ -1,6 +1,8 @@
 import MODELS_TXT from "../data/models.txt";
+import { apiBase } from "./modules/config.js";
 import { loadScript } from "./modules/load-script.js";
 import { phoneList, phoneParse } from "./modules/phone.js";
+import { createStore, jsonStorage } from "./modules/repair-store.js";
 import { KEEP_TAG, OVERPASS_MIRRORS, inMetroFrance, overpassQuery } from "./shared/overpass.js";
 import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
 
@@ -8,7 +10,9 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
   "use strict";
   document.documentElement.lang = "fr";
   const e = "https://data.geopf.fr/geocodage/search",
-    t = OVERPASS_MIRRORS,
+    // Avec une API configurée, son relais (cache partagé, serveurs OpenStreetMap interrogés en cascade, copie périmée en
+    // cas de panne) passe en premier ; les serveurs publics restent le secours, et partent tout de suite s'il ne répond pas.
+    t = ((api) => (api ? [{ url: api + "/v1/overpass", name: "Pixcar" }, ...OVERPASS_MIRRORS] : OVERPASS_MIRRORS))(apiBase()),
     a = Object.assign({ stagger: 4e3, osmTimeout: 3e4, retry: 2500, sirenePace: 400 }, window.JG_TUNE || {}),
     n = 864e5,
     r = 40,
@@ -877,10 +881,23 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
     const n = O.find((e) => K(a, e.k));
     return n ? (n.b + " " + U(X(t, n.k))).trim() : t === t.toUpperCase() || t === t.toLowerCase() ? U(t) : t;
   }
+  // État d'envoi d'une réparation de ce navigateur (mode distant seulement)
+  const stateLabel = (e) =>
+    "remote" !== RS.mode
+      ? ""
+      : "pending" === e.sync
+        ? "En attente d'envoi"
+        : "local" === e.sync
+          ? "Gardée sur cet appareil"
+          : "pending" === e.review
+            ? "En relecture avant publication"
+            : "";
   function Y(e) {
     return {
       id: e.id,
       own: !e.shared,
+      sync: e.sync,
+      review: e.review,
       serviceId: e.serviceId,
       price: e.price,
       month: String(e.date).slice(0, 7),
@@ -951,6 +968,7 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
       banner: w("#modeBanner"),
       status: w("#status"),
       summary: w("#summary"),
+      repairNote: w("#repairNote"),
       toolbar: w("#toolbar"),
       map: w("#map"),
       mapPane: w("#mapPane"),
@@ -1603,48 +1621,21 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
                   : { lvl: "check", why: "Spécialiste pneus : mécanique à vérifier" }
                 : { lvl: "likely", why: "Garage mécanique : prestation probable" };
   }
-  const Je = "jg.repairs.v1",
-    Ye = (() => {
-      try {
-        return (localStorage.setItem("jg.t", "1"), localStorage.removeItem("jg.t"), !0);
-      } catch (e) {
-        return !1;
-      }
-    })();
-  let Ze = (() => {
-    const e = P.get(Je, []),
-      t = Array.isArray(e)
-        ? e.filter(
-            (e) =>
-              e &&
-              e.id &&
-              e.garageName &&
-              Number.isFinite(e.price) &&
-              e.serviceId &&
-              /^\d{4}-\d{2}-\d{2}$/.test(e.date),
-          )
-        : [];
-    for (const r of t) {
-      if (!PLATE_RE.test(r.immat)) delete r.immat;
-      if (!(Number.isInteger(r.year) && r.year >= YEAR_MIN && r.year <= 2100)) delete r.year;
-    }
-    if (t.some((e) => "plate" in e)) {
-      for (const e of t)
-        if (!e.model && e.plate) {
-          const a = t.find((t) => t.plate === e.plate && t.model);
-          a && (e.model = a.model);
-        }
-      for (const e of t) delete e.plate;
-      P.set(Je, t);
-    }
+  // Les réparations : celles de ce navigateur et, si une API est configurée, celles de la zone (shared: true). Le tableau Ze
+  // est vivant (jamais remplacé) ; tout ce qui s'écrit passe par RS (modules/repair-store.js).
+  const RS = createStore({ apiBase: apiBase(), storage: jsonStorage() }),
+    Ye = RS.storageWorks(),
+    Ze = RS.rows();
+  document.body.dataset.store = RS.mode; // « local » ou « remote » : certains textes en dépendent (CSS [data-store-only])
+  let quiet = false; // vrai pendant une action de la page : elle réaffiche elle-même, les événements du magasin ne doublent pas
+  const act = (fn) => {
+    quiet = true;
     try {
-      (localStorage.removeItem("jg.platemodels.v1"), localStorage.removeItem("jg.plateapi.v1"));
-    } catch (e) {}
-    return t;
-  })();
-  function et() {
-    P.set(Je, Ze);
-  }
+      return fn();
+    } finally {
+      quiet = false;
+    }
+  };
   function tt(e) {
     return k(e)
       .replace(/[^a-z0-9]+/g, " ")
@@ -1660,9 +1651,11 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
   function nt(e, t) {
     return (
       e.garageId === t.id ||
-      (Number.isFinite(e.lat) && Number.isFinite(e.lon)
-        ? _(e, t) < 0.15 && at(e.garageName, t.name)
-        : tt(e.garageName) === tt(t.name))
+      // une réparation d'un autre visiteur est rattachée à un garage identifié (OpenStreetMap, SIRET) par cet identifiant seul
+      (!(e.shared && !e.garageId.startsWith("custom:")) &&
+        (Number.isFinite(e.lat) && Number.isFinite(e.lon)
+          ? _(e, t) < 0.15 && at(e.garageName, t.name)
+          : tt(e.garageName) === tt(t.name)))
     );
   }
   function rt(e, t) {
@@ -1767,6 +1760,8 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
           ((l = me.place = t[0]), (pe.address.value = l.label), na());
         }
         const c = +pe.radius.value;
+        // réparations déclarées de la zone : chargées pendant la recherche des garages, pas après (pas de liste qui se réordonne)
+        const repairsLoad = "ct" === s.kind ? null : RS.load({ lat: l.lat, lon: l.lon, km: c }).catch(() => ({}));
         if ((pt(), "ct" === s.kind)) {
           let e;
           dt(`Chargement des prix officiels du contrôle technique dans un rayon de ${c} km…`);
@@ -2035,6 +2030,7 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
           }
           ((me.raw = s), (me.garages = s), (me.kind = "osm"));
         }
+        repairsLoad && (await Promise.race([repairsLoad, new Promise((done) => setTimeout(done, 2500))])); // jamais plus de 2,5 s d'attente
         ((me.fetchedKm = c), (me.shown = r), dt(""), Pe(!0), ht());
       } finally {
         ct(!1);
@@ -2097,11 +2093,27 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
       (pe.osmNote.hidden = !0),
       "map" === me.viewMode && St("list"),
       (pe.list.innerHTML = ""),
-      be());
+      be(),
+      renderRepairNote());
   }
   pe.form.addEventListener("submit", (e) => {
     (e.preventDefault(), lt());
   });
+  // État du service des réparations partagées (mode distant) : copie de secours, indisponible, envois en attente
+  function renderRepairNote() {
+    const st = RS.status(),
+      parts = [];
+    if ("remote" === st.mode && "ct" !== me.kind && me.raw.length) {
+      if ("down" === st.api)
+        parts.push("Les réparations déclarées par les automobilistes sont momentanément indisponibles : seuls les prix des enseignes et vos propres déclarations sont affichés.");
+      else if ("stale" === st.api)
+        parts.push("Le service des réparations déclarées ne répond pas : la dernière copie enregistrée sur cet appareil est affichée.");
+    }
+    if (st.pending)
+      parts.push(`${V(st.pending, "réparation", "réparations")} en attente d'envoi : ${st.pending > 1 ? "elles partiront" : "elle partira"} dès que le service répondra.`);
+    pe.repairNote.textContent = parts.join(" ");
+    pe.repairNote.hidden = !parts.length;
+  }
   const mt = (e) => e.price && isFinite(e.price.amount) && !e.price.partial;
   function gt(e) {
     me.filter = e;
@@ -2213,7 +2225,7 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
           ) {
             const e = n.reduce((e, t) => (t.price.amount < e.price.amount ? t : e)),
               t = n.filter((e) => "declared" === e.price.kind).length;
-            r += `<p class="best">${n.length} avec un prix${t ? ` (dont ${t} déclaré${t > 1 ? "s" : ""} par vous)` : " affiché"}. Le moins cher : <b>${y(e.name)}</b>, à ${E(e.dist)}, <b>${C(e.price.amount)}</b>.</p>`;
+            r += `<p class="best">${n.length} avec un prix${t ? ` (dont ${t} déclaré${t > 1 ? "s" : ""} par ${"remote" === RS.mode ? "des automobilistes" : "vous"})` : " affiché"}. Le moins cher : <b>${y(e.name)}</b>, à ${E(e.dist)}, <b>${C(e.price.amount)}</b>.</p>`;
           } else
             e.length
               ? (r += `<p class="best">${(u[t.id] || []).length ? "Aucun centre d'enseigne à prix public dans cette zone." : "Aucun prix public pour cette prestation."} Demandez des devis, puis déclarez le prix payé avec « Ajouter une réparation » pour construire l'échelle de prix de chaque garage.</p>`)
@@ -2255,7 +2267,8 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
       (pe.mapFab.hidden = pe.mapPane.hidden),
       me.sel && !me.view.some((e) => e.id === me.sel) && sl(null),
       Et(),
-      ft());
+      ft(),
+      renderRepairNote());
   }
   function ft() {
     const e = fe(),
@@ -2718,7 +2731,7 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
             t.sort((e, t) => t.month.localeCompare(e.month) || e.price - t.price);
             const a = t.map((e) => e.price),
               n = "autre" === e;
-            return `<section class="h-type">\n        <div class="h-type-head"><span class="h-type-name">${y(j(e))}</span>${n ? "" : `<span class="h-median">Prix médian <b>${C(N(a))}</b></span>`}</div>\n        <p class="h-sub">${V(t.length, "réparation", "réparations")}${t.length > 1 && !n ? ` · de ${C(Math.min(...a))} à ${C(Math.max(...a))}` : ""}${n ? " de nature différente : pas de prix médian" : ""}</p>\n        <ul class="h-rows">${t.map((e) => `<li><span class="h-date">${y(G(e.month))}</span><span class="h-model${e.model ? "" : " none"}"><span>${y(vehLabel(e) || "Modèle non renseigné")}</span>${e.rating ? `${re(e.rating)}<span class="sr-only">note ${e.rating} sur 5</span>` : ""}${e.own ? `<button type="button" class="linkish h-del" data-act="unrepair" data-rid="${y(e.id)}" aria-label="Supprimer votre réparation : ${y(j(e.serviceId))}, ${y(G(e.month))}">Supprimer</button>` : ""}</span><span class="h-price">${C(e.price)}</span></li>`).join("")}</ul>\n      </section>`;
+            return `<section class="h-type">\n        <div class="h-type-head"><span class="h-type-name">${y(j(e))}</span>${n ? "" : `<span class="h-median">Prix médian <b>${C(N(a))}</b></span>`}</div>\n        <p class="h-sub">${V(t.length, "réparation", "réparations")}${t.length > 1 && !n ? ` · de ${C(Math.min(...a))} à ${C(Math.max(...a))}` : ""}${n ? " de nature différente : pas de prix médian" : ""}</p>\n        <ul class="h-rows">${t.map((e) => `<li><span class="h-date">${y(G(e.month))}</span><span class="h-model${e.model ? "" : " none"}"><span>${y(vehLabel(e) || "Modèle non renseigné")}</span>${e.rating ? `${re(e.rating)}<span class="sr-only">note ${e.rating} sur 5</span>` : ""}${e.own && stateLabel(e) ? `<span class="h-state">${y(stateLabel(e))}</span>` : ""}${e.own ? `<button type="button" class="linkish h-del" data-act="unrepair" data-rid="${y(e.id)}" aria-label="Supprimer votre réparation : ${y(j(e.serviceId))}, ${y(G(e.month))}">Supprimer</button>` : ""}</span><span class="h-price">${C(e.price)}</span></li>`).join("")}</ul>\n      </section>`;
           })
           .join("");
         return `<details class="history" data-hid="${y(e.id)}"${ot.has(e.id) ? " open" : ""}>\n      <summary>Historique des réparations<span class="h-count">${V(a.length, "réparation", "réparations")}</span></summary>\n      <div class="h-body">\n        <p class="h-note">Par type de prestation, avec le mois, le modèle et l'année du véhicule et la note donnée au garage. Les commentaires et l'immatriculation n'y figurent jamais.</p>\n        ${r}\n      </div>\n    </details>`;
@@ -3261,11 +3274,9 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
   }
   // À l'ouverture du formulaire, le véhicule de la dernière déclaration est repris (immatriculation, modèle, année).
   function vehPrefill() {
-    const last = Ze.slice()
-      .sort((r1, r2) => String(r2.createdAt).localeCompare(String(r1.createdAt)))
-      .find((r) => r.model);
+    const last = RS.vehicles()[0]; // la mémoire survit à « Annuler » et « Supprimer »
     Pt.model.value = last ? last.model : "";
-    Pt.plate.value = (last && last.immat) || "";
+    Pt.plate.value = (last && last.plate) || "";
     Pt.year.value = last && last.year ? String(last.year) : "";
     Pt.plateLive = false;
     Pt.plateSay.textContent = "";
@@ -3301,8 +3312,11 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
   function mdlFind(query) {
     const own = [],
       seen = new Set();
-    for (const r of Ze.slice().sort((r1, r2) => String(r2.createdAt).localeCompare(String(r1.createdAt)))) {
-      const entry = r.model && mdlEntry(r.model, own.length - 1e4, true);
+    const declared = RS.vehicles()
+      .map((v) => v.model)
+      .concat(RS.own().slice().sort((r1, r2) => String(r2.createdAt).localeCompare(String(r1.createdAt))).map((r) => r.model));
+    for (const model of declared) {
+      const entry = model && mdlEntry(model, own.length - 1e4, true);
       if (entry && !seen.has(entry.k)) {
         seen.add(entry.k);
         own.push(entry);
@@ -3513,7 +3527,7 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
       for (const e of (function () {
         const e = new Map();
         for (const t of me.garages) e.has(t.id) || e.set(t.id, qt(t, "search"));
-        for (const t of Ze)
+        for (const t of RS.own())
           e.has(t.garageId) ||
             e.set(t.garageId, {
               id: t.garageId,
@@ -3677,9 +3691,13 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
       (Pt.date.value = s),
       vehPrefill(),
       (Pt.note.className = "dlg-note" + (Ye ? "" : " warn")),
-      (Pt.note.textContent = Ye
-        ? "Elle reste enregistrée dans ce navigateur et complète l'échelle de prix du garage concerné."
-        : "Ce navigateur bloque l'enregistrement local : vos déclarations seront perdues à la fermeture de la page."),
+      (Pt.note.textContent =
+        "remote" === RS.mode
+          ? "Elle est publiée sans votre nom : prix, mois, modèle, année et note sont visibles de tous sur la fiche du garage. Le commentaire n'est jamais publié (seule la modération peut le lire) ; l'immatriculation, envoyée pour repérer les doublons, n'est ni publiée ni conservée en clair." +
+            (Ye ? "" : " Ce navigateur bloque l'enregistrement local : vous ne pourrez pas la retirer plus tard.")
+          : Ye
+            ? "Elle reste enregistrée dans ce navigateur et complète l'échelle de prix du garage concerné."
+            : "Ce navigateur bloque l'enregistrement local : vos déclarations seront perdues à la fermeture de la page."),
       document.documentElement.classList.add("dlg-open"),
       "function" == typeof Pt.el.showModal ? Pt.el.showModal() : Pt.el.setAttribute("open", ""),
       (Pt.garage.value
@@ -3766,8 +3784,7 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
         c.length)
       )
         return void (c[0] === Pt.stars ? w("#rSt1") : c[0]).focus();
-      const u = {
-        id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      const u = act(() => RS.add({
         garageId: t ? t.id : "custom:" + (tt(a).replace(/ /g, "-") || "garage"),
         garageName: a,
         garageAddr: (t && t.addr) || "",
@@ -3782,9 +3799,10 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
         price: Math.round(100 * o) / 100,
         date: l,
         comment: Pt.comment.value.trim().slice(0, 500),
-        createdAt: new Date().toISOString(),
-      };
-      (Ze.push(u), et(), Qt(), Kt());
+        // point de recherche : sert à situer un garage saisi à la main (sans position) dans la base partagée
+        area: me.place && !(t && Number.isFinite(t.lat)) ? { lat: me.place.lat, lon: me.place.lon } : undefined,
+      }));
+      (Qt(), Kt());
       // Si la recherche en cours contient ce garage, sa fiche s'ouvre sur l'échelle de prix et l'historique mis à jour.
       const g = "garages" === me.screen && "osm" === me.kind ? me.view.find((t) => nt(u, t)) : null;
       if (g) {
@@ -3806,10 +3824,8 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
   // Retire une réparation déclarée depuis ce navigateur : « Annuler » du message d'enregistrement, « Supprimer » de
   // l'historique d'une fiche (avec « Annuler » pour la remettre).
   function unrepair(id, msg, undoable) {
-    const i = Ze.findIndex((r) => r.id === id);
-    if (i < 0) return;
-    const [removed] = Ze.splice(i, 1);
-    et();
+    const removed = act(() => RS.remove(id));
+    if (!removed) return;
     Kt();
     aa(
       msg,
@@ -3817,8 +3833,7 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
         ? {
             label: "Annuler",
             fn: () => {
-              Ze.splice(Math.min(i, Ze.length), 0, removed);
-              et();
+              act(() => RS.restore(removed));
               Kt();
             },
           }
@@ -3897,9 +3912,47 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
             (me.fetchedKm = +pe.radius.value),
             (me.shown = r),
             (me.cachedAt = e.t),
+            // la dernière réponse connue pour cette zone est déjà là : le premier affichage comprend les réparations d'autres
+            RS.preload({ lat: me.place.lat, lon: me.place.lon, km: +pe.radius.value }),
             Pe(!0),
-            ht());
+            ht(),
+            RS.load({ lat: me.place.lat, lon: me.place.lon, km: +pe.radius.value }).catch(() => {}));
         })(),
         (me.probe = we()));
     })());
+  // Ce que le magasin signale de lui-même : réparations arrivées (zone chargée, envoi terminé), état du service, avis.
+  function storeNotice(e) {
+    const where = e.row ? `${e.row.garageName}, ${C(e.row.price)}` : "",
+      why = e.fields && Object.keys(e.fields).length ? ` (${Object.values(e.fields).join(" ; ")})` : "",
+      msg = {
+        duplicate: `Cette réparation (${where}) avait déjà été déclarée : elle n'est comptée qu'une fois.`,
+        rejected: `Cette réparation (${where}) n'a pas pu être partagée${why}. Elle reste sur cet appareil.`,
+        gaveup: `Une réparation (${where}) n'a pas pu être envoyée depuis plus d'une semaine. Elle reste sur cet appareil.`,
+      }[e.kind]; // « queued » : l'encart « en attente d'envoi » s'en charge, sans remplacer le message « Annuler »
+    msg && aa(msg);
+  }
+  // L'état d'envoi d'une réparation change (envoyée, gardée ici, en relecture) : on met son étiquette à jour, sans tout réafficher.
+  function refreshRowState(id) {
+    const row = Ze.find((r) => r.id === id),
+      label = row ? stateLabel(Y(row)) : "";
+    for (const btn of pe.list.querySelectorAll(`.h-del[data-rid="${CSS.escape(id)}"]`)) {
+      const host = btn.parentElement,
+        old = host.querySelector(".h-state");
+      if (!label) old && old.remove();
+      else if (old) old.textContent = label;
+      else {
+        const tag = document.createElement("span");
+        tag.className = "h-state";
+        tag.textContent = label;
+        host.insertBefore(tag, btn);
+      }
+    }
+  }
+  RS.on((e) => {
+    if ("row" === e.type) refreshRowState(e.id);
+    else if ("rows" === e.type) quiet || Kt();
+    else if ("sync" === e.type) renderRepairNote();
+    else if ("notice" === e.type) storeNotice(e);
+  });
+  RS.attach(window);
 })();

@@ -380,6 +380,7 @@ describe("GET /v1/repairs", () => {
   test("CORS: allowed origins only, preflight included", async () => {
     const ok = await t.call("GET", `/v1/repairs?${area}`, { origin: ORIGIN });
     assert.equal(ok.headers.get("access-control-allow-origin"), ORIGIN);
+    assert.match(ok.headers.get("access-control-expose-headers"), /retry-after/i, "la page doit pouvoir lire Retry-After");
     assert.match(ok.headers.get("vary"), /Origin/);
     const other = await t.call("GET", `/v1/repairs?${area}`, { origin: "https://evil.example" });
     assert.equal(other.headers.get("access-control-allow-origin"), null);

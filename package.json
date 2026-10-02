@@ -10,11 +10,12 @@
     "build": "node scripts/build.mjs",
     "build:dev": "node scripts/build.mjs --dev",
     "test": "node tests/run.mjs",
-    "test:server": "node scripts/test-server.mjs",
+    "test:server": "node scripts/node-tests.mjs server/test",
     "dev": "node server/dev.mjs",
     "start": "node server/index.mjs",
     "db:migrate": "node server/migrate.mjs",
-    "perf": "node scripts/perf.mjs"
+    "perf": "node scripts/perf.mjs",
+    "test:unit": "node scripts/node-tests.mjs tests/unit"
   },
   "dependencies": {
     "pg": "^8.13.0"

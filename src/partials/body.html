@@ -134,6 +134,7 @@
             <h2 class="sr-only">Résultats</h2>
             <div id="status" class="status"></div>
             <div id="summary" class="summary" hidden></div>
+            <p id="repairNote" class="hint repair-note" hidden></p>
             <div id="toolbar" class="toolbar" hidden>
               <div class="tool-group">
                 <span class="lbl-s" id="sortLbl">Trier</span>
@@ -250,10 +251,18 @@
             date de fin. Un centre franchisé peut appliquer un autre tarif, et tous les centres n'ont pas de banc de
             géométrie : confirmez avant de vous déplacer.
           </p>
-          <p>
+          <p data-store-only="local">
             <b>Vos réparations.</b> Elles restent dans ce navigateur : rien n'est envoyé ni partagé. L'échelle de prix
             et la note d'un garage ne comptent que vos propres déclarations. L'historique d'un garage affiche le modèle
             et l'année du véhicule, le mois, la note et le prix, jamais le commentaire ni l'immatriculation.
+          </p>
+          <p data-store-only="remote">
+            <b>Réparations déclarées.</b> Chaque déclaration est publiée sans nom ni compte. L'échelle de prix et la note
+            d'un garage reposent sur ces déclarations de visiteurs, qui ne sont pas vérifiées. L'historique d'un garage
+            affiche le modèle et l'année du véhicule, le mois, la note et le prix, jamais le commentaire ni
+            l'immatriculation. Le commentaire n'est lu que par la modération. L'immatriculation ne sert qu'à repérer les
+            doublons : elle est transformée en empreinte avant d'être enregistrée. Une déclaration se retire depuis le navigateur qui l'a envoyée (bouton «&nbsp;Supprimer&nbsp;»
+            de l'historique) ; un prix très éloigné des autres attend une relecture avant d'être publié.
           </p>
         </details>
       </section>

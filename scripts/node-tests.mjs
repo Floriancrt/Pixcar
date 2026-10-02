@@ -1,13 +1,20 @@
 #!/usr/bin/env node
-// Lance les tests de l'API (node:test) : tous les fichiers server/test/*.test.mjs, sans dépendre du shell pour développer les « * ».
+// Lance les tests node:test d'un dossier (tous les fichiers *.test.mjs), sans dépendre du shell pour développer les « * ».
+//   node scripts/node-tests.mjs server/test            l'API
+//   node scripts/node-tests.mjs tests/unit             modules de la page (client HTTP, stockage des réparations…)
+//   node scripts/node-tests.mjs server/test overpass   seulement les fichiers dont le nom contient « overpass »
 import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dir = join(ROOT, "server/test");
-const only = process.argv.slice(2);
+const [dirArg, ...only] = process.argv.slice(2);
+if (!dirArg) {
+  console.error("usage : node scripts/node-tests.mjs <dossier> [filtre…]");
+  process.exit(2);
+}
+const dir = join(ROOT, dirArg);
 const files = readdirSync(dir)
   .filter((f) => f.endsWith(".test.mjs") && (!only.length || only.some((o) => f.includes(o))))
   .map((f) => join(dir, f));
