@@ -16,10 +16,6 @@
             ><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg
             ><span class="tab-label">Garages</span></a
           >
-          <a class="tab" href="#reparations" data-view="reparations"
-            ><svg class="ic" aria-hidden="true"><use href="#i-receipt" /></svg
-            ><span class="tab-label">Mes réparations</span><span class="count" id="repBadge" hidden></span></a
-          >
           <a class="tab" href="#prix" data-view="prix"
             ><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg
             ><span class="tab-label">Prix et promos</span></a
@@ -42,8 +38,8 @@
       <div id="modeBanner" class="banner" role="status" hidden>
         <b>Recherche indisponible dans cet aperçu</b>
         La page ne joint pas les services publics (adresses, garages, contrôle technique) : l'aperçu claude.ai bloque
-        les connexions externes. Ouvrez l'app dans un navigateur ou en ligne. Vos réparations, les prix et les
-        promotions des enseignes restent consultables.
+        les connexions externes. Ouvrez l'app dans un navigateur ou en ligne. Les prix et les promotions des enseignes
+        restent consultables.
       </div>
 
       <!-- ===== Garages : panneau (liste) + carte plein écran ===== -->
@@ -208,34 +204,6 @@
         <button type="button" class="fab" id="mapFab" aria-controls="stage" hidden>
           <svg class="ic" aria-hidden="true"><use href="#i-map" /></svg><span>Carte</span>
         </button>
-      </section>
-
-      <!-- ===== Mes réparations ===== -->
-      <section class="view" id="view-reparations" data-view="reparations" aria-labelledby="repTitle" hidden>
-        <div class="view-head">
-          <div>
-            <h1 id="repTitle" tabindex="-1">Mes réparations</h1>
-            <p id="repCount">Prix payés et notes, enregistrés dans ce navigateur.</p>
-          </div>
-          <button type="button" class="btn dark" id="addRepairBtn2" aria-haspopup="dialog">
-            <svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter une réparation
-          </button>
-        </div>
-        <div class="empty" id="repEmpty">
-          <h2>Aucune réparation déclarée</h2>
-          <p>
-            Après un passage au garage, notez le prix payé, le modèle du véhicule et votre note sur 5. Chaque
-            déclaration alimente l'échelle de prix et la note du garage, visibles sur sa fiche.
-          </p>
-        </div>
-        <section id="repairs" aria-label="Réparations par garage" hidden>
-          <h2 class="sr-only">Réparations par garage</h2>
-          <ol class="rep-groups" id="repGroups"></ol>
-        </section>
-        <p class="hint">
-          Les fiches des garages affichent le modèle, le mois, la note et le prix de chaque réparation, jamais le
-          commentaire. Rien n'est envoyé ni partagé : l'échelle de prix et la note ne comptent que vos déclarations.
-        </p>
       </section>
 
       <!-- ===== Prix et promos ===== -->

@@ -450,18 +450,12 @@ const TODAY_YEAR = 2026;
     check("S3c … a missing plate / year is asked for on submit", /immatriculation/.test(await errText(page, "#rPlateErr")) && /année/.test(await errText(page, "#rYearErr")) && (await page.$eval("#repairDlg", (d) => d.open)));
     await page.click("#dlgCancel");
     await ctx.close();
-    // display
+    // display: the plate and the year are asked for, but only the model and its year ever show, on the garage fiche
     ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { elements: els }, storage: { "jg.repairs.v1": REPAIRS } }));
-    await page.click(".tab[data-view=reparations]");
-    await page.waitForTimeout(250);
-    const rows = await page.$$eval(".rep-item", (l) => l.map((li) => ({ model: (li.querySelector(".rep-model") || {}).textContent, year: (li.querySelector(".rep-year") || {}).textContent || "", plate: (li.querySelector(".rep-plate") || {}).textContent || "" })));
-    const r1 = rows.find((r) => /208/.test(r.model || "")), r2 = rows.find((r) => /Clio/.test(r.model || ""));
-    check("S4 Mes réparations: model, its own year span, and the plate chip", r1 && norm(r1.model) === "Peugeot 208" && r1.year === "2019" && r1.plate === "EZ-108-BC", J(rows));
-    check("S5 declarations without year/plate display as before (model alone, no year, no chip)", r2 && norm(r2.model) === "Renault Clio" && r2.year === "" && r2.plate === "", J(rows));
+    check("S4 the « Mes réparations » tab is gone: nowhere to read the plate or the comment back", !(await page.$(".tab[data-view=reparations], #view-reparations, .rep-plate")) && (await page.$$(".tab")).length === 2);
     const notes = await page.evaluate(() => ({ src: document.body.textContent.replace(/\s+/g, " ") }));
     check("S5b the sources paragraph says the history shows model and year, never the comment nor the plate", /affiche le modèle et l'année du véhicule, le mois, la note et le prix, jamais le commentaire ni l'immatriculation/.test(notes.src), "");
     // garage sheet: model + year, never the plate
-    await page.click(".tab[data-view=garages]");
     await search(page, { service: "vidange" });
     await page.click("[data-sort=dist]");
     await page.waitForTimeout(250);
@@ -489,11 +483,22 @@ const TODAY_YEAR = 2026;
       { ...REPAIRS[0], id: "b5", immat: "AB-123-CD", year: 1950 },
     ];
     ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { elements: els }, storage: { "jg.repairs.v1": BAD } }));
-    await page.click(".tab[data-view=reparations]");
+    await search(page, { service: "vidange" });
+    await page.click("[data-sort=dist]");
     await page.waitForTimeout(250);
-    const kept = await page.evaluate(() => ({ plates: [...document.querySelectorAll(".rep-plate")].map((e) => e.textContent), models: [...document.querySelectorAll(".rep-model")].map((e) => e.textContent.replace(/\s+/g, " ").trim()), years: [...document.querySelectorAll(".rep-year")].map((e) => e.textContent.trim()), ls: JSON.parse(localStorage.getItem("jg.repairs.v1")), imgs: document.querySelectorAll("#repairs img").length }));
-    check("S10 invalid plates are not displayed (HTML, lowercase, old format); valid ones are", J(kept.plates.sort()) === J(["AA-111-AA", "AB-123-CD"]), J(kept.plates));
-    check("S11 invalid years are not displayed (text, out of range, decimal); 1950 is", J(kept.years) === J(["1950"]), J(kept.years));
+    await page.locator(`#list [data-id="${id}"] .g-main`).scrollIntoViewIfNeeded();
+    await page.click(`#list [data-id="${id}"] .g-main`);
+    await page.waitForTimeout(500);
+    await page.click(`#list [data-id="${id}"] details.history > summary`);
+    const labels = await page.$$eval(`#list [data-id="${id}"] .h-model > span:first-child`, (l) => l.map((e) => e.textContent.replace(/\s+/g, " ").trim()));
+    check("S10 invalid years are not displayed (text, out of range, decimal); 1950 is", labels.filter((t) => / · \d{4}$/.test(t)).length === 1 && labels.some((t) => /· 1950$/.test(t)), J(labels));
+    // the stored list is cleaned for good at the next save (here: deleting one of the declarations)
+    await page.locator(`#list [data-id="${id}"] .h-del[data-rid="b2"]`).click();
+    await page.waitForTimeout(250);
+    const kept = await page.evaluate(() => ({ ls: JSON.parse(localStorage.getItem("jg.repairs.v1")), imgs: document.querySelectorAll("img[src=x]").length }));
+    const by = Object.fromEntries(kept.ls.map((r) => [r.id, r]));
+    check("S11 invalid plates are dropped at the next save (HTML, lowercase); valid ones are kept", by.b1 && !("immat" in by.b1) && by.b3 && !("immat" in by.b3) && by.b4 && by.b4.immat === "AA-111-AA" && by.b5 && by.b5.immat === "AB-123-CD", J(kept.ls.map((r) => [r.id, r.immat])));
+    check("S11b invalid years are dropped (text, out of range, decimal); 1950 is kept", by.b1 && !("year" in by.b1) && by.b3 && !("year" in by.b3) && by.b4 && !("year" in by.b4) && by.b5 && by.b5.year === 1950, J(kept.ls.map((r) => [r.id, r.year])));
     check("S12 nothing injected", kept.imgs === 0 && logs.errors.length === 0, J(logs.errors));
     await ctx.close();
     // legacy « plate » migration still runs, and does not touch the new fields

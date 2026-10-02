@@ -106,7 +106,24 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
   check("B4 console clean (CT flow)", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
   await ctx.close();
 
-  // =============== C. Repairs: dialog → save → list → delete/undo ===============
+  // =============== C. Repairs: dialog → save → fiche → delete/undo (no « Mes réparations » tab) ===============
+  const declare = async (page, price = "59,90") => {
+    await page.click("#addRepairBtn");
+    await page.fill("#rGarage", "Norauto");
+    await page.waitForSelector("#rGarageList li[data-i]", { state: "visible" });
+    await page.click("#rGarageList li[data-i='0']");
+    await page.fill("#rModel", "peugeot 208");
+    if (IS_NEW) {
+      await page.fill("#rPlate", "ez108bc");
+      await page.fill("#rYear", "2019");
+    }
+    await page.fill("#rPrice", price);
+    await page.click("label[for=rSt4]");
+    await page.fill("#rComment", "Très bien, rapide.");
+    await page.click("#repairForm button[type=submit]");
+    await page.waitForTimeout(500);
+  };
+  const storedRepairs = (page) => page.evaluate(() => JSON.parse(localStorage.getItem("jg.repairs.v1") || "[]"));
   ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 }));
   await search(page, { service: "vidange" });
   await page.click("#addRepairBtn");
@@ -114,41 +131,55 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
   await page.click("#repairForm button[type=submit]");
   const errs = await page.$$eval("#repairForm [aria-invalid=true]", (l) => l.length);
   check("C2 empty submit flags invalid fields", errs >= 4, errs);
-  await page.fill("#rGarage", "Norauto");
-  await page.waitForSelector("#rGarageList li[data-i]", { state: "visible" });
-  await page.click("#rGarageList li[data-i='0']");
-  await page.fill("#rModel", "peugeot 208");
-  if (IS_NEW) {
-    await page.fill("#rPlate", "ez108bc");
-    await page.fill("#rYear", "2019");
-  }
-  await page.fill("#rPrice", "59,90");
-  await page.click("label[for=rSt4]");
-  await page.fill("#rComment", "Très bien, rapide.");
-  await page.click("#repairForm button[type=submit]");
-  await page.waitForTimeout(500);
+  await page.click("#dlgCancel");
+  await declare(page);
   const toast1 = norm(await page.textContent("#toast"));
-  snaps.C_toast = toast1.replace(/Voir$/, "").trim();
-  check("C3 toast confirms saving", /Réparation enregistrée/.test(toast1), toast1);
+  snaps.C_toast = toast1.replace(/Annuler$/, "").trim();
+  check("C3 toast confirms saving, with Annuler", /Réparation enregistrée/.test(toast1) && /Annuler$/.test(toast1), toast1);
   check("C4 dialog closed", !(await page.$eval("#repairDlg", (d) => d.open)));
-  check("C5 rail badge shows 1", norm(await page.textContent("#repBadge")) === "1" && (await page.$eval("#repBadge", (e) => !e.hidden)));
-  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("jg.repairs.v1") || "[]"));
+  check("C5 two tabs only: no « Mes réparations » tab, badge, view or second add button", await page.evaluate(() => [...document.querySelectorAll(".tab")].map((t) => t.dataset.view).join() === "garages,prix" && !document.querySelector("#repBadge, #view-reparations, #addRepairBtn2, #repGroups")));
+  const stored = await storedRepairs(page);
   check("C6 localStorage has the repair", stored.length === 1 && stored[0].price === 59.9 && stored[0].model === "Peugeot 208" && stored[0].rating === 4, JSON.stringify(stored));
   if (IS_NEW) check("C6b [new] the repair carries the plate (normalised) and the model year", stored[0].immat === "EZ-108-BC" && stored[0].year === 2019, JSON.stringify(stored));
   snaps.C_stored = stored.map(({ id, createdAt, garageId, lat, lon, immat, year, ...r }) => r);
   snaps.C_cardAfter = (await cards(page, 40)).filter((c) => /Prix déclaré/.test(c.tag)).map((c) => `${c.name}|${c.price}|${c.tag}`);
-  await page.click(".tab[data-view=reparations]");
-  await page.waitForTimeout(200);
-  snaps.C_repText = norm(await page.textContent("#repairs"));
-  snaps.C_repCount = norm(await page.textContent("#repCount"));
-  await page.click(".rep-del");
-  await page.waitForTimeout(200);
-  check("C7 delete → toast with Annuler", /Annuler/.test(norm(await page.textContent("#toast"))), norm(await page.textContent("#toast")));
-  check("C8 repairs empty state back", await page.isVisible("#repEmpty"));
+  const hist = () => page.evaluate(() => {
+    const d = document.querySelector("#list .card.is-open details.history");
+    return d ? { open: d.open, rows: [...d.querySelectorAll(".h-rows li")].map((li) => li.textContent.replace(/\s+/g, " ").trim()), del: d.querySelectorAll(".h-del").length, label: (d.querySelector(".h-del") || { getAttribute: () => "" }).getAttribute("aria-label") } : null;
+  });
+  let h = await hist();
+  check("C7 saving opens the garage card on its history: the new row and a Supprimer button", h && h.open && h.rows.length === 1 && /59,90/.test(h.rows[0]) && h.del === 1 && /^Supprimer votre réparation : /.test(h.label), JSON.stringify(h));
+  check("C7b the new row shows the model with its year, never the plate or the comment", h && /Peugeot 208/.test(h.rows[0]) && /2019/.test(h.rows[0]) && !/EZ-108-BC|Très bien/.test(h.rows[0]), JSON.stringify(h));
+  await page.click("#list .card.is-open .h-del");
+  await page.waitForTimeout(250);
+  const toast2 = norm(await page.textContent("#toast"));
+  check("C8 Supprimer → toast « Réparation supprimée » with Annuler", /Réparation supprimée/.test(toast2) && /Annuler$/.test(toast2), toast2);
+  check("C9 deleted: storage empty, history gone, price no longer « déclaré »", (await storedRepairs(page)).length === 0 && (await hist()) === null && !(await page.$$eval("#list > li.card", (l) => l.some((c) => c.querySelector(".g-price .tag.info")))));
+  check("C9b focus is not lost on <body> after deleting", await page.evaluate(() => document.activeElement !== document.body && !!document.activeElement.closest("#list")), await page.evaluate(() => document.activeElement && document.activeElement.outerHTML.slice(0, 120)));
   await page.click("#toast button");
-  await page.waitForTimeout(200);
-  check("C9 undo restores the repair", (await page.$$eval(".rep-item", (l) => l.length)) === 1);
-  check("C10 console clean (repairs flow)", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
+  await page.waitForTimeout(250);
+  h = await hist();
+  check("C10 undo restores the repair (storage + history row)", (await storedRepairs(page)).length === 1 && h && h.rows.length === 1, JSON.stringify(h));
+  check("C11 console clean (repairs flow)", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
+  await ctx.close();
+
+  // « Annuler » on the save message withdraws the repair just declared; without a user session, nothing else remains of it
+  ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 }));
+  await search(page, { service: "vidange" });
+  await declare(page);
+  await page.click("#toast button");
+  await page.waitForTimeout(250);
+  check("C12 Annuler on the save toast removes the repair and says so", (await storedRepairs(page)).length === 0 && /Réparation annulée/.test(norm(await page.textContent("#toast"))) && !(await page.$$eval("#list > li.card", (l) => l.some((c) => c.querySelector(".g-price .tag.info")))), norm(await page.textContent("#toast")));
+  check("C12b the toast offers no further action once cancelled", (await page.$$("#toast button")).length === 0);
+  // declared from the « Prix et promos » tab: saved, the toast says where it will show
+  await page.click(".tab[data-view=prix]");
+  await declare(page, "64,50");
+  const toast3 = norm(await page.textContent("#toast"));
+  check("C13 declaring from another tab: saved, and the toast points at the garage fiche", /Réparation enregistrée/.test(toast3) && /fiche de ce garage/.test(toast3) && (await storedRepairs(page)).length === 1, toast3);
+  await page.click(".tab[data-view=garages]");
+  await page.waitForTimeout(250);
+  check("C14 back on the main tab, the repair already counts (declared price on the card)", (await page.$$eval("#list > li.card", (l) => l.some((c) => c.querySelector(".g-price .tag.info")))));
+  check("C15 console clean (second flow)", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
   await ctx.close();
 
   // =============== E. Navigation (tabs, hash, history) ===============
@@ -161,9 +192,12 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
   await page.goBack();
   await page.waitForTimeout(150);
   check("E4 back returns to garages", (await cur()) === "garages");
+  await page.evaluate(() => (location.hash = "#prix"));
+  await page.waitForTimeout(150);
+  check("E5 hash navigation", (await cur()) === "prix");
   await page.evaluate(() => (location.hash = "#reparations"));
   await page.waitForTimeout(150);
-  check("E5 hash navigation", (await cur()) === "reparations");
+  check("E6 an old #reparations link lands on the main tab", (await cur()) === "garages" && !(await page.$eval("#view-garages", (e) => e.hidden)) && (await page.$eval("#view-prix", (e) => e.hidden)));
   await page.selectOption("#refService", "montage").catch(() => {});
   await ctx.close();
 

@@ -53,6 +53,7 @@ def audit(name, T):
     chk('on-btn on btn', hexof(T['--on-btn']), hexof(T['--btn']))
     chk('tip-fg on tip-bg', hexof(T['--tip-fg']), hexof(T['--tip-bg']))
     chk('red on card', hexof(T['--red']), hexof(T['--card']))
+    chk('red on card-2 (history Supprimer, hover)', hexof(T['--red']), hexof(T['--card-2']))
     chk('ink-2 on card-2 (tag.info, svc.likely)', hexof(T['--ink-2']), hexof(T['--card-2']))
     chk('ink on card-2 (act-route)', hexof(T['--ink']), hexof(T['--card-2']))
     chk('accent-ink on card (links in tinted boxes)', hexof(T['--accent-ink']), hexof(T['--card']))

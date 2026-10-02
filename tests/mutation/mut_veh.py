@@ -43,9 +43,7 @@ M = [
  ("stored plates not sanitised", 'if (!/^[A-Z]{2}-\\d{3}-[A-Z]{2}$/.test(r.immat)) delete r.immat;', '', "S", "S10"),
  ("stored years not sanitised", 'if (!(Number.isInteger(r.year) && r.year >= 1950 && r.year <= 2100)) delete r.year;', '', "S", "S11"),
  ("plate not prefilled", 'Pt.plate.value = (last && last.immat) || "";', 'Pt.plate.value = "";', "S", "S1"),
- ("plate chip missing in Mes réparations", '<span class="rep-plate">', '<span class="rep-plateX">', "S", "S4"),
  ("history note forgets the plate", "et l'immatriculation n'y figurent jamais", "n'y figurent jamais", "S", "S8b"),
- ("year span missing in Mes réparations", '<span class="rep-year">', '<span class="rep-yearX">', "S", "S4"),
  ("plate and year row misaligned", '  gap: 12px;\n  align-items: start;\n}', '  gap: 12px;\n}', "L", "L2"),
  ("forced colours: no outline on the active option", '.suggest li[aria-selected="true"],\n  .suggest li:hover {\n    outline: 2px solid Highlight;', '.suggest li[aria-selected="true"],\n  .suggest li:hover {\n    outline: 2px solid Canvas;', "L", "L8"),
 ]

@@ -879,6 +879,8 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
   }
   function Y(e) {
     return {
+      id: e.id,
+      own: !e.shared,
       serviceId: e.serviceId,
       price: e.price,
       month: String(e.date).slice(0, 7),
@@ -956,12 +958,6 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
       moreBtn: w("#moreBtn"),
       refList: w("#refList"),
       addBtn: w("#addRepairBtn"),
-      addBtn2: w("#addRepairBtn2"),
-      repairs: w("#repairs"),
-      repGroups: w("#repGroups"),
-      repCount: w("#repCount"),
-      repEmpty: w("#repEmpty"),
-      repBadge: w("#repBadge"),
       toast: w("#toast"),
       tabs: w("#tabs"),
       sumWhere: w("#sumWhere"),
@@ -994,7 +990,6 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
       sel: null,
       mapKey: "",
       mapDirty: !1,
-      repDirty: !0,
       cachedAt: 0,
     },
     ge = () => matchMedia("(min-width:1024px)").matches,
@@ -2102,8 +2097,7 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
       (pe.osmNote.hidden = !0),
       "map" === me.viewMode && St("list"),
       (pe.list.innerHTML = ""),
-      be(),
-      Jt());
+      be());
   }
   pe.form.addEventListener("submit", (e) => {
     (e.preventDefault(), lt());
@@ -2261,8 +2255,7 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
       (pe.mapFab.hidden = pe.mapPane.hidden),
       me.sel && !me.view.some((e) => e.id === me.sel) && sl(null),
       Et(),
-      ft(),
-      Jt());
+      ft());
   }
   function ft() {
     const e = fe(),
@@ -2725,7 +2718,7 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
             t.sort((e, t) => t.month.localeCompare(e.month) || e.price - t.price);
             const a = t.map((e) => e.price),
               n = "autre" === e;
-            return `<section class="h-type">\n        <div class="h-type-head"><span class="h-type-name">${y(j(e))}</span>${n ? "" : `<span class="h-median">Prix médian <b>${C(N(a))}</b></span>`}</div>\n        <p class="h-sub">${V(t.length, "réparation", "réparations")}${t.length > 1 && !n ? ` · de ${C(Math.min(...a))} à ${C(Math.max(...a))}` : ""}${n ? " de nature différente : pas de prix médian" : ""}</p>\n        <ul class="h-rows">${t.map((e) => `<li><span class="h-date">${y(G(e.month))}</span><span class="h-model${e.model ? "" : " none"}"><span>${y(vehLabel(e) || "Modèle non renseigné")}</span>${e.rating ? `${re(e.rating)}<span class="sr-only">note ${e.rating} sur 5</span>` : ""}</span><span class="h-price">${C(e.price)}</span></li>`).join("")}</ul>\n      </section>`;
+            return `<section class="h-type">\n        <div class="h-type-head"><span class="h-type-name">${y(j(e))}</span>${n ? "" : `<span class="h-median">Prix médian <b>${C(N(a))}</b></span>`}</div>\n        <p class="h-sub">${V(t.length, "réparation", "réparations")}${t.length > 1 && !n ? ` · de ${C(Math.min(...a))} à ${C(Math.max(...a))}` : ""}${n ? " de nature différente : pas de prix médian" : ""}</p>\n        <ul class="h-rows">${t.map((e) => `<li><span class="h-date">${y(G(e.month))}</span><span class="h-model${e.model ? "" : " none"}"><span>${y(vehLabel(e) || "Modèle non renseigné")}</span>${e.rating ? `${re(e.rating)}<span class="sr-only">note ${e.rating} sur 5</span>` : ""}${e.own ? `<button type="button" class="linkish h-del" data-act="unrepair" data-rid="${y(e.id)}" aria-label="Supprimer votre réparation : ${y(j(e.serviceId))}, ${y(G(e.month))}">Supprimer</button>` : ""}</span><span class="h-price">${C(e.price)}</span></li>`).join("")}</ul>\n      </section>`;
           })
           .join("");
         return `<details class="history" data-hid="${y(e.id)}"${ot.has(e.id) ? " open" : ""}>\n      <summary>Historique des réparations<span class="h-count">${V(a.length, "réparation", "réparations")}</span></summary>\n      <div class="h-body">\n        <p class="h-note">Par type de prestation, avec le mois, le modèle et l'année du véhicule et la note donnée au garage. Les commentaires et l'immatriculation n'y figurent jamais.</p>\n        ${r}\n      </div>\n    </details>`;
@@ -2974,6 +2967,12 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
       } else if ("declare" === n) {
         const e = me.view.find((e) => e.id === a.dataset.id);
         e && Ot({ garage: qt(e, "search"), svcId: fe().id });
+      } else if ("unrepair" === n) {
+        unrepair(t.dataset.rid, "Réparation supprimée.", !0);
+        // la ligne cliquée disparaît : le focus revient sur l'historique du garage (ou sur son nom)
+        const id = CSS.escape(a.dataset.id),
+          f = pe.list.querySelector(`details.history[data-hid="${id}"] > summary`) || pe.list.querySelector(`[data-id="${id}"] .g-name`);
+        f && f.focus({ preventScroll: !0 });
       }
     }),
     pe.list.addEventListener(
@@ -3696,67 +3695,7 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
       document.documentElement.classList.remove("dlg-open"));
   }
   function Kt() {
-    me.raw.length && "osm" === me.kind ? ht() : Jt();
-  }
-  function Ut(e) {
-    const t = pe.repGroups.querySelector(`[data-key="${CSS.escape(e)}"]`);
-    t && Ft(t);
-  }
-  function Xt(e) {
-    return `<li class="rep-item">\n      <span class="rep-what">${y(j(e.serviceId))}</span>\n      <span class="rep-price">${C(e.price)}</span>\n      <span class="rep-meta"><span>${y(B(e.date))}</span><span class="rep-model${e.model ? "" : " none"}">${y(e.model || "Modèle non renseigné")}</span>${e.year ? `<span class="rep-year">${e.year}</span>` : ""}${e.immat ? `<span class="rep-plate">${y(e.immat)}</span>` : ""}${Z(e.rating) ? `${re(e.rating)}<span class="sr-only">note ${e.rating} sur 5</span>` : '<span class="rep-model none">non noté</span>'}</span>\n      ${e.comment ? `<p class="rep-comment">${y(e.comment)}</p>` : ""}\n      <button type="button" class="rep-del" data-del="${y(e.id)}" aria-label="Supprimer : ${y(j(e.serviceId))}, ${y(B(e.date))}">Supprimer</button>\n    </li>`;
-  }
-  function Jt() {
-    const e = Ze.length;
-    if (
-      ((pe.repBadge.hidden = !e),
-      (pe.repBadge.textContent = String(e)),
-      (pe.repEmpty.hidden = e > 0),
-      (pe.repairs.hidden = !e),
-      (pe.repCount.textContent = e
-        ? `${V(e, "réparation déclarée", "réparations déclarées")}, enregistrées dans ce navigateur.`
-        : "Prix payés et notes, enregistrés dans ce navigateur."),
-      "reparations" !== me.screen)
-    )
-      return void (me.repDirty = !0);
-    if (((me.repDirty = !1), !e)) return void (pe.repGroups.innerHTML = "");
-    const t = new Map();
-    for (const e of Ze) {
-      let a = t.get(e.garageId);
-      (a ||
-        t.set(
-          e.garageId,
-          (a = { key: e.garageId, name: e.garageName, addr: e.garageAddr, items: [], latest: "" }),
-        ),
-        a.items.push(e),
-        String(e.createdAt) > a.latest && (a.latest = String(e.createdAt)));
-    }
-    const a = "osm" === me.kind ? me.view : [];
-    pe.repGroups.innerHTML = [...t.values()]
-      .sort((e, t) => t.latest.localeCompare(e.latest))
-      .map((e) => {
-        e.items.sort(
-          (e, t) => t.date.localeCompare(e.date) || String(t.createdAt).localeCompare(String(e.createdAt)),
-        );
-        const t = new Map();
-        for (const a of e.items) (t.has(a.serviceId) || t.set(a.serviceId, []), t.get(a.serviceId).push(a));
-        const n = a.find((t) => e.items.some((e) => nt(e, t)));
-        return `<li class="rep-group" data-key="${y(e.key)}">\n      <div class="rep-head"><div><h3>${y(e.name)}</h3>${e.addr ? `<p class="meta">${y(e.addr)}</p>` : ""}${(function (
-          e,
-        ) {
-          const t = ae(e);
-          return t
-            ? `<p class="rating">${re(t.avg)}<span><b>${te(t.avg)}</b>/5 · ${V(t.n, "note déclarée", "notes déclarées")}</span></p>`
-            : "";
-        })(
-          e.items,
-        )}</div>${n ? `<button type="button" class="mini" data-act="show" data-id="${y(n.id)}">${he("garage")}Voir la fiche</button>` : ""}</div>\n      ${[
-          ...t,
-        ]
-          .filter(([e]) => "autre" !== e)
-          .map(([e, t]) => it(t, e, !0))
-          .join("")}\n      <ul class="rep-list">${e.items.map(Xt).join("")}</ul>\n    </li>`;
-      })
-      .join("");
+    me.raw.length && "osm" === me.kind && ht();
   }
   (Pt.stars.addEventListener("change", (e) => {
     "rRating" === e.target.name && Wt(+e.target.value);
@@ -3846,48 +3785,47 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
         createdAt: new Date().toISOString(),
       };
       (Ze.push(u), et(), Qt(), Kt());
-      const p = (function (e) {
-        if ("garages" === me.screen && "osm" === me.kind && e.serviceId === fe().id) {
-          const t = me.view.find((t) => nt(e, t));
-          if (t) return (_t(t.id, !0), !0);
-        }
-        return "reparations" === me.screen && (Ut(e.garageId), !0);
-      })(u);
+      // Si la recherche en cours contient ce garage, sa fiche s'ouvre sur l'échelle de prix et l'historique mis à jour.
+      const g = "garages" === me.screen && "osm" === me.kind ? me.view.find((t) => nt(u, t)) : null;
+      if (g) {
+        _t(g.id, !0);
+        const d = pe.list.querySelector(`details.history[data-hid="${CSS.escape(g.id)}"]`);
+        d && (d.open = !0);
+      }
       aa(
-        `Réparation enregistrée : ${u.garageName}, ${C(u.price)}, ${r}/5. Échelle de prix et note mises à jour.`,
-        p
-          ? null
-          : {
-              label: "Voir",
-              fn: () => {
-                (ea("reparations"), Ut(u.garageId));
-              },
-            },
+        `Réparation enregistrée : ${u.garageName}, ${C(u.price)}, ${r}/5. ${
+          g
+            ? u.serviceId === fe().id
+              ? "Échelle de prix et note mises à jour."
+              : "Note et historique du garage mis à jour."
+            : "Elle s'affichera dans la fiche de ce garage."
+        }`,
+        { label: "Annuler", fn: () => unrepair(u.id, "Réparation annulée.", !1) },
       );
-    }),
-    pe.repGroups.addEventListener("click", (e) => {
-      const t = e.target.closest("[data-del]");
-      if (t)
-        return void (function (e) {
-          const t = Ze.findIndex((t) => t.id === e);
-          if (t < 0) return;
-          const [a] = Ze.splice(t, 1);
-          (et(), Kt());
-          const n = pe.repGroups.querySelector(`[data-key="${CSS.escape(a.garageId)}"]`),
-            r = n || w("#repTitle");
-          (r.setAttribute("tabindex", "-1"),
-            (pe.repairs.hidden && !n) || r.focus({ preventScroll: !0 }),
-            aa("Réparation supprimée.", {
-              label: "Annuler",
-              fn: () => {
-                (Ze.splice(Math.min(t, Ze.length), 0, a), et(), Kt());
-              },
-            }));
-        })(t.dataset.del);
-      const a = e.target.closest("[data-act=show]");
-      a && (ea("garages"), _t(a.dataset.id, !0));
     }));
-  const Yt = ["garages", "reparations", "prix"];
+  // Retire une réparation déclarée depuis ce navigateur : « Annuler » du message d'enregistrement, « Supprimer » de
+  // l'historique d'une fiche (avec « Annuler » pour la remettre).
+  function unrepair(id, msg, undoable) {
+    const i = Ze.findIndex((r) => r.id === id);
+    if (i < 0) return;
+    const [removed] = Ze.splice(i, 1);
+    et();
+    Kt();
+    aa(
+      msg,
+      undoable
+        ? {
+            label: "Annuler",
+            fn: () => {
+              Ze.splice(Math.min(i, Ze.length), 0, removed);
+              et();
+              Kt();
+            },
+          }
+        : null,
+    );
+  }
+  const Yt = ["garages", "prix"];
   function Zt(e) {
     Yt.includes(e) || (e = "garages");
     const t = me.screen !== e;
@@ -3895,20 +3833,10 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
     for (const t of Yt) w("#view-" + t).hidden = t !== e;
     for (const t of pe.tabs.querySelectorAll(".tab"))
       t.dataset.view === e ? t.setAttribute("aria-current", "page") : t.removeAttribute("aria-current");
-    ("reparations" === e && me.repDirty && Jt(),
-      "garages" === e && (me.mapDirty ? Et() : Mt && Mt.invalidateSize()),
-      t && window.scrollTo(0, 0));
-  }
-  function ea(e) {
-    if (location.hash !== "#" + e)
-      try {
-        history.pushState(null, "", "#" + e);
-      } catch (e) {}
-    Zt(e);
+    ("garages" === e && (me.mapDirty ? Et() : Mt && Mt.invalidateSize()), t && window.scrollTo(0, 0));
   }
   (window.addEventListener("hashchange", () => Zt(location.hash.slice(1))),
-    window.addEventListener("popstate", () => Zt(location.hash.slice(1))),
-    pe.addBtn2.addEventListener("click", () => Ot()));
+    window.addEventListener("popstate", () => Zt(location.hash.slice(1))));
   let ta = null;
   function aa(e, t) {
     (clearTimeout(ta),
@@ -3960,7 +3888,6 @@ import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
         _e(),
         ve(),
         Zt(location.hash.slice(1) || "garages"),
-        Jt(),
         (function () {
           if (!me.place || "ct" === fe().kind) return;
           const e = Ie(me.place.lat, me.place.lon, Math.round(1e3 * +pe.radius.value));

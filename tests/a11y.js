@@ -30,8 +30,15 @@ async function audit(page, label, out) {
     await page.click("#list > li:nth-child(1) .g-main");
     await page.waitForTimeout(500);
     await audit(page, `${scheme} desktop results+open`, out);
-    await page.click(".tab[data-view=reparations]"); await page.waitForTimeout(250);
-    await audit(page, `${scheme} desktop reparations`, out);
+    // the history of a garage with declarations (Norauto Bron), open: rows with their « Supprimer » buttons
+    const hist = '#list [data-id="osm:node/1022"]';
+    await page.locator(`${hist} .g-main`).scrollIntoViewIfNeeded();
+    await page.click(`${hist} .g-main`);
+    await page.waitForTimeout(400);
+    await page.evaluate((s) => { const d = document.querySelector(`${s} details.history`); if (d) d.open = true; }, hist);
+    if (!(await page.$(`${hist} details.history[open] .h-del`))) throw new Error("a11y: l'historique du garage ouvert doit afficher des boutons Supprimer");
+    await page.waitForTimeout(250);
+    await audit(page, `${scheme} desktop history+delete`, out);
     await page.click(".tab[data-view=prix]"); await page.waitForTimeout(250);
     await audit(page, `${scheme} desktop prix`, out);
     await page.click("#addRepairBtn"); await page.waitForTimeout(350);

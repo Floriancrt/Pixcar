@@ -249,13 +249,18 @@ async function cornerDiff(browser, page, selector, radius, inset) {
       // the medians are plain text (not only drawn): readable without the bar
       const txt = norm(await page.$eval(`${sel(1022)} .scale`, (e) => e.innerText));
       check(`S8 [${scheme}] both medians and the gap are readable as text`, txt.includes("Médiane des enseignes") && txt.includes("Médiane de ce garage") && txt.includes(euro(refMed)) && txt.includes(euro(meMed)) && txt.includes(sc.delta), txt);
-      // Mes réparations: same component per service; « revision » has no chain price -> only the garage median
-      await page.click(".tab[data-view=reparations]");
-      await page.waitForTimeout(300);
-      const groups = await page.$$eval("#repairs .scale", (l) => l.map((el) => ({ head: el.querySelector(".label").textContent.replace(/\s+/g, " ").trim(), noRef: el.classList.contains("no-ref"), tiles: el.querySelectorAll(".cmp").length, delta: !!el.querySelector(".delta"), ref: !!el.querySelector(".scale-ref"), med: !!el.querySelector(".scale-med"), me: (el.querySelector(".cmp.is-me .cmp-v") || {}).textContent })));
-      const rev = groups.find((g) => /Révision|révision/i.test(g.head)), vid = groups.find((g) => /idange/.test(g.head));
-      check(`S9 [${scheme}] Mes réparations: scale with both medians for « vidange »`, vid && vid.tiles === 2 && vid.delta && vid.ref && vid.med && !vid.noRef, JSON.stringify(groups));
-      check(`S10 [${scheme}] Mes réparations: service without chain price shows only the garage median`, rev && rev.noRef && rev.tiles === 1 && !rev.delta && !rev.ref && rev.med && norm(rev.me) === euro(130), JSON.stringify(rev));
+      // the history of the same fiche: one block per declared service, each with its own median and a Supprimer per row
+      await page.click(`${sel(1022)} details.history > summary`);
+      await page.waitForTimeout(250);
+      const blocks = await page.$$eval(`${sel(1022)} .h-type`, (l) => l.map((b) => ({ name: b.querySelector(".h-type-name").textContent.trim(), med: (b.querySelector(".h-median b") || {}).textContent || "", rows: b.querySelectorAll(".h-rows li").length, del: b.querySelectorAll(".h-del").length })));
+      const vid = blocks.find((g) => /idange/.test(g.name)), rev = blocks.find((g) => /évision/i.test(g.name));
+      check(`S9 [${scheme}] fiche history: one block per declared service, with its median and a Supprimer per row`, vid && vid.rows === 3 && vid.del === 3 && norm(vid.med) === euro(median(declared)) && rev && rev.rows === 1 && rev.del === 1 && norm(rev.med) === euro(130), JSON.stringify(blocks));
+      // « revision » has no chain price: the same scale component shows only the garage median
+      await page.selectOption("#service", "revision");
+      await page.waitForTimeout(350);
+      if (!(await page.$(`${sel(1022)} .scale`))) await openCard(page, 1022);
+      const rv = await page.$eval(`${sel(1022)} .scale`, (el) => ({ noRef: el.classList.contains("no-ref"), tiles: el.querySelectorAll(".cmp").length, delta: !!el.querySelector(".delta"), ref: !!el.querySelector(".scale-ref"), med: !!el.querySelector(".scale-med"), me: (el.querySelector(".cmp.is-me .cmp-v") || {}).textContent }));
+      check(`S10 [${scheme}] service without chain price: the fiche scale shows only the garage median`, rv.noRef && rv.tiles === 1 && !rv.delta && !rv.ref && rv.med && norm(rv.me) === euro(130), JSON.stringify(rv));
       await ctx.close();
     }
     // S11: narrow screens: nothing overflows
