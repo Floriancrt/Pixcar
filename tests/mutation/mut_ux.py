@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Mutation checks for the UX round: break one thing in the built page, the matching checks must fail."""
-import pathlib, subprocess, sys, re, json
-T = pathlib.Path(__file__).parent
-src = (T.parent / "build_out.html").read_text()
+"""Mutations sur la série UX (prix sans « dès », téléphones, médianes, notes, barre de défilement) : voir lib.py."""
+import pathlib, sys
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
+from lib import run
+
 M = [
  # name, find, replace, sections, must-fail check prefix
  ("dès back on card prices", '<span class="amount">${n.approx', '<span class="amount">${n.from ? \'<span class="from">dès</span>\' : ""}${n.approx', "D", "D1"),
@@ -31,18 +32,5 @@ M = [
  ("standard scrollbar properties for every browser", '@supports not selector(::-webkit-scrollbar) {', '@media all {', "B", "B3"),
  ("forced-colors markers not coloured", '  .scale-ref,\n  .k-ref {\n    background: CanvasText;', '  .scale-refx,\n  .k-refx {\n    background: CanvasText;', "F", "F2"),
 ]
-only = sys.argv[1:] 
-bad = 0
-for name, find, rep, secs, must in M:
-    if only and not any(o.lower() in name.lower() for o in only): continue
-    n = src.count(find)
-    if n != 1:
-        print(f"[skip] {name}: anchor found {n} times"); bad += 1; continue
-    (T / "site" / "mut.html").write_text(src.replace(find, rep))
-    r = subprocess.run(["node", "ux.js", "mut.html", secs], cwd=T, capture_output=True, text=True, timeout=900)
-    fails = re.findall(r"FAIL: (\S+)", r.stdout)
-    ok = any(f.startswith(must) for f in fails)
-    print(f"[{'killed' if ok else 'SURVIVED'}] {name:58s} expect {must:4s} -> failing: {', '.join(sorted(set(fails))) or 'none'}")
-    bad += (not ok)
-print("mutations not killed:", bad)
-sys.exit(1 if bad else 0)
+
+run(M, "ux.js", 58)

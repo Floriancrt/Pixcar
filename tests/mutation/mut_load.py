@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Mutation checks for the loading state: break one thing in the built page, the matching checks must fail."""
-import pathlib, subprocess, sys, re
-T = pathlib.Path(__file__).parent
-src = (T.parent / "build_out.html").read_text()
+"""Mutations sur l'état de chargement : voir lib.py."""
+import pathlib, sys
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
+from lib import run
+
 Q = '<span class="wait-quote" aria-hidden="true">${y(waitQuote)}</span>'
 M = [
  ("body class never set", 'document.body.classList.toggle("is-searching", e),', '', "L", "L1"),
@@ -11,8 +12,8 @@ M = [
  ("animation running when idle", 'body.is-searching .map-empty .ld-orbit,\n.wait-loader .ld-orbit {', '.ld-orbit {', "I", "I2"),
  ("car turns clockwise", 'transform: rotate(-360deg);', 'transform: rotate(360deg);', "L", "L6"),
  ("car turns around the wrong centre", '.ld-orbit {\n  transform-origin: 0 0;\n}', '.ld-orbit {\n  transform-origin: 50% 50%;\n}', "L", "L5"),
- ("car off the lane (group shifted)", '<g class="ld" transform="translate(1000 500) scale(1.35)"><g class="ld-orbit">', '<g class="ld" transform="translate(1000 540) scale(1.35)"><g class="ld-orbit">', "L", "L5"),
- ("ring not centred on the pin", '<g class="ld" transform="translate(1000 500) scale(1.35)"><circle class="ld-asphalt"', '<g class="ld" transform="translate(940 500) scale(1.35)"><circle class="ld-asphalt"', "L", "L4"),
+ ("car off the lane (group shifted)", '<g class="ld" transform="translate(1000 500) scale(1.35)"><!--LD_CAR--></g>', '<g class="ld" transform="translate(1000 540) scale(1.35)"><!--LD_CAR--></g>', "L", "L5"),
+ ("ring not centred on the pin", '<g class="ld" transform="translate(1000 500) scale(1.35)"><!--LD_ROAD--></g>', '<g class="ld" transform="translate(940 500) scale(1.35)"><!--LD_ROAD--></g>', "L", "L4"),
  ("lap too fast (1.2 s)", 'animation: ld-lap 2.4s infinite;', 'animation: ld-lap 1.6s infinite;', "L", "L2"),
  ("map card still shown while searching", 'body.is-searching .map-hint,\nbody.is-searching .teaser {', 'body.is-searching .teaser {', "L", "L1"),
  ("teaser not hidden while searching", 'body.is-searching .map-hint,\nbody.is-searching .teaser {', 'body.is-searching .map-hint {', "L", "L3"),
@@ -30,18 +31,5 @@ M = [
  ("forced colours: car like the asphalt", '  .ld-island,\n  .ld-body,\n  .ld-hub {\n    fill: Canvas;', '  .ld-island,\n  .ld-body,\n  .ld-hub {\n    fill: CanvasText;', "X", "X1"),
  ("reduced motion not honoured", 'animation-duration: 0.001ms !important;', 'animation-duration: 2.4s !important;', "R", "R1"),
 ]
-only = sys.argv[1:]
-bad = 0
-for name, find, rep, secs, must in M:
-    if only and not any(o.lower() in name.lower() for o in only): continue
-    n = src.count(find)
-    if n != 1:
-        print(f"[skip] {name}: anchor found {n} times"); bad += 1; continue
-    (T / "site" / "mut.html").write_text(src.replace(find, rep))
-    r = subprocess.run(["node", "load.js", "mut.html", secs], cwd=T, capture_output=True, text=True, timeout=900)
-    fails = re.findall(r"FAIL: (\S+)", r.stdout)
-    ok = any(f.startswith(must) for f in fails)
-    print(f"[{'killed' if ok else 'SURVIVED'}] {name:52s} expect {must:3s} -> failing: {', '.join(sorted(set(fails))) or 'none'}")
-    bad += (not ok)
-print("mutations not killed:", bad)
-sys.exit(1 if bad else 0)
+
+run(M, "load.js", 52)

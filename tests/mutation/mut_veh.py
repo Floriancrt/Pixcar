@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Mutation checks for the vehicle block: break one thing in the built page, the matching check must fail."""
-import pathlib, subprocess, sys, re
-T = pathlib.Path(__file__).parent
-src = (T.parent / "build_out.html").read_text()
+"""Mutations sur le bloc véhicule (immatriculation, année, modèle) : voir lib.py."""
+import pathlib, sys
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
+from lib import run
+
 M = [
  # name, find, replace, sections, must-fail check prefix
  ("digits accepted in the letter groups", 'fits = 1 === g ? c >= "0" && c <= "9" : c >= "A" && c <= "Z";', 'fits = true;', "P", "P6"),
@@ -14,7 +15,7 @@ M = [
  ("no reminder on a refused keystroke", 'Tt(el, Pt.plateErr, masked.dropped ? PLATE_LIVE : "");', 'Tt(el, Pt.plateErr, "");', "P", "P6b"),
  ("reminder survives leaving the field", 'Tt(Pt.plate, Pt.plateErr, "");\n        Pt.plateSay.textContent = "";', 'Pt.plateSay.textContent = "";', "P", "P10"),
  ("no screen-reader announcement", 'Pt.plateSay.textContent = masked.dropped ? PLATE_LIVE : "";', '', "P", "P6d"),
- ("plate pattern loosened (1 to 3 characters per group)", '/^[A-Z]{2}-\\d{3}-[A-Z]{2}$/,\n    PLATE_SEP', '/^[A-Z]{1,2}-\\d{1,3}-[A-Z]{1,2}$/,\n    PLATE_SEP', "V", "V6d"),
+ ("plate pattern loosened (1 to 3 characters per group)", r'PLATE_RE = /^[A-Z]{2}-\d{3}-[A-Z]{2}$/;', r'PLATE_RE = /^[A-Z]{1,2}-\d{1,3}-[A-Z]{1,2}$/;', "V", "V6d"),
  ("plate not validated on submit", 'PLATE_RE.test(pl),', 'true,', "V", "V1"),
  ("year range ignored", 'if (+year < YEAR_MIN || +year > YEAR_MAX)', 'if (false)', "Y", "Y5"),
  ("year after the repair date accepted", 'if (/^\\d{4}-/.test(date) && +year > +date.slice(0, 4))', 'if (false)', "Y", "Y7"),
@@ -39,26 +40,13 @@ M = [
  ("one-character model names guess the brand", 'if (r.length < 2) continue;', '', "C", "C6"),
  ("brand list not extended with the catalogue", 'O = ["Mercedes-Benz", ...CARS.map(([brand]) => brand)]', 'O = ["Mercedes-Benz", "Renault", "Peugeot"]', "CM", "C5"),
  ("plate leaks into the model label (garage sheet, tooltip)", 'model: e.model || "",\n      year: e.year || 0,', 'model: (e.model || "") + (e.immat ? " " + e.immat : ""),\n      year: e.year || 0,', "S", "S8"),
- ("old « plate » migration disabled", 'if (t.some((e) => "plate" in e)) {', 'if (t.some((e) => "plateX" in e)) {', "S", "S13"),
- ("stored plates not sanitised", 'if (!/^[A-Z]{2}-\\d{3}-[A-Z]{2}$/.test(r.immat)) delete r.immat;', '', "S", "S10"),
- ("stored years not sanitised", 'if (!(Number.isInteger(r.year) && r.year >= 1950 && r.year <= 2100)) delete r.year;', '', "S", "S11"),
- ("plate not prefilled", 'Pt.plate.value = (last && last.immat) || "";', 'Pt.plate.value = "";', "S", "S1"),
+ ("old « plate » migration disabled", 'if (rows.some((e) => "plate" in e)) {', 'if (rows.some((e) => "plateX" in e)) {', "S", "S13"),
+ ("stored plates not sanitised", 'if (!PLATE_RE.test(r.immat)) delete r.immat;', '', "S", "S11"),
+ ("stored years not sanitised", 'if (!(Number.isInteger(r.year) && r.year >= YEAR_MIN && r.year <= 2100)) delete r.year;', '', "S", "S11"),
+ ("plate not prefilled", 'Pt.plate.value = (last && last.plate) || "";', 'Pt.plate.value = "";', "S", "S1"),
  ("history note forgets the plate", "et l'immatriculation n'y figurent jamais", "n'y figurent jamais", "S", "S8b"),
  ("plate and year row misaligned", '  gap: 12px;\n  align-items: start;\n}', '  gap: 12px;\n}', "L", "L2"),
  ("forced colours: no outline on the active option", '.suggest li[aria-selected="true"],\n  .suggest li:hover {\n    outline: 2px solid Highlight;', '.suggest li[aria-selected="true"],\n  .suggest li:hover {\n    outline: 2px solid Canvas;', "L", "L8"),
 ]
-only = sys.argv[1:]
-bad = 0
-for name, find, rep, secs, must in M:
-    if only and not any(o.lower() in name.lower() for o in only): continue
-    n = src.count(find)
-    if n != 1:
-        print(f"[skip] {name}: anchor found {n} times"); bad += 1; continue
-    (T / "site" / "mut.html").write_text(src.replace(find, rep))
-    r = subprocess.run(["node", "veh.js", "mut.html", secs], cwd=T, capture_output=True, text=True, timeout=900)
-    fails = re.findall(r"FAIL: (\S+)", r.stdout)
-    ok = any(f.startswith(must) for f in fails)
-    print(f"[{'killed' if ok else 'SURVIVED'}] {name:62s} expect {must:4s} -> failing: {', '.join(sorted(set(fails))) or 'none'}", flush=True)
-    bad += (not ok)
-print("mutations not killed:", bad)
-sys.exit(1 if bad else 0)
+
+run(M, "veh.js", 62)
