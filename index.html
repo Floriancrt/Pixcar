@@ -812,8 +812,6 @@ main {
     width: var(--panel-w);
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
-    scrollbar-color: var(--line-strong) transparent;
     padding: 28px 20px 32px;
     border-radius: 0 var(--r-xl) var(--r-xl) 0;
     background: var(--glass);
@@ -1503,8 +1501,12 @@ select {
   display: block;
   margin-top: 6px;
   font-size: 0.82rem;
-  opacity: 0.85;
   overflow-wrap: anywhere;
+}
+.status .detail > summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 600;
 }
 .results {
   display: grid;
@@ -1943,6 +1945,7 @@ select {
   margin: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
   gap: 8px 14px;
   font-size: 0.88rem;
 }
@@ -1955,11 +1958,29 @@ select {
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
+.phones {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+}
+.ph {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 14px;
+}
 .phone {
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
   user-select: all;
   -webkit-user-select: all;
+}
+.fact-none {
+  color: var(--ink-3);
 }
 .price-note {
   margin: 0;
@@ -2087,23 +2108,75 @@ select {
   font: 500 0.8rem/1.2 var(--font);
   color: var(--ink-3);
 }
-.scale-median {
-  font-size: 0.82rem;
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-.scale-median b {
-  margin-left: 4px;
-  padding: 0.2rem 0.55rem;
+/* Écart entre la médiane du garage et celle des enseignes */
+.delta {
+  padding: 0.28rem 0.65rem;
   border-radius: 999px;
+  font: 700 0.8rem/1.2 var(--font);
+}
+.delta.is-low {
   background: var(--accent-soft);
   color: var(--accent-ink);
-  font: 800 0.98rem/1 var(--font);
+}
+.delta.is-high {
+  background: var(--amber-soft);
+  color: var(--amber-ink);
+}
+.delta.is-eq {
+  background: var(--card);
+  color: var(--ink-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+/* Les deux repères chiffrés : médiane des enseignes (▼) et médiane de ce garage (▲) */
+.scale-cmp {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.no-ref .scale-cmp {
+  grid-template-columns: minmax(0, 1fr);
+}
+.cmp {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.cmp.is-me {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.cmp-k {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 600 0.76rem/1.25 var(--font);
+  color: var(--ink-3);
+}
+.cmp-v {
+  font: 800 1.4rem/1.1 var(--font);
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
+}
+.k-ref,
+.k-me {
+  flex: none;
+  width: 12px;
+  height: 8px;
+}
+.k-ref {
+  background: var(--ink);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+.k-me {
+  background: var(--accent);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
 }
 .scale-bar {
   position: relative;
-  height: 24px;
+  height: 40px;
   margin: 2px 9px;
 }
 .scale-bar::before {
@@ -2130,14 +2203,22 @@ select {
     0 0 0 3px var(--card),
     0 2px 6px rgba(10, 22, 10, 0.35);
 }
-.scale-ref {
+.scale-ref,
+.scale-med {
   position: absolute;
-  top: 1px;
-  bottom: 1px;
-  width: 3px;
-  margin-left: -1.5px;
-  border-radius: 2px;
+  width: 14px;
+  height: 9px;
+  margin-left: -7px;
+}
+.scale-ref {
+  top: 0;
   background: var(--ink);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+.scale-med {
+  bottom: 0;
+  background: var(--accent);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
 }
 .scale-ends {
   display: flex;
@@ -2152,30 +2233,6 @@ select {
   font-size: 0.84rem;
   line-height: 1.5;
   color: var(--ink-2);
-}
-.scale-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  font-size: 0.78rem;
-  color: var(--ink-3);
-}
-.scale-legend i {
-  display: inline-block;
-  vertical-align: -1px;
-  margin-right: 6px;
-}
-.lg-dot {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-.lg-ref {
-  width: 3px;
-  height: 12px;
-  border-radius: 2px;
-  background: var(--ink);
 }
 .history {
   border-radius: var(--r-md);
@@ -3044,6 +3101,62 @@ html.dlg-open {
   }
 }
 
+/* ---------- Barres de défilement ----------
+   Panneau, dialogue et suggestions ont des coins arrondis : la barre native (flèches haut/bas comprises) en
+   dépassait. Souris et pavé tactile (pointeur fin avec survol) sous Chromium et Safari : barre fine sans flèches, rentrée
+   de --sb-inset en haut et en bas pour rester dans la courbe. Écrans tactiles : barres natives en surimpression, sans
+   changement. Firefox : propriétés standard (fines, sans flèches). Les poser aussi dans Chromium désactiverait le style
+   WebKit ci-dessous, d'où le @supports. */
+.panel-col,
+.dlg {
+  --sb-inset: 18px;
+}
+.suggest {
+  --sb-inset: 8px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .panel-col::-webkit-scrollbar,
+  .dlg::-webkit-scrollbar,
+  .suggest::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  .panel-col::-webkit-scrollbar-button,
+  .dlg::-webkit-scrollbar-button,
+  .suggest::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  .panel-col::-webkit-scrollbar-track,
+  .dlg::-webkit-scrollbar-track,
+  .suggest::-webkit-scrollbar-track {
+    margin: var(--sb-inset) 0;
+    background: transparent;
+  }
+  .panel-col::-webkit-scrollbar-thumb,
+  .dlg::-webkit-scrollbar-thumb,
+  .suggest::-webkit-scrollbar-thumb {
+    min-height: 44px;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background: var(--line-strong) padding-box;
+  }
+  .panel-col::-webkit-scrollbar-thumb:hover,
+  .dlg::-webkit-scrollbar-thumb:hover,
+  .suggest::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-3) padding-box;
+  }
+}
+@supports not selector(::-webkit-scrollbar) {
+  .panel-col,
+  .dlg,
+  .suggest {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
 /* ---------- 11. Mouvement & accessibilité ---------- */
 /* Écrans tactiles : cibles plus généreuses (les pastilles sont compactes au pointeur fin) */
 @media (pointer: coarse) {
@@ -3107,6 +3220,24 @@ html.dlg-open {
   .add-btn,
   .icon-btn {
     border: 1px solid CanvasText;
+  }
+  .scale-ref,
+  .k-ref {
+    background: CanvasText;
+  }
+  .scale-med,
+  .k-me,
+  .scale-dot {
+    background: Highlight;
+  }
+  .cmp,
+  .delta {
+    border: 1px solid CanvasText;
+  }
+  .panel-col::-webkit-scrollbar-thumb,
+  .dlg::-webkit-scrollbar-thumb,
+  .suggest::-webkit-scrollbar-thumb {
+    background: CanvasText padding-box;
   }
   .tab[aria-current="page"] {
     outline: 2px solid Highlight;
@@ -3226,7 +3357,7 @@ html.dlg-open {
         <div class="panel-col" id="panelCol">
           <header class="panel-head">
             <h1 id="garagesTitle"><span class="t-brand"><span class="px-word" role="img" aria-label="Pixcar"></span></span><span class="t-text">Garages</span><span class="sr-only"> autour de votre adresse</span></h1>
-            <p class="panel-sub">Comparez le prix d'une prestation autour de votre adresse.</p>
+            <p class="panel-sub">1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto</p>
           </header>
           <form id="searchForm" class="search" novalidate>
             <div class="field">
@@ -3372,7 +3503,7 @@ html.dlg-open {
             </svg>
             <div class="map-hint">
               <b>La carte s'affiche après votre recherche</b>
-              <span>Choisissez une prestation et une adresse : les garages et leurs prix apparaissent ici.</span>
+              <span>Votre titine est comme vous, elle n'aime pas qu'on lui cache des choses</span>
             </div>
           </div>
           <aside class="map-info" id="mapInfo" aria-label="Garage sélectionné" hidden></aside>
@@ -3429,12 +3560,13 @@ html.dlg-open {
         <details class="sources">
           <summary>Sources et méthode</summary>
           <p>
-            <b>Sources.</b> Adresses : Base Adresse Nationale via la Géoplateforme de l'IGN. Garages : © les
-            contributeurs d'<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener"
-              >OpenStreetMap</a
-            >
-            (ODbL). Quand OpenStreetMap n'indique pas l'adresse d'un garage, la page affiche l'adresse la plus proche de
-            sa position (Base Adresse Nationale, 80 m au plus), précédée de « ≈ » : c'est une approximation. Fond de
+            <b>Sources.</b> Adresses : Base Adresse Nationale via la Géoplateforme de l'IGN. Garages (nom, position,
+            adresse, téléphone, horaires, site) : © les contributeurs d'<a href="https://www.openstreetmap.org/copyright"
+              target="_blank" rel="noopener">OpenStreetMap</a>
+            (ODbL), la base de données cartographique ouverte et collaborative : elle ne recense pas tous les garages, et
+            un garage y est parfois sans adresse ni numéro de téléphone. Quand l'adresse manque, la page affiche
+            l'adresse la plus proche de la position du garage (Base Adresse Nationale, 80 m au plus), précédée de « ≈ » :
+            c'est une approximation. Fond de
             carte : Plan IGN (Géoplateforme). Avis : le bouton « Avis Google » ouvre la fiche du garage
             sur Google Maps. Contrôle technique : prix déclarés par les centres, publiés par la DGCCRF sur
             <a href="https://prix.conso.gouv.fr/controle-technique" target="_blank" rel="noopener">prix.conso.gouv.fr</a
@@ -4644,7 +4776,7 @@ html.dlg-open {
         let n = t
           .map((t, n) => {
             const r = oe(t.c, e.id);
-            return `\n    <li>\n      <span class="ref-chain">${av(D(t.c).name, D(t.c))}${y(D(t.c).name)}${0 === n && a && !t.partial ? ' <span class="tag ok">Le moins cher</span>' : ""}${t.partial ? ' <span class="tag warn">Pièces en plus</span>' : ""}${r.length ? " " + ce(r) : ""}</span>\n      <span class="ref-label">${y(t.label)}</span>\n      <span class="ref-price">${t.from ? "<small>dès</small> " : ""}${t.approx ? "<small>env.</small> " : ""}${C(t.p)}${e.unit ? `<br><small>${y(e.unit)}</small>` : ""}</span>\n      ${t.note ? `<span class="ref-note">${y(t.note)}</span>` : ""}\n      ${r.length ? `<div class="ref-promos">${ue(r, e.id)}</div>` : ""}\n      <a class="ref-src" href="${y(t.src)}" target="_blank" rel="noopener">Source : ${y(R(t.src))}</a>\n    </li>`;
+            return `\n    <li>\n      <span class="ref-chain">${av(D(t.c).name, D(t.c))}${y(D(t.c).name)}${0 === n && a && !t.partial ? ' <span class="tag ok">Le moins cher</span>' : ""}${t.partial ? ' <span class="tag warn">Pièces en plus</span>' : ""}${r.length ? " " + ce(r) : ""}</span>\n      <span class="ref-label">${y(t.label)}</span>\n      <span class="ref-price">${t.approx ? "<small>env.</small> " : ""}${C(t.p)}${e.unit ? `<br><small>${y(e.unit)}</small>` : ""}</span>\n      ${t.note ? `<span class="ref-note">${y(t.note)}</span>` : ""}\n      ${r.length ? `<div class="ref-promos">${ue(r, e.id)}</div>` : ""}\n      <a class="ref-src" href="${y(t.src)}" target="_blank" rel="noopener">Source : ${y(R(t.src))}</a>\n    </li>`;
           })
           .join("");
         t.length ||
@@ -4848,7 +4980,7 @@ html.dlg-open {
     (localStorage.removeItem("jg.osm.v1"), localStorage.removeItem("jg.osm.v2"));
   } catch (e) {}
   const qe =
-    /^(name|brand|brand:fr|brand:wikidata|operator|operator:wikidata|shop|craft|service|phone|contact:phone|phone:mobile|contact:mobile|website|contact:website|opening_hours|addr:housenumber|addr:street|addr:postcode|addr:city|addr:full|addr:place|addr:suburb|contact:housenumber|contact:street|contact:postcode|contact:city|service:vehicle:.+)$/;
+    /^(name|brand|brand:fr|brand:wikidata|operator|operator:wikidata|shop|craft|service|phone|contact:phone|phone:mobile|contact:mobile|mobile|website|contact:website|opening_hours|addr:housenumber|addr:street|addr:postcode|addr:city|addr:full|addr:place|addr:suburb|contact:housenumber|contact:street|contact:postcode|contact:city|service:vehicle:.+)$/;
   function Ie(e, t, a, r = 3 * n) {
     const s = P.get(Re, {}) || {},
       i = `${e.toFixed(4)},${t.toFixed(4)}`;
@@ -5035,7 +5167,9 @@ html.dlg-open {
       chain: r,
       addr: [l, d].filter(Boolean).join(", ") || q(t["addr:full"] || ""),
       addrGap: gap,
-      phone: t.phone || t["contact:phone"] || t["phone:mobile"] || t["contact:mobile"] || "",
+      phone: [t.phone, t["contact:phone"], t.mobile, t["contact:mobile"], t["phone:mobile"]]
+        .filter(Boolean)
+        .join(";"),
       web: T(t.website || t["contact:website"] || ""),
       hours: t.opening_hours || "",
       dealer: !r && (c.test(t.brand || "") || c.test(t.name || "")),
@@ -5298,6 +5432,12 @@ html.dlg-open {
         ? { kind: "center" }
         : { kind: "none" };
   }
+  // ----- Échelle de prix : où se situent les réparations d'un garage, avec deux repères nommés et chiffrés ------------
+  // Les points sont les réparations déclarées chez ce garage pour la prestation, placés sur l'étendue de tous les prix
+  // connus (réparations déclarées + prix des enseignes). Deux repères, écrits en toutes lettres au-dessus de l'échelle :
+  // la médiane des enseignes (▼) et la médiane de ce garage (▲), avec l'écart entre les deux. Sans prix d'enseigne pour
+  // la prestation, seule la médiane du garage est repérée.
+  // e : réparations déclarées chez ce garage pour la prestation ; t : id de la prestation ; a : nommer la prestation.
   function it(e, t, a) {
     if (!e.length) return "";
     const n = (u[t] || []).filter((e) => !e.partial).map((e) => e.p),
@@ -5309,9 +5449,12 @@ html.dlg-open {
       o = i - s,
       l = (e) => (o > 0 ? Math.max(0, Math.min(100, ((e - s) / o) * 100)).toFixed(1) : "50"),
       c = n.length ? N(n) : NaN,
+      ref = Number.isFinite(c),
       d = e.map(Y).sort((e, t) => e.month.localeCompare(t.month)),
       p = d.map((e) => e.price),
       m = N(p),
+      gap = ref ? (m - c) / c : 0,
+      kind = Math.abs(gap) < 0.05 ? "eq" : gap < 0 ? "low" : "high",
       g = d
         .map(
           (e) =>
@@ -5322,17 +5465,17 @@ html.dlg-open {
       1 === e.length
         ? `1 réparation déclarée, en ${G(d[0].month)}`
         : `${e.length} réparations déclarées, de ${C(Math.min(...p))} à ${C(Math.max(...p))}`;
-    if (Number.isFinite(c)) {
-      const e = (m - c) / c;
-      h +=
-        Math.abs(e) < 0.05
-          ? ` · médiane au niveau du prix médian « dès » des enseignes (${C(c)})`
-          : ` · médiane ${Math.round(100 * Math.abs(e))} % ${e < 0 ? "sous le" : "au-dessus du"} prix médian « dès » des enseignes (${C(c)})`;
-    }
-    return (
-      1 === r.length && (h += ". Les prochaines déclarations compléteront l'échelle."),
-      `<div class="scale">\n      <div class="scale-head"><span class="label">Échelle de prix${a ? ` <small>· ${y(j(t))}</small>` : ""}</span><span class="scale-median">Prix médian <b>${C(m)}</b></span></div>\n      <div class="scale-bar" aria-hidden="true">${Number.isFinite(c) && o > 0 ? `<span class="scale-ref" style="left:${l(c)}%"></span>` : ""}${g}</div>\n      ${o > 0 ? `<div class="scale-ends" aria-hidden="true"><span>${C(s)} · moins cher</span><span>plus cher · ${C(i)}</span></div>` : ""}\n      <p class="scale-text">${y(h)}</p>\n      ${Number.isFinite(c) && o > 0 ? '<div class="scale-legend" aria-hidden="true"><span><i class="lg-dot"></i>ce garage</span><span><i class="lg-ref"></i>prix médian des enseignes</span></div>' : ""}\n    </div>`
-    );
+    h += 1 === r.length ? ". Les prochaines déclarations compléteront l'échelle." : ".";
+    return `<div class="scale${ref ? "" : " no-ref"}">
+      <div class="scale-head"><span class="label">Échelle de prix${a ? ` <small>· ${y(j(t))}</small>` : ""}</span>${ref ? `<span class="delta is-${kind}">${"eq" === kind ? "Au niveau des enseignes" : `${Math.round(100 * Math.abs(gap))} % ${gap < 0 ? "sous les enseignes" : "au-dessus des enseignes"}`}</span>` : ""}</div>
+      <div class="scale-cmp">
+        ${ref ? `<div class="cmp is-ref"><span class="cmp-k"><i class="k-ref" aria-hidden="true"></i>Médiane des enseignes</span><b class="cmp-v">${C(c)}</b></div>` : ""}
+        <div class="cmp is-me"><span class="cmp-k"><i class="k-me" aria-hidden="true"></i>Médiane de ce garage</span><b class="cmp-v">${C(m)}</b></div>
+      </div>
+      <div class="scale-bar" aria-hidden="true">${ref ? `<span class="scale-ref" style="left:${l(c)}%"></span>` : ""}${g}<span class="scale-med" style="left:${l(m)}%"></span></div>
+      ${o > 0 ? `<div class="scale-ends" aria-hidden="true"><span>${C(s)} · moins cher</span><span>plus cher · ${C(i)}</span></div>` : ""}
+      <p class="scale-text">${y(h)}</p>
+    </div>`;
   }
   const ot = new Set();
   async function lt(e) {
@@ -5585,8 +5728,7 @@ html.dlg-open {
               l.lon,
               r,
               (e) => {
-                e > 0 &&
-                  dt("Le serveur OpenStreetMap principal tarde à répondre. Essai d'un serveur de secours…");
+                e > 0 && dt("Le serveur principal tarde à répondre. Essai d'un serveur de secours…");
               },
               !0 === e,
             );
@@ -5596,12 +5738,7 @@ html.dlg-open {
           }
           if (!s) {
             const e = Ie(l.lat, l.lon, r, 30 * n);
-            e &&
-              ((s = e.els.map(Be).filter(Boolean)),
-              (me.cachedAt = e.t),
-              me.notes.push(
-                `OpenStreetMap ne répond pas pour le moment (${De(d)}) : voici la liste enregistrée lors d'une recherche précédente.`,
-              ));
+            e && ((s = e.els.map(Be).filter(Boolean)), (me.cachedAt = e.t));
           }
           if (s && pe.sirene.checked) {
             dt("Ajout des ateliers du registre SIRENE…");
@@ -5628,24 +5765,18 @@ html.dlg-open {
               )),
                 me.notes.push(...e.notes));
             } catch (e) {
-              me.notes.push(
-                "Le registre SIRENE n'a pas répondu : seuls les garages d'OpenStreetMap sont affichés.",
-              );
+              me.notes.push("Le registre SIRENE n'a pas répondu : aucun atelier n'est ajouté à cette liste.");
             }
           }
           if (!s) {
             let e;
-            dt("OpenStreetMap ne répond pas. Recherche dans le registre des entreprises (SIRENE)…");
+            dt("La base des garages ne répond pas. Recherche dans le registre des entreprises (SIRENE)…");
             try {
               e = await Oe(l.lat, l.lon, c);
             } catch (e) {
               return void ut(0, "osm", De(d));
             }
-            ((s = e.items),
-              me.notes.push(
-                `OpenStreetMap ne répond pas pour le moment (${De(d)}). Cette liste vient du registre des entreprises, sans téléphone ni horaires : relancez la recherche plus tard pour la liste complète.`,
-                ...e.notes,
-              ));
+            ((s = e.items), me.notes.push(...e.notes));
           }
           ((me.raw = s), (me.garages = s), (me.kind = "osm"));
         }
@@ -5670,7 +5801,7 @@ html.dlg-open {
     ((pe.status.className = "status" + ("err" === t ? " err" : "")),
       (pe.status.innerHTML = e
         ? y(e) +
-          (n ? `<small class="detail">Détail : ${y(n)}</small>` : "") +
+          (n ? `<details class="detail"><summary>Détails techniques</summary>${y(n)}</details>` : "") +
           (a ? '<br><button type="button" class="ghost" id="retryBtn">Réessayer</button>' : "")
         : ""));
     const r = w("#retryBtn");
@@ -5679,7 +5810,7 @@ html.dlg-open {
   function ut(e, t, a) {
     const n = !navigator.onLine;
     dt(
-      `${{ adresse: "Le service d'adresses de l'IGN ne répond pas.", osm: "Ni OpenStreetMap ni le registre des entreprises ne répondent.", ct: "Les prix officiels du contrôle technique ne répondent pas. Vous pouvez les consulter sur prix.conso.gouv.fr." }[t]} ${n ? "Vous semblez hors connexion. " : ""}Réessayez dans une minute.`,
+      `${{ adresse: "Le service d'adresses de l'IGN ne répond pas.", osm: "Ni la base des garages ni le registre des entreprises ne répondent.", ct: "Les prix officiels du contrôle technique ne répondent pas. Vous pouvez les consulter sur prix.conso.gouv.fr." }[t]} ${n ? "Vous semblez hors connexion. " : ""}Réessayez dans une minute.`,
       "err",
       !0,
       a,
@@ -5818,7 +5949,7 @@ html.dlg-open {
           ) {
             const e = n.reduce((e, t) => (t.price.amount < e.price.amount ? t : e)),
               t = n.filter((e) => "declared" === e.price.kind).length;
-            r += `<p class="best">${n.length} avec un prix${t ? ` (dont ${t} déclaré${t > 1 ? "s" : ""} par vous)` : " affiché"}. Le moins cher : <b>${y(e.name)}</b>, à ${E(e.dist)}, ${e.price.from ? "dès " : ""}<b>${C(e.price.amount)}</b>.</p>`;
+            r += `<p class="best">${n.length} avec un prix${t ? ` (dont ${t} déclaré${t > 1 ? "s" : ""} par vous)` : " affiché"}. Le moins cher : <b>${y(e.name)}</b>, à ${E(e.dist)}, <b>${C(e.price.amount)}</b>.</p>`;
           } else
             e.length
               ? (r += `<p class="best">${(u[t.id] || []).length ? "Aucun centre d'enseigne à prix public dans cette zone." : "Aucun prix public pour cette prestation."} Demandez des devis, puis déclarez le prix payé avec « Ajouter une réparation » pour construire l'échelle de prix de chaque garage.</p>`)
@@ -5886,7 +6017,7 @@ html.dlg-open {
                 "declared" === n.kind
                   ? `<span class="amount"><span class="num">${C(n.amount)}</span>${i}</span><span class="tag info">Prix déclaré</span>`
                   : "chain" === n.kind
-                    ? `<span class="amount">${n.from ? '<span class="from">dès</span>' : ""}${n.approx ? '<span class="from">env.</span>' : ""}<span class="num">${C(n.amount)}</span>${i}</span><span class="tag ${n.partial ? "warn" : "ok"}">${n.partial ? "Pièces en plus" : "Prix enseigne"}</span>`
+                    ? `<span class="amount">${n.approx ? '<span class="from">env.</span>' : ""}<span class="num">${C(n.amount)}</span>${i}</span><span class="tag ${n.partial ? "warn" : "ok"}">${n.partial ? "Pièces en plus" : "Prix enseigne"}</span>`
                     : "center" === n.kind
                       ? '<span class="no-price">Tarif fixé par le centre</span>'
                       : '<span class="no-price">Prix non publié</span>';
@@ -5913,10 +6044,48 @@ html.dlg-open {
         me.raw.length &&
         (pe.list.innerHTML = '<li class="status">Aucun résultat avec ce filtre.</li>'));
   }
-  const vt = (e) =>
-    String(e.phone || "")
-      .split(/[;,]/)[0]
-      .trim();
+  // ----- Téléphones : un garage peut en avoir plusieurs (fixe, mobile) et OpenStreetMap les saisit de dix façons -----
+  // phoneParse lit une valeur brute (plusieurs numéros séparés par « ; », « , », « / », « ou » ou « et »), ne garde que ce
+  // qui ressemble à un numéro, écrit les numéros français à la française (« 04 72 55 34 57 »), supprime les doublons et
+  // fournit le lien tel: international (« +33472553457 »). Un numéro qui n'est pas reconnu est ignoré, jamais deviné.
+  function phoneParse(raw) {
+    const out = [],
+      seen = new Set();
+    for (const part of String(raw || "").split(/\s*(?:[;,/|]|\bou\b|\bet\b)\s*/i)) {
+      const m = part.replace(/\(\s*0\s*\)/g, " ").match(/(\+|00)?[\s(]*\d[\d\s().-]*\d/);
+      if (!m) continue;
+      let d = m[0].replace(/\D/g, ""),
+        text,
+        tel;
+      if ("00" === m[1]) d = d.slice(2);
+      if (m[1]) {
+        if (d.startsWith("33")) {
+          d = d.slice(2).replace(/^0/, "");
+          if (9 !== d.length) continue;
+          d = "0" + d;
+        } else if (d.length < 10 || d.length > 15) continue;
+        else {
+          tel = "+" + d;
+          text =
+            "+" +
+            m[0]
+              .replace(/^(\+|00)[\s(]*/, "")
+              .replace(/[().-]/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+        }
+      }
+      if (!tel) {
+        if (!/^0[1-9]\d{8}$/.test(d)) continue;
+        tel = "+33" + d.slice(1);
+        text = d.replace(/(\d{2})(?=\d)/g, "$1 ");
+      }
+      seen.has(tel) || (seen.add(tel), out.push({ text, tel }));
+    }
+    return out;
+  }
+  const phoneList = (g) => phoneParse(g && g.phone);
+  const vt = (e) => (phoneList(e)[0] || {}).text || "";
   // ----- Enseignes : monogramme de marque, puis vrai logo dès qu'on le trouve --------------------------
   // Toute enseigne a toujours un avatar « de marque » : monogramme coloré (teintes propres à l'interface, pas les
   // couleurs officielles). Le logo le remplace dès qu'il est trouvé, dans cet ordre :
@@ -6229,8 +6398,8 @@ html.dlg-open {
     ${s.strip || ""}
     ${(function (e) {
       const t = vt(e),
-        a = t.replace(/[^\d+]/g, "");
-      return `<div class="g-actions">\n      ${t ? `<a class="mini act-call" href="tel:${y(a)}">Appeler</a>` : ""}\n      <a class="mini act-route" href="https://www.google.com/maps/dir/?api=1&amp;destination=${e.lat},${e.lon}" target="_blank" rel="noopener">Itinéraire</a>\n      <a class="mini google act-reviews" href="${y(
+        a = (phoneList(e)[0] || {}).tel || "";
+      return `<div class="g-actions">\n      ${t ? `<a class="mini act-call" href="tel:${y(a)}" aria-label="Appeler le ${y(t)}">Appeler</a>` : ""}\n      <a class="mini act-route" href="https://www.google.com/maps/dir/?api=1&amp;destination=${e.lat},${e.lon}" target="_blank" rel="noopener">Itinéraire</a>\n      <a class="mini google act-reviews" href="${y(
         (function (e) {
           const t = [
             e.name && !/^(Garage \(nom|Spécialiste pneus \(sans)/.test(e.name) ? e.name : "garage",
@@ -6255,9 +6424,11 @@ html.dlg-open {
     </div>`
       : "";
   }
+  // Fiche d'un garage : mêmes lignes pour tous (« Non renseigné » quand l'information manque), jusqu'à deux numéros
   function wt(e, t) {
-    const a = vt(e),
-      n = rb(e),
+    const n = rb(e),
+      p = phoneList(e),
+      none = (x) => `<span class="fact-none">${x}</span>`,
       r = [
         n
           ? null
@@ -6265,14 +6436,25 @@ html.dlg-open {
               "Adresse",
               `<span data-ad="${y(e.id)}" aria-live="polite"${adTitleAttr(e)}>${adHtml(e, !0)}</span>`,
             ],
-        a
-          ? [
-              "Téléphone",
-              `<span class="phone">${y(a)}</span> <button type="button" class="linkish" data-act="copy" data-v="${y(a)}">Copier</button>`,
-            ]
-          : null,
-        e.hours ? ["Horaires", y(I(e.hours))] : null,
-        e.web ? ["Site", `<a href="${y(e.web)}" target="_blank" rel="noopener">${y(R(e.web))}</a>`] : null,
+        [
+          "Téléphone",
+          p.length
+            ? `<span class="phones">${p
+                .slice(0, 2)
+                .map(
+                  (x) =>
+                    `<span class="ph"><a class="phone" href="tel:${y(x.tel)}">${y(x.text)}</a> <button type="button" class="linkish" data-act="copy" data-v="${y(x.text)}">Copier</button></span>`,
+                )
+                .join("")}</span>`
+            : `${none("Non renseigné")} · <a href="${y(adGoogle(e))}" target="_blank" rel="noopener">chercher sur Google Maps</a>`,
+        ],
+        ["Horaires", e.hours ? y(I(e.hours)) : none("Non renseignés")],
+        [
+          "Site",
+          e.web
+            ? `<a href="${y(e.web)}" target="_blank" rel="noopener">${y(R(e.web))}</a>`
+            : none("Non renseigné"),
+        ],
       ]
         .concat(t || [])
         .filter(Boolean);
@@ -6288,7 +6470,7 @@ html.dlg-open {
         "chain" === a.kind
           ? `${y(a.ref.label)}${a.ref.note ? " · " + y(a.ref.note) : ""} · relevé le 1er octobre 2026 · <a href="${y(a.ref.src)}" target="_blank" rel="noopener">source</a>`
           : "declared" === a.kind
-            ? `${a.n > 1 ? `Prix médian de ${a.n} réparations déclarées` : `1 réparation déclarée, en ${y(G(a.last))}`}${a.ref ? " · " + y(((s = a.ref), `prix enseigne ${s.from ? "dès " : ""}${C(s.p)}${s.partial ? " hors pièces" : ""}`)) : ""}`
+            ? `${a.n > 1 ? `Prix médian de ${a.n} réparations déclarées` : `1 réparation déclarée, en ${y(G(a.last))}`}${a.ref ? " · " + y(((s = a.ref), `prix enseigne ${C(s.p)}${s.partial ? " hors pièces" : ""}`)) : ""}`
             : "center" === a.kind
               ? "L'enseigne ne publie pas de prix national pour cette prestation : demandez un devis au centre."
               : "Ce garage ne publie pas ses prix : demandez un devis, puis déclarez le prix payé."),
@@ -6419,7 +6601,7 @@ html.dlg-open {
     },
     mp = (e) =>
       mt(e)
-        ? `${"declared" === e.price.kind ? "prix déclaré " : e.price.from ? "dès " : ""}${C(e.price.amount)}`
+        ? `${"declared" === e.price.kind ? "prix déclaré " : ""}${C(e.price.amount)}`
         : "ct" === me.kind
           ? "Prix non déclaré"
           : "Prix non publié";
@@ -6548,7 +6730,7 @@ html.dlg-open {
         try {
           (await navigator.clipboard.writeText(t.dataset.v), (t.textContent = "Copié"));
         } catch (e) {
-          const n = a.querySelector(".phone");
+          const n = (t.parentElement || a).querySelector(".phone");
           if (n) {
             const e = document.createRange();
             e.selectNodeContents(n);

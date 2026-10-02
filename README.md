@@ -45,7 +45,7 @@ Jetons (section 1 du CSS) : `--px-mint`, `--px-lime`, `--px-ice` (marque, fixes)
 
 ## Ce qui ne change pas
 
-Recherche (IGN, OpenStreetMap, SIRENE, DGCCRF), prix et promotions des enseignes, calculs, textes, liens d'action, clés `localStorage` (`jg.*`) : les données affichées sont identiques à l'original.
+Recherche (IGN, OpenStreetMap, SIRENE, DGCCRF), prix et promotions des enseignes, calculs, liens d'action, clés `localStorage` (`jg.*`) : les données affichées sont identiques à l'original. Ne changent que la présentation et les textes ou liens décrits ci-dessous : plus de « dès » devant les prix, repères de médiane dans l'échelle de prix, téléphones lus et affichés autrement (les liens `tel:` sont désormais internationaux, `tel:+33472000007` au lieu de `tel:0472000007`), messages OpenStreetMap retirés.
 
 ## Avatars des enseignes
 
@@ -76,6 +76,41 @@ OpenStreetMap n'a pas toujours l'adresse d'un garage (beaucoup de Speedy, par ex
 - OpenStreetMap lui-même est mieux lu : `addr:full`, `addr:place`, `addr:suburb` et `contact:*` complètent `addr:*` (cache OSM passé en `jg.osm.v3` pour que ces balises soient conservées) ;
 - sans effet sur le contrôle technique et le registre SIRENE, dont l'adresse vient des données.
 
+## Repères de prix
+
+L'**échelle de prix** (fiche d'un garage où vous avez déclaré des réparations, et vue « Mes réparations ») repère deux médianes, écrites en toutes lettres et chiffrées :
+
+- **Médiane des enseignes** (▼ au-dessus de la barre) : médiane des prix nationaux de la prestation, hors « pièces en plus » ;
+- **Médiane de ce garage** (▲ sous la barre) : médiane de vos réparations déclarées chez ce garage pour cette prestation ;
+- une pastille donne l'écart : « 18 % sous les enseignes » (vert), « 42 % au-dessus des enseignes » (ambre), « Au niveau des enseignes » en dessous de 5 % d'écart ;
+- les points de la barre sont toujours vos réparations (infobulle : prix, modèle, mois) ; sans prix d'enseigne pour la prestation (révision, batterie…), seule la médiane du garage est repérée ;
+- les médianes sont du texte (lisible sans la barre, qui reste décorative) ; en couleurs forcées les repères prennent `CanvasText` / `Highlight`.
+
+**« dès » est retiré de tous les prix** (cartes, ligne de synthèse, bulle et barre de la carte, note de la fiche, vue Prix et promos). Conservé volontairement : les libellés des offres tels que les enseignes les publient (« vidange dès 49,95 € », « Montage dès 9,95 € »), où le mot décrit la condition de l'offre, et la mention « à partir de » une fois (sous-titre de la vue Prix, encadré « les repères » du formulaire). `from: true` reste dans les données, donc rétablir le mot est une ligne (`${n.from ? … : ""}` dans les cinq endroits ; la liste est dans `build.py`, patchs J13a-e).
+
+## Fiche garagiste et téléphones
+
+Tous les garages ont les mêmes lignes dans la fiche : **Téléphone, Horaires, Site** (« Non renseigné » quand l'information manque, avec un lien « chercher sur Google Maps » pour le numéro). Les numéros :
+
+- OpenStreetMap les saisit de dix façons ; `phoneParse()` lit `phone`, `contact:phone`, **`mobile`** (nouveau), `contact:mobile`, `phone:mobile`, plusieurs numéros dans une valeur (séparés par `;`, `,`, `/`, « ou », « et »), `+33 (0)4…`, `0033…`, points, tirets ;
+- écrits à la française (`04 72 55 34 57`), doublons supprimés (un même numéro écrit de deux façons compte une fois), **deux numéros au plus** par fiche, chacun avec son bouton « Copier » ; le bouton « Appeler » de la carte appelle le premier (`tel:+33…`, libellé accessible « Appeler le 04 72 55 34 57 ») ;
+- une valeur qui n'est pas un numéro (« n/a », numéro trop court ou trop long, extension collée) est ignorée, jamais devinée ; un numéro étranger est gardé tel quel (`+32 2 123 45 67`) ;
+- contrôle technique : le champ officiel `cct_tel`, même mise en forme ; registre SIRENE : aucun numéro dans les données.
+
+**Limite** : la page ne peut afficher que les numéros que ces sources contiennent, et je ne connais pas d'autre source ouverte exploitable depuis une page web : SIRENE n'a pas de champ téléphone ; le service public Nominatim n'est pas prévu pour cet usage (limite d'une requête par seconde pour toute l'application, d'après sa politique d'usage : à revérifier) ; les sites des enseignes ne répondent pas aux pages d'un autre domaine (CORS) et leur extraction relève de leurs conditions d'utilisation. Une couverture complète demanderait une source commerciale à clé (Google Places par exemple : coût et conditions d'usage à vérifier). Le gain réel de la lecture de `mobile` et des numéros multiples dépend de la couverture d'OpenStreetMap dans votre zone, que le bac à sable ne permet pas de mesurer.
+
+## Messages et textes
+
+- Phrase sous le logo (ordinateur) : « 1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto ». Sur mobile le bandeau du haut reste compact, sans phrase.
+- Carte vide : « Votre titine est comme vous, elle n'aime pas qu'on lui cache des choses ».
+- **Plus aucun paragraphe sur OpenStreetMap dans l'interface.** OpenStreetMap fournit la liste des garages (nom, position, adresse, téléphone, horaires, site, enseigne), lue avec l'API Overpass ; le fond de carte est le Plan IGN et la recherche d'adresse la BAN. Retirés : « OpenStreetMap ne répond pas pour le moment (…) » (liste enregistrée ou liste du registre), les états du type « Le serveur OpenStreetMap principal tarde à répondre » (devenus « Le serveur principal… »), « seuls les garages d'OpenStreetMap sont affichés » ; en cas de panne totale, « Ni la base des garages ni le registre des entreprises ne répondent », la liste des serveurs et de leurs codes d'erreur étant repliée sous **« Détails techniques »**. Restent, parce que la licence ODbL l'exige : la ligne « © les contributeurs d'OpenStreetMap » sous la liste, le crédit de la carte, et la rubrique « Sources et méthode » (qui dit maintenant ce que fournit OpenStreetMap). Conservés aussi : la date de la liste enregistrée avec « Actualiser », et la phrase du registre SIRENE facultatif quand il ne répond pas.
+
+## Barre de défilement
+
+Sur ordinateur les flèches haut/bas de la barre native dépassaient des coins arrondis du panneau (et de la fenêtre « Déclarer une réparation » : 208 pixels hors de la forme sur la version précédente, mesurés par différence d'image). Pour la souris et le pavé tactile (`hover: hover` et `pointer: fine`), le panneau, cette fenêtre et la liste de suggestions ont maintenant une barre fine **sans flèches**, rentrée de 18 px (8 px pour les suggestions) en haut et en bas pour rester dans la courbe (`::-webkit-scrollbar`, Chromium et Safari). Firefox garde les propriétés standard (`scrollbar-width: thin`) ; elles sont dans un `@supports not selector(::-webkit-scrollbar)` : les poser aussi dans Chromium désactiverait le style WebKit. Écrans tactiles : barres natives en surimpression, sans changement.
+
+À vérifier : le rendu sous Windows (mon bac à sable est Linux) et sous macOS/Safari, où une barre personnalisée devient permanente au lieu de la barre « automatique » du système.
+
 ## Maintenance
 
 Le JS est celui de l'original (noms de variables minifiés), reformaté, avec des patchs ciblés :
@@ -85,7 +120,9 @@ Le JS est celui de l'original (noms de variables minifiés), reformaté, avec de
 | `bt()`, `av()`, `kd()` | gabarit de fiche, avatar (logo, monogramme ou initiale), libellé du type de garage |
 | `logoLoad()`, `logoTry()`, `logoApply()`, `logoShow()`, `logoHostOk()` | résolution Wikidata → Commons puis icône du site, cache 30 jours, remplacement du monogramme par le logo ; `logoBrand` / `ctBrand` : monogrammes |
 | `adEnsure()`, `adFetch()`, `adRepaint()`, `adInit()` | adresses manquantes : requête BAN, cache, mise à jour de la fiche, de la bulle et du lien Google |
-| `wt()`, `rb()` | détails de fiche, frise du trajet |
+| `wt()`, `rb()` | détails de fiche (lignes Téléphone / Horaires / Site), frise du trajet |
+| `it()` | échelle de prix : médiane des enseignes (▼), médiane du garage (▲), écart |
+| `phoneParse()`, `phoneList()`, `vt()` | lecture, mise en forme et dédoublonnage des numéros ; `vt()` = premier numéro |
 | `kt()`, `kc()` | accordéon ; compense le défilement quand une fiche au-dessus se referme (utile sur Safari) |
 | `sl()`, `slMap()`, `mi()`, `sx()`, `bindTip()` | sélection liste ↔ carte, barre récapitulative, bulles |
 | `St()` | bascule Liste / Carte sur mobile (classe `is-map` sur `<body>`) |
@@ -107,4 +144,8 @@ Avatars : 62 contrôles, dont les trois niveaux ensemble (logo Wikidata, icône 
 
 Adresses : 31 contrôles contre un géocodeur simulé (affichage en attente puis « ≈ », une requête aux coordonnées du garage, tooltip et lien Google, cache et expiration à 90 jours, adresses déjà dans OSM jamais redemandées, balises `addr:full` / `addr:place` / `contact:*` conservées par le cache, garage à 300 m refusé et refus mémorisé, échec réseau avec une seule nouvelle tentative, réponses sans `distance` ou sans géométrie, formulaire de réparation, contrôle technique, mobile, axe-core). Neuf variantes cassées volontairement, huit détectées (l'application du cache à la création des garages ne l'est que grâce à la liste de suggestions du formulaire ; retirer le rappel à l'ouverture de la fiche ne l'est pas, le rappel à la sélection faisant le même travail : les deux sont conservés).
 
+Repères de prix, téléphones, messages, barre de défilement : 98 contrôles (clair/sombre, ordinateur/mobile/320 px) et 37 cas de lecture de numéros. Les médianes attendues sont recalculées dans le test à partir des prix lus sur la vue Prix et des réparations déclarées (positions des repères comprises), pas recopiées de la page ; la barre de défilement est jugée par différence d'image entre la page et la même page sans barre (rien ne doit être dessiné hors de la courbe, ni dans les 17 premiers et derniers pixels de la piste) ; 0 violation axe-core avec échelle et lignes de téléphone ouvertes (4 états) ; les 62 + 62 + 31 + 31 contrôles précédents passent toujours. Comparée à l'original, la page ne diffère que par les prix sans « dès », la distance en pastille (refonte), les liens `tel:` internationaux et l'échelle. Sur la version précédente, 51 des 77 contrôles applicables échouent. 25 variantes cassées volontairement (« dès » rétabli aux cinq endroits, `mobile` ignoré ou retiré de la liste des balises gardées, doublons conservés, libellé d'appel retiré, copie du mauvais numéro, repères mal placés ou écart de signe inversé, seuil de 5 % ignoré, messages OpenStreetMap rétablis, détails techniques dépliés, flèches rétablies, barre non rentrée, barre personnalisée sur écran tactile, propriétés standard dans Chromium, couleurs forcées) : 25 détectées, dont quatre seulement après avoir durci le test (une expression trop stricte, un jeu d'essai sans doublon visible, un seuil jamais exercé, un contrôle de couleurs forcées trop faible).
+
 **À vérifier en conditions réelles** : le rendu du Plan IGN réel avec le filtre désaturant (testé avec des tuiles simulées), Safari / iOS, les API publiques en production, et **les logos d'enseignes eux-mêmes** : le bac à sable n'atteint ni Wikidata, ni Commons, ni les sites des enseignes. Les domaines officiels de `logoDom` ont été relevés par recherche web (les sites eux-mêmes sont bloqués depuis le bac à sable : aucune icône n'a pu être téléchargée ni vue). Quelles enseignes obtiennent un vrai logo (et lequel : un `favicon.ico` de 32 px peut être flou), si l'API de géocodage inverse renvoie bien `properties.name`, `postcode`, `city` et une géométrie (format relu de mémoire, jamais appelé pour de vrai), et si Safari ou Firefox mesurent un `.ico` multi-images comme Chromium, ne se sait que sur le réseau réel. Dans le doute, l'avatar reste un monogramme lisible.
+
+Pour la série prix / téléphones / messages / barre : la **couverture réelle des numéros** dans OpenStreetMap près de chez vous (le bac à sable n'atteint pas Overpass : tout est testé sur des données simulées), le rendu de la barre de défilement sous **Windows** et **macOS / Safari**, et le comportement de la page quand les serveurs Overpass ne répondent pas depuis votre environnement (liste du registre SIRENE ou liste enregistrée, sans paragraphe d'explication).
