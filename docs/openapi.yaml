@@ -1,0 +1,295 @@
+openapi: 3.0.3
+info:
+  title: API Pixcar
+  version: "1.0.0"
+  description: |
+    Réparations déclarées par les visiteurs (aucun compte, aucune session) et relais en cache vers OpenStreetMap.
+
+    **L'API est une amélioration de la page, pas un prérequis** : la page sait chercher des garages et afficher les prix
+    des enseignes sans elle. Quand elle est lente ou en panne, la page affiche la dernière copie qu'elle a gardée et
+    renvoie plus tard les déclarations en attente (les écritures sont rejouables sans risque : voir `POST /v1/repairs`).
+
+    ### Ce que l'API garde, et ce qu'elle ne renvoie jamais
+    | Donnée | Stockée | Renvoyée par `GET` |
+    |---|---|---|
+    | prix, prestation, note, modèle, année du véhicule | oui | oui |
+    | jour de la réparation | oui | **non** : le mois seulement |
+    | commentaire | oui (relecture) | **non** |
+    | plaque d'immatriculation | **non** : empreinte HMAC-SHA256 avec un secret du serveur, pour détecter les doublons | **non** |
+    | adresse IP du visiteur | **non** : empreinte HMAC pour limiter le débit, purgée après 30 jours | **non** |
+    | jeton de suppression | **non** : empreinte SHA-256 | **non** |
+
+    ### Cache
+    `GET /v1/repairs` et `GET /v1/overpass` portent `Cache-Control` avec `s-maxage`, `stale-while-revalidate` et
+    `stale-if-error` : un CDN devant l'API absorbe la lecture et continue de répondre quand l'API ou sa base tombent.
+    Les écritures ne sont jamais mises en cache.
+
+    ### Erreurs
+    Toujours `{ "error": { "code": "…", "message": "…" } }` ; `422` ajoute `fields` (champ → explication).
+    `429` et `503` portent `Retry-After` (secondes).
+  contact:
+    name: Exploitation Pixcar
+servers:
+  - url: https://api.exemple.fr
+    description: À remplacer par l'adresse de l'API (variable PIXCAR_API_BASE au moment du build de la page)
+  - url: http://localhost:8787
+    description: Développement (npm run dev)
+
+tags:
+  - name: Réparations
+  - name: Relais OpenStreetMap
+  - name: Exploitation
+
+paths:
+  /v1/repairs:
+    get:
+      tags: [Réparations]
+      summary: Réparations déclarées autour d'un point
+      description: |
+        Renvoie, groupées par garage, les réparations approuvées dans la case de 0,05° (≈ 5 km) qui contient le point,
+        élargie de `radius` + 4,5 km. La page affine à la distance exacte. **Envoyer des coordonnées arrondies à 0,05°**
+        (la réponse ne dépend que de la case) donne le même cache pour tous les visiteurs d'un quartier.
+        Au plus 30 réparations (les plus récentes) par garage et par prestation, 3 000 par réponse (`truncated`).
+      operationId: listRepairs
+      parameters:
+        - { name: lat, in: query, required: true, schema: { type: number, minimum: -90, maximum: 90 }, example: 45.75 }
+        - { name: lon, in: query, required: true, schema: { type: number, minimum: -180, maximum: 180 }, example: 4.85 }
+        - name: radius
+          in: query
+          required: true
+          description: Rayon de recherche de la page, en km.
+          schema: { type: integer, enum: [3, 5, 10, 20, 30, 50] }
+      responses:
+        "200":
+          description: Les réparations de la zone.
+          headers:
+            Cache-Control: { schema: { type: string }, example: "public, max-age=30, s-maxage=60, stale-while-revalidate=300, stale-if-error=86400" }
+            ETag: { schema: { type: string }, description: Valideur faible ; `If-None-Match` donne un 304. }
+            X-Pixcar-Stale: { schema: { type: string, enum: ["1"] }, description: Présent quand la base ne répond pas et que la dernière bonne réponse (moins d'une heure) est servie. }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Area" }
+        "304": { description: Inchangé. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+    post:
+      tags: [Réparations]
+      summary: Déclarer une réparation
+      description: |
+        **Rejouable** : l'identifiant (UUID v4) est choisi par le navigateur. Renvoyer la même déclaration (même `id`,
+        même `deleteToken`) après un échec réseau répond `200` sans rien écrire. Un même `id` avec un autre jeton est un
+        conflit. Une même plaque, pour le même garage, la même prestation et le même jour, n'est acceptée qu'une fois.
+
+        Un prix très éloigné de ce qui est déclaré à proximité pour la même prestation est accepté (`201`) mais reste
+        `pending` (invisible) jusqu'à relecture (`node server/moderate.mjs`).
+
+        En-tête `X-Turnstile-Token` : exigé seulement si le serveur est configuré avec `TURNSTILE_SECRET`.
+      operationId: createRepair
+      parameters:
+        - { name: X-Turnstile-Token, in: header, required: false, schema: { type: string }, description: Jeton Cloudflare Turnstile (si l'anti-robot est activé). }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RepairInput" }
+      responses:
+        "201":
+          description: Enregistrée.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Created" }
+        "200":
+          description: "Déjà enregistrée à l'identique (rejeu) : rien n'est écrit."
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/Created" }
+                  - { type: object, properties: { replayed: { type: boolean, enum: [true] } } }
+        "400": { description: JSON illisible. , content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "403": { description: Vérification anti-robot refusée. , content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409":
+          description: "`id_conflict` (identifiant déjà pris par une autre déclaration) ou `duplicate` (même plaque, garage, prestation et jour)."
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "413": { description: Corps de plus de 8 Ko. , content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "415": { description: Content-Type autre que application/json. , content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422":
+          description: Un ou plusieurs champs invalides.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/Error" }
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          fields: { type: object, additionalProperties: { type: string }, example: { price: "prix entre 0,01 et 20000 €" } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /v1/repairs/{id}:
+    delete:
+      tags: [Réparations]
+      summary: Retirer sa réparation
+      description: |
+        Seul le navigateur qui l'a déclarée connaît le jeton. Un jeton faux, un identifiant inconnu et une réparation déjà
+        retirée répondent pareil (`404`) : l'API ne révèle pas ce qui existe. Suppression définitive.
+        Reposter la même déclaration (même `id`, même `deleteToken`) la remet : c'est le « Annuler » de la page.
+      operationId: deleteRepair
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: X-Delete-Token, in: header, required: true, schema: { type: string, pattern: "^[0-9a-f]{32,128}$" } }
+      responses:
+        "204": { description: Supprimée. }
+        "404": { description: Introuvable (ou jeton incorrect). , content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /v1/overpass:
+    get:
+      tags: [Relais OpenStreetMap]
+      summary: Garages d'OpenStreetMap autour d'un point (relais avec cache)
+      description: |
+        Le paramètre `data` doit être **exactement** la requête Overpass que produit la page pour l'un des six rayons
+        (3, 5, 10, 20, 30, 50 km) ; toute autre requête est refusée (`400`). Le centre est arrondi à 3 décimales (≈ 80 m) et
+        le rayon élargi de 100 m. Les serveurs OpenStreetMap sont interrogés en cascade ; la réponse est gardée en mémoire
+        puis en base (frais 24 h) et servie **périmée** (jusqu'à 7 jours, `X-Pixcar-Stale: 1`) quand tous échouent.
+        Seules les balises utilisées par la page sont renvoyées.
+      operationId: overpass
+      parameters:
+        - { name: data, in: query, required: true, schema: { type: string }, description: Requête Overpass QL de la page, encodée. }
+      responses:
+        "200":
+          description: Éléments OpenStreetMap, même forme que la réponse d'Overpass (`elements`).
+          headers:
+            Cache-Control: { schema: { type: string }, example: "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400, stale-if-error=604800" }
+            X-Pixcar-Source: { schema: { type: string, enum: [memory, db, upstream] } }
+            X-Pixcar-Stale: { schema: { type: string, enum: ["1"] } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [elements]
+                properties:
+                  elements: { type: array, items: { type: object } }
+                  server: { type: string, description: Serveur OpenStreetMap qui a répondu. }
+                  generatedAt: { type: string, format: date-time }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { description: Trop de requêtes amont (par visiteur) ou serveur occupé. , content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "502": { description: Aucun serveur OpenStreetMap ne répond et aucune copie n'existe. , content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /healthz:
+    get:
+      tags: [Exploitation]
+      summary: Le processus est vivant (ne touche pas la base)
+      operationId: healthz
+      responses:
+        "200": { description: Vivant., content: { application/json: { schema: { type: object, properties: { ok: { type: boolean } } } } } }
+  /readyz:
+    get:
+      tags: [Exploitation]
+      summary: Prêt à servir (la base répond en moins d'une seconde)
+      description: À utiliser comme sonde du répartiteur de charge. Répond `503` pendant l'arrêt (vidange) pour que l'instance soit retirée avant sa fermeture.
+      operationId: readyz
+      responses:
+        "200": { description: Prêt. , content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, db: { type: string, enum: [up] } } } } } }
+        "503": { description: Base indisponible ou arrêt en cours. , content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, db: { type: string }, draining: { type: boolean } } } } } }
+
+components:
+  responses:
+    BadRequest:
+      description: Paramètres manquants ou hors limites.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RateLimited:
+      description: Trop de requêtes depuis cette adresse (ou plafond global d'écritures).
+      headers: { Retry-After: { schema: { type: integer }, description: Secondes à attendre. } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unavailable:
+      description: Base momentanément indisponible. Réessayer ; la page garde la déclaration et la renvoie.
+      headers: { Retry-After: { schema: { type: integer } } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: validation }
+            message: { type: string }
+    Created:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [approved, pending], description: "`pending` : en attente de relecture, pas encore publique." }
+    RepairInput:
+      type: object
+      required: [id, deleteToken, garage, serviceId, price, date, rating, vehicle]
+      properties:
+        id: { type: string, format: uuid, description: UUID v4 choisi par le navigateur (clé d'idempotence). }
+        deleteToken: { type: string, pattern: "^[0-9a-fA-F]{32,128}$", description: Secret aléatoire, gardé par le navigateur ; sert à retirer la déclaration. }
+        garage:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string, description: "`osm:node/123`, `osm:way/45`, `osm:relation/6`, `siret:12345678901234` ou `custom:nom-saisi-a-la-main`.", example: "osm:node/123" }
+            name: { type: string, minLength: 2, maxLength: 120 }
+            addr: { type: string, maxLength: 200 }
+            lat: { type: number, nullable: true }
+            lon: { type: number, nullable: true }
+            chainId: { type: string, maxLength: 40, description: Enseigne reconnue (`norauto`…), vide sinon. }
+        area:
+          type: object
+          description: Point de recherche du visiteur. **Obligatoire quand le garage n'a pas de position** (nom saisi à la main).
+          properties: { lat: { type: number }, lon: { type: number } }
+        serviceId: { type: string, description: Identifiant de prestation (voir server/shared/services.json)., example: vidange }
+        price: { type: number, minimum: 0.01, maximum: 20000, description: Euros TTC payés. }
+        date: { type: string, format: date, description: "Jour de la réparation, entre 1990-01-01 et aujourd'hui (tolérance UTC+14)." }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, maxLength: 500, description: Jamais renvoyé par l'API publique. }
+        vehicle:
+          type: object
+          required: [model, year, plate]
+          properties:
+            model: { type: string, minLength: 2, maxLength: 40, example: Peugeot 208 }
+            year: { type: integer, minimum: 1950, description: "Année de première mise en circulation ; pas après l'année de la réparation." }
+            plate: { type: string, pattern: "^[A-Z]{2}-\\d{3}-[A-Z]{2}$", example: EZ-108-BC, description: Format SIV. Jamais stockée en clair ni renvoyée. }
+    Area:
+      type: object
+      required: [v, cell, radius, generatedAt, truncated, garages]
+      properties:
+        v: { type: integer, enum: [1] }
+        cell: { type: object, properties: { y: { type: integer }, x: { type: integer } }, description: Case de 0,05° dont dépend la réponse. }
+        radius: { type: integer }
+        generatedAt: { type: string, format: date-time }
+        truncated: { type: boolean }
+        garages:
+          type: array
+          items: { $ref: "#/components/schemas/GarageRepairs" }
+    GarageRepairs:
+      type: object
+      required: [id, name, repairs]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        addr: { type: string }
+        lat: { type: number, nullable: true }
+        lon: { type: number, nullable: true }
+        chainId: { type: string }
+        repairs:
+          type: array
+          items: { $ref: "#/components/schemas/PublicRepair" }
+    PublicRepair:
+      type: object
+      required: [id, serviceId, price, month, rating, model, year]
+      properties:
+        id: { type: string, format: uuid }
+        serviceId: { type: string }
+        price: { type: number }
+        month: { type: string, pattern: "^\\d{4}-\\d{2}$", description: Mois de la réparation (le jour n'est jamais public). }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        model: { type: string }
+        year: { type: integer }
