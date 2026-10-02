@@ -193,6 +193,30 @@ describe("limits", () => {
     }
   });
 
+  test("a relay header with TRUST_PROXY=0 is reported once (every visitor would share one rate limit); no warning when it is set or when there is no relay", async () => {
+    const logs = [];
+    const direct = await makeApp({ config: { trustProxy: 0 }, log: (o) => logs.push(o) });
+    try {
+      await direct.call("GET", `/v1/repairs?${area}`, { ip: "10.0.0.1" });
+      assert.equal(logs.filter((l) => l.level === "warn").length, 0, "rien à signaler sans en-tête de relais");
+      for (const header of [{ "x-forwarded-for": "1.1.1.1" }, { "x-forwarded-for": "2.2.2.2" }, { "cf-connecting-ip": "3.3.3.3" }])
+        await direct.call("GET", `/v1/repairs?${area}`, { ip: "10.0.0.1", headers: header });
+      const warns = logs.filter((l) => l.level === "warn");
+      assert.equal(warns.length, 1);
+      assert.match(warns[0].msg, /TRUST_PROXY/);
+    } finally {
+      await direct.close();
+    }
+    logs.length = 0;
+    const proxied = await makeApp({ config: { trustProxy: 1 }, log: (o) => logs.push(o) });
+    try {
+      await proxied.call("GET", `/v1/repairs?${area}`, { ip: "10.0.0.1", headers: { "x-forwarded-for": "1.1.1.1" } });
+      assert.equal(logs.filter((l) => l.level === "warn").length, 0);
+    } finally {
+      await proxied.close();
+    }
+  });
+
   test("reads are limited per visitor too (last line of defence when no CDN is in front)", async () => {
     const t = await makeApp({ config: { readLimitPerMinute: 3 } });
     try {

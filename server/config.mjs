@@ -22,6 +22,8 @@ export function loadConfig(env = process.env) {
   const origins = (env.ALLOWED_ORIGINS || (production ? "" : "*")).split(",").map((s) => s.trim()).filter(Boolean);
   if (production && !origins.length) problems.push("ALLOWED_ORIGINS : liste des origines autorisées, séparées par des virgules (ou « * »)");
   if (production && !env.DATABASE_URL) problems.push("DATABASE_URL : adresse de la base PostgreSQL");
+  // pas de valeur par défaut en production : derrière un répartiteur, « 0 » ferait partager à tous les visiteurs la même limite de débit
+  if (production && (env.TRUST_PROXY === undefined || env.TRUST_PROXY === "")) problems.push("TRUST_PROXY : 0 (visiteurs directs), N (derrière N relais de confiance) ou cloudflare — à choisir explicitement, sinon tous les visiteurs partagent une même limite de débit");
   if (problems.length) throw new Error("Configuration incomplète :\n  - " + problems.join("\n  - "));
 
   const trust = (env.TRUST_PROXY || "0").toLowerCase();

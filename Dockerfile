@@ -4,7 +4,7 @@
 #   docker build -t pixcar-api .
 #   docker run --rm -p 8080:8080 --env-file api.env pixcar-api
 #
-# Variables obligatoires en production : DATABASE_URL, ALLOWED_ORIGINS, PLATE_PEPPER, IP_PEPPER (voir docs/exploitation.md).
+# Variables obligatoires en production : DATABASE_URL, ALLOWED_ORIGINS, PLATE_PEPPER, IP_PEPPER, TRUST_PROXY (voir docs/exploitation.md).
 # Aucune n'est dans l'image : le démarrage échoue avec un message clair si l'une manque.
 FROM node:22-alpine AS deps
 WORKDIR /app

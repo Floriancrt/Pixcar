@@ -61,8 +61,13 @@ export function createApp({ db, config, services, fetchImpl = globalThis.fetch, 
   let draining = false; // arrêt demandé : /readyz répond 503 pour que le répartiteur nous retire avant la fermeture
 
   // ---- adresse du visiteur (jamais journalisée en clair ; seule son empreinte sert à limiter les écritures)
+  let warnedProxy = false;
   const clientIp = (request, ctx) => {
     const mode = config.trustProxy;
+    if (mode === 0 && !warnedProxy && (request.headers.has("x-forwarded-for") || request.headers.has("cf-connecting-ip"))) {
+      warnedProxy = true; // un relais est devant nous et TRUST_PROXY ne le sait pas : toutes les adresses sont celles du relais
+      log({ level: "warn", msg: "en-tête de relais reçu alors que TRUST_PROXY=0 : tous les visiteurs partagent la même limite de débit. Régler TRUST_PROXY (nombre de relais ou cloudflare)." });
+    }
     if (mode === "cloudflare") return request.headers.get("cf-connecting-ip") || ctx.remoteIp || "unknown";
     if (mode > 0) {
       const hops = (request.headers.get("x-forwarded-for") || "").split(",").map((s) => s.trim()).filter(Boolean);
