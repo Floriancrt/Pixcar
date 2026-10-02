@@ -90,6 +90,11 @@
   --mk-ring: #ffffff;
   --tip-bg: #0a0d0a;
   --tip-fg: #ffffff;
+  --ld-road: #0a0d0a;
+  --ld-edge: transparent;
+  --ld-line: #f2f2f2;
+  --ld-car: #79fa52;
+  --ld-deep: #0a0d0a;
   --shadow-sm: 0 1px 2px rgba(10, 22, 10, 0.05), 0 6px 18px -10px rgba(10, 22, 10, 0.16);
   --shadow-md: 0 12px 30px -14px rgba(10, 22, 10, 0.3);
   --shadow-lg: 0 24px 60px -22px rgba(10, 22, 10, 0.42);
@@ -164,6 +169,11 @@ color-scheme: dark;
     --mk-ring: #040604;
     --tip-bg: #f2f2f2;
     --tip-fg: #0a0d0a;
+    --ld-road: #2b332b;
+    --ld-edge: #3d463d;
+    --ld-line: #f2f2f2;
+    --ld-car: #79fa52;
+    --ld-deep: #0a0d0a;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 18px -10px rgba(0, 0, 0, 0.55);
     --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.7);
     --shadow-lg: 0 24px 60px -22px rgba(0, 0, 0, 0.8);
@@ -230,6 +240,11 @@ color-scheme: dark;
   --mk-ring: #040604;
   --tip-bg: #f2f2f2;
   --tip-fg: #0a0d0a;
+  --ld-road: #2b332b;
+  --ld-edge: #3d463d;
+  --ld-line: #f2f2f2;
+  --ld-car: #79fa52;
+  --ld-deep: #0a0d0a;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 18px -10px rgba(0, 0, 0, 0.55);
   --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.7);
   --shadow-lg: 0 24px 60px -22px rgba(0, 0, 0, 0.8);
@@ -2604,7 +2619,7 @@ select {
   opacity: 0.45;
 }
 .ma-pin-ring {
-  fill: var(--mk-ring);
+  fill: var(--mk-user-ring);
 }
 .ma-pin {
   fill: var(--mk-user);
@@ -2872,6 +2887,109 @@ select {
   }
   body.is-map .leaflet-top .leaflet-control {
     margin-top: 0;
+  }
+}
+
+/* ---------- Chargement : un rond-point autour de l'adresse, une voiture y tourne ----------
+   Visible seulement pendant une recherche (body.is-searching, posé par ct()) : en dehors, display:none, donc aucune
+   animation. Ordinateur : sur la carte, au centre du rayon de recherche. Mobile (carte cachée) : en petit dans
+   l'encart d'état. Couleurs de la charte : bitume noir (--ld-road), pointillés blanc cassé, voiture vert vif ; en
+   thème sombre le bitume est éclairci pour se détacher du fond. Sens inverse des aiguilles d'une montre (giratoire
+   français), un tour en 1,8 s qui accélère puis ralentit, 0,6 s de pause ; prefers-reduced-motion : voiture à l'arrêt. */
+.ld {
+  display: none;
+}
+body.is-searching .map-empty .ld,
+.wait-loader .ld {
+  display: inline;
+}
+body.is-searching .map-empty .ld {
+  animation: ld-in 0.4s 0.35s both;
+}
+body.is-searching .map-hint,
+body.is-searching .teaser {
+  display: none;
+}
+.ld-asphalt {
+  stroke: var(--ld-road);
+}
+.ld-edge {
+  stroke: var(--ld-edge);
+}
+.ld-dash {
+  stroke: var(--ld-line);
+}
+.ld-island {
+  fill: var(--card);
+}
+.ld-pin {
+  fill: var(--ink);
+}
+.ld-body {
+  fill: var(--ld-car);
+}
+.ld-glass,
+.ld-tyre {
+  fill: var(--ld-deep);
+}
+.ld-hub {
+  fill: var(--ld-line);
+}
+.ld-orbit {
+  transform-origin: 0 0;
+}
+/* l'animation n'existe que pendant une recherche : Chromium en crée une même sous un <g> en display:none */
+body.is-searching .map-empty .ld-orbit,
+.wait-loader .ld-orbit {
+  animation: ld-lap 2.4s infinite;
+}
+@keyframes ld-lap {
+  0% {
+    transform: rotate(0);
+    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+  75%,
+  100% {
+    transform: rotate(-360deg);
+  }
+}
+@keyframes ld-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Encart d'état pendant la recherche : la phrase d'attente, puis l'étape en cours en plus petit */
+.status.is-wait {
+  display: grid;
+  gap: 3px 14px;
+  align-items: center;
+  padding: 14px 16px;
+  animation: ld-in 0.3s 0.35s both;
+}
+.wait-loader {
+  display: none;
+}
+.wait-quote {
+  font: 600 0.98rem/1.35 var(--font);
+  color: var(--ink);
+}
+.wait-step {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+@media (max-width: 1023px) {
+  .status.is-wait {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+  .wait-loader {
+    display: block;
+    grid-row: 1 / span 2;
+    width: 72px;
+    height: 72px;
   }
 }
 
@@ -3221,6 +3339,24 @@ html.dlg-open {
   .icon-btn {
     border: 1px solid CanvasText;
   }
+  /* rond-point du chargement : couleurs du système, la voiture (Canvas) se détache du bitume (CanvasText) */
+  .ld-asphalt,
+  .ld-edge {
+    stroke: CanvasText;
+  }
+  .ld-dash {
+    stroke: Canvas;
+  }
+  .ld-island,
+  .ld-body,
+  .ld-hub {
+    fill: Canvas;
+  }
+  .ld-pin,
+  .ld-glass,
+  .ld-tyre {
+    fill: CanvasText;
+  }
   .scale-ref,
   .k-ref {
     background: CanvasText;
@@ -3498,8 +3634,11 @@ html.dlg-open {
                 <path d="M-200 1100L1800 -120" stroke-width="13" />
               </g>
               <circle class="ma-radius" cx="1000" cy="500" r="230" fill="none" stroke-width="2" stroke-dasharray="7 9" />
+              <!-- Recherche en cours : un rond-point autour de l'adresse, une voiture y tourne (voir « Chargement » du CSS) -->
+              <g class="ld" transform="translate(1000 500) scale(1.35)"><circle class="ld-asphalt" r="75" fill="none" stroke-width="34" /> <circle class="ld-edge" r="91.2" fill="none" stroke-width="1.6" /> <circle class="ld-edge" r="58.8" fill="none" stroke-width="1.6" /> <circle class="ld-dash" r="75" fill="none" stroke-width="2.6" stroke-dasharray="8.4 8.43" /> <circle class="ld-island" r="58" /></g>
               <circle class="ma-pin-ring" cx="1000" cy="500" r="21" />
-              <circle class="ma-pin" cx="1000" cy="500" r="11" />
+              <circle class="ma-pin" cx="1000" cy="500" r="13" />
+              <g class="ld" transform="translate(1000 500) scale(1.35)"><g class="ld-orbit"><g class="ld-car" transform="translate(0 -84) scale(1.1)"><path class="ld-body" d="M-14 3.2V-.4Q-14-1.6-12.6-2L-7.2-2.9-3.4-6.4Q-3-6.8-2.4-6.8H5.6Q6.4-6.8 6.9-6.2L10.4-2.4 12.6-2.1Q14-1.9 14-.5V3.2Z" /><path class="ld-glass" d="M-6.4-2.6-3.2-5.7H5.5L9.1-2.6Z" /><circle class="ld-tyre" cx="-8.2" cy="3.2" r="3.2" /><circle class="ld-tyre" cx="8.6" cy="3.2" r="3.2" /><circle class="ld-hub" cx="-8.2" cy="3.2" r="1.3" /><circle class="ld-hub" cx="8.6" cy="3.2" r="1.3" /><circle class="ld-hub" cx="-13.2" cy=".8" r="1.1" /></g></g></g>
             </svg>
             <div class="map-hint">
               <b>La carte s'affiche après votre recherche</b>
@@ -5793,14 +5932,24 @@ html.dlg-open {
   }
   function ct(e) {
     ((me.busy = e),
+      document.body.classList.toggle("is-searching", e),
       (pe.go.disabled = e),
       pe.go.setAttribute("aria-busy", String(e)),
       e ? (pe.goLabel.textContent = "Recherche…") : ve());
   }
+  // Pendant une recherche l'encart d'état montre la phrase d'attente puis l'étape en cours ; le pictogramme (rond-point et
+  // voiture, le même que sur la carte) n'apparaît que sur mobile, où la carte est cachée (CSS « Chargement »). La phrase
+  // est décorative : cachée aux lecteurs d'écran, pour que la zone vivante (#results) ne la relise pas à chaque étape.
+  const waitQuote = "Votre titine est comme vous, elle n'aime pas qu'on lui cache des choses",
+    waitSvg = `<svg class="wait-loader" viewBox="-100 -100 200 200" aria-hidden="true" focusable="false"><g class="ld"><circle class="ld-asphalt" r="75" fill="none" stroke-width="34" /> <circle class="ld-edge" r="91.2" fill="none" stroke-width="1.6" /> <circle class="ld-edge" r="58.8" fill="none" stroke-width="1.6" /> <circle class="ld-dash" r="75" fill="none" stroke-width="2.6" stroke-dasharray="8.4 8.43" /> <circle class="ld-island" r="58" /><circle class="ld-pin" r="9" /><g class="ld-orbit"><g class="ld-car" transform="translate(0 -84) scale(1.1)"><path class="ld-body" d="M-14 3.2V-.4Q-14-1.6-12.6-2L-7.2-2.9-3.4-6.4Q-3-6.8-2.4-6.8H5.6Q6.4-6.8 6.9-6.2L10.4-2.4 12.6-2.1Q14-1.9 14-.5V3.2Z" /><path class="ld-glass" d="M-6.4-2.6-3.2-5.7H5.5L9.1-2.6Z" /><circle class="ld-tyre" cx="-8.2" cy="3.2" r="3.2" /><circle class="ld-tyre" cx="8.6" cy="3.2" r="3.2" /><circle class="ld-hub" cx="-8.2" cy="3.2" r="1.3" /><circle class="ld-hub" cx="8.6" cy="3.2" r="1.3" /><circle class="ld-hub" cx="-13.2" cy=".8" r="1.1" /></g></g></g></svg>`;
   function dt(e, t, a, n) {
-    ((pe.status.className = "status" + ("err" === t ? " err" : "")),
+    const wait = !!e && !t && me.busy;
+    ((pe.status.className = "status" + ("err" === t ? " err" : "") + (wait ? " is-wait" : "")),
       (pe.status.innerHTML = e
-        ? y(e) +
+        ? (wait
+            ? waitSvg +
+              `<span class="wait-quote" aria-hidden="true">${y(waitQuote)}</span><span class="wait-step">${y(e)}</span>`
+            : y(e)) +
           (n ? `<details class="detail"><summary>Détails techniques</summary>${y(n)}</details>` : "") +
           (a ? '<br><button type="button" class="ghost" id="retryBtn">Réessayer</button>' : "")
         : ""));
