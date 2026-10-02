@@ -107,6 +107,8 @@ export function createRepo(db) {
         )
         .then((r) => r.rows),
     setStatus: (id, status) => db.query("UPDATE repairs SET status = $2 WHERE id = $1", [id, status]).then((r) => r.rowCount > 0),
+    // demande d'effacement d'une personne : toutes les déclarations portant cette empreinte de plaque (rejetées comprises)
+    deleteByPlate: (plateHash) => db.query("DELETE FROM repairs WHERE plate_hmac = $1", [buf(plateHash)]).then((r) => r.rowCount),
     stats: () =>
       db
         .query("SELECT status, count(*)::int AS n FROM repairs GROUP BY status ORDER BY status")
