@@ -1,0 +1,19 @@
+# Seule l'API entre dans l'image (voir Dockerfile) : on n'envoie pas le reste au démon.
+.git
+node_modules
+dist
+index.html
+original.html
+tests
+docs
+scripts
+server/test
+src/css
+src/partials
+src/assets
+src/js/app.js
+src/js/main.js
+src/js/modules
+.data
+*.log
+.DS_Store
