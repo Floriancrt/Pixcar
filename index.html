@@ -2465,6 +2465,18 @@ select {
   color: var(--ink-3);
   font-style: italic;
 }
+.rep-plate {
+  padding: 1px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--card-2);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .rep-comment {
   grid-column: 1 / -1;
   margin: 2px 0 0;
@@ -3064,6 +3076,7 @@ html.dlg-open {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  align-items: start;
 }
 .row2 .field > label {
   min-height: 2.5em;
@@ -3074,6 +3087,20 @@ html.dlg-open {
   .row2 .field > label {
     min-height: 0;
   }
+}
+/* Immatriculation + année du modèle : libellés courts (une seule ligne), la plaque a un peu plus de place */
+.row2.veh {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+}
+.row2.veh .field > label {
+  min-height: 0;
+}
+.plate-in {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+.plate-in:not(:placeholder-shown) {
+  font-weight: 700;
 }
 .err-msg {
   margin: 0;
@@ -3367,8 +3394,15 @@ html.dlg-open {
     background: Highlight;
   }
   .cmp,
-  .delta {
+  .delta,
+  .suggest,
+  .rep-plate {
     border: 1px solid CanvasText;
+  }
+  .suggest li[aria-selected="true"],
+  .suggest li:hover {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
   .panel-col::-webkit-scrollbar-thumb,
   .dlg::-webkit-scrollbar-thumb,
@@ -3727,7 +3761,7 @@ html.dlg-open {
           <p>
             <b>Vos réparations.</b> Elles restent dans ce navigateur : rien n'est envoyé ni partagé. L'échelle de prix
             et la note d'un garage ne comptent que vos propres déclarations. L'historique d'un garage affiche le modèle
-            du véhicule, le mois, la note et le prix, jamais le commentaire.
+            et l'année du véhicule, le mois, la note et le prix, jamais le commentaire ni l'immatriculation.
           </p>
         </details>
       </section>
@@ -3763,19 +3797,58 @@ html.dlg-open {
       </div>
       <div class="field">
         <label for="rModel">Modèle du véhicule</label>
-        <input
-          id="rModel"
-          type="text"
-          autocomplete="off"
-          spellcheck="false"
-          maxlength="40"
-          placeholder="Ex. Peugeot 208"
-          list="modelList"
-          aria-describedby="rModelInfo rModelErr"
-        />
-        <datalist id="modelList"></datalist>
-        <p class="hint" id="rModelInfo">Affiché dans l'historique du garage avec le prix et la note.</p>
+        <div class="combo">
+          <input
+            id="rModel"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            maxlength="40"
+            placeholder="Ex. Peugeot 208"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="false"
+            aria-controls="rModelList"
+            aria-describedby="rModelInfo rModelErr"
+          />
+          <ul id="rModelList" class="suggest" role="listbox" aria-label="Modèles proposés" hidden></ul>
+        </div>
+        <p class="hint" id="rModelInfo">
+          Affiché dans l'historique du garage avec le prix et la note. Tapez pour filtrer la liste&nbsp;; un modèle absent se saisit tel quel.
+        </p>
         <p class="err-msg" id="rModelErr" hidden></p>
+      </div>
+      <div class="row2 veh">
+        <div class="field">
+          <label for="rPlate">Immatriculation</label>
+          <input
+            id="rPlate"
+            class="plate-in"
+            type="text"
+            autocomplete="off"
+            autocapitalize="characters"
+            autocorrect="off"
+            spellcheck="false"
+            placeholder="EZ-108-BC"
+            aria-describedby="rPlateInfo rPlateErr"
+          />
+          <p class="hint" id="rPlateInfo">2 lettres, 3 chiffres, 2 lettres.</p>
+          <p class="err-msg" id="rPlateErr" hidden></p>
+          <span class="sr-only" id="rPlateSay" role="status" aria-live="polite"></span>
+        </div>
+        <div class="field">
+          <label for="rYear">Année du modèle</label>
+          <input
+            id="rYear"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            placeholder="2019"
+            aria-describedby="rYearInfo rYearErr"
+          />
+          <p class="hint" id="rYearInfo">Année de 1re mise en circulation (carte grise, case B).</p>
+          <p class="err-msg" id="rYearErr" hidden></p>
+        </div>
       </div>
       <div class="field">
         <label for="rService">Type de prestation</label>
@@ -4522,10 +4595,88 @@ html.dlg-open {
         src: f,
       },
     ],
-    b =
-      "Abarth 500|Alfa Romeo Giulietta|Alfa Romeo Mito|Alfa Romeo Stelvio|Alfa Romeo Tonale|Audi A1|Audi A3|Audi A4|Audi A5|Audi A6|Audi Q2|Audi Q3|Audi Q5|Audi e-tron|BMW Série 1|BMW Série 2|BMW Série 3|BMW Série 4|BMW Série 5|BMW X1|BMW X2|BMW X3|BMW X5|BMW i3|BYD Atto 3|BYD Dolphin|Citroën Berlingo|Citroën C1|Citroën C2|Citroën C3|Citroën C3 Aircross|Citroën C3 Picasso|Citroën C4|Citroën C4 Cactus|Citroën C4 Picasso|Citroën C5|Citroën C5 Aircross|Citroën C5 X|Citroën ë-C4|Citroën Jumper|Citroën Jumpy|Citroën Nemo|Citroën Saxo|Citroën Xsara|Citroën Xsara Picasso|Cupra Born|Cupra Formentor|Dacia Dokker|Dacia Duster|Dacia Jogger|Dacia Lodgy|Dacia Logan|Dacia Sandero|Dacia Spring|DS 3|DS 4|DS 7|Fiat 500|Fiat 500X|Fiat Doblo|Fiat Ducato|Fiat Panda|Fiat Punto|Fiat Tipo|Ford C-Max|Ford Fiesta|Ford Focus|Ford Ka|Ford Kuga|Ford Mondeo|Ford Puma|Ford Transit|Ford Transit Custom|Honda Civic|Honda CR-V|Honda Jazz|Hyundai i10|Hyundai i20|Hyundai i30|Hyundai Ioniq|Hyundai Kona|Hyundai Tucson|Jeep Compass|Jeep Renegade|Kia Ceed|Kia EV6|Kia Niro|Kia Picanto|Kia Rio|Kia Sportage|Kia Stonic|Land Rover Range Rover Evoque|Mazda 2|Mazda 3|Mazda CX-30|Mazda CX-5|Mazda MX-5|Mercedes Classe A|Mercedes Classe B|Mercedes Classe C|Mercedes Classe E|Mercedes CLA|Mercedes GLA|Mercedes GLC|Mercedes Sprinter|Mercedes Vito|MG 4|MG ZS|Mini Cooper|Mini Countryman|Mitsubishi ASX|Mitsubishi Space Star|Nissan Juke|Nissan Leaf|Nissan Micra|Nissan Note|Nissan Qashqai|Nissan X-Trail|Opel Astra|Opel Corsa|Opel Crossland|Opel Grandland|Opel Meriva|Opel Mokka|Opel Zafira|Peugeot 106|Peugeot 107|Peugeot 108|Peugeot 206|Peugeot 207|Peugeot 208|Peugeot 2008|Peugeot 301|Peugeot 306|Peugeot 307|Peugeot 308|Peugeot 3008|Peugeot 407|Peugeot 408|Peugeot 508|Peugeot 5008|Peugeot Bipper|Peugeot Boxer|Peugeot Expert|Peugeot Partner|Peugeot Rifter|Peugeot e-208|Porsche Cayenne|Porsche Macan|Renault 5 E-Tech|Renault Arkana|Renault Austral|Renault Captur|Renault Clio|Renault Espace|Renault Kadjar|Renault Kangoo|Renault Koleos|Renault Laguna|Renault Master|Renault Mégane|Renault Modus|Renault Scénic|Renault Talisman|Renault Trafic|Renault Twingo|Renault Zoe|Seat Arona|Seat Ateca|Seat Ibiza|Seat Leon|Skoda Fabia|Skoda Kamiq|Skoda Karoq|Skoda Kodiaq|Skoda Octavia|Skoda Superb|Smart Fortwo|Suzuki Ignis|Suzuki Swift|Suzuki Vitara|Tesla Model 3|Tesla Model Y|Toyota Auris|Toyota Aygo|Toyota Aygo X|Toyota C-HR|Toyota Corolla|Toyota Prius|Toyota RAV4|Toyota Yaris|Toyota Yaris Cross|Volkswagen Caddy|Volkswagen Golf|Volkswagen ID.3|Volkswagen ID.4|Volkswagen Passat|Volkswagen Polo|Volkswagen T-Cross|Volkswagen T-Roc|Volkswagen Tiguan|Volkswagen Touran|Volkswagen Transporter|Volkswagen Up!|Volvo V40|Volvo XC40|Volvo XC60|Volvo XC90".split(
-        "|",
-      ),
+    // Catalogue des modèles proposés dans le formulaire de réparation : une ligne par marque (« Marque: modèle, modèle… »),
+    // les plus courants d'abord. À modifier ici : la liste des noms (b) et celle des marques (O) en sont déduites.
+    CARS = `
+Renault: Clio, Mégane, Scénic, Captur, Twingo, Kangoo, Trafic, Master, Espace, Laguna, Kadjar, Arkana, Austral, Zoe, Talisman, Koleos, Modus, Fluence, Symbioz, Rafale, Mégane E-Tech, Scénic E-Tech, 5 E-Tech, 4 E-Tech, Twizy, Grand Scénic, Grand Espace, Grand Modus, Safrane, Vel Satis, Avantime, Wind, Latitude, Express, Alaskan, 5, 4, 4L, 9, 11, 12, 18, 19, 21, 25
+Peugeot: 208, 308, 2008, 3008, 5008, 508, 207, 206, 307, 107, 108, 106, 205, 306, 407, 408, 301, 406, 405, 309, 4008, 4007, 807, 806, 607, 605, 1007, 504, 505, 104, 204, 304, 305, 404, 403, RCZ, iOn, Partner, Expert, Boxer, Rifter, Bipper, Traveller, e-208, e-2008, e-308, e-3008, e-5008, e-Rifter, e-Expert, e-Traveller, e-Partner
+Citroën: C3, C4, C5, C1, Berlingo, C3 Picasso, C4 Picasso, Grand C4 Picasso, C3 Aircross, C4 Cactus, C5 Aircross, C4 Aircross, Xsara, Xsara Picasso, Saxo, C2, C-Elysée, C4 SpaceTourer, Grand C4 SpaceTourer, C3 Pluriel, C-Crosser, C6, C8, C-Zero, DS3, DS4, DS5, Jumpy, Jumper, Nemo, SpaceTourer, ë-C3, ë-C4, ë-C4 X, ë-Berlingo, ë-Jumpy, ë-Jumper, ë-SpaceTourer, C4 X, C5 X, Xantia, XM, ZX, AX, BX, Visa, 2CV, Dyane, Ami, Méhari, Evasion, Synergie, C15, Acadiane
+Dacia: Sandero, Duster, Logan, Jogger, Spring, Lodgy, Dokker, Sandero Stepway, Logan MCV, Bigster
+Volkswagen: Golf, Polo, Tiguan, Passat, T-Roc, Touran, Caddy, Transporter, Up!, T-Cross, Touareg, Sharan, Jetta, Lupo, Fox, Scirocco, Arteon, ID.3, ID.4, ID.5, ID.7, ID.Buzz, Taigo, Crafter, Multivan, Caravelle, California, Grand California, Amarok, Beetle, Coccinelle, Bora, Eos, CC, Phaeton, Golf Plus, Golf Sportsvan, e-Golf, e-Up!
+Ford: Fiesta, Focus, Kuga, Puma, Mondeo, Ka, C-Max, Transit, Transit Custom, Transit Connect, Transit Courier, Tourneo Custom, Tourneo Connect, Tourneo Courier, Tourneo, S-Max, Galaxy, EcoSport, Grand C-Max, B-Max, Edge, Mustang, Mustang Mach-E, Ranger, Fusion, Explorer, Capri, Escort, Cougar, StreetKa
+Opel: Corsa, Astra, Mokka, Crossland, Grandland, Insignia, Zafira, Meriva, Vectra, Combo, Vivaro, Movano, Crossland X, Grandland X, Mokka X, Zafira Tourer, Zafira Life, Combo Life, Frontera, Adam, Agila, Ampera, Antara, Cascada, Karl, Signum, Tigra, Omega, Kadett, Calibra, Corsa-e, Mokka-e, Vivaro-e, Combo-e, Movano-e
+Toyota: Yaris, Corolla, Aygo, C-HR, RAV4, Yaris Cross, Auris, Prius, Aygo X, Land Cruiser, Hilux, Proace, Proace City, Proace Verso, Proace Max, Yaris Verso, Avensis, Verso, Corolla Verso, Corolla Cross, Camry, Celica, MR2, Previa, Picnic, Starlet, iQ, Highlander, GR Yaris, GR86, GT86, Supra, Mirai, bZ4X, Urban Cruiser
+BMW: Série 1, Série 2, Série 3, Série 4, Série 5, Série 6, Série 7, Série 8, X1, X2, X3, X4, X5, X6, X7, Z3, Z4, i3, i4, i5, i7, iX, iX1, iX2, iX3, M2, M3, M4, M5, Série 2 Active Tourer, Série 2 Gran Tourer, Série 2 Gran Coupé
+Mercedes: Classe A, Classe B, Classe C, Classe E, CLA, GLA, GLC, Classe S, Classe G, Classe V, Classe X, Classe T, CLS, CLK, SLK, SL, SLC, GLB, GLE, GLS, GLK, Classe M, Classe R, Sprinter, Vito, Citan, Viano, Vaneo, Marco Polo, EQA, EQB, EQC, EQE, EQS, EQV, AMG GT, 190
+Audi: A3, A4, A1, A5, A6, Q3, Q5, Q2, Q7, Q8, A7, A8, A2, TT, R8, e-tron, Q4 e-tron, Q6 e-tron, Q8 e-tron, e-tron GT, 80, 100
+Fiat: 500, Panda, Punto, Tipo, Doblo, Ducato, 500X, 500L, 500e, Grande Punto, Punto Evo, Scudo, Fiorino, Qubo, Talento, Freemont, Bravo, Brava, Stilo, Multipla, Seicento, Cinquecento, Uno, Idea, Linea, Croma, Sedici, Ulysse, Barchetta, Coupé, Strada, Fullback, Grande Panda, 600, 600e, Topolino, Albea, Marea
+Nissan: Qashqai, Micra, Juke, X-Trail, Note, Leaf, Ariya, Navara, Pulsar, Primera, Almera, Pathfinder, Murano, Patrol, Terrano, NV200, NV250, NV300, NV400, Primastar, Interstar, Kubistar, Cube, Pixo, 350Z, 370Z, GT-R, Townstar, Evalia, Tino
+Seat: Ibiza, Leon, Arona, Ateca, Alhambra, Altea, Altea XL, Toledo, Cordoba, Mii, Exeo, Tarraco, Inca, Arosa
+Cupra: Born, Formentor, Leon, Ateca, Tavascan, Terramar
+Skoda: Octavia, Fabia, Superb, Kodiaq, Karoq, Kamiq, Scala, Rapid, Roomster, Yeti, Citigo, Enyaq, Elroq, Felicia
+Hyundai: i10, i20, i30, Tucson, Kona, Ioniq, i40, ix20, ix35, Santa Fe, Ioniq 5, Ioniq 6, Bayon, Getz, Matrix, Accent, Elantra, Atos, Coupé, Veloster, Staria, H350, Nexo, Inster, H-1, i800
+Kia: Sportage, Picanto, Ceed, Rio, Niro, Stonic, Sorento, EV6, Soul, Carens, Venga, Optima, Stinger, XCeed, ProCeed, Cee'd, e-Niro, e-Soul, EV9, EV3, Carnival, Magentis, Sedona
+Honda: Civic, Jazz, CR-V, HR-V, ZR-V, Accord, e, e:Ny1, FR-V, Insight, CR-Z, Legend, Prelude, S2000, NSX, Stream
+Mazda: 3, 2, CX-5, CX-30, MX-5, 6, CX-3, CX-60, CX-80, CX-7, MX-30, RX-8, 5, 323, 626, Premacy, BT-50, Tribute
+Suzuki: Swift, Vitara, Ignis, Jimny, S-Cross, SX4, Baleno, Celerio, Splash, Alto, Wagon R+, Liana, Grand Vitara, Across, Swace, Samurai, Kizashi
+Mitsubishi: ASX, Space Star, Outlander, Eclipse Cross, L200, Colt, Lancer, Pajero, Grandis, i-MiEV, Carisma, Galant, Space Wagon, Space Runner
+Volvo: XC60, XC40, V40, XC90, V60, S60, V70, V50, S40, C30, XC70, S80, V90, S90, C40, EX30, EX40, EX90, C70, 850, 940, 960, 240, 740
+Mini: Cooper, Countryman, One, Clubman, Cabrio, Paceman, Aceman, Coupé, Roadster
+Smart: Fortwo, Forfour, Roadster, #1, #3
+DS: 3, 4, 7, 5, 9, 3 Crossback, 7 Crossback
+Alfa Romeo: Giulietta, Mito, Stelvio, Tonale, Giulia, 147, 156, 159, 166, 145, 146, GT, Brera, Spider, 4C, Junior, GTV, 33
+Abarth: 500, 595, 695, 124 Spider, 500e, 600e
+Jeep: Renegade, Compass, Wrangler, Grand Cherokee, Cherokee, Avenger, Patriot, Commander, Gladiator
+Land Rover: Range Rover Evoque, Range Rover, Range Rover Sport, Range Rover Velar, Defender, Discovery, Discovery Sport, Freelander
+Lexus: CT, IS, GS, LS, NX, RX, UX, LBX, RZ, ES, LC, RC, LX
+Porsche: Cayenne, Macan, 911, 718, Panamera, Taycan, Cayman, Boxster, 944, 928, 924, 968
+Tesla: Model 3, Model Y, Model S, Model X
+MG: 4, ZS, HS, 3, 5, Marvel R, Cyberster
+BYD: Atto 3, Dolphin, Seal, Seal U, Han, Tang, Atto 2, Sealion 7, Dolphin Surf
+Polestar: 2, 3, 4
+Leapmotor: T03, C10, B10
+Ora: Funky Cat
+SsangYong: Tivoli, Korando, Rexton, Musso, Actyon, Kyron, Rodius
+Lancia: Ypsilon, Delta, Musa, Phedra, Lybra, Thesis, Dedra, Kappa, Y10, Voyager
+Chevrolet: Spark, Aveo, Cruze, Captiva, Lacetti, Matiz, Orlando, Trax, Kalos, Camaro, Corvette, Epica, Nubira, Tacuma, Volt
+Daewoo: Matiz, Lanos, Kalos, Nubira, Leganza, Tacuma
+Chrysler: PT Cruiser, Voyager, Grand Voyager, 300C, Sebring, Neon, Stratus, Crossfire
+Dodge: Caliber, Nitro, Journey, Challenger, Charger, Ram
+Jaguar: XE, XF, XJ, XK, F-Pace, E-Pace, I-Pace, F-Type, S-Type, X-Type
+Maserati: Ghibli, Levante, Quattroporte, GranTurismo, GranCabrio, Grecale, MC20
+Subaru: Impreza, Forester, Outback, Legacy, XV, BRZ, Levorg, Justy, Solterra, WRX, Crosstrek
+Daihatsu: Sirion, Terios, Cuore, Materia, YRV, Copen, Charade
+Isuzu: D-Max
+Lada: Niva, Samara
+Saab: 9-3, 9-5, 900, 9000
+Rover: 25, 45, 75, 200, 400, 600, 800, Streetwise, CityRover
+Iveco: Daily
+Alpine: A110, A290
+Aixam: City, Coupé, Crossline, Crossover, Minauto, Scouty
+Ligier: JS50, JS60, JS RC, Myli, Ixo
+Microcar: M.Go, Dué, Flex, MC1, MC2
+Aston Martin: DB11, DB12, DBX, Vantage, Vanquish, DBS, Rapide
+Bentley: Continental GT, Continental GTC, Bentayga, Flying Spur, Mulsanne
+Ferrari: California, Portofino, Roma, Purosangue, 458, 488, F8 Tributo, 812, SF90 Stradale, 296 GTB, F430, 599
+Lamborghini: Huracán, Urus, Aventador, Gallardo, Revuelto
+Rolls-Royce: Ghost, Phantom, Wraith, Cullinan, Dawn, Spectre
+Lotus: Elise, Exige, Evora, Emira, Eletre
+McLaren: 570S, 720S, GT, Artura
+Infiniti: Q30, Q50, Q60, QX30, QX50, QX70
+`
+      .trim()
+      .split("\n")
+      .map((l) => {
+        const i = l.indexOf(":");
+        return [
+          l.slice(0, i),
+          l
+            .slice(i + 1)
+            .split(",")
+            .map((m) => m.trim()),
+        ];
+      }),
+    b = CARS.flatMap(([brand, models]) => models.map((m) => brand + " " + m)),
     w = (e, t = document) => t.querySelector(e),
     y = (e) =>
       String(e ?? "").replace(
@@ -4669,43 +4820,7 @@ html.dlg-open {
         .replace(/[^a-z0-9]+/g, " ")
         .trim(),
     W = b.map((e) => ({ m: e, k: H(e) })).sort((e, t) => t.k.length - e.k.length),
-    O = [
-      "Abarth",
-      "Alfa Romeo",
-      "Audi",
-      "BMW",
-      "BYD",
-      "Citroën",
-      "Cupra",
-      "Dacia",
-      "DS",
-      "Fiat",
-      "Ford",
-      "Honda",
-      "Hyundai",
-      "Jeep",
-      "Kia",
-      "Land Rover",
-      "Mazda",
-      "Mercedes-Benz",
-      "Mercedes",
-      "MG",
-      "Mini",
-      "Mitsubishi",
-      "Nissan",
-      "Opel",
-      "Peugeot",
-      "Porsche",
-      "Renault",
-      "Seat",
-      "Skoda",
-      "Smart",
-      "Suzuki",
-      "Tesla",
-      "Toyota",
-      "Volkswagen",
-      "Volvo",
-    ]
+    O = ["Mercedes-Benz", ...CARS.map(([brand]) => brand)]
       .map((e) => ({ b: e, k: H(e) }))
       .sort((e, t) => t.k.length - e.k.length),
     Q = (() => {
@@ -4714,6 +4829,7 @@ html.dlg-open {
         const n = O.find((e) => a.startsWith(e.k + " "));
         if (!n) continue;
         const r = a.slice(n.k.length + 1);
+        if (r.length < 2) continue;
         (e.has(r) || e.set(r, []), e.get(r).push(t));
       }
       return [...e].sort((e, t) => t[0].length - e[0].length);
@@ -4763,6 +4879,7 @@ html.dlg-open {
       price: e.price,
       month: String(e.date).slice(0, 7),
       model: e.model || "",
+      year: e.year || 0,
       rating: Z(e.rating) ? e.rating : 0,
     };
   }
@@ -5509,6 +5626,10 @@ html.dlg-open {
               /^\d{4}-\d{2}-\d{2}$/.test(e.date),
           )
         : [];
+    for (const r of t) {
+      if (!/^[A-Z]{2}-\d{3}-[A-Z]{2}$/.test(r.immat)) delete r.immat;
+      if (!(Number.isInteger(r.year) && r.year >= 1950 && r.year <= 2100)) delete r.year;
+    }
     if (t.some((e) => "plate" in e)) {
       for (const e of t)
         if (!e.model && e.plate) {
@@ -5597,7 +5718,7 @@ html.dlg-open {
       g = d
         .map(
           (e) =>
-            `<span class="scale-dot" style="left:${l(e.price)}%" title="${y([C(e.price), e.model || "modèle non renseigné", G(e.month)].join(" · "))}"></span>`,
+            `<span class="scale-dot" style="left:${l(e.price)}%" title="${y([C(e.price), vehLabel(e) || "modèle non renseigné", G(e.month)].join(" · "))}"></span>`,
         )
         .join("");
     let h =
@@ -6645,10 +6766,10 @@ html.dlg-open {
             t.sort((e, t) => t.month.localeCompare(e.month) || e.price - t.price);
             const a = t.map((e) => e.price),
               n = "autre" === e;
-            return `<section class="h-type">\n        <div class="h-type-head"><span class="h-type-name">${y(j(e))}</span>${n ? "" : `<span class="h-median">Prix médian <b>${C(N(a))}</b></span>`}</div>\n        <p class="h-sub">${V(t.length, "réparation", "réparations")}${t.length > 1 && !n ? ` · de ${C(Math.min(...a))} à ${C(Math.max(...a))}` : ""}${n ? " de nature différente : pas de prix médian" : ""}</p>\n        <ul class="h-rows">${t.map((e) => `<li><span class="h-date">${y(G(e.month))}</span><span class="h-model${e.model ? "" : " none"}"><span>${y(e.model || "Modèle non renseigné")}</span>${e.rating ? `${re(e.rating)}<span class="sr-only">note ${e.rating} sur 5</span>` : ""}</span><span class="h-price">${C(e.price)}</span></li>`).join("")}</ul>\n      </section>`;
+            return `<section class="h-type">\n        <div class="h-type-head"><span class="h-type-name">${y(j(e))}</span>${n ? "" : `<span class="h-median">Prix médian <b>${C(N(a))}</b></span>`}</div>\n        <p class="h-sub">${V(t.length, "réparation", "réparations")}${t.length > 1 && !n ? ` · de ${C(Math.min(...a))} à ${C(Math.max(...a))}` : ""}${n ? " de nature différente : pas de prix médian" : ""}</p>\n        <ul class="h-rows">${t.map((e) => `<li><span class="h-date">${y(G(e.month))}</span><span class="h-model${e.model ? "" : " none"}"><span>${y(vehLabel(e) || "Modèle non renseigné")}</span>${e.rating ? `${re(e.rating)}<span class="sr-only">note ${e.rating} sur 5</span>` : ""}</span><span class="h-price">${C(e.price)}</span></li>`).join("")}</ul>\n      </section>`;
           })
           .join("");
-        return `<details class="history" data-hid="${y(e.id)}"${ot.has(e.id) ? " open" : ""}>\n      <summary>Historique des réparations<span class="h-count">${V(a.length, "réparation", "réparations")}</span></summary>\n      <div class="h-body">\n        <p class="h-note">Par type de prestation, avec le mois, le modèle du véhicule et la note donnée au garage. Les commentaires n'y figurent jamais.</p>\n        ${r}\n      </div>\n    </details>`;
+        return `<details class="history" data-hid="${y(e.id)}"${ot.has(e.id) ? " open" : ""}>\n      <summary>Historique des réparations<span class="h-count">${V(a.length, "réparation", "réparations")}</span></summary>\n      <div class="h-body">\n        <p class="h-note">Par type de prestation, avec le mois, le modèle et l'année du véhicule et la note donnée au garage. Les commentaires et l'immatriculation n'y figurent jamais.</p>\n        ${r}\n      </div>\n    </details>`;
       })(
         e,
         t.id,
@@ -7072,7 +7193,12 @@ html.dlg-open {
     model: w("#rModel"),
     modelInfo: w("#rModelInfo"),
     modelErr: w("#rModelErr"),
-    modelList: w("#modelList"),
+    mList: w("#rModelList"),
+    plate: w("#rPlate"),
+    plateErr: w("#rPlateErr"),
+    plateSay: w("#rPlateSay"),
+    year: w("#rYear"),
+    yearErr: w("#rYearErr"),
     service: w("#rService"),
     price: w("#rPrice"),
     priceErr: w("#rPriceErr"),
@@ -7089,6 +7215,7 @@ html.dlg-open {
     ctl: null,
     loading: !1,
     listClosedAt: 0,
+    plateLive: !1,
     rating: 0,
   };
   !(function () {
@@ -7107,6 +7234,257 @@ html.dlg-open {
         .join("") +
       '<optgroup label="Autre"><option value="autre">Autre réparation (précisez en commentaire)</option></optgroup>';
   })();
+  // ----- Véhicule : immatriculation, modèle (liste de suggestions) et année du modèle ---------------------------------------
+  // Immatriculation : format SIV, 2 lettres - 3 chiffres - 2 lettres (EZ-108-BC). Le champ se met en forme à la saisie :
+  // majuscules, tirets posés tout seuls, et tout caractère qui n'a pas sa place (un chiffre là où une lettre est attendue)
+  // est refusé avec un rappel du format (affiché, et annoncé aux lecteurs d'écran, pour qui une frappe ignorée ne se voit pas).
+  // L'ancien format (1234 AB 56) n'est pas accepté.
+  const PLATE_RE = /^[A-Z]{2}-\d{3}-[A-Z]{2}$/,
+    PLATE_SEP = new RegExp("[\\s\\-._/\\u2010-\\u2015]"),
+    PLATE_HELP = "Immatriculation incomplète. Format attendu : AB-123-CD (2 lettres, 3 chiffres, 2 lettres).",
+    PLATE_LIVE = "Une plaque s'écrit AB-123-CD : 2 lettres, 3 chiffres, 2 lettres.",
+    YEAR_MIN = 1950,
+    YEAR_MAX = +s.slice(0, 4);
+  // Trois groupes : 2 lettres, 3 chiffres, 2 lettres. Un groupe plein passe au suivant tout seul ; un séparateur saisi (tiret,
+  // espace, point…) y passe aussi, ce qui laisse corriger un caractère au milieu sans pousser les groupes suivants dans de
+  // mauvaises cases. Un caractère qui ne peut aller nulle part (chiffre dans les lettres, 8e caractère, accent…) est refusé.
+  // Les tirets ne sont posés qu'avec le caractère qui suit : « EZ » reste « EZ », jamais « EZ- » (Retour arrière le garderait).
+  function plateMask(raw) {
+    const groups = ["", "", ""];
+    let g = 0,
+      dropped = false;
+    for (const ch of String(raw || "")) {
+      if (PLATE_SEP.test(ch)) {
+        if (groups[g] && g < 2) g++;
+        continue;
+      }
+      if (!/[A-Za-z0-9]/.test(ch)) {
+        dropped = true;
+        continue;
+      }
+      const c = ch.toUpperCase(),
+        size = 1 === g ? 3 : 2;
+      if (g < 2 && groups[g].length === size) g++;
+      const room = groups[g].length < (1 === g ? 3 : 2),
+        fits = 1 === g ? c >= "0" && c <= "9" : c >= "A" && c <= "Z";
+      room && fits ? (groups[g] += c) : (dropped = true);
+    }
+    return { value: groups.filter(Boolean).join("-"), dropped };
+  }
+  // Le curseur reste devant le même caractère utile quand le masque ajoute ou retire un tiret (collage au milieu, etc.).
+  function plateInput() {
+    const el = Pt.plate,
+      at = null == el.selectionStart ? el.value.length : el.selectionStart,
+      masked = plateMask(el.value),
+      caret = plateMask(el.value.slice(0, at)).value.length;
+    if (el.value !== masked.value) {
+      el.value = masked.value;
+      try {
+        el.setSelectionRange(caret, caret);
+      } catch (err) {}
+    }
+    Pt.plateLive = masked.dropped;
+    Tt(el, Pt.plateErr, masked.dropped ? PLATE_LIVE : "");
+    Pt.plateSay.textContent = masked.dropped ? PLATE_LIVE : "";
+  }
+  // Année du modèle : 4 chiffres, entre 1950 et l'année en cours, jamais après la date de la réparation.
+  function yearMsg(year, date) {
+    if (!year) return "Indiquez l'année du modèle.";
+    if (!/^\d{4}$/.test(year)) return "Année non reconnue. Exemple : 2019.";
+    if (+year < YEAR_MIN || +year > YEAR_MAX)
+      return `L'année du modèle doit être comprise entre ${YEAR_MIN} et ${YEAR_MAX}.`;
+    if (/^\d{4}-/.test(date) && +year > +date.slice(0, 4))
+      return "L'année du modèle ne peut pas être postérieure à la date de la réparation.";
+    return "";
+  }
+  function yearInput() {
+    const digits = Pt.year.value.replace(/\D/g, "").slice(0, 4);
+    if (digits !== Pt.year.value) Pt.year.value = digits;
+    Tt(Pt.year, Pt.yearErr, "");
+  }
+  // Corriger la date peut lever (ou créer) le désaccord avec l'année : on ne remet le message à jour que s'il y en avait un.
+  function yearRecheck() {
+    Pt.yearErr.hidden || Tt(Pt.year, Pt.yearErr, yearMsg(Pt.year.value.trim(), Pt.date.value));
+  }
+  // Modèle (et année) tels qu'on les affiche partout : « Peugeot 208 · 2019 ». Jamais l'immatriculation.
+  function vehLabel(r) {
+    return [r.model, r.year].filter(Boolean).join(" · ");
+  }
+  // À l'ouverture du formulaire, le véhicule de la dernière déclaration est repris (immatriculation, modèle, année).
+  function vehPrefill() {
+    const last = Ze.slice()
+      .sort((r1, r2) => String(r2.createdAt).localeCompare(String(r1.createdAt)))
+      .find((r) => r.model);
+    Pt.model.value = last ? last.model : "";
+    Pt.plate.value = (last && last.immat) || "";
+    Pt.year.value = last && last.year ? String(last.year) : "";
+    Pt.plateLive = false;
+    Pt.plateSay.textContent = "";
+    mdlHide();
+  }
+
+  // Modèle : suggestions tirées du catalogue (b : « Marque Modèle »), sans accents ni ponctuation, et des modèles déjà
+  // déclarés, placés devant. Classement : nom exact, nom suivi d'autres mots, début de nom, mots commençant par la saisie,
+  // saisie contenue dans le nom, puis saisie collée (« chr » trouve « C-HR »). Un modèle déjà déclaré gagne un rang ; à rang
+  // égal, il passe devant, puis l'ordre du catalogue (marques et modèles les plus courants d'abord).
+  const mdlEntry = (name, i, own) => {
+      const k = H(name),
+        brand = O.find((o) => K(k, o.k));
+      return { m: name, k, mk: brand ? k.slice(brand.k.length + 1) : k, i, own };
+    },
+    mdlCatalog = b.map((name, i) => mdlEntry(name, i, false)),
+    mdl = { items: [], index: -1 },
+    // Champ vide : les modèles déjà déclarés, puis ceux-ci (les plus répandus), pour qu'un clic dans le champ montre une liste.
+    POPULAR = [
+      "Renault Clio",
+      "Peugeot 208",
+      "Citroën C3",
+      "Dacia Sandero",
+      "Peugeot 308",
+      "Renault Captur",
+      "Volkswagen Golf",
+      "Renault Twingo",
+      "Toyota Yaris",
+      "Peugeot 2008",
+      "Renault Mégane",
+      "Dacia Duster",
+    ];
+  function mdlFind(query) {
+    const own = [],
+      seen = new Set();
+    for (const r of Ze.slice().sort((r1, r2) => String(r2.createdAt).localeCompare(String(r1.createdAt)))) {
+      const entry = r.model && mdlEntry(r.model, own.length - 1e4, true);
+      if (entry && !seen.has(entry.k)) {
+        seen.add(entry.k);
+        own.push(entry);
+      }
+    }
+    const q = H(
+      String(query || "")
+        .replace(/^\s*vw\b/i, "volkswagen")
+        .replace(/^\s*mercedes[\s-]*benz\b/i, "mercedes"),
+    );
+    if (!q)
+      return own
+        .slice(0, 8)
+        .concat(
+          POPULAR.map((name) => mdlCatalog.find((c) => c.m === name)).filter((c) => c && !seen.has(c.k)),
+        )
+        .slice(0, 12);
+    const toks = q.split(" "),
+      packed = q.replace(/ /g, ""),
+      rank = (c) => {
+        if (c.k === q || c.mk === q) return 0;
+        if (c.k.startsWith(q + " ") || c.mk.startsWith(q + " ")) return 1;
+        if (c.k.startsWith(q) || c.mk.startsWith(q)) return 2;
+        const words = c.k.split(" ");
+        if (toks.every((tok) => words.some((word) => word.startsWith(tok)))) return 3;
+        if (toks.every((tok) => c.k.includes(tok))) return 4;
+        return packed.length > 1 && c.k.replace(/ /g, "").includes(packed) ? 5 : -1;
+      };
+    return own
+      .concat(mdlCatalog.filter((c) => !seen.has(c.k)))
+      .map((c) => ({ c, r: rank(c) }))
+      .filter((x) => x.r >= 0)
+      .sort((x1, x2) => x1.r - x1.c.own - (x2.r - x2.c.own) || x1.c.i - x2.c.i)
+      .slice(0, 12)
+      .map((x) => x.c);
+  }
+  function mdlHide() {
+    Pt.mList.hidden = true;
+    Pt.mList.innerHTML = "";
+    Pt.model.setAttribute("aria-expanded", "false");
+    Pt.model.removeAttribute("aria-activedescendant");
+    mdl.items = [];
+    mdl.index = -1;
+  }
+  // Une seule suggestion identique à ce qui est déjà saisi n'apporte rien : la liste reste fermée.
+  function mdlShow(items) {
+    mdl.items = 1 === items.length && H(items[0].m) === H(Pt.model.value) ? [] : items;
+    mdl.index = -1;
+    if (!mdl.items.length) return mdlHide();
+    Pt.mList.innerHTML = mdl.items
+      .map(
+        (c, i) =>
+          `<li role="option" id="ms-${i}" data-i="${i}" aria-selected="false"><span class="s-main">${y(c.m)}</span>${c.own ? '<span class="s-sub">déjà déclaré</span>' : ""}</li>`,
+      )
+      .join("");
+    Pt.mList.hidden = false;
+    Pt.mList.scrollTop = 0;
+    Pt.model.setAttribute("aria-expanded", "true");
+    Pt.model.removeAttribute("aria-activedescendant");
+  }
+  // Flèches : l'option active change sur place (la liste n'est pas redessinée) et reste visible dans la liste.
+  function mdlMove(step) {
+    const n = mdl.items.length;
+    mdl.index = mdl.index < 0 ? (step > 0 ? 0 : n - 1) : (mdl.index + step + n) % n;
+    [...Pt.mList.children].forEach((li, i) => li.setAttribute("aria-selected", String(i === mdl.index)));
+    const li = Pt.mList.children[mdl.index],
+      top = li.offsetTop,
+      bottom = top + li.offsetHeight;
+    if (top < Pt.mList.scrollTop + 6) Pt.mList.scrollTop = Math.max(0, top - 6);
+    else if (bottom > Pt.mList.scrollTop + Pt.mList.clientHeight - 6)
+      Pt.mList.scrollTop = bottom - Pt.mList.clientHeight + 6;
+    Pt.model.setAttribute("aria-activedescendant", li.id);
+  }
+  function mdlPick(i) {
+    const c = mdl.items[i];
+    if (!c) return;
+    Pt.model.value = c.m;
+    Tt(Pt.model, Pt.modelErr, "");
+    mdlHide();
+  }
+  function wireVehicle() {
+    Pt.model.addEventListener("input", () => {
+      Tt(Pt.model, Pt.modelErr, "");
+      mdlShow(mdlFind(Pt.model.value));
+    });
+    Pt.model.addEventListener("focus", () => {
+      Pt.model.value.trim() || mdlShow(mdlFind(""));
+    });
+    Pt.model.addEventListener("keydown", (e) => {
+      const open = !Pt.mList.hidden;
+      if ("Escape" === e.key && open) {
+        e.preventDefault();
+        e.stopPropagation();
+        Pt.listClosedAt = Date.now();
+        return void mdlHide();
+      }
+      // Entrée choisit l'option active (le champ garde le focus), sinon passe au champ suivant, comme pour le garage.
+      if ("Enter" === e.key) {
+        e.preventDefault();
+        if (open && mdl.index >= 0) return void mdlPick(mdl.index);
+        mdlHide();
+        return void Pt.plate.focus();
+      }
+      if ("ArrowDown" === e.key || "ArrowUp" === e.key) {
+        open || mdlShow(mdlFind(Pt.model.value));
+        if (!mdl.items.length) return;
+        e.preventDefault();
+        mdlMove("ArrowDown" === e.key ? 1 : -1);
+      }
+    });
+    Pt.model.addEventListener("blur", () => {
+      setTimeout(() => document.activeElement === Pt.model || mdlHide(), 150);
+      const name = J(Pt.model.value);
+      name && (Pt.model.value = name);
+    });
+    Pt.mList.addEventListener("mousedown", (e) => e.preventDefault());
+    Pt.mList.addEventListener("click", (e) => {
+      const li = e.target.closest("li[data-i]");
+      li && mdlPick(+li.dataset.i);
+    });
+    Pt.plate.addEventListener("input", (e) => e.isComposing || plateInput());
+    Pt.plate.addEventListener("compositionend", plateInput);
+    Pt.plate.addEventListener("blur", () => {
+      if (Pt.plateLive) {
+        Pt.plateLive = false;
+        Tt(Pt.plate, Pt.plateErr, "");
+        Pt.plateSay.textContent = "";
+      }
+    });
+    Pt.year.addEventListener("input", yearInput);
+  }
   const Rt = { search: "dans votre recherche", declared: "déjà déclaré", sirene: "registre des entreprises" };
   function qt(e, t) {
     return {
@@ -7312,11 +7690,7 @@ html.dlg-open {
       t && Nt(+t.dataset.i);
     }),
     Pt.garage.addEventListener("blur", () => setTimeout(zt, 150)),
-    Pt.model.addEventListener("input", () => Tt(Pt.model, Pt.modelErr, "")),
-    Pt.model.addEventListener("blur", () => {
-      const e = J(Pt.model.value);
-      e && (Pt.model.value = e);
-    }));
+    wireVehicle());
   const Vt = ["", "Très mauvais", "Mauvais", "Correct", "Bien", "Excellent"],
     Gt = [...Pt.stars.querySelectorAll("label")];
   function Ht(e) {
@@ -7334,6 +7708,8 @@ html.dlg-open {
     for (const [e, t] of [
       [Pt.garage, Pt.gErr],
       [Pt.model, Pt.modelErr],
+      [Pt.plate, Pt.plateErr],
+      [Pt.year, Pt.yearErr],
       [Pt.price, Pt.priceErr],
       [Pt.date, Pt.dateErr],
       [Pt.stars, Pt.ratingErr],
@@ -7350,31 +7726,22 @@ html.dlg-open {
     ((Pt.service.value = e.svcId && "ct" !== e.svcId ? e.svcId : "ct" === t.kind ? "vidange" : t.id),
       (Pt.date.max = s),
       (Pt.date.value = s),
-      (Pt.model.value =
-        (function () {
-          const e = [],
-            t = new Set();
-          for (const a of Ze.slice().sort((e, t) => String(t.createdAt).localeCompare(String(e.createdAt))))
-            a.model && !t.has(a.model) && (t.add(a.model), e.push(a.model));
-          return (
-            (Pt.modelList.innerHTML = e
-              .concat(b.filter((e) => !t.has(e)))
-              .map((e) => `<option value="${y(e)}"></option>`)
-              .join("")),
-            e
-          );
-        })()[0] || ""),
+      vehPrefill(),
       (Pt.note.className = "dlg-note" + (Ye ? "" : " warn")),
       (Pt.note.textContent = Ye
         ? "Elle reste enregistrée dans ce navigateur et complète l'échelle de prix du garage concerné."
         : "Ce navigateur bloque l'enregistrement local : vos déclarations seront perdues à la fermeture de la page."),
       document.documentElement.classList.add("dlg-open"),
       "function" == typeof Pt.el.showModal ? Pt.el.showModal() : Pt.el.setAttribute("open", ""),
-      (Pt.garage.value ? (Pt.model.value ? Pt.price : Pt.model) : Pt.garage).focus());
+      (Pt.garage.value
+        ? [Pt.model, Pt.plate, Pt.year, Pt.price].find((e) => !e.value.trim())
+        : Pt.garage
+      ).focus());
   }
   function Qt() {
     (Bt(),
       zt(),
+      mdlHide(),
       "function" == typeof Pt.el.close ? Pt.el.open && Pt.el.close() : Pt.el.removeAttribute("open"),
       document.documentElement.classList.remove("dlg-open"));
   }
@@ -7386,7 +7753,7 @@ html.dlg-open {
     t && Ft(t);
   }
   function Xt(e) {
-    return `<li class="rep-item">\n      <span class="rep-what">${y(j(e.serviceId))}</span>\n      <span class="rep-price">${C(e.price)}</span>\n      <span class="rep-meta"><span>${y(B(e.date))}</span><span class="rep-model${e.model ? "" : " none"}">${y(e.model || "Modèle non renseigné")}</span>${Z(e.rating) ? `${re(e.rating)}<span class="sr-only">note ${e.rating} sur 5</span>` : '<span class="rep-model none">non noté</span>'}</span>\n      ${e.comment ? `<p class="rep-comment">${y(e.comment)}</p>` : ""}\n      <button type="button" class="rep-del" data-del="${y(e.id)}" aria-label="Supprimer : ${y(j(e.serviceId))}, ${y(B(e.date))}">Supprimer</button>\n    </li>`;
+    return `<li class="rep-item">\n      <span class="rep-what">${y(j(e.serviceId))}</span>\n      <span class="rep-price">${C(e.price)}</span>\n      <span class="rep-meta"><span>${y(B(e.date))}</span><span class="rep-model${e.model ? "" : " none"}">${y(e.model || "Modèle non renseigné")}</span>${e.year ? `<span class="rep-year">${e.year}</span>` : ""}${e.immat ? `<span class="rep-plate">${y(e.immat)}</span>` : ""}${Z(e.rating) ? `${re(e.rating)}<span class="sr-only">note ${e.rating} sur 5</span>` : '<span class="rep-model none">non noté</span>'}</span>\n      ${e.comment ? `<p class="rep-comment">${y(e.comment)}</p>` : ""}\n      <button type="button" class="rep-del" data-del="${y(e.id)}" aria-label="Supprimer : ${y(j(e.serviceId))}, ${y(B(e.date))}">Supprimer</button>\n    </li>`;
   }
   function Jt() {
     const e = Ze.length;
@@ -7450,7 +7817,7 @@ html.dlg-open {
     }),
     Pt.stars.addEventListener("mouseleave", () => Ht(Pt.rating)),
     Pt.price.addEventListener("input", () => Tt(Pt.price, Pt.priceErr, "")),
-    Pt.date.addEventListener("input", () => Tt(Pt.date, Pt.dateErr, "")),
+    Pt.date.addEventListener("input", () => (Tt(Pt.date, Pt.dateErr, ""), yearRecheck())),
     Pt.el.addEventListener("close", () => {
       (Bt(), document.documentElement.classList.remove("dlg-open"));
     }),
@@ -7465,10 +7832,13 @@ html.dlg-open {
       const t = Pt.picked,
         a = t ? t.name : q(Pt.garage.value),
         n = J(Pt.model.value),
+        pl = plateMask(Pt.plate.value).value,
+        yr = Pt.year.value.trim(),
         r = Pt.rating,
         i = Pt.price.value.trim(),
         o = $(i),
         l = Pt.date.value,
+        ym = yearMsg(yr, l),
         c = [],
         d = (e, t, a, n) => {
           (Tt(t, a, e ? "" : n), e || c.push(t));
@@ -7476,6 +7846,13 @@ html.dlg-open {
       if (
         (d(a.length >= 2, Pt.garage, Pt.gErr, "Indiquez le garage concerné."),
         d(n.length >= 2, Pt.model, Pt.modelErr, "Indiquez le modèle du véhicule, par exemple Peugeot 208."),
+        d(
+          PLATE_RE.test(pl),
+          Pt.plate,
+          Pt.plateErr,
+          pl ? PLATE_HELP : "Indiquez l'immatriculation du véhicule.",
+        ),
+        d(!ym, Pt.year, Pt.yearErr, ym),
         d(
           o > 0 && o <= 2e4,
           Pt.price,
@@ -7509,6 +7886,8 @@ html.dlg-open {
         lon: t && Number.isFinite(t.lon) ? t.lon : null,
         chainId: t ? t.chainId || "" : (je({ name: a }) || {}).id || "",
         model: n,
+        immat: pl,
+        year: +yr,
         rating: r,
         serviceId: Pt.service.value,
         price: Math.round(100 * o) / 100,
