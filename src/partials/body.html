@@ -1,0 +1,293 @@
+  <a class="skip" href="#main">Aller au contenu</a>
+  <div class="app">
+    <div class="dock" aria-hidden="true"></div>
+
+    <!-- Navigation : rail d'icônes (ordinateur) / barre du haut + navigation flottante (mobile) -->
+    <header class="rail">
+      <div class="rail-in">
+        <a class="brand" href="#garages" aria-label="Pixcar, accueil">
+          <span class="brand-mark">
+            <svg viewBox="0 0 100 100" aria-hidden="true"><use href="#px-mark" /></svg>
+          </span>
+          <span class="px-word brand-word" aria-hidden="true"></span>
+        </a>
+        <nav class="tabs" id="tabs" aria-label="Sections">
+          <a class="tab" href="#garages" data-view="garages" aria-current="page"
+            ><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg
+            ><span class="tab-label">Garages</span></a
+          >
+          <a class="tab" href="#reparations" data-view="reparations"
+            ><svg class="ic" aria-hidden="true"><use href="#i-receipt" /></svg
+            ><span class="tab-label">Mes réparations</span><span class="count" id="repBadge" hidden></span></a
+          >
+          <a class="tab" href="#prix" data-view="prix"
+            ><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg
+            ><span class="tab-label">Prix et promos</span></a
+          >
+        </nav>
+        <button
+          type="button"
+          class="add-btn"
+          id="addRepairBtn"
+          aria-haspopup="dialog"
+          aria-label="Ajouter une réparation"
+        >
+          <svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg
+          ><span class="lbl-long">Ajouter une réparation</span><span class="lbl-short">Réparation</span>
+        </button>
+      </div>
+    </header>
+
+    <main id="main">
+      <div id="modeBanner" class="banner" role="status" hidden>
+        <b>Recherche indisponible dans cet aperçu</b>
+        La page ne joint pas les services publics (adresses, garages, contrôle technique) : l'aperçu claude.ai bloque
+        les connexions externes. Ouvrez l'app dans un navigateur ou en ligne. Vos réparations, les prix et les
+        promotions des enseignes restent consultables.
+      </div>
+
+      <!-- ===== Garages : panneau (liste) + carte plein écran ===== -->
+      <section class="view" id="view-garages" data-view="garages" aria-labelledby="garagesTitle">
+        <div class="panel-col" id="panelCol">
+          <header class="panel-head">
+            <h1 id="garagesTitle"><span class="t-brand"><span class="px-word" role="img" aria-label="Pixcar"></span></span><span class="t-text">Garages</span><span class="sr-only"> autour de votre adresse</span></h1>
+            <p class="panel-sub">1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto</p>
+          </header>
+          <form id="searchForm" class="search" novalidate>
+            <div class="field">
+              <label for="service">Prestation</label>
+              <select id="service" class="svc-select"></select>
+              <p class="hint full-only" id="serviceHint"></p>
+            </div>
+            <div class="sum-line" id="searchSum">
+              <p class="sum-where">
+                <svg class="ic" aria-hidden="true"><use href="#i-pin" /></svg><span id="sumWhere"></span>
+              </p>
+              <button type="button" class="btn" id="editSearch" aria-expanded="false" aria-controls="searchForm">
+                <svg class="ic" aria-hidden="true"><use href="#i-edit" /></svg>Modifier
+              </button>
+            </div>
+            <div class="field addr-field full-only" id="addrField">
+              <label for="address">Votre adresse</label>
+              <div class="addr">
+                <input
+                  id="address"
+                  type="text"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="N°, rue, code postal ou ville"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded="false"
+                  aria-controls="addrList"
+                />
+                <button
+                  type="button"
+                  id="locateBtn"
+                  class="icon-btn"
+                  aria-label="Utiliser ma position"
+                  title="Utiliser ma position"
+                >
+                  <svg class="ic" aria-hidden="true"><use href="#i-locate" /></svg>
+                </button>
+              </div>
+              <ul id="addrList" class="suggest" role="listbox" aria-label="Adresses proposées" hidden></ul>
+            </div>
+            <div class="field full-only">
+              <span class="lbl" id="radiusLbl">Rayon autour de l'adresse</span>
+              <input type="hidden" id="radius" value="10" />
+              <div class="chips" id="radiusChips" role="group" aria-labelledby="radiusLbl">
+                <button type="button" class="chip" data-km="3">3 km</button>
+                <button type="button" class="chip" data-km="5">5 km</button>
+                <button type="button" class="chip" data-km="10">10 km</button>
+                <button type="button" class="chip" data-km="20">20 km</button>
+                <button type="button" class="chip" data-km="30">30 km</button>
+                <button type="button" class="chip" data-km="50">50 km</button>
+              </div>
+            </div>
+            <div class="field" id="energyField" hidden>
+              <label for="energy">Énergie du véhicule</label>
+              <select id="energy">
+                <option>Essence</option>
+                <option>Diesel</option>
+                <option>Hybride</option>
+                <option>Électrique</option>
+                <option>Gaz</option>
+              </select>
+            </div>
+            <details class="more full-only" id="moreOpts">
+              <summary>Plus d'ateliers</summary>
+              <label class="check"
+                ><input type="checkbox" id="sirene" />
+                <span>Ajouter les ateliers du registre des entreprises (SIRENE)</span></label
+              >
+              <p class="hint">
+                Ajoute les ateliers déclarés à l'INSEE (code NAF 45.20A) absents d'OpenStreetMap. Liste plus complète,
+                sans prix, et parfois des adresses de domicile.
+              </p>
+            </details>
+            <div class="go-row full-only">
+              <button type="submit" id="go" class="primary">
+                <svg class="ic" aria-hidden="true"><use href="#i-search" /></svg
+                ><span id="goLabel">Rechercher les garages</span>
+              </button>
+            </div>
+          </form>
+          <section class="teaser" id="teaser" aria-live="polite"></section>
+          <section class="results" id="results" aria-live="polite" aria-label="Résultats">
+            <h2 class="sr-only">Résultats</h2>
+            <div id="status" class="status"></div>
+            <div id="summary" class="summary" hidden></div>
+            <div id="toolbar" class="toolbar" hidden>
+              <div class="tool-group">
+                <span class="lbl-s" id="sortLbl">Trier</span>
+                <div class="seg" role="group" aria-labelledby="sortLbl">
+                  <button type="button" data-sort="price" aria-pressed="true">Prix</button>
+                  <button type="button" data-sort="dist" aria-pressed="false">Distance</button>
+                  <button type="button" data-sort="note" aria-pressed="false">Note</button>
+                </div>
+              </div>
+              <div class="filters" id="filters" role="group" aria-label="Filtrer">
+                <button type="button" class="chip" data-filter="all" aria-pressed="true">Tous</button>
+                <button type="button" class="chip" data-filter="priced" aria-pressed="false">Avec prix</button>
+                <button type="button" class="chip" data-filter="promo" aria-pressed="false">En promo</button>
+                <button type="button" class="chip" data-filter="chains" aria-pressed="false">Enseignes</button>
+                <button type="button" class="chip" data-filter="indep" aria-pressed="false">Indépendants</button>
+              </div>
+            </div>
+            <div class="res-body" id="resBody">
+              <div class="list-pane" id="listPane">
+                <ol id="list" class="list"></ol>
+                <button type="button" id="moreBtn" class="btn more-btn" hidden>Afficher plus</button>
+                <p class="osm-note" id="osmNote" hidden>
+                  Garages : © les contributeurs d'<a
+                    href="https://www.openstreetmap.org/copyright"
+                    target="_blank"
+                    rel="noopener"
+                    >OpenStreetMap</a
+                  >
+                  (ODbL).
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Carte : toujours en arrière-plan sur ordinateur, plein écran via le bouton « Carte » sur mobile -->
+        <div class="stage" id="stage">
+          <div class="map-pane" id="mapPane" hidden>
+            <div id="map" class="map" role="region" aria-label="Carte des garages"></div>
+          </div>
+          <div class="map-empty" aria-hidden="true">
+            <svg class="map-art" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" focusable="false">
+              <rect class="ma-bg" width="1600" height="1000" />
+              <path class="ma-park" d="M120 90c110-50 260-40 330 40s30 190-80 220-290 0-330-90 10-130 80-170z" />
+              <path class="ma-park" d="M1180 700c90-40 230-20 290 50s10 170-90 200-230-10-260-90 10-120 60-160z" />
+              <path class="ma-park" d="M760 40c70-30 170-10 200 40s-20 110-90 120-150-20-160-70 20-70 50-90z" />
+              <path class="ma-water" fill="none" stroke-width="64" stroke-linecap="round" d="M-60 800C240 700 420 860 720 780S1180 540 1700 620" />
+              <g class="ma-roads" fill="none" stroke-linecap="round" transform="rotate(-14 800 500)">
+                <path d="M-200 130H1800M-200 250H1800M-200 370H1800M-200 490H1800M-200 610H1800M-200 730H1800M-200 850H1800M-200 970H1800M-200 1090H1800" stroke-width="9" />
+                <path d="M60 -200V1200M200 -200V1200M340 -200V1200M480 -200V1200M620 -200V1200M760 -200V1200M900 -200V1200M1040 -200V1200M1180 -200V1200M1320 -200V1200M1460 -200V1200M1600 -200V1200" stroke-width="9" />
+                <path d="M-200 430H1800M480 -200V1200M1180 -200V1200" stroke-width="17" />
+                <path d="M-200 1100L1800 -120" stroke-width="13" />
+              </g>
+              <circle class="ma-radius" cx="1000" cy="500" r="230" fill="none" stroke-width="2" stroke-dasharray="7 9" />
+              <!-- Recherche en cours : un rond-point autour de l'adresse, une voiture y tourne (voir « Chargement » du CSS) -->
+              <g class="ld" transform="translate(1000 500) scale(1.35)"><!--LD_ROAD--></g>
+              <circle class="ma-pin-ring" cx="1000" cy="500" r="21" />
+              <circle class="ma-pin" cx="1000" cy="500" r="13" />
+              <g class="ld" transform="translate(1000 500) scale(1.35)"><!--LD_CAR--></g>
+            </svg>
+            <div class="map-hint">
+              <b>La carte s'affiche après votre recherche</b>
+              <span>Votre titine est comme vous, elle n'aime pas qu'on lui cache des choses</span>
+            </div>
+          </div>
+          <aside class="map-info" id="mapInfo" aria-label="Garage sélectionné" hidden></aside>
+        </div>
+        <button type="button" class="fab" id="mapFab" aria-controls="stage" hidden>
+          <svg class="ic" aria-hidden="true"><use href="#i-map" /></svg><span>Carte</span>
+        </button>
+      </section>
+
+      <!-- ===== Mes réparations ===== -->
+      <section class="view" id="view-reparations" data-view="reparations" aria-labelledby="repTitle" hidden>
+        <div class="view-head">
+          <div>
+            <h1 id="repTitle" tabindex="-1">Mes réparations</h1>
+            <p id="repCount">Prix payés et notes, enregistrés dans ce navigateur.</p>
+          </div>
+          <button type="button" class="btn dark" id="addRepairBtn2" aria-haspopup="dialog">
+            <svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter une réparation
+          </button>
+        </div>
+        <div class="empty" id="repEmpty">
+          <h2>Aucune réparation déclarée</h2>
+          <p>
+            Après un passage au garage, notez le prix payé, le modèle du véhicule et votre note sur 5. Chaque
+            déclaration alimente l'échelle de prix et la note du garage, visibles sur sa fiche.
+          </p>
+        </div>
+        <section id="repairs" aria-label="Réparations par garage" hidden>
+          <h2 class="sr-only">Réparations par garage</h2>
+          <ol class="rep-groups" id="repGroups"></ol>
+        </section>
+        <p class="hint">
+          Les fiches des garages affichent le modèle, le mois, la note et le prix de chaque réparation, jamais le
+          commentaire. Rien n'est envoyé ni partagé : l'échelle de prix et la note ne comptent que vos déclarations.
+        </p>
+      </section>
+
+      <!-- ===== Prix et promos ===== -->
+      <section class="view" id="view-prix" data-view="prix" aria-labelledby="prixTitle" hidden>
+        <div class="view-head">
+          <div>
+            <h1 id="prixTitle">Prix et promos des enseignes</h1>
+            <p id="refsSub">
+              Tarifs nationaux « à partir de » pour une voiture de tourisme, relevés le 1<sup>er</sup> octobre 2026. Les
+              promotions sont souvent limitées aux centres participants.
+            </p>
+          </div>
+        </div>
+        <div class="field">
+          <label for="refService">Prestation</label>
+          <select id="refService" class="svc-select"></select>
+        </div>
+        <section class="panel" id="refs" aria-label="Prix publiés"><ol class="ref-list" id="refList"></ol></section>
+        <details class="sources">
+          <summary>Sources et méthode</summary>
+          <p>
+            <b>Sources.</b> Adresses : Base Adresse Nationale via la Géoplateforme de l'IGN. Garages (nom, position,
+            adresse, téléphone, horaires, site) : © les contributeurs d'<a href="https://www.openstreetmap.org/copyright"
+              target="_blank" rel="noopener">OpenStreetMap</a>
+            (ODbL), la base de données cartographique ouverte et collaborative : elle ne recense pas tous les garages, et
+            un garage y est parfois sans adresse ni numéro de téléphone. Quand l'adresse manque, la page affiche
+            l'adresse la plus proche de la position du garage (Base Adresse Nationale, 80 m au plus), précédée de « ≈ » :
+            c'est une approximation. Fond de
+            carte : Plan IGN (Géoplateforme). Avis : le bouton « Avis Google » ouvre la fiche du garage
+            sur Google Maps. Contrôle technique : prix déclarés par les centres, publiés par la DGCCRF sur
+            <a href="https://prix.conso.gouv.fr/controle-technique" target="_blank" rel="noopener">prix.conso.gouv.fr</a
+            >. Registre : INSEE, via l'API Recherche d'entreprises. Licence Ouverte pour les données publiques.
+          </p>
+          <p>
+            <b>Logos des enseignes.</b> Wikimedia Commons, via Wikidata ; à défaut, l'icône du site officiel de
+            l'enseigne ; sans logo, un monogramme aux couleurs de l'interface (ce ne sont pas les couleurs officielles).
+            Ces marques appartiennent à leurs propriétaires. Pour les charger, votre navigateur contacte ces services,
+            qui voient son adresse IP.
+          </p>
+          <p>
+            <b>Prix et promotions des enseignes.</b> Relevés sur leurs sites le 1<sup>er</sup> octobre 2026. Promotions
+            vérifiées chez Norauto, Speedy, Midas, Euromaster, Roady et Feu Vert (aucune offre atelier chez Feu Vert à
+            cette date) ; les autres enseignes n'ont pas été vérifiées. Une promotion disparaît d'elle-même après sa
+            date de fin. Un centre franchisé peut appliquer un autre tarif, et tous les centres n'ont pas de banc de
+            géométrie : confirmez avant de vous déplacer.
+          </p>
+          <p>
+            <b>Vos réparations.</b> Elles restent dans ce navigateur : rien n'est envoyé ni partagé. L'échelle de prix
+            et la note d'un garage ne comptent que vos propres déclarations. L'historique d'un garage affiche le modèle
+            et l'année du véhicule, le mois, la note et le prix, jamais le commentaire ni l'immatriculation.
+          </p>
+        </details>
+      </section>
+    </main>
+  </div>

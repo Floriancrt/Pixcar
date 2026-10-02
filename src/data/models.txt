@@ -1,0 +1,65 @@
+Renault: Clio, Mégane, Scénic, Captur, Twingo, Kangoo, Trafic, Master, Espace, Laguna, Kadjar, Arkana, Austral, Zoe, Talisman, Koleos, Modus, Fluence, Symbioz, Rafale, Mégane E-Tech, Scénic E-Tech, 5 E-Tech, 4 E-Tech, Twizy, Grand Scénic, Grand Espace, Grand Modus, Safrane, Vel Satis, Avantime, Wind, Latitude, Express, Alaskan, 5, 4, 4L, 9, 11, 12, 18, 19, 21, 25
+Peugeot: 208, 308, 2008, 3008, 5008, 508, 207, 206, 307, 107, 108, 106, 205, 306, 407, 408, 301, 406, 405, 309, 4008, 4007, 807, 806, 607, 605, 1007, 504, 505, 104, 204, 304, 305, 404, 403, RCZ, iOn, Partner, Expert, Boxer, Rifter, Bipper, Traveller, e-208, e-2008, e-308, e-3008, e-5008, e-Rifter, e-Expert, e-Traveller, e-Partner
+Citroën: C3, C4, C5, C1, Berlingo, C3 Picasso, C4 Picasso, Grand C4 Picasso, C3 Aircross, C4 Cactus, C5 Aircross, C4 Aircross, Xsara, Xsara Picasso, Saxo, C2, C-Elysée, C4 SpaceTourer, Grand C4 SpaceTourer, C3 Pluriel, C-Crosser, C6, C8, C-Zero, DS3, DS4, DS5, Jumpy, Jumper, Nemo, SpaceTourer, ë-C3, ë-C4, ë-C4 X, ë-Berlingo, ë-Jumpy, ë-Jumper, ë-SpaceTourer, C4 X, C5 X, Xantia, XM, ZX, AX, BX, Visa, 2CV, Dyane, Ami, Méhari, Evasion, Synergie, C15, Acadiane
+Dacia: Sandero, Duster, Logan, Jogger, Spring, Lodgy, Dokker, Sandero Stepway, Logan MCV, Bigster
+Volkswagen: Golf, Polo, Tiguan, Passat, T-Roc, Touran, Caddy, Transporter, Up!, T-Cross, Touareg, Sharan, Jetta, Lupo, Fox, Scirocco, Arteon, ID.3, ID.4, ID.5, ID.7, ID.Buzz, Taigo, Crafter, Multivan, Caravelle, California, Grand California, Amarok, Beetle, Coccinelle, Bora, Eos, CC, Phaeton, Golf Plus, Golf Sportsvan, e-Golf, e-Up!
+Ford: Fiesta, Focus, Kuga, Puma, Mondeo, Ka, C-Max, Transit, Transit Custom, Transit Connect, Transit Courier, Tourneo Custom, Tourneo Connect, Tourneo Courier, Tourneo, S-Max, Galaxy, EcoSport, Grand C-Max, B-Max, Edge, Mustang, Mustang Mach-E, Ranger, Fusion, Explorer, Capri, Escort, Cougar, StreetKa
+Opel: Corsa, Astra, Mokka, Crossland, Grandland, Insignia, Zafira, Meriva, Vectra, Combo, Vivaro, Movano, Crossland X, Grandland X, Mokka X, Zafira Tourer, Zafira Life, Combo Life, Frontera, Adam, Agila, Ampera, Antara, Cascada, Karl, Signum, Tigra, Omega, Kadett, Calibra, Corsa-e, Mokka-e, Vivaro-e, Combo-e, Movano-e
+Toyota: Yaris, Corolla, Aygo, C-HR, RAV4, Yaris Cross, Auris, Prius, Aygo X, Land Cruiser, Hilux, Proace, Proace City, Proace Verso, Proace Max, Yaris Verso, Avensis, Verso, Corolla Verso, Corolla Cross, Camry, Celica, MR2, Previa, Picnic, Starlet, iQ, Highlander, GR Yaris, GR86, GT86, Supra, Mirai, bZ4X, Urban Cruiser
+BMW: Série 1, Série 2, Série 3, Série 4, Série 5, Série 6, Série 7, Série 8, X1, X2, X3, X4, X5, X6, X7, Z3, Z4, i3, i4, i5, i7, iX, iX1, iX2, iX3, M2, M3, M4, M5, Série 2 Active Tourer, Série 2 Gran Tourer, Série 2 Gran Coupé
+Mercedes: Classe A, Classe B, Classe C, Classe E, CLA, GLA, GLC, Classe S, Classe G, Classe V, Classe X, Classe T, CLS, CLK, SLK, SL, SLC, GLB, GLE, GLS, GLK, Classe M, Classe R, Sprinter, Vito, Citan, Viano, Vaneo, Marco Polo, EQA, EQB, EQC, EQE, EQS, EQV, AMG GT, 190
+Audi: A3, A4, A1, A5, A6, Q3, Q5, Q2, Q7, Q8, A7, A8, A2, TT, R8, e-tron, Q4 e-tron, Q6 e-tron, Q8 e-tron, e-tron GT, 80, 100
+Fiat: 500, Panda, Punto, Tipo, Doblo, Ducato, 500X, 500L, 500e, Grande Punto, Punto Evo, Scudo, Fiorino, Qubo, Talento, Freemont, Bravo, Brava, Stilo, Multipla, Seicento, Cinquecento, Uno, Idea, Linea, Croma, Sedici, Ulysse, Barchetta, Coupé, Strada, Fullback, Grande Panda, 600, 600e, Topolino, Albea, Marea
+Nissan: Qashqai, Micra, Juke, X-Trail, Note, Leaf, Ariya, Navara, Pulsar, Primera, Almera, Pathfinder, Murano, Patrol, Terrano, NV200, NV250, NV300, NV400, Primastar, Interstar, Kubistar, Cube, Pixo, 350Z, 370Z, GT-R, Townstar, Evalia, Tino
+Seat: Ibiza, Leon, Arona, Ateca, Alhambra, Altea, Altea XL, Toledo, Cordoba, Mii, Exeo, Tarraco, Inca, Arosa
+Cupra: Born, Formentor, Leon, Ateca, Tavascan, Terramar
+Skoda: Octavia, Fabia, Superb, Kodiaq, Karoq, Kamiq, Scala, Rapid, Roomster, Yeti, Citigo, Enyaq, Elroq, Felicia
+Hyundai: i10, i20, i30, Tucson, Kona, Ioniq, i40, ix20, ix35, Santa Fe, Ioniq 5, Ioniq 6, Bayon, Getz, Matrix, Accent, Elantra, Atos, Coupé, Veloster, Staria, H350, Nexo, Inster, H-1, i800
+Kia: Sportage, Picanto, Ceed, Rio, Niro, Stonic, Sorento, EV6, Soul, Carens, Venga, Optima, Stinger, XCeed, ProCeed, Cee'd, e-Niro, e-Soul, EV9, EV3, Carnival, Magentis, Sedona
+Honda: Civic, Jazz, CR-V, HR-V, ZR-V, Accord, e, e:Ny1, FR-V, Insight, CR-Z, Legend, Prelude, S2000, NSX, Stream
+Mazda: 3, 2, CX-5, CX-30, MX-5, 6, CX-3, CX-60, CX-80, CX-7, MX-30, RX-8, 5, 323, 626, Premacy, BT-50, Tribute
+Suzuki: Swift, Vitara, Ignis, Jimny, S-Cross, SX4, Baleno, Celerio, Splash, Alto, Wagon R+, Liana, Grand Vitara, Across, Swace, Samurai, Kizashi
+Mitsubishi: ASX, Space Star, Outlander, Eclipse Cross, L200, Colt, Lancer, Pajero, Grandis, i-MiEV, Carisma, Galant, Space Wagon, Space Runner
+Volvo: XC60, XC40, V40, XC90, V60, S60, V70, V50, S40, C30, XC70, S80, V90, S90, C40, EX30, EX40, EX90, C70, 850, 940, 960, 240, 740
+Mini: Cooper, Countryman, One, Clubman, Cabrio, Paceman, Aceman, Coupé, Roadster
+Smart: Fortwo, Forfour, Roadster, #1, #3
+DS: 3, 4, 7, 5, 9, 3 Crossback, 7 Crossback
+Alfa Romeo: Giulietta, Mito, Stelvio, Tonale, Giulia, 147, 156, 159, 166, 145, 146, GT, Brera, Spider, 4C, Junior, GTV, 33
+Abarth: 500, 595, 695, 124 Spider, 500e, 600e
+Jeep: Renegade, Compass, Wrangler, Grand Cherokee, Cherokee, Avenger, Patriot, Commander, Gladiator
+Land Rover: Range Rover Evoque, Range Rover, Range Rover Sport, Range Rover Velar, Defender, Discovery, Discovery Sport, Freelander
+Lexus: CT, IS, GS, LS, NX, RX, UX, LBX, RZ, ES, LC, RC, LX
+Porsche: Cayenne, Macan, 911, 718, Panamera, Taycan, Cayman, Boxster, 944, 928, 924, 968
+Tesla: Model 3, Model Y, Model S, Model X
+MG: 4, ZS, HS, 3, 5, Marvel R, Cyberster
+BYD: Atto 3, Dolphin, Seal, Seal U, Han, Tang, Atto 2, Sealion 7, Dolphin Surf
+Polestar: 2, 3, 4
+Leapmotor: T03, C10, B10
+Ora: Funky Cat
+SsangYong: Tivoli, Korando, Rexton, Musso, Actyon, Kyron, Rodius
+Lancia: Ypsilon, Delta, Musa, Phedra, Lybra, Thesis, Dedra, Kappa, Y10, Voyager
+Chevrolet: Spark, Aveo, Cruze, Captiva, Lacetti, Matiz, Orlando, Trax, Kalos, Camaro, Corvette, Epica, Nubira, Tacuma, Volt
+Daewoo: Matiz, Lanos, Kalos, Nubira, Leganza, Tacuma
+Chrysler: PT Cruiser, Voyager, Grand Voyager, 300C, Sebring, Neon, Stratus, Crossfire
+Dodge: Caliber, Nitro, Journey, Challenger, Charger, Ram
+Jaguar: XE, XF, XJ, XK, F-Pace, E-Pace, I-Pace, F-Type, S-Type, X-Type
+Maserati: Ghibli, Levante, Quattroporte, GranTurismo, GranCabrio, Grecale, MC20
+Subaru: Impreza, Forester, Outback, Legacy, XV, BRZ, Levorg, Justy, Solterra, WRX, Crosstrek
+Daihatsu: Sirion, Terios, Cuore, Materia, YRV, Copen, Charade
+Isuzu: D-Max
+Lada: Niva, Samara
+Saab: 9-3, 9-5, 900, 9000
+Rover: 25, 45, 75, 200, 400, 600, 800, Streetwise, CityRover
+Iveco: Daily
+Alpine: A110, A290
+Aixam: City, Coupé, Crossline, Crossover, Minauto, Scouty
+Ligier: JS50, JS60, JS RC, Myli, Ixo
+Microcar: M.Go, Dué, Flex, MC1, MC2
+Aston Martin: DB11, DB12, DBX, Vantage, Vanquish, DBS, Rapide
+Bentley: Continental GT, Continental GTC, Bentayga, Flying Spur, Mulsanne
+Ferrari: California, Portofino, Roma, Purosangue, 458, 488, F8 Tributo, 812, SF90 Stradale, 296 GTB, F430, 599
+Lamborghini: Huracán, Urus, Aventador, Gallardo, Revuelto
+Rolls-Royce: Ghost, Phantom, Wraith, Cullinan, Dawn, Spectre
+Lotus: Elise, Exige, Evora, Emira, Eletre
+McLaren: 570S, 720S, GT, Artura
+Infiniti: Q30, Q50, Q60, QX30, QX50, QX70

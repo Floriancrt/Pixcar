@@ -1,0 +1,344 @@
+// Functional tests. Same scenarios run on the original and on the refreshed page;
+// semantic snapshots are written to JSON so the two can be diffed (non-regression of data + logic).
+// Checks tagged [new] only apply to the refreshed UI.
+const { serve, launch, open, search, shot, markerPoint, ROOT } = require("./harness");
+const fs = require("fs");
+const path = require("path");
+
+const FILE = process.argv[2] || "index.html";
+const TAG = process.argv[3] || "new";
+const IS_NEW = TAG !== "orig";
+const results = [];
+const snaps = {};
+const check = (name, cond, detail = "") => {
+  results.push({ name, ok: !!cond, detail: cond ? "" : String(detail) });
+  if (!cond) console.log("  FAIL:", name, "|", detail);
+};
+const norm = (s) => String(s || "").replace(/\s+/g, " ").trim();
+
+// ---- extractors (work on both versions) ----
+async function cards(page, n = 40) {
+  return page.evaluate((n) => {
+    const t = (e, s) => { const x = e.querySelector(s); return x ? x.textContent.replace(/\s+/g, " ").trim() : ""; };
+    return [...document.querySelectorAll("#list > li.card")].slice(0, n).map((c) => ({
+      id: c.dataset.id,
+      name: t(c, ".g-name"),
+      kind: t(c, ".kind"),
+      price: t(c, ".amount") || t(c, ".no-price"),
+      tag: t(c, ".g-price .tag"),
+      avail: t(c, ".svc"),
+      promo: t(c, ".g-promo"),
+      rating: t(c, ".rating"),
+      dist: t(c, ".borne") || t(c, ".dist"),
+      actions: [...c.querySelectorAll(".g-actions a")].map((a) => a.textContent.trim() + "→" + a.getAttribute("href")),
+    }));
+  }, n);
+}
+const summaryText = (page) => page.$eval("#summary", (e) => e.textContent.replace(/\s+/g, " ").trim());
+const toolbarState = (page) =>
+  page.evaluate(() => ({
+    sort: [...document.querySelectorAll("[data-sort]")].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.sort),
+    filter: [...document.querySelectorAll("[data-filter]")].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.filter),
+  }));
+const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
+
+(async () => {
+  const server = await serve(ROOT);
+  const browser = await launch();
+
+  // =============== A. OSM search, sort, filters, pagination, radius ===============
+  let { page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 });
+  await search(page, { service: "vidange" });
+  snaps.A_summary = await summaryText(page);
+  snaps.A_cards = await cards(page);
+  check("A1 40 cards on first page", (await listCount(page)) === 40, await listCount(page));
+  check("A2 'Afficher plus' visible", await page.isVisible("#moreBtn"));
+  snaps.A_moreLabel = norm(await page.textContent("#moreBtn"));
+  await page.click("#moreBtn");
+  await page.waitForTimeout(200);
+  check("A3 after 'Afficher plus' all 66 cards", (await listCount(page)) === 66, await listCount(page));
+  check("A3b 'Afficher plus' hidden when exhausted", !(await page.isVisible("#moreBtn")));
+
+  await page.click("[data-sort=dist]");
+  await page.waitForTimeout(200);
+  snaps.A_sortDist = (await cards(page, 12)).map((c) => `${c.name}|${c.dist}|${c.price}`);
+  await page.click("[data-sort=note]");
+  await page.waitForTimeout(200);
+  snaps.A_sortNote = (await cards(page, 6)).map((c) => `${c.name}|${c.price}`);
+  await page.click("[data-sort=price]");
+  for (const f of ["priced", "promo", "chains", "indep"]) {
+    await page.click(`[data-filter=${f}]`);
+    await page.waitForTimeout(150);
+    snaps["A_filter_" + f] = { n: await listCount(page), first: (await cards(page, 5)).map((c) => c.name), tb: await toolbarState(page) };
+  }
+  await page.click("[data-filter=all]");
+  await page.click("[data-chain=norauto]");
+  await page.waitForTimeout(150);
+  snaps.A_chain_norauto = { n: await listCount(page), names: (await cards(page, 10)).map((c) => c.name) };
+  await page.click("[data-chain=norauto]");
+  await page.click("#editSearch");
+  await page.click("#radiusChips .chip[data-km='5']");
+  await page.waitForTimeout(300);
+  snaps.A_radius5 = { summary: await summaryText(page), n: await listCount(page) };
+  // widening beyond the fetched radius must NOT silently re-fetch
+  await page.click("#radiusChips .chip[data-km='20']");
+  await page.waitForTimeout(200);
+  snaps.A_radius20_status = norm(await page.textContent("#status"));
+  check("A4 console clean (OSM flow)", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
+  await ctx.close();
+
+  // =============== B. Contrôle technique ===============
+  ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 }));
+  await page.selectOption("#service", "ct");
+  check("B1 goLabel switches to 'Rechercher les centres'", norm(await page.textContent("#goLabel")) === "Rechercher les centres");
+  check("B2 energy field shown for CT", await page.isVisible("#energyField"));
+  await page.fill("#address", "lyon");
+  await page.waitForSelector("#addrList li[data-i]");
+  await page.click("#addrList li[data-i='0']");
+  await page.click("#go");
+  await page.waitForSelector("#list > li.card", { timeout: 12000 });
+  snaps.B_summary = await summaryText(page);
+  snaps.B_cards = await cards(page);
+  await page.selectOption("#energy", "Diesel");
+  await page.waitForTimeout(250);
+  snaps.B_diesel = (await cards(page, 8)).map((c) => `${c.name}|${c.price}`);
+  check("B3 CT cards carry official price tag", snaps.B_cards.every((c) => /Prix officiel|Prix non déclaré|^$/.test(c.tag) || c.price.includes("non")), JSON.stringify(snaps.B_cards.map((c) => c.tag)));
+  check("B4 console clean (CT flow)", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
+  await ctx.close();
+
+  // =============== C. Repairs: dialog → save → list → delete/undo ===============
+  ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 }));
+  await search(page, { service: "vidange" });
+  await page.click("#addRepairBtn");
+  check("C1 dialog opens", await page.$eval("#repairDlg", (d) => d.open));
+  await page.click("#repairForm button[type=submit]");
+  const errs = await page.$$eval("#repairForm [aria-invalid=true]", (l) => l.length);
+  check("C2 empty submit flags invalid fields", errs >= 4, errs);
+  await page.fill("#rGarage", "Norauto");
+  await page.waitForSelector("#rGarageList li[data-i]", { state: "visible" });
+  await page.click("#rGarageList li[data-i='0']");
+  await page.fill("#rModel", "peugeot 208");
+  if (IS_NEW) {
+    await page.fill("#rPlate", "ez108bc");
+    await page.fill("#rYear", "2019");
+  }
+  await page.fill("#rPrice", "59,90");
+  await page.click("label[for=rSt4]");
+  await page.fill("#rComment", "Très bien, rapide.");
+  await page.click("#repairForm button[type=submit]");
+  await page.waitForTimeout(500);
+  const toast1 = norm(await page.textContent("#toast"));
+  snaps.C_toast = toast1.replace(/Voir$/, "").trim();
+  check("C3 toast confirms saving", /Réparation enregistrée/.test(toast1), toast1);
+  check("C4 dialog closed", !(await page.$eval("#repairDlg", (d) => d.open)));
+  check("C5 rail badge shows 1", norm(await page.textContent("#repBadge")) === "1" && (await page.$eval("#repBadge", (e) => !e.hidden)));
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("jg.repairs.v1") || "[]"));
+  check("C6 localStorage has the repair", stored.length === 1 && stored[0].price === 59.9 && stored[0].model === "Peugeot 208" && stored[0].rating === 4, JSON.stringify(stored));
+  if (IS_NEW) check("C6b [new] the repair carries the plate (normalised) and the model year", stored[0].immat === "EZ-108-BC" && stored[0].year === 2019, JSON.stringify(stored));
+  snaps.C_stored = stored.map(({ id, createdAt, garageId, lat, lon, immat, year, ...r }) => r);
+  snaps.C_cardAfter = (await cards(page, 40)).filter((c) => /Prix déclaré/.test(c.tag)).map((c) => `${c.name}|${c.price}|${c.tag}`);
+  await page.click(".tab[data-view=reparations]");
+  await page.waitForTimeout(200);
+  snaps.C_repText = norm(await page.textContent("#repairs"));
+  snaps.C_repCount = norm(await page.textContent("#repCount"));
+  await page.click(".rep-del");
+  await page.waitForTimeout(200);
+  check("C7 delete → toast with Annuler", /Annuler/.test(norm(await page.textContent("#toast"))), norm(await page.textContent("#toast")));
+  check("C8 repairs empty state back", await page.isVisible("#repEmpty"));
+  await page.click("#toast button");
+  await page.waitForTimeout(200);
+  check("C9 undo restores the repair", (await page.$$eval(".rep-item", (l) => l.length)) === 1);
+  check("C10 console clean (repairs flow)", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
+  await ctx.close();
+
+  // =============== E. Navigation (tabs, hash, history) ===============
+  ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 }));
+  const cur = () => page.$eval(".tab[aria-current=page]", (e) => e.dataset.view);
+  check("E1 default tab = garages", (await cur()) === "garages");
+  await page.click(".tab[data-view=prix]");
+  check("E2 prix tab", (await cur()) === "prix" && (await page.isVisible("#view-prix")) && !(await page.isVisible("#view-garages")));
+  check("E3 hash updated", (await page.evaluate(() => location.hash)) === "#prix");
+  await page.goBack();
+  await page.waitForTimeout(150);
+  check("E4 back returns to garages", (await cur()) === "garages");
+  await page.evaluate(() => (location.hash = "#reparations"));
+  await page.waitForTimeout(150);
+  check("E5 hash navigation", (await cur()) === "reparations");
+  await page.selectOption("#refService", "montage").catch(() => {});
+  await ctx.close();
+
+  // =============== F. Reload restores last search from cache ===============
+  ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 }));
+  await search(page, { service: "geo_av" });
+  const html0 = await page.evaluate(() => ({ ls: Object.fromEntries(Object.entries(localStorage)) }));
+  await page.reload();
+  await page.waitForTimeout(800);
+  check("F1 reload restores results from cache", (await listCount(page)) > 0, await listCount(page));
+  check("F2 reload restores address", norm(await page.inputValue("#address")).includes("République"), await page.inputValue("#address"));
+  snaps.F_summary = (await page.isVisible("#summary")) ? await summaryText(page) : "";
+  await ctx.close();
+
+  // =============== D. New behaviours (refreshed UI only) ===============
+  if (IS_NEW) {
+    ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 }));
+    check("D0 desktop: map placeholder visible before search", await page.isVisible(".map-empty"));
+    check("D0b desktop: FAB hidden", !(await page.isVisible("#mapFab")));
+    check("D0c desktop: stage fixed full-viewport", await page.$eval("#stage", (e) => { const r = e.getBoundingClientRect(); return r.width === innerWidth && r.height === innerHeight; }));
+    await search(page, { service: "vidange" });
+    check("D0d placeholder gone after search", !(await page.isVisible(".map-empty")) && (await page.isVisible("#mapPane")));
+    const st = () => page.evaluate(() => ({
+      open: [...document.querySelectorAll(".card.is-open")].map((c) => c.dataset.id),
+      sel: [...document.querySelectorAll(".card.is-selected")].map((c) => c.dataset.id),
+      bar: !document.getElementById("mapInfo").hidden,
+      barTitle: (document.querySelector("#mapInfo .mi-title") || {}).textContent || "",
+      markers: (() => { const m = (window.__maps || [])[0], out = []; m && m.eachLayer((l) => { if (l.jg && l.jgOn) out.push(l.jg.id); }); return out; })(),
+      halo: (() => { const m = (window.__maps || [])[0]; let n = 0; m && m.eachLayer((l) => { if (l.options && l.options.radius === 22) n++; }); return n; })(),
+    }));
+    let s = await st();
+    check("D1 nothing selected initially", !s.open.length && !s.sel.length && !s.bar && !s.markers.length, JSON.stringify(s));
+    await page.click("#list > li:nth-child(3) .g-main");
+    s = await st();
+    const id3 = await page.$eval("#list > li:nth-child(3)", (e) => e.dataset.id);
+    check("D2 click card → opened + selected + bar + marker + halo", s.open[0] === id3 && s.sel[0] === id3 && s.bar && s.markers[0] === id3 && s.halo === 1, JSON.stringify(s));
+    check("D2b info bar title = card name", norm(s.barTitle) === norm(await page.textContent("#list > li:nth-child(3) .g-name")), s.barTitle);
+    await page.click("#list > li:nth-child(5) .g-main");
+    s = await st();
+    const id5 = await page.$eval("#list > li:nth-child(5)", (e) => e.dataset.id);
+    check("D3 accordion: one open card, selection moved", s.open.length === 1 && s.open[0] === id5 && s.sel[0] === id5 && s.markers.length === 1 && s.markers[0] === id5 && s.halo === 1, JSON.stringify(s));
+    await page.click("#list > li:nth-child(5) .g-name");
+    s = await st();
+    check("D4 toggling the open card clears selection", !s.open.length && !s.sel.length && !s.bar && !s.markers.length && s.halo === 0, JSON.stringify(s));
+    // marker for a garage NOT rendered yet (beyond first 40)
+    const rendered = await page.$$eval("#list > li.card", (l) => l.map((c) => c.dataset.id));
+    const far = await page.evaluate((rendered) => {
+      const m = window.__maps[0], out = [];
+      m.eachLayer((l) => { if (l.jg && !rendered.includes(l.jg.id)) { const p = m.latLngToContainerPoint(l.getLatLng()), r = m.getContainer().getBoundingClientRect(), pr = document.getElementById("panelCol").getBoundingClientRect(); if (p.x + r.left > pr.right + 60 && p.y > 120 && p.y < 700) out.push({ x: p.x + r.left, y: p.y + r.top, id: l.jg.id }); } });
+      return out[0];
+    }, rendered);
+    check("D5a found a marker beyond the first page", !!far);
+    if (far) {
+      await page.mouse.click(far.x, far.y);
+      await page.waitForTimeout(700);
+      s = await st();
+      check("D5 clicking a far marker renders + opens + selects its card", s.open[0] === far.id && s.sel[0] === far.id && s.bar, JSON.stringify({ ...s, far: far.id }));
+      check("D5b card scrolled into the panel viewport", await page.$eval(`[data-id="${far.id}"]`, (c) => { const r = c.getBoundingClientRect(), p = document.getElementById("panelCol").getBoundingClientRect(); return r.top >= p.top - 2 && r.top < p.bottom; }));
+    }
+    // selecting an unpriced garage then filtering on priced clears the selection
+    await page.evaluate(() => document.getElementById("panelCol").scrollTo(0, 0));
+    const unpriced = await page.evaluate(() => { const c = [...document.querySelectorAll("#list > li.card")].find((c) => c.querySelector(".no-price")); return c && c.dataset.id; });
+    check("D6a found an unpriced card", !!unpriced);
+    if (unpriced) {
+      await page.click(`[data-id="${unpriced}"] .g-main`);
+      await page.click("[data-filter=priced]");
+      await page.waitForTimeout(250);
+      s = await st();
+      check("D6 filter hiding the selected garage clears selection + bar", !s.sel.length && !s.bar && !s.markers.length, JSON.stringify(s));
+    }
+    await page.click("[data-filter=all]");
+    // new search clears selection
+    await page.click("#list > li:nth-child(2) .g-main");
+    await page.click("#editSearch");
+    await page.click("#radiusChips .chip[data-km='5']");
+    await page.click("#go");
+    await page.waitForTimeout(900);
+    s = await st();
+    check("D7 new search clears selection", !s.sel.length && !s.bar && !s.markers.length, JSON.stringify(s));
+    // keyboard: name button toggles
+    await page.focus("#list > li:nth-child(2) .g-name");
+    await page.keyboard.press("Enter");
+    s = await st();
+    check("D8 keyboard Enter on card name opens + selects", s.open.length === 1 && s.sel.length === 1 && s.bar, JSON.stringify(s));
+    check("D8b aria-expanded reflects state", (await page.getAttribute("#list > li:nth-child(2) .g-name", "aria-expanded")) === "true");
+    // info-bar close also collapses the card
+    await page.click("#mapInfo [data-mi=close]");
+    s = await st();
+    check("D9 info-bar × closes card and selection", !s.open.length && !s.sel.length && !s.bar, JSON.stringify(s));
+    check("D9b focus returns to the card title after closing the bar", await page.evaluate(() => document.activeElement && document.activeElement.classList.contains("g-name")), await page.evaluate(() => document.activeElement && document.activeElement.outerHTML.slice(0, 80)));
+    // clicked card stays put when an open card above it collapses (scroll compensation)
+    await page.evaluate(() => document.getElementById("panelCol").scrollTo(0, 0));
+    await page.click("#list > li:nth-child(2) .g-main");
+    await page.evaluate(() => { const p = document.getElementById("panelCol"), t = document.querySelector("#list > li:nth-child(9)"); p.scrollTop += t.getBoundingClientRect().top - p.getBoundingClientRect().top - 200; });
+    await page.waitForTimeout(150);
+    const y0 = await page.$eval("#list > li:nth-child(9)", (e) => e.getBoundingClientRect().top);
+    await page.mouse.click(300, y0 + 25);
+    await page.waitForTimeout(150);
+    const y1 = await page.$eval("#list > li:nth-child(9)", (e) => e.getBoundingClientRect().top);
+    s = await st();
+    check("D21 card above collapses, clicked card stays in place", Math.abs(y1 - y0) < 3 && s.open.length === 1, JSON.stringify({ y0, y1, open: s.open.length }));
+    await page.click("#mapInfo [data-mi=close]");
+    // map fit leaves the circle right of the panel
+    const fit = await page.evaluate(() => { const m = window.__maps[0], b = m.getBounds(), pr = document.getElementById("panelCol").getBoundingClientRect(); let c = null; m.eachLayer((l) => { if (l.options && l.options.dashArray && l.getLatLng) c = l.getLatLng(); }); const p = m.latLngToContainerPoint(c); return { cx: p.x, panelRight: pr.right, w: innerWidth }; });
+    check("D10 search circle centred in the free map area (right of panel)", fit.cx > fit.panelRight && fit.cx < fit.w, JSON.stringify(fit));
+    await ctx.close();
+
+    // ---- preview mode: banner must be visible on desktop ----
+    ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { geocodeFail: true } }));
+    await page.waitForTimeout(600);
+    const ban = await page.evaluate(() => { const b = document.getElementById("modeBanner"); if (b.hidden) return { hidden: true }; const r = b.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { hidden: false, covered: !(top === b || b.contains(top)), r: [r.left, r.top, r.width, r.height] }; });
+    check("D11 preview banner visible and not covered (desktop)", ban.hidden === false && ban.covered === false, JSON.stringify(ban));
+    await ctx.close();
+
+    // ---- mobile: map mode ----
+    ({ page, ctx, logs } = await open(browser, server, FILE, { width: 390, height: 844, dpr: 2, touch: true }));
+    check("D12 mobile: bottom nav fixed at the bottom", await page.$eval("#tabs", (e) => { const r = e.getBoundingClientRect(); return Math.abs(r.bottom - (innerHeight - 12)) < 3; }));
+    check("D12b mobile: stage hidden in list mode", !(await page.isVisible("#stage")));
+    await search(page, { service: "vidange" });
+    check("D13 mobile: FAB visible after search", await page.isVisible("#mapFab"));
+    await page.click("#mapFab");
+    await page.waitForTimeout(900);
+    check("D14 mobile: map mode shows stage, hides panel", (await page.evaluate(() => document.body.classList.contains("is-map"))) && (await page.isVisible("#stage")) && !(await page.isVisible("#panelCol")));
+    check("D14b FAB now says Liste", /Liste/.test(await page.textContent("#mapFab")));
+    let mp = await markerPoint(page, 6);
+    await page.touchscreen.tap(mp.x, mp.y);
+    await page.waitForTimeout(700);
+    s = await page.evaluate(() => ({ bar: !document.getElementById("mapInfo").hidden, cta: !!document.querySelector("#mapInfo [data-mi=card]") }));
+    check("D15 mobile: marker tap shows info bar with 'Voir la fiche'", s.bar && s.cta, JSON.stringify(s));
+    check("D15b still in map mode (no jump to list)", await page.evaluate(() => document.body.classList.contains("is-map")));
+    const attr = await page.evaluate(() => { const a = document.querySelector(".leaflet-control-attribution").getBoundingClientRect(), b = document.getElementById("mapInfo").getBoundingClientRect(), n = document.getElementById("tabs").getBoundingClientRect(); return { aTop: a.top, aBottom: a.bottom, barBottom: b.bottom, navTop: n.top }; });
+    check("D15c attribution not covered by info bar", attr.aTop >= attr.barBottom - 1 && attr.aBottom <= attr.navTop + 1, JSON.stringify(attr));
+    await page.click("#mapInfo [data-mi=card]");
+    await page.waitForTimeout(900);
+    s = await page.evaluate(() => ({ map: document.body.classList.contains("is-map"), open: document.querySelectorAll(".card.is-open").length, sel: document.querySelectorAll(".card.is-selected").length, panel: !document.getElementById("panelCol").hidden && getComputedStyle(document.getElementById("panelCol")).display !== "none" }));
+    check("D16 'Voir la fiche' → list mode, card open + selected", !s.map && s.open === 1 && s.sel === 1 && s.panel, JSON.stringify(s));
+    check("D17 console clean (mobile)", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
+    await ctx.close();
+
+    // ---- live resize: mobile map mode -> desktop must restore the panel (tablet rotation) ----
+    ({ page, ctx, logs } = await open(browser, server, FILE, { width: 820, height: 1180 }));
+    await search(page, { service: "vidange" });
+    await page.click("#mapFab");
+    await page.waitForTimeout(800);
+    await page.setViewportSize({ width: 1180, height: 820 });
+    await page.waitForTimeout(800);
+    const rz = await page.evaluate(() => { const p = document.getElementById("panelCol"), r = p.getBoundingClientRect(), m = window.__maps[0], c = m.getContainer().getBoundingClientRect(); return { panelVisible: getComputedStyle(p).display !== "none" && r.width > 300, fab: getComputedStyle(document.getElementById("mapFab")).display, mapW: Math.round(c.width), mapSize: m.getSize().x, vw: innerWidth }; });
+    check("D22 rotate tablet from map mode to desktop width: panel back, map resized, FAB hidden", rz.panelVisible && rz.fab === "none" && rz.mapW === rz.vw && rz.mapSize === rz.vw, JSON.stringify(rz));
+    await ctx.close();
+
+    // ---- dark theme tokens + reduced motion ----
+    ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, colorScheme: "dark" }));
+    const dk = await page.evaluate(() => ({ card: getComputedStyle(document.documentElement).getPropertyValue("--card").trim(), scheme: getComputedStyle(document.documentElement).colorScheme }));
+    check("D18 dark tokens applied", dk.card === "#101410" && /dark/.test(dk.scheme), JSON.stringify(dk));
+    await ctx.close();
+    ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, reducedMotion: "reduce" }));
+    await search(page, { service: "vidange" });
+    await page.click("#list > li:nth-child(2) .g-main");
+    const dur = await page.$eval("#list > li:nth-child(2) .g-more", (e) => getComputedStyle(e).animationDuration);
+    check("D19 reduced motion: reveal animation neutralised", parseFloat(dur) < 0.01, dur);
+    await ctx.close();
+
+    // ---- theme override attribute ----
+    ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, colorScheme: "dark" }));
+    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+    const lt = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--card").trim());
+    check("D20 data-theme=light overrides system dark", lt === "#ffffff", lt);
+    await ctx.close();
+  }
+
+  await browser.close();
+  server.close();
+  fs.writeFileSync(path.join(__dirname, ".out", "shots", `func-${TAG}.json`), JSON.stringify(snaps, null, 1));
+  const failed = results.filter((r) => !r.ok);
+  console.log(`\n[${TAG}] ${results.length - failed.length}/${results.length} checks passed`);
+  failed.forEach((f) => console.log("  ✗", f.name, "-", f.detail.slice(0, 300)));
+  process.exit(failed.length ? 1 : 0);
+})().catch((e) => { console.error(e); process.exit(2); });

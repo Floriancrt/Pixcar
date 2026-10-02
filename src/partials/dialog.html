@@ -1,0 +1,153 @@
+<dialog id="repairDlg" class="dlg" aria-labelledby="dlgTitle">
+    <form id="repairForm" novalidate>
+      <div class="dlg-head">
+        <h2 id="dlgTitle">Déclarer une réparation</h2>
+        <button type="button" class="dlg-close" id="dlgClose" aria-label="Fermer">×</button>
+      </div>
+      <p class="dlg-note" id="dlgNote">Chaque réparation déclarée complète l'échelle de prix du garage concerné.</p>
+      <div class="field">
+        <label for="rGarage">Garage concerné</label>
+        <div class="combo">
+          <input
+            id="rGarage"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Nom du garage"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="false"
+            aria-controls="rGarageList"
+            aria-describedby="rGarageInfo rGarageErr"
+          />
+          <ul id="rGarageList" class="suggest" role="listbox" aria-label="Garages proposés" hidden></ul>
+        </div>
+        <p class="hint" id="rGarageInfo"></p>
+        <p class="err-msg" id="rGarageErr" hidden></p>
+      </div>
+      <div class="field">
+        <label for="rModel">Modèle du véhicule</label>
+        <div class="combo">
+          <input
+            id="rModel"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            maxlength="40"
+            placeholder="Ex. Peugeot 208"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="false"
+            aria-controls="rModelList"
+            aria-describedby="rModelInfo rModelErr"
+          />
+          <ul id="rModelList" class="suggest" role="listbox" aria-label="Modèles proposés" hidden></ul>
+        </div>
+        <p class="hint" id="rModelInfo">
+          Affiché dans l'historique du garage avec le prix et la note. Tapez pour filtrer la liste&nbsp;; un modèle absent se saisit tel quel.
+        </p>
+        <p class="err-msg" id="rModelErr" hidden></p>
+      </div>
+      <div class="row2 veh">
+        <div class="field">
+          <label for="rPlate">Immatriculation</label>
+          <input
+            id="rPlate"
+            class="plate-in"
+            type="text"
+            autocomplete="off"
+            autocapitalize="characters"
+            autocorrect="off"
+            spellcheck="false"
+            placeholder="EZ-108-BC"
+            aria-describedby="rPlateInfo rPlateErr"
+          />
+          <p class="hint" id="rPlateInfo">2 lettres, 3 chiffres, 2 lettres.</p>
+          <p class="err-msg" id="rPlateErr" hidden></p>
+          <span class="sr-only" id="rPlateSay" role="status" aria-live="polite"></span>
+        </div>
+        <div class="field">
+          <label for="rYear">Année du modèle</label>
+          <input
+            id="rYear"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            placeholder="2019"
+            aria-describedby="rYearInfo rYearErr"
+          />
+          <p class="hint" id="rYearInfo">Année de 1re mise en circulation (carte grise, case B).</p>
+          <p class="err-msg" id="rYearErr" hidden></p>
+        </div>
+      </div>
+      <div class="field">
+        <label for="rService">Type de prestation</label>
+        <select id="rService"></select>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="rPrice">Prix de la réparation</label>
+          <input
+            id="rPrice"
+            type="text"
+            inputmode="decimal"
+            autocomplete="off"
+            placeholder="€ TTC"
+            aria-describedby="rPriceErr"
+          />
+          <p class="err-msg" id="rPriceErr" hidden></p>
+        </div>
+        <div class="field">
+          <label for="rDate">Date</label> <input id="rDate" type="date" aria-describedby="rDateErr" />
+          <p class="err-msg" id="rDateErr" hidden></p>
+        </div>
+      </div>
+      <fieldset class="field rate-field">
+        <legend>Note du garage</legend>
+        <div class="rate">
+          <div class="stars-in" id="rStars">
+            <input type="radio" class="sr-only" name="rRating" id="rSt1" value="1" /><label for="rSt1" data-v="1"
+              ><svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 17.5l-5.9 3.2 1.2-6.6-4.8-4.6 6.6-.9z" /></svg
+              ><span class="sr-only">1 étoile : très mauvais</span></label
+            >
+            <input type="radio" class="sr-only" name="rRating" id="rSt2" value="2" /><label for="rSt2" data-v="2"
+              ><svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 17.5l-5.9 3.2 1.2-6.6-4.8-4.6 6.6-.9z" /></svg
+              ><span class="sr-only">2 étoiles : mauvais</span></label
+            >
+            <input type="radio" class="sr-only" name="rRating" id="rSt3" value="3" /><label for="rSt3" data-v="3"
+              ><svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 17.5l-5.9 3.2 1.2-6.6-4.8-4.6 6.6-.9z" /></svg
+              ><span class="sr-only">3 étoiles : correct</span></label
+            >
+            <input type="radio" class="sr-only" name="rRating" id="rSt4" value="4" /><label for="rSt4" data-v="4"
+              ><svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 17.5l-5.9 3.2 1.2-6.6-4.8-4.6 6.6-.9z" /></svg
+              ><span class="sr-only">4 étoiles : bien</span></label
+            >
+            <input type="radio" class="sr-only" name="rRating" id="rSt5" value="5" /><label for="rSt5" data-v="5"
+              ><svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 17.5l-5.9 3.2 1.2-6.6-4.8-4.6 6.6-.9z" /></svg
+              ><span class="sr-only">5 étoiles : excellent</span></label
+            >
+          </div>
+          <span class="rate-word" id="rRateWord" aria-hidden="true">Touchez une étoile</span>
+        </div>
+        <p class="err-msg" id="rRatingErr" hidden></p>
+      </fieldset>
+      <div class="field">
+        <label for="rComment">Commentaire <span class="opt">(facultatif)</span></label>
+        <textarea
+          id="rComment"
+          rows="3"
+          maxlength="500"
+          placeholder="Pièces changées, kilométrage, délai, accueil…"
+        ></textarea>
+      </div>
+      <div class="dlg-actions">
+        <button type="button" class="ghost" id="dlgCancel">Annuler</button>
+        <button type="submit" class="primary">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>

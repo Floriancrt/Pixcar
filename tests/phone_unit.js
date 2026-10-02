@@ -1,0 +1,51 @@
+// Unit tests of phoneParse (src/js/modules/phone.js), run in Node.
+(async () => {
+const { phoneParse } = await import("../src/js/modules/phone.js");
+let bad = 0, n = 0;
+const eq = (name, raw, want) => {
+  n++;
+  const got = phoneParse(raw).map((x) => x.text + " | " + x.tel);
+  const ok = JSON.stringify(got) === JSON.stringify(want);
+  if (!ok) { bad++; console.log("FAIL", name, JSON.stringify(raw), "\n   got ", JSON.stringify(got), "\n   want", JSON.stringify(want)); }
+};
+const F = (t, tel) => `${t} | ${tel}`;
+eq("national spaced", "04 72 55 34 57", [F("04 72 55 34 57", "+33472553457")]);
+eq("national compact", "0472553457", [F("04 72 55 34 57", "+33472553457")]);
+eq("national dots", "04.72.55.34.57", [F("04 72 55 34 57", "+33472553457")]);
+eq("national dashes", "04-72-55-34-57", [F("04 72 55 34 57", "+33472553457")]);
+eq("e164", "+33472553457", [F("04 72 55 34 57", "+33472553457")]);
+eq("e164 spaced", "+33 4 72 55 34 57", [F("04 72 55 34 57", "+33472553457")]);
+eq("trunk 0 in parens", "+33 (0)4 72 55 34 57", [F("04 72 55 34 57", "+33472553457")]);
+eq("trunk 0 plain", "+33 04 72 55 34 57", [F("04 72 55 34 57", "+33472553457")]);
+eq("0033", "0033 4 72 55 34 57", [F("04 72 55 34 57", "+33472553457")]);
+eq("parens country", "(+33) 4 72 55 34 57", [F("04 72 55 34 57", "+33472553457")]);
+eq("two numbers ;", "04 72 55 34 57; 06 12 34 56 78", [F("04 72 55 34 57", "+33472553457"), F("06 12 34 56 78", "+33612345678")]);
+eq("two numbers ,", "+33 4 72 55 34 57, +33 6 12 34 56 78", [F("04 72 55 34 57", "+33472553457"), F("06 12 34 56 78", "+33612345678")]);
+eq("two numbers /", "04 72 55 34 57 / 06 12 34 56 78", [F("04 72 55 34 57", "+33472553457"), F("06 12 34 56 78", "+33612345678")]);
+eq("two numbers ou", "04 72 55 34 57 ou 06 12 34 56 78", [F("04 72 55 34 57", "+33472553457"), F("06 12 34 56 78", "+33612345678")]);
+eq("duplicates", "04 72 55 34 57;+33472553457;0472553457", [F("04 72 55 34 57", "+33472553457")]);
+eq("label after", "04 72 55 34 57 (accueil)", [F("04 72 55 34 57", "+33472553457")]);
+eq("label before", "Tel: 04 72 55 34 57", [F("04 72 55 34 57", "+33472553457")]);
+eq("extension is not guessed", "04 72 55 34 57 12", []);
+eq("belgian", "+32 2 123 45 67", [F("+32 2 123 45 67", "+3221234567")]);
+eq("belgian 0032", "0032 2 123 45 67", [F("+32 2 123 45 67", "+3221234567")]);
+eq("swiss parens", "+41 (0)22 123 45 67", [F("+41 22 123 45 67", "+41221234567")]);
+eq("service number", "08 10 12 34 56", [F("08 10 12 34 56", "+33810123456")]);
+eq("too short", "72 55 34", []);
+eq("short code", "3631", []);
+eq("nine digits no zero", "472553457", []);
+eq("garbage", "n/a", []);
+eq("empty", "", []);
+eq("undefined", undefined, []);
+eq("null", null, []);
+eq("number type", 472553457, []);
+eq("letters in number", "04 72 55 34 5O", []);
+eq("bad french prefix 00", "00 12 34 56 78", []);
+eq("overseas réunion national", "02 62 12 34 56", [F("02 62 12 34 56", "+33262123456")]);
+eq("whitespace padding", "  04 72 55 34 57  ", [F("04 72 55 34 57", "+33472553457")]);
+eq("three numbers keep all", "0472553457;0472553458;0472553459", [F("04 72 55 34 57", "+33472553457"), F("04 72 55 34 58", "+33472553458"), F("04 72 55 34 59", "+33472553459")]);
+eq("html is not interpreted", "<b>04 72 55 34 57</b>", [F("04 72 55 34 57", "+33472553457")]);
+eq("script text ignored", "<script>alert(1)</script>", []);
+console.log(`${n - bad}/${n} phoneParse cases ok`);
+process.exit(bad ? 1 : 0);
+})();

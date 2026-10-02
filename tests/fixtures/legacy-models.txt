@@ -1,0 +1,208 @@
+Abarth 500
+Alfa Romeo Giulietta
+Alfa Romeo Mito
+Alfa Romeo Stelvio
+Alfa Romeo Tonale
+Audi A1
+Audi A3
+Audi A4
+Audi A5
+Audi A6
+Audi Q2
+Audi Q3
+Audi Q5
+Audi e-tron
+BMW Série 1
+BMW Série 2
+BMW Série 3
+BMW Série 4
+BMW Série 5
+BMW X1
+BMW X2
+BMW X3
+BMW X5
+BMW i3
+BYD Atto 3
+BYD Dolphin
+Citroën Berlingo
+Citroën C1
+Citroën C2
+Citroën C3
+Citroën C3 Aircross
+Citroën C3 Picasso
+Citroën C4
+Citroën C4 Cactus
+Citroën C4 Picasso
+Citroën C5
+Citroën C5 Aircross
+Citroën C5 X
+Citroën ë-C4
+Citroën Jumper
+Citroën Jumpy
+Citroën Nemo
+Citroën Saxo
+Citroën Xsara
+Citroën Xsara Picasso
+Cupra Born
+Cupra Formentor
+Dacia Dokker
+Dacia Duster
+Dacia Jogger
+Dacia Lodgy
+Dacia Logan
+Dacia Sandero
+Dacia Spring
+DS 3
+DS 4
+DS 7
+Fiat 500
+Fiat 500X
+Fiat Doblo
+Fiat Ducato
+Fiat Panda
+Fiat Punto
+Fiat Tipo
+Ford C-Max
+Ford Fiesta
+Ford Focus
+Ford Ka
+Ford Kuga
+Ford Mondeo
+Ford Puma
+Ford Transit
+Ford Transit Custom
+Honda Civic
+Honda CR-V
+Honda Jazz
+Hyundai i10
+Hyundai i20
+Hyundai i30
+Hyundai Ioniq
+Hyundai Kona
+Hyundai Tucson
+Jeep Compass
+Jeep Renegade
+Kia Ceed
+Kia EV6
+Kia Niro
+Kia Picanto
+Kia Rio
+Kia Sportage
+Kia Stonic
+Land Rover Range Rover Evoque
+Mazda 2
+Mazda 3
+Mazda CX-30
+Mazda CX-5
+Mazda MX-5
+Mercedes Classe A
+Mercedes Classe B
+Mercedes Classe C
+Mercedes Classe E
+Mercedes CLA
+Mercedes GLA
+Mercedes GLC
+Mercedes Sprinter
+Mercedes Vito
+MG 4
+MG ZS
+Mini Cooper
+Mini Countryman
+Mitsubishi ASX
+Mitsubishi Space Star
+Nissan Juke
+Nissan Leaf
+Nissan Micra
+Nissan Note
+Nissan Qashqai
+Nissan X-Trail
+Opel Astra
+Opel Corsa
+Opel Crossland
+Opel Grandland
+Opel Meriva
+Opel Mokka
+Opel Zafira
+Peugeot 106
+Peugeot 107
+Peugeot 108
+Peugeot 206
+Peugeot 207
+Peugeot 208
+Peugeot 2008
+Peugeot 301
+Peugeot 306
+Peugeot 307
+Peugeot 308
+Peugeot 3008
+Peugeot 407
+Peugeot 408
+Peugeot 508
+Peugeot 5008
+Peugeot Bipper
+Peugeot Boxer
+Peugeot Expert
+Peugeot Partner
+Peugeot Rifter
+Peugeot e-208
+Porsche Cayenne
+Porsche Macan
+Renault 5 E-Tech
+Renault Arkana
+Renault Austral
+Renault Captur
+Renault Clio
+Renault Espace
+Renault Kadjar
+Renault Kangoo
+Renault Koleos
+Renault Laguna
+Renault Master
+Renault Mégane
+Renault Modus
+Renault Scénic
+Renault Talisman
+Renault Trafic
+Renault Twingo
+Renault Zoe
+Seat Arona
+Seat Ateca
+Seat Ibiza
+Seat Leon
+Skoda Fabia
+Skoda Kamiq
+Skoda Karoq
+Skoda Kodiaq
+Skoda Octavia
+Skoda Superb
+Smart Fortwo
+Suzuki Ignis
+Suzuki Swift
+Suzuki Vitara
+Tesla Model 3
+Tesla Model Y
+Toyota Auris
+Toyota Aygo
+Toyota Aygo X
+Toyota C-HR
+Toyota Corolla
+Toyota Prius
+Toyota RAV4
+Toyota Yaris
+Toyota Yaris Cross
+Volkswagen Caddy
+Volkswagen Golf
+Volkswagen ID.3
+Volkswagen ID.4
+Volkswagen Passat
+Volkswagen Polo
+Volkswagen T-Cross
+Volkswagen T-Roc
+Volkswagen Tiguan
+Volkswagen Touran
+Volkswagen Transporter
+Volkswagen Up!
+Volvo V40
+Volvo XC40
+Volvo XC60
+Volvo XC90

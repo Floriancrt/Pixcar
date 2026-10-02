@@ -1,0 +1,29 @@
+{
+  "name": "pixcar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pixcar : comparateur de prix de garages (page statique + API de réparations déclarées)",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:dev": "node scripts/build.mjs --dev",
+    "test": "node tests/run.mjs",
+    "test:server": "node --test server/test/",
+    "dev": "node server/dev.mjs",
+    "start": "node server/index.mjs",
+    "db:migrate": "node server/migrate.mjs",
+    "perf": "node scripts/perf.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.0",
+    "axe-core": "^4.10.0",
+    "esbuild": "^0.25.0",
+    "leaflet": "1.9.4",
+    "playwright": "1.56.1"
+  }
+}

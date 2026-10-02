@@ -1,0 +1,66 @@
+#!/usr/bin/env node
+// Lance les suites de tests de la page (Playwright + Chromium) l'une après l'autre et résume le résultat.
+//   npm test                  toutes les suites, sur index.html (page tout-en-un)
+//   npm test -- dist          les mêmes sur dist/index.html (site publiable)
+//   npm test -- ux veh        seulement ces suites
+// Prérequis : npm install, npm run build, un Chromium pour Playwright (npx playwright install chromium).
+import { spawn } from "node:child_process";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const args = process.argv.slice(2);
+const target = args.includes("dist") ? "dist" : "single";
+const only = args.filter((a) => a !== "dist");
+const FILE = target === "dist" ? "dist/index.html" : "index.html";
+
+const SUITES = [
+  { name: "func", cmd: ["node", "tests/func.js", FILE, "new"] },
+  { name: "logos", cmd: ["node", "tests/logos.js"], env: { FILE } },
+  { name: "brand", cmd: ["node", "tests/brand.js"], env: { FILE } },
+  { name: "addr", cmd: ["node", "tests/addr.js"], env: { FILE } },
+  { name: "ux", cmd: ["node", "tests/ux.js", FILE] },
+  { name: "load", cmd: ["node", "tests/load.js", FILE] },
+  { name: "veh", cmd: ["node", "tests/veh.js", FILE] },
+  { name: "a11y", cmd: ["node", "tests/a11y.js", FILE, "new"], a11y: true },
+  { name: "sizes", cmd: ["node", "tests/sizes.js"] },
+  { name: "states", cmd: ["node", "tests/states.js", FILE] },
+  { name: "integrity", cmd: ["node", "tests/integrity.js"] },
+  { name: "anchor", cmd: ["node", "tests/anchor_test.js"] },
+  { name: "phone", cmd: ["node", "tests/phone_unit.js"] },
+  { name: "contrast", cmd: ["python3", "tests/contrast/contrast_css.py"], contrast: true },
+];
+
+const run = (s) =>
+  new Promise((done) => {
+    const p = spawn(s.cmd[0], s.cmd.slice(1), { cwd: ROOT, env: { ...process.env, ...(s.env || {}) } });
+    let out = "";
+    p.stdout.on("data", (d) => (out += d));
+    p.stderr.on("data", (d) => (out += d));
+    p.on("close", (code) => done({ code, out }));
+  });
+
+let failed = 0;
+for (const s of SUITES) {
+  if (only.length && !only.includes(s.name)) continue;
+  const t0 = Date.now();
+  const { code, out } = await run(s);
+  const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
+  let ok = code === 0;
+  let summary = lines.filter((l) => /passed|cas|pass$|ok$/.test(l)).pop() || lines.pop() || "";
+  if (s.a11y) {
+    const bad = lines.filter((l) => /violations=[1-9]/.test(l));
+    ok = ok && !bad.length;
+    summary = `${lines.filter((l) => /violations=\d/.test(l)).length} états, ${bad.length} avec violations`;
+  }
+  if (s.contrast) {
+    const bad = lines.filter((l) => /^LOW|LOW /.test(l));
+    ok = ok && !bad.length;
+    summary = lines.filter((l) => /pass$/.test(l)).join(" · ");
+  }
+  if (!ok) failed++;
+  console.log(`${ok ? "OK  " : "FAIL"} ${s.name.padEnd(10)} ${((Date.now() - t0) / 1000).toFixed(0).padStart(3)} s  ${summary}`);
+  if (!ok) console.log(lines.filter((l) => /FAIL|Error|✗/.test(l)).slice(0, 12).map((l) => "     " + l.slice(0, 200)).join("\n"));
+}
+console.log(failed ? `\n${failed} suite(s) en échec` : "\nToutes les suites passent");
+process.exit(failed ? 1 : 0);

@@ -1,0 +1,5 @@
+<circle class="ld-asphalt" r="75" fill="none" stroke-width="34" />
+<circle class="ld-edge" r="91.2" fill="none" stroke-width="1.6" />
+<circle class="ld-edge" r="58.8" fill="none" stroke-width="1.6" />
+<circle class="ld-dash" r="75" fill="none" stroke-width="2.6" stroke-dasharray="8.4 8.43" />
+<circle class="ld-island" r="58" />
