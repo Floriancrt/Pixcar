@@ -245,7 +245,7 @@ components:
           type: object
           description: Point de recherche du visiteur. **Obligatoire quand le garage n'a pas de position** (nom saisi à la main).
           properties: { lat: { type: number }, lon: { type: number } }
-        serviceId: { type: string, description: Identifiant de prestation (voir server/shared/services.json)., example: vidange }
+        serviceId: { type: string, description: "Identifiant de prestation (src/js/shared/services.js) ; `autre` pour une réparation hors liste. Le contrôle technique n'est pas déclarable (ses prix sont officiels).", example: vidange }
         price: { type: number, minimum: 0.01, maximum: 20000, description: Euros TTC payés. }
         date: { type: string, format: date, description: "Jour de la réparation, entre 1990-01-01 et aujourd'hui (tolérance UTC+14)." }
         rating: { type: integer, minimum: 1, maximum: 5 }

@@ -1,6 +1,6 @@
 // UX round: wording, no "dès", price scale with both medians, OpenStreetMap notices, phones, scrollbar corners.
 // Usage: node ux.js [file] [only-section-letters]   (file defaults to index.html; run it on an older build to see the mutations fail)
-const { serve, launch, open, search, SHOTS, ROOT } = require("./harness");
+const { serve, launch, open, search, SHOTS, ROOT, injectScript, injectStyle } = require("./harness");
 const { buildElements, CENTER } = require("./mocks");
 const fs = require("fs");
 const path = require("path");
@@ -58,10 +58,10 @@ async function cornerDiff(browser, page, selector, radius, inset) {
   const clip = { x: Math.floor(geo.r - 40), y: Math.floor(geo.t - 6), width: 52, height: Math.ceil(geo.b - geo.t) + 12 };
   const a = await page.screenshot({ clip });
   const pad = await page.evaluate((s) => { const e = document.querySelector(s); return { sb: e.offsetWidth - e.clientWidth, pr: parseFloat(getComputedStyle(e).paddingRight) }; }, selector);
-  const css = await page.addStyleTag({ content: `${selector}{overflow:hidden!important;padding-right:${pad.pr + pad.sb}px!important}` });
+  const undo = await injectStyle(page, `${selector}{overflow:hidden!important;padding-right:${pad.pr + pad.sb}px!important}`);
   await page.waitForTimeout(150);
   const b = await page.screenshot({ clip });
-  await page.evaluate((el) => el.remove(), css);
+  await undo();
   const pg = await browser.newPage();
   const px = async (buf) => pg.evaluate(async (b64) => { const i = new Image(); i.src = "data:image/png;base64," + b64; await i.decode(); const c = document.createElement("canvas"); c.width = i.width; c.height = i.height; const g = c.getContext("2d"); g.drawImage(i, 0, 0); return { w: c.width, h: c.height, d: Array.from(g.getImageData(0, 0, c.width, c.height).data) }; }, buf.toString("base64"));
   const A = await px(a), B = await px(b);
@@ -426,7 +426,7 @@ async function cornerDiff(browser, page, selector, radius, inset) {
       await openCard(page, 1022);
       await openCard(page, 9202);
       await page.waitForTimeout(300);
-      await page.addScriptTag({ content: AXE });
+      await injectScript(page, AXE);
       const r = await page.evaluate(async () => {
         const res = await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } });
         return res.violations.map((v) => ({ id: v.id, n: v.nodes.length, ex: v.nodes.slice(0, 2).map((n) => n.target.join(" ")) }));

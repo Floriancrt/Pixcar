@@ -308,7 +308,14 @@ async function installMocks(ctx, opts = {}) {
   await ctx.route("**/*", async (route) => {
     const url = new URL(route.request().url());
     const h = url.hostname;
-    if (h === "127.0.0.1" || h === "localhost") return route.continue();
+    if (h === "127.0.0.1" || h === "localhost") {
+      // site publiable (dist/) : Leaflet se charge d'abord depuis le site ; on y ajoute la même instrumentation que celle du CDN simulé
+      if (/\/assets\/leaflet\.[0-9a-f]+\.js$/.test(url.pathname)) {
+        const response = await route.fetch();
+        return route.fulfill({ response, body: (await response.text()) + "\n;L.Map.addInitHook(function(){(window.__maps=window.__maps||[]).push(this)});" });
+      }
+      return route.continue();
+    }
 
     // Google Fonts -> local files
     if (h === "fonts.googleapis.com") {

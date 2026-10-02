@@ -4,7 +4,6 @@
 // Principe d'exploitation : l'API est une AMÉLIORATION de la page, pas un prérequis. Elle échoue vite et proprement
 // (503 + Retry-After), garde de quoi répondre quand la base tombe (copie de la dernière bonne réponse), et ne retient
 // aucun état en mémoire dont une autre instance aurait besoin : on en lance autant qu'on veut derrière un répartiteur.
-import { readFile } from "node:fs/promises";
 import { apiError, corsHeaders, etagResponse, json, readJson, withHeaders } from "./lib/http.mjs";
 import { hmac, randomHex, sha256 } from "./lib/crypto.mjs";
 import { RADII_KM, cellOf } from "./lib/geo.mjs";
@@ -12,6 +11,7 @@ import { createMemoryLimiter } from "./lib/ratelimit.mjs";
 import { createOverpassProxy } from "./lib/overpass.mjs";
 import { isToken, isUuid, parseRepair } from "./lib/validate.mjs";
 import { createRepo } from "./repo.mjs";
+import { REPAIR_SERVICES } from "../src/js/shared/services.js";
 
 const CACHE_REPAIRS = "public, max-age=30, s-maxage=60, stale-while-revalidate=300, stale-if-error=86400";
 const CACHE_OVERPASS = "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400, stale-if-error=604800";
@@ -19,9 +19,9 @@ const SECURITY = { "x-content-type-options": "nosniff", "cross-origin-resource-p
 const AREA_FRESH_MS = 10_000; // une même zone n'est relue en base qu'une fois par 10 s et par instance
 const AREA_STALE_MS = 3600_000; // et sa dernière bonne réponse sert jusqu'à 1 h quand la base ne répond plus
 
+// Prestations déclarables : celles de la page (src/js/shared/services.js), « autre » comprise, contrôle technique exclu.
 export async function loadServices() {
-  const url = new URL("./shared/services.json", import.meta.url);
-  return new Set(JSON.parse(await readFile(url, "utf8")).map((s) => s.id));
+  return new Set(REPAIR_SERVICES);
 }
 
 // Disjoncteur : après plusieurs échecs de suite, on cesse d'attendre une base qui ne répond pas (chaque requête

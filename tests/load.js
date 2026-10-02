@@ -1,6 +1,6 @@
 // Loading state: ring road + car on the map, waiting sentence in the status card.
 // Usage: node load.js [file] [sections]   (default index.html; run it on an older build to see what the old build lacks)
-const { serve, launch, open, SHOTS, ROOT } = require("./harness");
+const { serve, launch, open, SHOTS, ROOT, injectScript } = require("./harness");
 const { buildElements, CENTER } = require("./mocks");
 const fs = require("fs");
 const path = require("path");
@@ -228,14 +228,14 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
       check(`A1 [${scheme}] charte colours: black / grey asphalt, off-white markings (#F2F2F2), lime car (#79FA52)`, col.road === want.road && col.dash === want.dash && col.car === want.car && col.island === want.island, JSON.stringify(col));
       const allowed = new Set(["rgb(10, 13, 10)", "rgb(43, 51, 43)", "rgb(61, 70, 61)", "rgb(242, 242, 242)", "rgb(121, 250, 82)", "rgb(255, 255, 255)", "rgb(16, 20, 16)", "rgba(0, 0, 0, 0)"]);
       check(`A2 [${scheme}] nothing outside the charte (no red, blue or yellow anywhere in the pictogram)`, col.all.every((c) => allowed.has(c)), JSON.stringify(col.all));
-      await page.addScriptTag({ content: AXE });
+      await injectScript(page, AXE);
       const ax = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } })).violations.map((v) => ({ id: v.id, n: v.nodes.length })));
       check(`A3 [${scheme}] axe: no violation while searching (desktop)`, ax.length === 0, JSON.stringify(ax));
       await ctx.close();
       const mob = await open(browser, server, FILE, { width: 390, height: 844, dpr: 2, touch: true, colorScheme: scheme, mock: slow });
       await begin(mob.page);
       await mob.page.waitForTimeout(900);
-      await mob.page.addScriptTag({ content: AXE });
+      await injectScript(mob.page, AXE);
       const ax2 = await mob.page.evaluate(async () => (await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } })).violations.map((v) => ({ id: v.id, n: v.nodes.length })));
       check(`A4 [${scheme}] axe: no violation while searching (mobile)`, ax2.length === 0, JSON.stringify(ax2));
       await mob.ctx.close();

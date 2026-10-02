@@ -52,8 +52,8 @@
           <form id="searchForm" class="search" novalidate>
             <div class="field">
               <label for="service">Prestation</label>
-              <select id="service" class="svc-select"></select>
-              <p class="hint full-only" id="serviceHint"></p>
+              <select id="service" class="svc-select"><!--SERVICE_OPTIONS--></select>
+              <p class="hint full-only" id="serviceHint"><!--SERVICE_HINT--></p>
             </div>
             <div class="sum-line" id="searchSum">
               <p class="sum-where">
@@ -220,7 +220,7 @@
         </div>
         <div class="field">
           <label for="refService">Prestation</label>
-          <select id="refService" class="svc-select"></select>
+          <select id="refService" class="svc-select"><!--SERVICE_OPTIONS--></select>
         </div>
         <section class="panel" id="refs" aria-label="Prix publiés"><ol class="ref-list" id="refList"></ol></section>
         <details class="sources">
@@ -243,6 +243,12 @@
             l'enseigne ; sans logo, un monogramme aux couleurs de l'interface (ce ne sont pas les couleurs officielles).
             Ces marques appartiennent à leurs propriétaires. Pour les charger, votre navigateur contacte ces services,
             qui voient son adresse IP.
+          </p>
+          <p data-store-only="remote">
+            <b>Liste des garages.</b> Elle est demandée à Pixcar, qui interroge OpenStreetMap à votre place et garde la
+            réponse quelques heures pour que la recherche soit plus rapide et résiste aux pannes. Pixcar reçoit votre
+            adresse IP et la zone cherchée (arrondie à 80 mètres environ) ; il ne les enregistre pas (l'hébergeur peut
+            conserver des journaux techniques).
           </p>
           <p>
             <b>Prix et promotions des enseignes.</b> Relevés sur leurs sites le 1<sup>er</sup> octobre 2026. Promotions

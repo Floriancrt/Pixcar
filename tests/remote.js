@@ -4,7 +4,7 @@
 // le même faux OpenStreetMap. Chaque scénario ouvre un contexte neuf et part d'une API remise à zéro.
 const fs = require("fs");
 const path = require("path");
-const { serve, launch, open, search, ROOT } = require("./harness");
+const { serve, launch, open, search, ROOT, injectScript } = require("./harness");
 const { startApi } = require("./api-harness");
 const { buildElements } = require("./mocks");
 
@@ -37,6 +37,7 @@ async function until(fn, ms = 6000, step = 80) {
   const browser = await launch();
   const api = await startApi({ origin: server.url });
   api.upstream.elements = ELEMENTS;
+  if (server.allowConnect) server.allowConnect(api.url); // site publiable : sa politique de sécurité n'autorise que les hôtes de production
 
   // une déclaration d'« un autre visiteur » chez Norauto Bron
   const others = (prices, over = {}) =>
@@ -83,7 +84,7 @@ async function until(fn, ms = 6000, step = 80) {
       let { page, ctx, logs } = await fresh();
       await others([55, 60, 65, 70]);
       check("R1a the page is in remote mode (store flag, Sources text variant)", (await page.evaluate(() => document.body.dataset.store)) === "remote" && (await page.isVisible('[data-store-only="remote"] >> nth=0').catch(() => false)) !== undefined);
-      check("R1b only the remote wording of « Réparations déclarées » is displayed", await page.evaluate(() => { const vis = (e) => getComputedStyle(e).display !== "none"; return [...document.querySelectorAll('[data-store-only="remote"]')].every(vis) && [...document.querySelectorAll('[data-store-only="local"]')].every((e) => !vis(e)) && document.querySelectorAll('[data-store-only]').length === 2; }));
+      check("R1b only the remote wording is displayed in « Sources » (declared repairs, garages relay), not the local one", await page.evaluate(() => { const vis = (e) => getComputedStyle(e).display !== "none"; const remote = [...document.querySelectorAll('[data-store-only="remote"]')], local = [...document.querySelectorAll('[data-store-only="local"]')]; return remote.length === 2 && local.length === 1 && remote.every(vis) && local.every((e) => !vis(e)); }));
       await search(page, { service: "vidange" });
       await page.click("[data-sort=dist]");
       await page.waitForTimeout(300);
@@ -309,6 +310,18 @@ async function until(fn, ms = 6000, step = 80) {
       await ctx.close();
     }
 
+    // ============ R16. « Autre réparation » : une prestation hors liste est acceptée par l'API ============
+    {
+      let { page, ctx } = await fresh();
+      await search(page, { service: "vidange" });
+      await declare(page, { price: "120", service: "autre" });
+      const accepted = await until(async () => (await api.rows()).length === 1, 5000);
+      const rows = await api.rows();
+      check("R16a « Autre réparation » (not in the services list) is accepted and stored by the API", accepted && rows[0].service_id === "autre", JSON.stringify(rows.map((r) => r.service_id)));
+      check("R16b … and the page keeps it as its own, synced, deletable declaration", ((await stored(page)) || [{}])[0].sync === "synced" || (await until(async () => ((await stored(page)) || [{}])[0].sync === "synced")));
+      await ctx.close();
+    }
+
     // ============ R15. accessibilité des états propres au mode distant ============
     {
       let { page, ctx } = await fresh();
@@ -319,7 +332,7 @@ async function until(fn, ms = 6000, step = 80) {
       await declare(page);
       await openHistory(page);
       await until(async () => /en attente/.test(await note(page)), 5000);
-      await page.addScriptTag({ content: AXE });
+      await injectScript(page, AXE);
       const v = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } })).violations.map((x) => ({ id: x.id, n: x.nodes.length, ex: x.nodes.slice(0, 2).map((n) => n.target.join(" ")) })));
       check("R15 axe: no violation with a waiting declaration, its label and the note", v.length === 0, JSON.stringify(v));
       await ctx.close();

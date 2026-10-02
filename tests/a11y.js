@@ -1,5 +1,5 @@
 // axe-core audit of key states. Usage: node a11y.js <file> <tag>
-const { serve, launch, open, search, markerPoint, ROOT } = require("./harness");
+const { serve, launch, open, search, markerPoint, ROOT, injectScript } = require("./harness");
 const fs = require("fs"), path = require("path");
 const FILE = process.argv[2] || "index.html", TAG = process.argv[3] || "new";
 const AXE = fs.readFileSync(path.join(__dirname, "..", "node_modules/axe-core/axe.min.js"), "utf8");
@@ -9,7 +9,7 @@ const REPAIRS = [
   { id: "r3", garageId: "custom:garage-du-coin", garageName: "Garage du Coin", garageAddr: "", lat: null, lon: null, chainId: "", model: "Dacia Sandero", rating: 3, serviceId: "plaq_av", price: 140, date: "2026-07-05", comment: "Un peu long", createdAt: "2026-07-05T10:00:00Z" },
 ];
 async function audit(page, label, out) {
-  await page.addScriptTag({ content: AXE });
+  await injectScript(page, AXE);
   const r = await page.evaluate(async () => {
     const res = await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } });
     const f = (x) => ({ id: x.id, impact: x.impact, help: x.help, nodes: x.nodes.length, ex: x.nodes.slice(0, 3).map((n) => ({ t: n.target.join(" "), s: (n.any[0] || n.all[0] || n.none[0] || {}).message })) });

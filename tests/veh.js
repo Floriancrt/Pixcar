@@ -1,7 +1,7 @@
 // Vehicle block of the repair form: plate (AB-123-CD), model with suggestions, model year.
 // Usage: node veh.js [file] [only-section-letters]   (file defaults to index.html; run it on an older build / mutants to see checks fail)
 //   P plate mask · V validation · Y year · M model suggestions · C catalogue · S storage, prefill, display, privacy · L layout, a11y
-const { serve, launch, open, search, SHOTS, ROOT } = require("./harness");
+const { serve, launch, open, search, SHOTS, ROOT, injectScript } = require("./harness");
 const { buildElements } = require("./mocks");
 const fs = require("fs");
 const path = require("path");
@@ -533,7 +533,7 @@ const TODAY_YEAR = 2026;
       for (const mobile of [false, true]) {
         const o = mobile ? { width: 390, height: 844, dpr: 2, touch: true } : { width: 1440, height: 900 };
         const { page, ctx } = await dlg({ ...o, colorScheme: scheme, storage: { "jg.repairs.v1": REPAIRS } });
-        await page.addScriptTag({ content: AXE });
+        await injectScript(page, AXE);
         const run = () => page.evaluate(async () => (await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } })).violations.map((v) => ({ id: v.id, n: v.nodes.length, ex: v.nodes.slice(0, 2).map((n) => n.target.join(" ")) })));
         let v = await run();
         check(`L5 [${scheme}${mobile ? " mobile" : ""}] axe: no violation, dialog open and prefilled`, v.length === 0, J(v));

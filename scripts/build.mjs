@@ -3,22 +3,34 @@
 //
 //   node scripts/build.mjs          production : JS/CSS minifiés
 //   node scripts/build.mjs --dev    lisible : rien n'est minifié
+//   node scripts/build.mjs --check  reconstruit à part et vérifie que index.html et dist/ du dépôt sont à jour (sort en erreur sinon)
+//   options : --only single|dist · --src <dossier des sources> · --out <dossier de sortie>   (utilisées par les tests de mutation)
 //
 // Variable d'environnement : PIXCAR_API_BASE = URL de l'API des réparations (vide : stockage dans le navigateur).
 //
 // Deux sorties à partir des mêmes sources :
 //   index.html   page tout-en-un (CSS, JS, police et icônes en ligne) : s'ouvre depuis le disque, se déploie n'importe où ;
 //   dist/        site publiable : fichiers séparés à nom haché (cache « immutable »), police locale, Leaflet local,
-//                service worker (coque hors ligne), en-têtes de cache et de sécurité (_headers).
+//                service worker (coque hors ligne), en-têtes de cache et de sécurité (_headers : Netlify, Cloudflare Pages),
+//                robots.txt. L'adresse de l'API (PIXCAR_API_BASE) y est aussi dans la politique de sécurité du contenu.
 import { build, transform } from "esbuild";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, writeFile, copyFile, readdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdir, mkdtemp, readFile, rm, writeFile, copyFile, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const SRC = join(ROOT, "src");
-const DIST = join(ROOT, "dist");
+const arg = (name) => {
+  const i = process.argv.indexOf("--" + name);
+  return i > 0 ? process.argv[i + 1] : undefined;
+};
+const check = process.argv.includes("--check");
+const SRC = resolve(arg("src") || join(ROOT, "src"));
+const OUT = check ? await mkdtemp(join(tmpdir(), "pixcar-build-")) : resolve(arg("out") || ROOT);
+const DIST = join(OUT, "dist");
+const only = arg("only"); // « single » ou « dist » : une seule sortie
+const { OTHER_SERVICE, SERVICES } = await import(pathToFileURL(join(SRC, "js/shared/services.js")).href);
 const dev = process.argv.includes("--dev");
 const apiBase = (process.env.PIXCAR_API_BASE || "").replace(/\/+$/, "");
 const read = (...p) => readFile(join(...p), "utf8");
@@ -38,7 +50,7 @@ async function buildJs(extraDefine = {}) {
     legalComments: "none",
     write: false,
     loader: { ".txt": "text" },
-    define: { __LEAFLET_URLS__: JSON.stringify([LEAFLET_CDN]), ...extraDefine },
+    define: { __LEAFLET_URLS__: JSON.stringify([LEAFLET_CDN]), __SW_URL__: JSON.stringify(""), ...extraDefine },
     logLevel: "warning",
   });
   return r.outputFiles[0].text;
@@ -76,15 +88,48 @@ const fontFace = (url, range) => `@font-face{font-family:'Plus Jakarta Sans';fon
 
 // ------------------------------------------------------------------------------------------------ HTML
 const oneLine = (s) => s.trim().split("\n").map((l) => l.trim()).join(" ");
+// Connexions ouvertes dès le chargement : le service d'adresses (utilisé dès la première recherche) et l'API.
+const GEOCODER = "https://data.geopf.fr";
+const apiOrigin = (() => {
+  try {
+    return apiBase ? new URL(apiBase).origin : "";
+  } catch {
+    throw new Error(`PIXCAR_API_BASE n'est pas une adresse valide : ${apiBase}`);
+  }
+})();
+const preconnect = () => [GEOCODER, apiOrigin].filter(Boolean).map((o) => `<link rel="preconnect" href="${o}" crossorigin>`).join("\n");
+// Listes de prestations écrites dans le HTML, pour que la liste déroulante soit remplie et son aide visible avant l'exécution du
+// script (la page les reconstruit à l'identique ; un test compare les deux). Même échappement que la page.
+const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+function optionsHtml(list, extra = "") {
+  const groups = [];
+  for (const s of list) {
+    let g = groups.find((x) => x.name === s.g);
+    if (!g) groups.push((g = { name: s.g, items: [] }));
+    g.items.push(s);
+  }
+  return groups.map((g) => `<optgroup label="${esc(g.name)}">${g.items.map((s) => `<option value="${s.id}">${esc(s.label)}</option>`).join("")}</optgroup>`).join("") + extra;
+}
 async function pageParts() {
   const road = oneLine(await read(SRC, "partials/ld-road.svg"));
   const car = oneLine(await read(SRC, "partials/ld-car.svg"));
   let body = await read(SRC, "partials/body.html");
-  for (const [mark, svg] of [["<!--LD_ROAD-->", road], ["<!--LD_CAR-->", car]]) {
-    if (body.split(mark).length !== 2) throw new Error(`${mark} : 1 occurrence attendue`);
-    body = body.replace(mark, svg);
-  }
-  return { body, sprite: await read(SRC, "partials/sprite.html"), dialog: await read(SRC, "partials/dialog.html") };
+  let dialog = await read(SRC, "partials/dialog.html");
+  const fill = (text, pairs) => {
+    for (const [mark, value, times = 1] of pairs) {
+      if (text.split(mark).length !== times + 1) throw new Error(`${mark} : ${times} occurrence(s) attendue(s)`);
+      text = text.split(mark).join(value);
+    }
+    return text;
+  };
+  body = fill(body, [
+    ["<!--LD_ROAD-->", road],
+    ["<!--LD_CAR-->", car],
+    ["<!--SERVICE_OPTIONS-->", optionsHtml(SERVICES), 2],
+    ["<!--SERVICE_HINT-->", esc(SERVICES[0].hint)], // la première prestation est celle que la page sélectionne à la première visite
+  ]);
+  dialog = fill(dialog, [["<!--REPAIR_OPTIONS-->", optionsHtml(SERVICES.filter((s) => s.kind !== "ct"), `<optgroup label="Autre"><option value="${OTHER_SERVICE}">Autre réparation (précisez en commentaire)</option></optgroup>`)]]);
+  return { body, sprite: await read(SRC, "partials/sprite.html"), dialog };
 }
 function squeeze(html) {
   if (dev) return html;
@@ -93,7 +138,7 @@ function squeeze(html) {
 }
 async function render(parts, { headAssets, scripts }) {
   const tpl = await read(SRC, "index.html");
-  const fill = { API_BASE: apiBase, HEAD_ASSETS: headAssets, SPRITE: parts.sprite, BODY: parts.body, DIALOG: parts.dialog, SCRIPTS: scripts };
+  const fill = { API_BASE: apiBase, PRECONNECT: preconnect(), HEAD_ASSETS: headAssets, SPRITE: parts.sprite, BODY: parts.body, DIALOG: parts.dialog, SCRIPTS: scripts };
   return squeeze(tpl.replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => (k in fill ? fill[k] : m)));
 }
 
@@ -111,8 +156,60 @@ async function buildSingle(parts) {
     `<style>${css}</style>`,
   ].join("\n");
   const html = await render(parts, { headAssets, scripts: `<script>\n${js}</script>` });
-  await writeFile(join(ROOT, "index.html"), html);
+  await writeFile(join(OUT, "index.html"), html);
   return html.length;
+}
+
+// ------------------------------------------------------------------------------------------------ en-têtes (dist/_headers)
+// Même format pour Netlify et Cloudflare Pages ; d'autres hébergeurs : reprendre les mêmes valeurs dans leur configuration.
+// La page appelle ces services, et eux seuls : tout autre hôte est refusé par le navigateur (Content-Security-Policy).
+const CONNECT = ["https://data.geopf.fr", "https://overpass-api.de", "https://overpass.openstreetmap.fr", "https://maps.mail.ru", "https://recherche-entreprises.api.gouv.fr", "https://data.economie.gouv.fr", "https://query.wikidata.org"];
+export function contentSecurityPolicy(origin = apiOrigin, styleHash = "") {
+  return [
+    "default-src 'self'",
+    "script-src 'self' https://cdnjs.cloudflare.com", // le CDN ne sert que de secours à la copie locale de Leaflet
+    `style-src 'self'${styleHash ? ` 'sha256-${styleHash}'` : ""}`, // la feuille de style est dans la page : autorisée par son empreinte
+    "style-src-attr 'unsafe-inline'", // quelques positions calculées (repères de l'échelle de prix, marqueurs)
+    "img-src 'self' data: blob: https:", // tuiles de la carte, logos (Wikimedia Commons), icônes des sites d'enseignes
+    "font-src 'self'",
+    `connect-src ${["'self'", origin, ...CONNECT].filter(Boolean).join(" ")}`,
+    "worker-src 'self'",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+function headersFile(styleHash) {
+  const immutable = "public, max-age=31536000, immutable";
+  return `# Généré par scripts/build.mjs. Netlify et Cloudflare Pages lisent ce fichier tel quel.
+/*
+  Content-Security-Policy: ${contentSecurityPolicy(apiOrigin, styleHash)}
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=(), usb=()
+  Cross-Origin-Opener-Policy: same-origin
+  Strict-Transport-Security: max-age=31536000
+
+# La page et le service worker : toujours revalidés (un 304 suffit), pour que chaque déploiement soit vu tout de suite.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/sw.js
+  Cache-Control: no-cache
+
+# Fichiers dont le nom contient l'empreinte de leur contenu : jamais modifiés, gardés un an.
+/assets/*
+  Cache-Control: ${immutable}
+
+# Icônes : nom fixe, un jour.
+/favicon.svg
+  Cache-Control: public, max-age=86400
+/apple-touch-icon.png
+  Cache-Control: public, max-age=86400
+`;
 }
 
 // ------------------------------------------------------------------------------------------------ dist
@@ -125,12 +222,10 @@ async function buildDist(parts) {
     const buf = await readFile(join(SRC, "assets/fonts", f.file));
     const name = f.file.replace(".woff2", `.${hash(buf)}.woff2`);
     await writeFile(join(DIST, "assets/fonts", name), buf);
-    fontCss += fontFace(`fonts/${name}`, f.range);
+    fontCss += fontFace(`assets/fonts/${name}`, f.range); // le CSS est dans la page : chemins depuis la racine du site
     fontUrls.push(`assets/fonts/${name}`);
   }
   const css = await buildCss(fontCss);
-  const cssName = `app.${hash(css)}.css`;
-  await writeFile(join(DIST, "assets", cssName), css);
 
   // Leaflet : copie locale (chargée à la demande), le CDN ne sert plus que de secours.
   const leaflet = await readFile(join(ROOT, "node_modules/leaflet/dist/leaflet.js"));
@@ -138,7 +233,7 @@ async function buildDist(parts) {
   const leafletName = `leaflet.${hash(leafletMin)}.js`;
   await writeFile(join(DIST, "assets", leafletName), leafletMin);
 
-  const js = await buildJs({ __LEAFLET_URLS__: JSON.stringify([`assets/${leafletName}`, LEAFLET_CDN]) });
+  const js = await buildJs({ __LEAFLET_URLS__: JSON.stringify([`assets/${leafletName}`, LEAFLET_CDN]), __SW_URL__: JSON.stringify("sw.js") });
   const jsName = `app.${hash(js)}.js`;
   await writeFile(join(DIST, "assets", jsName), js);
 
@@ -148,16 +243,49 @@ async function buildDist(parts) {
     `<link rel="icon" type="image/svg+xml" href="favicon.svg">`,
     `<link rel="apple-touch-icon" href="apple-touch-icon.png">`,
     `<link rel="preload" href="${fontUrls[0]}" as="font" type="font/woff2" crossorigin>`,
-    `<link rel="stylesheet" href="assets/${cssName}">`,
+    // Feuille de style dans la page : un aller-retour de moins avant le premier affichage (la page revient du cache du service
+    // worker ou d'un 304 aux visites suivantes : l'intégrer ne coûte rien). La politique de sécurité l'autorise par son empreinte.
+    `<style>${css}</style>`,
   ].join("\n");
   const html = await render(parts, { headAssets, scripts: `<script src="assets/${jsName}" defer></script>` });
   await writeFile(join(DIST, "index.html"), html);
-  return { html: html.length, js: js.length, css: css.length };
+  const styleSource = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
+  const styleHash = createHash("sha256").update(styleSource).digest("base64");
+
+  // Coque hors ligne : la page, le script à empreinte et la police (Leaflet et la 2e police se chargent à la demande)
+  const shell = ["./", `assets/${jsName}`, fontUrls[0], "favicon.svg", "apple-touch-icon.png"];
+  const version = hash(Buffer.from([html, ...shell.slice(1)].join("\n") + (await read(SRC, "sw.js"))));
+  const sw = (await read(SRC, "sw.js")).replace("__VERSION__", version).replace("__SHELL__", JSON.stringify(shell));
+  await writeFile(join(DIST, "sw.js"), dev ? sw : (await transform(sw, { minify: true, legalComments: "none" })).code);
+  await writeFile(join(DIST, "_headers"), headersFile(styleHash));
+  await writeFile(join(DIST, "robots.txt"), "User-agent: *\nAllow: /\n");
+  return { html: html.length, js: js.length, css: css.length, version };
 }
 
 // ------------------------------------------------------------------------------------------------
 const parts = await pageParts();
-const single = await buildSingle(parts);
-const dist = await buildDist(parts);
+await mkdir(OUT, { recursive: true });
+const single = only === "dist" ? null : await buildSingle(parts);
+const dist = only === "single" ? null : await buildDist(parts);
 const kb = (n) => (n / 1024).toFixed(1) + " Ko";
-console.log(`${dev ? "dev" : "prod"} · index.html ${kb(single)} · dist : html ${kb(dist.html)}, js ${kb(dist.js)}, css ${kb(dist.css)}`);
+
+if (check) {
+  // Les sorties sont déterministes (noms à empreinte, version du service worker dérivée du contenu) : toute différence avec ce
+  // qui est dans le dépôt veut dire qu'une source a changé sans reconstruction.
+  const files = async (dir) => (await readdir(dir, { recursive: true, withFileTypes: true })).filter((e) => e.isFile()).map((e) => relative(dir, join(e.parentPath ?? e.path, e.name))).sort();
+  const problems = [];
+  const same = async (a, b, label) => {
+    const [fa, fb] = await Promise.all([files(a).catch(() => []), files(b).catch(() => [])]);
+    for (const f of fa) if (!fb.includes(f)) problems.push(`${label}/${f} : absent du dépôt`);
+    for (const f of fb) if (!fa.includes(f)) problems.push(`${label}/${f} : n'existe plus dans la construction`);
+    for (const f of fa) if (fb.includes(f) && !(await readFile(join(a, f))).equals(await readFile(join(b, f)))) problems.push(`${label}/${f} : contenu différent`);
+  };
+  await same(DIST, join(ROOT, "dist"), "dist");
+  if (!(await readFile(join(OUT, "index.html"))).equals(await readFile(join(ROOT, "index.html")).catch(() => Buffer.alloc(0)))) problems.push("index.html : contenu différent");
+  await rm(OUT, { recursive: true, force: true });
+  if (problems.length) {
+    console.error("Sorties du dépôt périmées :\n  - " + problems.join("\n  - ") + "\nLancer npm run build et recommiter.");
+    process.exit(1);
+  }
+  console.log("index.html et dist/ sont à jour.");
+} else console.log(`${dev ? "dev" : "prod"} · ${single ? `index.html ${kb(single)}` : ""}${single && dist ? " · " : ""}${dist ? `dist : html ${kb(dist.html)}, js ${kb(dist.js)}, css ${kb(dist.css)}` : ""}`);

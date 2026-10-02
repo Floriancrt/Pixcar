@@ -9,13 +9,15 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:dev": "node scripts/build.mjs --dev",
-    "test": "node tests/run.mjs",
-    "test:server": "node scripts/node-tests.mjs server/test",
     "dev": "node server/dev.mjs",
     "start": "node server/index.mjs",
     "db:migrate": "node server/migrate.mjs",
-    "perf": "node scripts/perf.mjs",
-    "test:unit": "node scripts/node-tests.mjs tests/unit"
+    "moderate": "node server/moderate.mjs",
+    "test": "node tests/run.mjs",
+    "test:dist": "node tests/run.mjs dist",
+    "test:unit": "node scripts/node-tests.mjs tests/unit",
+    "test:server": "node scripts/node-tests.mjs server/test",
+    "perf": "node tests/perf.js"
   },
   "dependencies": {
     "pg": "^8.13.0"

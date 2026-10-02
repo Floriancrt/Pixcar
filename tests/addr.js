@@ -1,5 +1,5 @@
 // Missing garage addresses: nearest address from the IGN reverse geocoder, shown with "≈", cached, bounded to 80 m.
-const { serve, launch, open, search, shot, ROOT } = require("./harness");
+const { serve, launch, open, search, shot, ROOT, injectScript } = require("./harness");
 const { buildElements, CENTER } = require("./mocks");
 const fs = require("fs"), path = require("path");
 const FILE = process.env.FILE || "index.html";
@@ -91,7 +91,7 @@ const nearly = (a, b) => Math.abs(a - b) < 2e-6;
   check("A11 other chains and nameless garages without address are completed too (one request each)", adv && adv.approx && ind && ind.approx && c.reverse === before + 2, JSON.stringify([adv, ind, c.reverse]));
   const gl8 = await page.evaluate((id) => decodeURIComponent(document.querySelector(`#list [data-id="${CSS.escape(id)}"] .act-reviews`).getAttribute("href")), ID(8));
   check("A12 a garage with no name keeps the generic 'garage' search term in the Google link", /\/maps\/search\/garage, \d+ Rue du Test, 69007 Lyon\//.test(gl8), gl8);
-  await page.addScriptTag({ content: AXE });
+  await injectScript(page, AXE);
   const ax = await page.evaluate(async () => { const r = await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa", "best-practice"] } }); return r.violations.map((v) => v.id + "×" + v.nodes.length); });
   check("A13 axe: no violation with an approximate address open", ax.length === 0, JSON.stringify(ax));
   check("A14 no page error", logs.errors.length === 0 && logs.console.length === 0, JSON.stringify([logs.errors, logs.console]));

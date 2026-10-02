@@ -25,7 +25,15 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
       sprite: (document.getElementById("px-mark") || { querySelector: () => null }).querySelector("path") && document.getElementById("px-mark").querySelector("path").getAttribute("d"),
     }));
     check(`${T}1 title is Pixcar and no trace of the old name in the page text`, head.title === "Pixcar" && !/Juste Garage/i.test(await page.evaluate(() => document.documentElement.outerHTML.replace(/<script[\s\S]*?<\/script>/g, ""))), head.title);
-    check(`${T}2 favicon is an SVG data URI holding the symbol, apple-touch-icon a PNG data URI`, /^data:image\/svg\+xml,/.test(head.icon) && /%3Cpath/.test(head.icon) && /^data:image\/png;base64,/.test(head.touch), head.icon.slice(0, 60));
+    // page tout-en-un : icônes en data URI ; site publiable : fichiers favicon.svg et apple-touch-icon.png (même contenu)
+    const iconsOk = /^data:/.test(head.icon)
+      ? /^data:image\/svg\+xml,/.test(head.icon) && /%3Cpath/.test(head.icon) && /^data:image\/png;base64,/.test(head.touch)
+      : await page.evaluate(async ([i, t]) => {
+          const svg = await (await fetch(i)).text();
+          const png = new Uint8Array(await (await fetch(t)).arrayBuffer()).slice(0, 4);
+          return /<svg/.test(svg) && /<path/.test(svg) && png[0] === 0x89 && png[1] === 0x50 && png[2] === 0x4e && png[3] === 0x47;
+        }, [head.icon, head.touch]);
+    check(`${T}2 favicon is an SVG holding the symbol (data URI, or favicon.svg), apple-touch-icon a PNG`, iconsOk, head.icon.slice(0, 60));
     check(`${T}3 single black theme-color`, head.themeColors.length === 1 && head.themeColors[0] === "#000000", JSON.stringify(head.themeColors));
     check(`${T}4 symbol path has 16 sectors, an arc pair each`, head.sprite && (head.sprite.match(/M/g) || []).length === 16 && (head.sprite.match(/A/g) || []).length === 32, head.sprite && head.sprite.slice(0, 80));
     const brand = await page.evaluate(() => {

@@ -11,6 +11,9 @@ const SHOTS = path.join(__dirname, ".out", "shots");
 fs.mkdirSync(SHOTS, { recursive: true });
 
 function serve(dir) {
+  // PIXCAR_ROOT=dist : on teste le site publiable tel qu'un hébergeur le sert (types MIME, compression, _headers dont la
+  // politique de sécurité du contenu) ; sinon, les fichiers du dépôt tels quels.
+  if (process.env.PIXCAR_ROOT) return require("./static-server").serveDir(path.join(ROOT, process.env.PIXCAR_ROOT));
   const srv = http.createServer((req, res) => {
     const f = path.join(dir, decodeURIComponent(req.url.split("?")[0]));
     if (!f.startsWith(dir) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) {
@@ -97,6 +100,8 @@ async function open(browser, server, file, o = {}) {
   const ctx = await browser.newContext({
     viewport: { width, height }, colorScheme, reducedMotion, forcedColors, deviceScaleFactor: dpr,
     locale: "fr-FR", timezoneId: "Europe/Paris", hasTouch: touch, isMobile: touch, ignoreHTTPSErrors: true,
+    // le service worker change qui répond aux requêtes du site : bloqué partout sauf dans sa propre suite (tests/offline.js)
+    serviceWorkers: process.env.PIXCAR_SW === "1" ? "allow" : "block",
   });
   const logs = { console: [], errors: [], failed: [], requests: [] };
   await ctx.addInitScript(
@@ -118,6 +123,7 @@ async function open(browser, server, file, o = {}) {
     if (!["error", "warning"].includes(m.type())) return;
     const u = (m.location() && m.location().url) || "";
     if (/\/apple-touch-icon\.png$|\/favicon\.ico$|wikimedia\.org/.test(u)) return; // expected misses of the optional logo tiers
+    if (/Service Worker registration blocked by Playwright/.test(m.text())) return; // the harness blocks service workers (see serviceWorkers above)
     logs.console.push(`[${m.type()}] ${m.text()}`);
   });
   page.on("request", (r) => logs.requests.push(r.url()));
@@ -174,4 +180,17 @@ async function markerPoint(page, which = 0) {
   }, which);
 }
 
-module.exports = { serve, launch, open, search, shot, sheet, markerPoint, SHOTS, ROOT };
+// page.addScriptTag / addStyleTag posent des éléments « inline » : la politique de sécurité du contenu du site publiable les
+// refuse. Ces aides passent par le protocole de débogage (évaluation directe) et par une feuille de style construite, que la
+// politique n'interdit pas : le site reste testé avec sa politique, sans exception pour les tests.
+const injectScript = (page, source) => page.evaluate(source);
+async function injectStyle(page, css) {
+  await page.evaluate((text) => {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(text);
+    (window.__testSheets = window.__testSheets || []).push(sheet);
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  }, css);
+  return () => page.evaluate(() => { const s = window.__testSheets.pop(); document.adoptedStyleSheets = document.adoptedStyleSheets.filter((x) => x !== s); });
+}
+module.exports = { serve, launch, open, search, shot, sheet, markerPoint, injectScript, injectStyle, SHOTS, ROOT };

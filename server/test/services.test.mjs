@@ -1,15 +1,30 @@
-// La liste des prestations de la page et celle de l'API (qui valide serviceId) ne doivent jamais diverger.
+// Les prestations déclarables viennent de la même définition que celles de la page : elles ne peuvent pas diverger.
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { test } from "node:test";
+import { OTHER_SERVICE, REPAIR_SERVICES, SERVICES } from "../../src/js/shared/services.js";
+import { loadServices } from "../app.mjs";
+import { makeApp, repair } from "./helpers.mjs";
 
-const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
+test("the declarable services are the page's, « autre » included, the official-price technical inspection excluded", async () => {
+  assert.ok(SERVICES.length >= 15);
+  assert.equal(new Set(SERVICES.map((s) => s.id)).size, SERVICES.length, "identifiants uniques");
+  for (const s of SERVICES) assert.ok(s.id && s.g && s.label && s.kind, JSON.stringify(s));
+  assert.ok(REPAIR_SERVICES.includes(OTHER_SERVICE) && !REPAIR_SERVICES.includes("ct"));
+  assert.deepEqual([...(await loadServices())].sort(), [...REPAIR_SERVICES].sort());
+});
 
-test("server/shared/services.json lists exactly the services offered by the page, with the same labels", async () => {
-  const page = await read("../../src/js/app.js");
-  const fromPage = [...page.matchAll(/\{\s*id:\s*"([a-z0-9_]+)",\s*g:\s*"([^"]+)",\s*label:\s*"((?:[^"\\]|\\.)*)",\s*kind:\s*"([a-z]+)"/g)].map((m) => ({ id: m[1], group: m[2], label: JSON.parse(`"${m[3]}"`), kind: m[4] }));
-  const fromApi = JSON.parse(await read("../shared/services.json"));
-  assert.ok(fromPage.length >= 15, `${fromPage.length} prestations lues dans la page`);
-  assert.deepEqual(fromApi, fromPage);
-  assert.equal(new Set(fromApi.map((s) => s.id)).size, fromApi.length, "identifiants uniques");
+test("the API accepts every service the repair form offers (including « Autre réparation »), and refuses the technical inspection", async () => {
+  const t = await makeApp();
+  try {
+    let n = 0;
+    for (const serviceId of REPAIR_SERVICES) {
+      const res = await t.call("POST", "/v1/repairs", { body: repair({ serviceId }), ip: `198.51.100.${(n++ % 200) + 1}` });
+      assert.equal(res.status, 201, `${serviceId} : ${await res.text()}`);
+    }
+    const ct = await t.call("POST", "/v1/repairs", { body: repair({ serviceId: "ct" }) });
+    assert.equal(ct.status, 422);
+    assert.ok("serviceId" in (await ct.json()).error.fields);
+  } finally {
+    await t.close();
+  }
 });

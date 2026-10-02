@@ -49,7 +49,11 @@ export function toNodeListener(app, { onError = () => {} } = {}) {
   };
 }
 
-export async function start({ env = process.env, log = (o) => console.log(JSON.stringify({ t: new Date().toISOString(), ...o })) } = {}) {
+// LOG_LEVEL : « info » (une ligne par requête, par défaut), « warn » (incidents seulement), « error ». Ni adresse IP, ni requête, ni corps.
+const LEVELS = { error: 0, warn: 1, info: 2 };
+const jsonLog = (min) => (o) => (LEVELS[o.level] ?? 2) <= (LEVELS[min] ?? 2) && console.log(JSON.stringify({ t: new Date().toISOString(), ...o }));
+
+export async function start({ env = process.env, log = jsonLog(env.LOG_LEVEL) } = {}) {
   const config = loadConfig(env);
   const db = await createDb({ url: config.databaseUrl, dataDir: env.DEV_DATA_DIR || undefined, log: (m) => log({ level: "warn", msg: m }) });
   if (env.MIGRATE_ON_START !== "0") (await migrate(db, undefined, (m) => log({ level: "info", msg: m })));

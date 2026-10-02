@@ -1,5 +1,5 @@
 // Emulates a browser WITHOUT scroll anchoring (Safari) and checks the clicked card does not jump.
-const { serve, launch, open, search, ROOT } = require("./harness");
+const { serve, launch, open, search, ROOT, injectStyle } = require("./harness");
 const path = require("path");
 (async () => {
   const server = await serve(ROOT);
@@ -8,7 +8,7 @@ const path = require("path");
     for (const mode of ["desktop", "mobile"]) {
       const o = mode === "desktop" ? { width: 1440, height: 900 } : { width: 390, height: 844, dpr: 2, touch: true };
       const { page, ctx } = await open(browser, server, file, o);
-      await page.addStyleTag({ content: "*{overflow-anchor:none!important}" });
+      await injectStyle(page, "*{overflow-anchor:none!important}");
       await search(page, { service: "vidange" });
       await page.click("#list > li:nth-child(2) .g-main");
       await page.waitForTimeout(300);
