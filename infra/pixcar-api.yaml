@@ -1,0 +1,412 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  API Pixcar sans serveur : API Gateway HTTP + Lambda (Node 22, arm64) + Aurora DSQL. Ni réseau privé ni serveur à gérer ;
+  la base est répartie sur plusieurs zones par conception et les coûts suivent l'usage.
+
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    arch: "navigateur -> API GW HTTP ($default, limitation de débit) -> Lambda api (rôle de base pixcar_api) -> Aurora DSQL ; Lambda ops (rôle admin) lancée à la main ou par le planificateur"
+    must:
+      - "secrets (PLATE_PEPPER, IP_PEPPER) dans SSM SecureString, jamais dans cette pile ni dans l'environnement des fonctions"
+      - "PLATE_PEPPER ne change jamais une fois en service (empreintes des plaques, doublons, effacement)"
+      - "rôle de base pixcar_api = DML sur 4 tables seulement ; admin réservé à la fonction ops"
+    ref:
+      - { at: docs/exploitation.md, has: "déploiement AWS, opérations, coûts, fin du plan gratuit" }
+      - { at: docs/architecture.md, has: "schéma, API, choix de la base" }
+
+Parameters:
+  CodeBucket:
+    Type: String
+    Description: Bucket S3 (versionné, privé) qui contient le paquet construit par scripts/build-lambda.mjs.
+    AllowedPattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+  CodeKey:
+    Type: String
+    Description: Clé de l'archive dans ce bucket (pixcar-lambda-<empreinte>.zip). Une nouvelle empreinte = une nouvelle version du code.
+    AllowedPattern: '^[A-Za-z0-9._/-]+\.zip$'
+  AllowedOrigins:
+    Type: String
+    Default: "https://pixcar.fr,https://www.pixcar.fr"
+    Description: Origines des navigateurs autorisées à appeler l'API (CORS), séparées par des virgules.
+    AllowedPattern: '^https?://[A-Za-z0-9.:-]+(,https?://[A-Za-z0-9.:-]+)*$'
+  SsmPrefix:
+    Type: String
+    Default: "/pixcar/prod/"
+    Description: Préfixe des paramètres SSM SecureString PLATE_PEPPER et IP_PEPPER (créés avant la pile, chiffrés par la clé gérée alias/aws/ssm ; voir docs/exploitation.md).
+    AllowedPattern: '^/[A-Za-z0-9/_-]*/$'
+  OverpassUserAgent:
+    Type: String
+    Default: "Pixcar/1.0 (+https://pixcar.fr)"
+    Description: Identifie Pixcar auprès des miroirs OpenStreetMap (Overpass) ; y mettre un moyen de vous joindre.
+    MaxLength: 200
+  ThrottleRatePerSecond:
+    Type: Number
+    Default: 50
+    MinValue: 1
+    Description: Requêtes par seconde au plus, tous visiteurs confondus (API Gateway).
+  ThrottleBurst:
+    Type: Number
+    Default: 100
+    MinValue: 1
+    Description: Pic admis au-delà du débit moyen.
+  ReservedConcurrency:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    Description: Exécutions simultanées réservées à l'API (0 = aucune réservation ; à régler après avoir vérifié le quota du compte).
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [7, 14, 30, 60, 90, 180, 365]
+    Description: Durée de conservation des journaux (ni adresse IP ni corps de requête n'y figurent).
+  ApiDomainName:
+    Type: String
+    Default: ""
+    Description: Nom de domaine de l'API (api.pixcar.fr). Vide tant que le certificat n'est pas validé.
+  ApiCertificateArn:
+    Type: String
+    Default: ""
+    Description: Certificat ACM (même région) du domaine ci-dessus, validé par DNS. Vide tant qu'il n'est pas émis.
+  AlarmEmail:
+    Type: String
+    Default: ""
+    Description: Adresse qui reçoit les alarmes (erreurs). Vide = pas d'alarme par courriel.
+
+Conditions:
+  HasDomain: !And [!Not [!Equals [!Ref ApiDomainName, ""]], !Not [!Equals [!Ref ApiCertificateArn, ""]]]
+  HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, ""]]
+  HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, "0"]]
+
+Resources:
+  # ---- base de données
+  Cluster:
+    Type: AWS::DSQL::Cluster
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "DSQL : réparti sur plusieurs zones sans réplique à payer, rien à payer pour le calcul au repos, pas de VPC ; une base PostgreSQL gérée (RDS) coûterait un forfait mensuel même sans trafic"
+        must: ["Retain + protection contre la suppression : contient les déclarations des visiteurs", "supprimer la pile ne supprime PAS la base (la retirer à la main après avoir levé la protection)"]
+        mutable: review-required
+    Properties:
+      DeletionProtectionEnabled: true
+      Tags:
+        - { Key: Project, Value: pixcar }
+        - { Key: Name, Value: !Sub "${AWS::StackName}-db" }
+
+  # ---- fonction de l'API (rôle de base à moindre privilège)
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-api"
+      RetentionInDays: !Ref LogRetentionDays
+
+  ApiRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "identité IAM de l'API ; sa base lui donne le rôle pixcar_api (lien créé par l'opération « migrate »)"
+        must: ["dsql:DbConnect seulement (jamais DbConnectAdmin)", "ssm:GetParameters sur les 2 secrets seulement"]
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: runtime
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Sid: Logs, Effect: Allow, Action: ["logs:CreateLogStream", "logs:PutLogEvents"], Resource: !GetAtt ApiLogGroup.Arn }
+              - { Sid: Database, Effect: Allow, Action: "dsql:DbConnect", Resource: !GetAtt Cluster.ResourceArn }
+              - Sid: Secrets
+                Effect: Allow
+                Action: "ssm:GetParameters"
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}PLATE_PEPPER"
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}IP_PEPPER"
+      Tags: [{ Key: Project, Value: pixcar }]
+
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "toute l'API dans une fonction (server/lambda.mjs) ; arm64 = ~20 % moins cher ; 512 Mo suffisent (E/S, pas de calcul lourd)"
+        must: ["REQUEST_TIMEOUT_MS (10 s) < délai d'intégration de la passerelle (12 s) <= Timeout de la fonction (15 s) ; la passerelle coupe à 30 s au plus", "TRUST_PROXY=0 : l'adresse du visiteur vient de la passerelle (requestContext), pas d'en-têtes"]
+        mutable: free-to-tune
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-api"
+      Description: API Pixcar (réparations déclarées par les visiteurs)
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      Handler: api.handler
+      Role: !GetAtt ApiRole.Arn
+      Code: { S3Bucket: !Ref CodeBucket, S3Key: !Ref CodeKey }
+      MemorySize: 512
+      Timeout: 15
+      ReservedConcurrentExecutions: !If [HasReservedConcurrency, !Ref ReservedConcurrency, !Ref "AWS::NoValue"]
+      LoggingConfig: { LogGroup: !Ref ApiLogGroup, LogFormat: Text }
+      Environment:
+        Variables:
+          NODE_ENV: production
+          DSQL_ENDPOINT: !GetAtt Cluster.Endpoint
+          DSQL_USER: pixcar_api
+          DSQL_POOL_MAX: "2"
+          ALLOWED_ORIGINS: !Ref AllowedOrigins
+          TRUST_PROXY: "0"
+          OVERPASS_USER_AGENT: !Ref OverpassUserAgent
+          SSM_PREFIX: !Ref SsmPrefix
+          REQUEST_TIMEOUT_MS: "10000"
+          LOG_LEVEL: info
+      Tags: [{ Key: Project, Value: pixcar }]
+
+  # ---- passerelle HTTP
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Ref "AWS::StackName"
+      Description: Passerelle publique de l'API Pixcar (le CORS est géré par l'application)
+      ProtocolType: HTTP
+      Tags: { Project: pixcar }
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ApiFunction.Arn
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 12000
+
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "$default"
+      Target: !Sub "integrations/${ApiIntegration}"
+
+  DefaultStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "limite globale de débit : dernier rempart avant la fonction (l'application limite déjà par visiteur, mais en mémoire par instance)"
+        mutable: free-to-tune
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: "$default"
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: !Ref ThrottleBurst
+        ThrottlingRateLimit: !Ref ThrottleRatePerSecond
+      Tags: { Project: pixcar }
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+
+  # ---- domaine personnalisé (api.pixcar.fr), une fois le certificat validé
+  CustomDomain:
+    Type: AWS::ApiGatewayV2::DomainName
+    Condition: HasDomain
+    Properties:
+      DomainName: !Ref ApiDomainName
+      DomainNameConfigurations:
+        - { CertificateArn: !Ref ApiCertificateArn, EndpointType: REGIONAL, SecurityPolicy: TLS_1_2 }
+      Tags: { Project: pixcar }
+
+  CustomDomainMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Condition: HasDomain
+    DependsOn: DefaultStage
+    Properties:
+      DomainName: !Ref CustomDomain
+      ApiId: !Ref HttpApi
+      Stage: !Ref DefaultStage
+
+  # ---- fonction d'opérations (migrations, modération, entretien, auto-contrôle) : rôle administrateur de la base
+  OpsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-ops"
+      RetentionInDays: !Ref LogRetentionDays
+
+  OpsRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "seule identité qui administre la base ; invoquée par les personnes autorisées (lambda:InvokeFunction) et par le planificateur"
+        must: ["liste fermée d'opérations dans server/ops.mjs : jamais de SQL libre"]
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: operations
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Sid: Logs, Effect: Allow, Action: ["logs:CreateLogStream", "logs:PutLogEvents"], Resource: !GetAtt OpsLogGroup.Arn }
+              - { Sid: DatabaseAdmin, Effect: Allow, Action: "dsql:DbConnectAdmin", Resource: !GetAtt Cluster.ResourceArn }
+              - Sid: PlateSecret
+                Effect: Allow
+                Action: "ssm:GetParameters"
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}PLATE_PEPPER"
+      Tags: [{ Key: Project, Value: pixcar }]
+
+  OpsFunction:
+    Type: AWS::Lambda::Function
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "même archive que l'API, autre point d'entrée ; 300 s : la migration attend les index asynchrones de DSQL, l'auto-contrôle rejoue tous les cas"
+        must: ["MIGRATIONS_DIR = dossier où Lambda décompresse l'archive (/var/task/db/migrations)", "API_ROLE_ARN = rôle de l'API : « migrate » le lie au rôle de base pixcar_api"]
+        mutable: free-to-tune
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-ops"
+      Description: Opérations d'exploitation de l'API Pixcar (migrate, stats, list, approve, reject, forget, purge, selfcheck, whoami)
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      Handler: ops.handler
+      Role: !GetAtt OpsRole.Arn
+      Code: { S3Bucket: !Ref CodeBucket, S3Key: !Ref CodeKey }
+      MemorySize: 512
+      Timeout: 300
+      LoggingConfig: { LogGroup: !Ref OpsLogGroup, LogFormat: Text }
+      Environment:
+        Variables:
+          NODE_ENV: production
+          DSQL_ENDPOINT: !GetAtt Cluster.Endpoint
+          API_ROLE_ARN: !GetAtt ApiRole.Arn
+          MIGRATIONS_DIR: /var/task/db/migrations
+          SSM_PREFIX: !Ref SsmPrefix
+          LOG_LEVEL: info
+      Tags: [{ Key: Project, Value: pixcar }]
+
+  # ---- entretien quotidien (journal d'écritures, cache Overpass, garages sans réparation)
+  SchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: scheduler.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                "aws:SourceAccount": !Ref "AWS::AccountId"
+                "aws:SourceArn": !Sub "arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule-group/default"
+      Policies:
+        - PolicyName: invoke-ops
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: "lambda:InvokeFunction", Resource: !GetAtt OpsFunction.Arn }
+      Tags: [{ Key: Project, Value: pixcar }]
+
+  PurgeSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub "${AWS::StackName}-purge"
+      Description: Entretien quotidien de la base
+      ScheduleExpression: "rate(1 day)"
+      FlexibleTimeWindow: { Mode: FLEXIBLE, MaximumWindowInMinutes: 60 }
+      State: ENABLED
+      Target:
+        Arn: !GetAtt OpsFunction.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: '{"op":"purge"}'
+        RetryPolicy: { MaximumEventAgeInSeconds: 3600, MaximumRetryAttempts: 2 }
+
+  # ---- alarmes par courriel (facultatives)
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasAlarmEmail
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "non chiffré par la clé gérée alias/aws/sns : CloudWatch ne peut pas publier dans un sujet chiffré avec une clé gérée par AWS ; le message ne contient que le nom de l'alarme"
+    Properties:
+      TopicName: !Sub "${AWS::StackName}-alarms"
+      Subscription: [{ Protocol: email, Endpoint: !Ref AlarmEmail }]
+      Tags: [{ Key: Project, Value: pixcar }]
+
+  ApiErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlarmEmail
+    Properties:
+      AlarmDescription: La fonction de l'API a échoué (voir le groupe de journaux de la fonction)
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{ Name: FunctionName, Value: !Ref ApiFunction }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+
+  Api5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlarmEmail
+    Properties:
+      AlarmDescription: Réponses 5xx de la passerelle (base ou fonction en difficulté)
+      Namespace: AWS/ApiGateway
+      MetricName: 5xx
+      Dimensions: [{ Name: ApiId, Value: !Ref HttpApi }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+
+  OpsErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlarmEmail
+    Properties:
+      AlarmDescription: Une opération d'exploitation (entretien quotidien, migration) a échoué
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{ Name: FunctionName, Value: !Ref OpsFunction }]
+      Statistic: Sum
+      Period: 86400
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+
+Outputs:
+  ApiUrl:
+    Description: Adresse de l'API tant que le domaine personnalisé n'est pas en place
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
+  CustomDomainTarget:
+    Condition: HasDomain
+    Description: Cible de l'enregistrement DNS CNAME du domaine de l'API
+    Value: !GetAtt CustomDomain.RegionalDomainName
+  DsqlEndpoint:
+    Description: Adresse du cluster Aurora DSQL
+    Value: !GetAtt Cluster.Endpoint
+  DsqlClusterId:
+    Description: Identifiant du cluster Aurora DSQL
+    Value: !GetAtt Cluster.Identifier
+  ApiFunctionName:
+    Description: Fonction de l'API
+    Value: !Ref ApiFunction
+  OpsFunctionName:
+    Description: Fonction d'opérations (aws lambda invoke)
+    Value: !Ref OpsFunction
+  ApiRoleArn:
+    Description: Rôle IAM de l'API, lié au rôle de base pixcar_api
+    Value: !GetAtt ApiRole.Arn

@@ -65,7 +65,7 @@ def run(mutations, suite, name_width):
 # Une mutation = (nom, fichier, ancre, remplacement, dossier de tests, filtres de fichiers de tests)
 # La variante est vérifiée dans une COPIE minimale du dépôt (.mut/node/) ; elle est « tuée » quand au moins un test échoue
 # (et que l'échec n'est pas une erreur de syntaxe ou d'import : une variante qui ne se charge pas ne prouve rien).
-NODE_COPY = ["server", "db", "scripts/node-tests.mjs", "package.json", "tests/unit", "src/js/modules", "src/js/shared", "src/js/package.json"]
+NODE_COPY = ["server", "db", "infra", "scripts/node-tests.mjs", "scripts/build-lambda.mjs", "package.json", "tests/unit", "src/js/modules", "src/js/shared", "src/js/package.json"]
 
 
 def run_node(mutations, name_width):

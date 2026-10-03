@@ -12,7 +12,8 @@ Ce dossier est indépendant du thème Shopify du dépôt (un thème Shopify ne c
 | `index.html` | Page tout-en-un **générée** (CSS, JS, police en ligne) : s'ouvre depuis le disque. Ne pas modifier à la main. |
 | `dist/` | Site **publiable généré** : fichiers à nom haché, service worker, en-têtes de cache et de sécurité. Ne pas modifier à la main. |
 | `server/` | L'API (Node ≥ 20, sans framework), le relais Overpass, les outils de migration et de modération. |
-| `db/migrations/` | Schéma PostgreSQL. |
+| `db/migrations/` | Schéma, pour PostgreSQL et pour Amazon Aurora DSQL. |
+| `infra/` | Modèle CloudFormation de l'API sur AWS (API Gateway + Lambda + Aurora DSQL). |
 | `docs/` | Documentation (voir plus bas) et contrat de l'API (`openapi.yaml`). |
 | `tests/`, `scripts/` | Tests (navigateur, API, unitaires, budgets, mutations), build, outils de mesure. |
 | `Dockerfile` | Image de l'API seule. |
@@ -30,7 +31,7 @@ Sans adresse d'API la page garde les réparations dans le navigateur ; `npm run 
 
 ## Publier
 
-Trois pièces : la **page** (`PIXCAR_API_BASE=https://api.exemple node scripts/build.mjs --only dist --out /tmp/site`, puis publier `/tmp/site/dist/` sur un hébergeur statique ou un CDN), l'**API** (`Dockerfile` ou `node server/index.mjs`, au moins 2 instances) et une base **PostgreSQL ≥ 14** gérée. Pas à pas, réglages, surveillance, incidents et points à valider avant l'ouverture : [docs/exploitation.md](docs/exploitation.md) (dont la publication sur **GitHub Pages avec un domaine personnalisé**, exemple `pixcar.fr`, et ses limites). Une fois l'API en ligne, pour vérifier que les réparations arrivent bien en base : `node scripts/smoke-api.mjs https://api.pixcar.fr --origin https://pixcar.fr`.
+Trois pièces : la **page** (`PIXCAR_API_BASE=https://api.exemple node scripts/build.mjs --only dist --out /tmp/site`, puis publier `/tmp/site/dist/` sur un hébergeur statique ou un CDN), l'**API** (`Dockerfile` ou `node server/index.mjs`, au moins 2 instances) et une base **PostgreSQL ≥ 14** gérée. **Sur AWS** : une seule pile (`infra/pixcar-api.yaml`, API Gateway + Lambda + Aurora DSQL, paquet construit par `npm run build:lambda`), pas à pas dans [docs/exploitation.md](docs/exploitation.md#3-bis-déployer-sur-aws-api-gateway--lambda--aurora-dsql). Pas à pas, réglages, surveillance, incidents et points à valider avant l'ouverture : [docs/exploitation.md](docs/exploitation.md) (dont la publication sur **GitHub Pages avec un domaine personnalisé**, exemple `pixcar.fr`, et ses limites). Une fois l'API en ligne, pour vérifier que les réparations arrivent bien en base : `node scripts/smoke-api.mjs https://api.pixcar.fr --origin https://pixcar.fr`.
 
 ## Tester
 

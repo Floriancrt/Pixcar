@@ -84,3 +84,6 @@ Constraints for each level:
 Enregistrées hors des balises ci-dessus pour survivre à une mise à jour des règles de l'AWS Agent Toolkit.
 
 - help_level: HIGH — expliquer chaque étape et son intérêt avant de l'exécuter, proposer des alternatives quand il y en a de meilleures, signaler les bonnes pratiques et expliquer les compromis ; exécuter quand même le choix de l'utilisateur s'il n'est pas d'accord avec une suggestion.
+- Créer une ressource AWS (même gratuite : bucket, paramètre, pile, certificat) seulement après un accord explicite de l'utilisateur pour cette étape ; lecture seule (tarifs, documentation, listes) sans demander. Ne jamais afficher la valeur d'un secret (`PLATE_PEPPER`, `IP_PEPPER`) : la générer et l'enregistrer sans l'imprimer.
+- Architecture choisie par l'utilisateur : API Gateway (HTTP API) + Lambda (arm64, Node 22) + Aurora DSQL, région `eu-north-1`, pile `infra/pixcar-api.yaml` (voir `docs/exploitation.md`, section 3 bis).
+- Plan gratuit AWS : 100 USD de crédits, **fin du plan le 3 avril 2027** ou à l'épuisement des crédits (suspension ; 90 jours pour passer au plan payant avant suppression : à revérifier dans AWS Settings → Billing). À rappeler avant cette date et avant toute ressource payante.

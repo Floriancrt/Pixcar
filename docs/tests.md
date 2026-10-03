@@ -21,7 +21,7 @@ Mutations (une variante cassée volontairement doit faire échouer un test ; voi
 
 ```sh
 python3 tests/mutation/mut_load.py     # chargement (24)            python3 tests/mutation/mut_ux.py     # prix, téléphones, messages… (25)
-python3 tests/mutation/mut_veh.py      # véhicule (41)              python3 tests/mutation/mut_node.py   # serveur, magasin, client HTTP (48)
+python3 tests/mutation/mut_veh.py      # véhicule (41)              python3 tests/mutation/mut_node.py   # serveur, magasin, client HTTP, DSQL, Lambda, modèle CloudFormation (81)
 python3 tests/mutation/mut_ux.py --anchors    # vérifie sans navigateur que chaque ancre existe encore
 ```
 
@@ -61,9 +61,11 @@ node scripts/smoke-api.mjs https://api.pixcar.fr --origin https://pixcar.fr   # 
 | Dossier | Vérifie | Tests |
 | --- | --- | --- |
 | `tests/unit` | magasin de réparations (file d'envoi, rejeu, reprises, abandon, annulation, zones de secours, véhicule mémorisé), client HTTP (délais, nouvelles tentatives, `Retry-After`, disjoncteur), configuration de la page | 63 |
-| `server/test` | API : validation, idempotence, limites, modération, ETag/304, CORS, disjoncteur, arrêt propre, erreurs sans détail ; relais Overpass (cache, miroirs en échec, copie périmée, une seule requête amont, plafonds) ; schéma SQL et contraintes ; migrations ; contrat OpenAPI (chaque réponse produite est décrite) ; serveur Node réel (compression, 304, corps en morceaux, arrêt) ; outil de modération et effacement ; **essai de l'API déployée** (`scripts/smoke-api.mjs`) contre une vraie API (déclaration écrite, relue, rejouée, dédoublonnée, supprimée) **et contre treize API volontairement défectueuses** (site non autorisé, API ou base en panne, écriture refusée, accusé de réception sans écriture, commentaire / plaque / jour exact publiés, CORS absent à la lecture ou à l'écriture, suppression sans jeton ou refusée, « supprimé » sans effet, rejeu et doublon non détectés) : un essai qui ne sait pas échouer ne prouverait rien | 150 sur PGlite · 154 sur PostgreSQL 16 (+ migrations concurrentes, verrou tenu par sa connexion, migration de plus de 5 s) |
+| `server/test` | API : validation, idempotence, limites, modération, ETag/304, CORS, disjoncteur, arrêt propre, erreurs sans détail ; relais Overpass (cache, miroirs en échec, copie périmée, une seule requête amont, plafonds) ; schéma SQL et contraintes ; migrations ; contrat OpenAPI (chaque réponse produite est décrite) ; serveur Node réel (compression, 304, corps en morceaux, arrêt) ; outil de modération et effacement ; **essai de l'API déployée** (`scripts/smoke-api.mjs`) contre une vraie API (déclaration écrite, relue, rejouée, dédoublonnée, supprimée) **et contre treize API volontairement défectueuses** (site non autorisé, API ou base en panne, écriture refusée, accusé de réception sans écriture, commentaire / plaque / jour exact publiés, CORS absent à la lecture ou à l'écriture, suppression sans jeton ou refusée, « supprimé » sans effet, rejeu et doublon non détectés) : un essai qui ne sait pas échouer ne prouverait rien. **AWS** : pilote Aurora DSQL contre un connecteur simulé (reprise sur conflit, migrations asynchrones, rôle de base à moindre privilège, connexions renouvelées avant 60 minutes), adaptateur Lambda (événements API Gateway, adresse du visiteur, corps en base64, démarrage raté), fonction d'opérations (liste fermée, identifiants contrôlés), **auto-contrôle** (18 vérifications rejouées sur la base), SQL portable (médiane, purge par lots, mois), **paquet Lambda extrait seul** (reproductible, démarre en production, répond), et **cohérence du modèle CloudFormation avec le code** (`infra.test.mjs` : variables lues, secrets hors de la configuration, droits IAM au plus juste, délais emboîtés, base conservée à la suppression de la pile) | 214 sur PGlite · 218 sur PostgreSQL 16 (+ migrations concurrentes, verrou tenu par sa connexion, migration de plus de 5 s) |
 
-**Résultat du 3 octobre 2026** : `npm test` et `npm run test:dist` passent en entier (toutes les suites ci-dessus) ; unitaires 63/63 ; serveur 150/150 (PGlite) et 154/154 (PostgreSQL 16) ; `node scripts/build.mjs --check` : à jour.
+**Résultat du 3 octobre 2026** : unitaires 63/63 ; serveur 214/214 (PGlite) et 218/218 (PostgreSQL 16) ; suite navigateur `remote` (page → vraie API → PostgreSQL 16) 53/53 et `tests/demo-db.js` conforme, relancées après les changements pour AWS ; `node scripts/build.mjs --check` : à jour. Les autres suites navigateur (`npm test`, `npm run test:dist`) étaient toutes passées avant ces changements, qui ne touchent pas le code de la page (l'API simulée qu'elles utilisent n'a pas changé).
+
+**Ce qui n'est pas vérifié pour AWS** : Aurora DSQL réel (index asynchrones, droits du rôle de base, `rank()`, `OFFSET`, `ON CONFLICT` sans cible sur un index partiel), le déploiement de la pile, le démarrage à froid, les latences et les coûts. Le modèle CloudFormation n'a passé ni cfn-lint ni cfn-guard ni la validation de CloudFormation (aucun de ces outils n'est installé dans l'environnement de développement, aucune pile n'a été créée) ; seul le test de cohérence ci-dessus le contrôle.
 
 ### Ce que la page n'a pas le droit de faire (vérifié par `budget` et `integrity`)
 
@@ -78,7 +80,7 @@ Principe : on casse **une** règle dans une **copie** des sources (`.mut/`, igno
 | Chargement (`mut_load.py`) | 24 | 24 |
 | UX : « dès », téléphones, médianes, notes, barre de défilement (`mut_ux.py`) | 25 | 25 |
 | Véhicule : plaque, année, modèle, stockage (`mut_veh.py`) | 41 | 41 |
-| Serveur, magasin, client HTTP (`mut_node.py`) | 48 | 48 |
+| Serveur, magasin, client HTTP, DSQL, Lambda, opérations, modèle CloudFormation (`mut_node.py`) | 81 | 81 |
 
 Ce qui a été trouvé **en écrivant ces mutations** (et corrigé) : un prix entre 0,01 et 0,99 € passait la validation mais violait la contrainte de la base (réponse 503 réessayée pendant 7 jours, et comptée pour le disjoncteur) ; des longueurs comptées en unités UTF-16 au lieu de caractères ; un identifiant OSM de longueur illimitée ; le plafond de requêtes simultanées vers Overpass, l'abandon à 7 jours et la péremption des zones n'étaient testés qu'« au-delà », pas « pas avant ». Une mutation **ne prouve pas** l'absence de défaut : elle mesure la force des tests sur les règles choisies.
 

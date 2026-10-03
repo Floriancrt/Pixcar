@@ -11,6 +11,7 @@ from lib import run_node
 
 V, APP, UNIT, SRV = "server/lib/validate.mjs", "server/app.mjs", "tests/unit", "server/test"
 REPO, HTTP, STORE, CLIENT = "server/repo.mjs", "server/lib/http.mjs", "src/js/modules/repair-store.js", "src/js/modules/api-client.js"
+CFN = "infra/pixcar-api.yaml"
 M = [
  # ---- validation des déclarations
  ("price: under 1 € accepted (the database refuses it)", V, "price < PRICE_MIN ||", "price <= 0 ||", SRV, ["validate"]),
@@ -22,11 +23,11 @@ M = [
  ("model year after the repair date accepted", V, "else if (isRealDate(date) && year > +date.slice(0, 4))", "else if (false)", SRV, ["validate"]),
  ("identifier not required to be a UUID v4", V, "-4[0-9a-f]{3}-[89ab]", "-[0-9a-f]{4}-[89ab]", SRV, ["validate"]),
  # ---- écriture, lecture et suppression
- ("delete: any token deletes", REPO, "AND delete_token_hash = $2 RETURNING id", "AND ($2::bytea IS NOT NULL) RETURNING id", SRV, ["api"]),
- ("replay: any token is recognised", REPO, "const sameBytes = (a, b) => !!a && !!b && Buffer.from(a).equals(Buffer.from(b));", "const sameBytes = (a, b) => true;", SRV, ["api"]),
+ ("delete: any token deletes", REPO, "AND delete_token_hash = $2 RETURNING id", "AND ($2::text IS NOT NULL) RETURNING id", SRV, ["api"]),
+ ("replay: any token is recognised", REPO, "if (known) return known.delete_token_hash === ctx.tokenHash ?", "if (known) return true ?", SRV, ["api"]),
  ("per-address limit off by one", REPO, "if (perIp.n >= ctx.limitPerHour)", "if (perIp.n > ctx.limitPerHour)", SRV, ["api"]),
  ("global limit off by one", REPO, "if (global.n >= ctx.limitGlobalPerMinute)", "if (global.n > ctx.limitGlobalPerMinute)", SRV, ["api"]),
- ("moderation never triggers (needs 500 declarations)", REPO, "if (r.n >= 5 && med > 0 &&", "if (r.n >= 500 && med > 0 &&", SRV, ["api"]),
+ ("moderation never triggers (needs 500 declarations)", REPO, 'if (n < 5) return "approved";', 'if (n < 500) return "approved";', SRV, ["api"]),
  ("moderation ignores prices far below the median", REPO, "(priceCents < med / 3 || priceCents > med * 3)", "(priceCents > med * 3)", SRV, ["api"]),
  ("pending and rejected declarations are listed", REPO, "WHERE r.status = 'approved' AND g.area_y BETWEEN $1 AND $2", "WHERE g.area_y BETWEEN $1 AND $2", SRV, ["api"]),
  ("no cap on declarations per garage and service", REPO, "export const MAX_PER_GARAGE_SERVICE = 30;", "export const MAX_PER_GARAGE_SERVICE = 3000;", SRV, ["api"]),
@@ -43,8 +44,45 @@ M = [
  ("no stale-if-error on area reads", APP, "stale-while-revalidate=300, stale-if-error=86400", "stale-while-revalidate=300", SRV, ["api"]),
  ("ETag never matches (no 304)", HTTP, 'if (request.headers.get("if-none-match") === etag)', "if (false)", SRV, ["api", "index"]),
  ("any origin allowed by CORS", HTTP, 'if (origin && (allowed.includes("*") || allowed.includes(origin))) {', "if (origin) {", SRV, ["api"]),
- ("compression off", "server/index.mjs", "if (body.length >= 1024 && COMPRESSIBLE.test(type)", "if (false && COMPRESSIBLE.test(type)", SRV, ["index"]),
+ ("compression off", "server/lib/compress.mjs", "if (alreadyEncoded || body.length < 1024 || !COMPRESSIBLE.test(type)) return null;", "return null;", SRV, ["index", "compress", "lambda"]),
  ("weak secret accepted in production", "server/config.mjs", "if (v && v.length >= 16) return v;", "if (v && v.length >= 1) return v;", SRV, ["config"]),
+ # ---- Aurora DSQL (pilote, migrations, rôle de base)
+ ("DSQL: connections live past the 60-minute limit", "server/db.mjs", "maxLifetimeSeconds: 50 * 60, ", "", SRV, ["dsql"]),
+ ("DSQL: a conflict of optimistic concurrency is not replayed", "server/db.mjs", "if (!isConflict(e) || attempt >= retries) throw e;", "throw e;", SRV, ["dsql"]),
+ ("DSQL: a schema conflict (OC001) is not recognised", "server/db.mjs", r"/\b(OC000|OC001)\b/", r"/\b(OC000)\b/", SRV, ["dsql"]),
+ ("DSQL migration: indexes are not asynchronous", "server/lib/sql.mjs", "INDEX ASYNC IF NOT EXISTS ${m[2]}", "INDEX IF NOT EXISTS ${m[2]}", SRV, ["dsql"]),
+ ("DSQL migration: DESC kept in the index columns", "server/lib/sql.mjs", r'.replace(/\s+(ASC|DESC)\b/gi, "")', r'.replace(/\s+(ASC)\b/gi, "")', SRV, ["dsql"]),
+ ("DSQL migration: the index build is not waited for", "server/migrate.mjs", "if (jobId) await waitForJob(", "if (false) await waitForJob(", SRV, ["dsql"]),
+ ("DSQL migration: a failed index build is ignored", "server/migrate.mjs", 'if (job && job.status === "failed") throw', "if (false) throw", SRV, ["dsql"]),
+ ("DSQL role: any IAM role ARN accepted", "server/migrate.mjs", "if (!/^arn:aws:iam::", "if (false && /^arn:aws:iam::", SRV, ["dsql"]),
+ # ---- fonction Lambda et opérations
+ ("Lambda: the visitor's X-Forwarded-For is trusted", "server/lambda.mjs", "!CLIENT_ADDRESS_HEADERS.has(name.toLowerCase())", "true", SRV, ["lambda"]),
+ ("Lambda: the address reported by API Gateway is ignored", "server/lambda.mjs", "remoteIp: event.requestContext && event.requestContext.http && event.requestContext.http.sourceIp", "remoteIp: undefined", SRV, ["lambda"]),
+ ("Lambda: a base64 request body is not decoded", "server/lambda.mjs", 'event.isBase64Encoded ? Buffer.from(event.body, "base64") : event.body', "event.body", SRV, ["lambda"]),
+ ("Lambda: a failed start is kept for good", "server/lambda.mjs", "starting = null; // un démarrage raté se réessaie à l'invocation suivante", "", SRV, ["lambda"]),
+ ("ops: any property name is an operation", "server/ops.mjs", "if (!Object.hasOwn(operations, String(op)))", "if (false)", SRV, ["ops"]),
+ ("ops: approve accepts any string as an identifier", "server/ops.mjs", 'approve: (e) => withDb((db) => runModerate(["approve", ...list(e.ids, "ids", isUuid)], db)),', 'approve: (e) => withDb((db) => runModerate(["approve", ...list(e.ids, "ids", () => true)], db)),', SRV, ["ops"]),
+ # ---- modèle CloudFormation (contrat avec le code, droits, suppression de la base)
+ ("infra: the API role can administer the database", CFN, 'Action: "dsql:DbConnect", Resource', 'Action: "dsql:DbConnectAdmin", Resource', SRV, ["infra"]),
+ ("infra: the database is deleted with the stack", CFN, "    DeletionPolicy: Retain\n", "    DeletionPolicy: Delete\n", SRV, ["infra"]),
+ ("infra: deletion protection is off", CFN, "DeletionProtectionEnabled: true", "DeletionProtectionEnabled: false", SRV, ["infra"]),
+ ("infra: the gateway's address is read from a header (TRUST_PROXY=1)", CFN, 'TRUST_PROXY: "0"', 'TRUST_PROXY: "1"', SRV, ["infra"]),
+ ("infra: the plate secret sits in the function configuration", CFN, '          REQUEST_TIMEOUT_MS: "10000"', '          PLATE_PEPPER: "0123456789abcdef0123"\n          REQUEST_TIMEOUT_MS: "10000"', SRV, ["infra"]),
+ ("infra: the API role reads every parameter under the prefix", CFN, '${AWS::AccountId}:parameter${SsmPrefix}IP_PEPPER"', '${AWS::AccountId}:parameter${SsmPrefix}*"', SRV, ["infra"]),
+ ("infra: the function gives up before the gateway", CFN, "      Timeout: 15\n", "      Timeout: 5\n", SRV, ["infra"]),
+ ("infra: the daily maintenance calls an unknown operation", CFN, """Input: '{"op":"purge"}'""", """Input: '{"op":"clean"}'""", SRV, ["infra"]),
+ ("infra: the API function points to another handler", CFN, "Handler: api.handler", "Handler: index.handler", SRV, ["infra"]),
+ ("infra: the scheduler may invoke any function", CFN, 'Action: "lambda:InvokeFunction", Resource: !GetAtt OpsFunction.Arn }', 'Action: "lambda:InvokeFunction", Resource: "*" }', SRV, ["infra"]),
+ ("infra: the operations function runs with the API role", CFN, "Role: !GetAtt OpsRole.Arn", "Role: !GetAtt ApiRole.Arn", SRV, ["infra"]),
+ ("infra: the database role of the API is bound to the operations role", CFN, "API_ROLE_ARN: !GetAtt ApiRole.Arn", "API_ROLE_ARN: !GetAtt OpsRole.Arn", SRV, ["infra"]),
+ ("infra: the operations function looks for migrations elsewhere than in the package", CFN, "MIGRATIONS_DIR: /var/task/db/migrations", "MIGRATIONS_DIR: /var/db/migrations", SRV, ["infra"]),
+ ("infra: a parameter nobody reads", CFN, "ThrottlingBurstLimit: !Ref ThrottleBurst", "ThrottlingBurstLimit: 100", SRV, ["infra"]),
+ ("infra: an unconditional output reads a conditional resource", CFN, "  CustomDomainTarget:\n    Condition: HasDomain\n", "  CustomDomainTarget:\n", SRV, ["infra"]),
+ ("ops: MIGRATIONS_DIR is ignored (the bundle looks for db/migrations next to itself)", "server/ops.mjs", "env.MIGRATIONS_DIR || MIGRATIONS_DIR", "MIGRATIONS_DIR", SRV, ["ops"]),
+ # ---- SQL portable (PostgreSQL = DSQL)
+ ("purge stops after one batch", REPO, "if (rowCount < PURGE_BATCH) break;", "break;", SRV, ["repo-portable"]),
+ ("median of an even count reads one value", REPO, "n % 2 ? 1 : 2", "1", SRV, ["repo-portable"]),
+ ("the exact day is published instead of the month", REPO, "month: String(r.day).slice(0, 7)", "month: String(r.day)", SRV, ["repo-portable", "api"]),
  # ---- relais Overpass
  ("stale Overpass copy served for 7 hours instead of 7 days", "server/lib/overpass.mjs", "staleSeconds = 7 * 24 * 3600,", "staleSeconds = 7 * 3600,", SRV, ["overpass"]),
  ("no cap on simultaneous upstream requests", "server/lib/overpass.mjs", "maxConcurrent = 4,", "maxConcurrent = 4000,", SRV, ["overpass"]),

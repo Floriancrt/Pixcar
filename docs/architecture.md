@@ -30,6 +30,8 @@ Pixcar se compose de **trois pièces indépendantes**, pensées pour que la pann
 
 Principe directeur : **dégrader, ne pas échouer**. Chaque dépendance qui tombe retire une fonction, jamais la page.
 
+Le schéma ci-dessus est celui d'un déploiement classique (instances derrière un répartiteur, PostgreSQL géré). **Sur AWS**, l'API tourne dans AWS Lambda derrière API Gateway et la base est Amazon Aurora DSQL, sans serveur à gérer (`infra/pixcar-api.yaml`, voir [exploitation.md](exploitation.md#3-bis-déployer-sur-aws-api-gateway--lambda--aurora-dsql)) : le même code, un autre adaptateur (`server/lambda.mjs`) et une autre base (§ 3).
+
 ## 1. La page
 
 ### Organisation des sources
@@ -113,26 +115,44 @@ Contrat complet : [openapi.yaml](openapi.yaml). Résumé :
 
 ## 3. La base
 
-Schéma : `db/migrations/001_init.sql` (PostgreSQL 14 ou plus).
+Schéma : `db/migrations/001_init.sql`, pour PostgreSQL 14 ou plus **et** pour Amazon Aurora DSQL (voir plus bas).
 
 | Table | Contenu | Conservation |
 | --- | --- | --- |
 | `garages` | identifiant (`osm:node/…`, `siret:…`, `custom:…`), nom, adresse, position, enseigne, case de 0,05° | un garage sans réparation est supprimé après 7 jours |
-| `repairs` | prestation, prix (centimes), date, note, commentaire, modèle, année, **empreinte** de la plaque, état (`approved`, `pending`, `rejected`), **empreinte** du jeton de suppression | jusqu'à suppression par son auteur, par la modération ou à la demande |
-| `write_log` | empreinte de l'adresse IP, instant (limitation des écritures) | 30 jours |
+| `repairs` | prestation, prix (centimes), date, note, commentaire, modèle, année, **empreinte** de la plaque, état (`approved`, `pending`, `rejected`), **empreinte** du jeton de suppression (empreintes : 64 caractères hexadécimaux) | jusqu'à suppression par son auteur, par la modération ou à la demande |
+| `write_log` | empreinte de l'adresse IP (64 caractères hexadécimaux), instant (limitation des écritures) | 30 jours |
 | `upstream_cache` | dernières réponses d'Overpass | 14 jours |
 
 Les `CHECK` de la base répètent la validation de l'API : **même une erreur de l'API ne peut pas y inscrire un prix négatif ou une note de 9**. Index : lecture d'une zone (`garages_area_idx`, `repairs_garage_service_idx`, index partiels sur `approved`), unicité anti-doublon, file de modération, limitation.
 
-**Migrations** : `server/migrate.mjs` applique les fichiers `NNN_nom.sql` pas encore appliqués, chacun dans une transaction, sous un **verrou consultatif pris sur une connexion dédiée** (plusieurs instances qui démarrent ensemble : une seule migre, les autres attendent, 120 s au plus). Une migration qui échoue est annulée en entier et libère le verrou. Règle de déploiement : une migration doit rester **compatible avec la version précédente de l'API** (ajouter avant d'utiliser, supprimer après), pour qu'un déploiement progressif ne casse rien.
+**Migrations** : `server/migrate.mjs` applique les fichiers `NNN_nom.sql` pas encore appliqués, chacun dans une transaction, sous un **verrou consultatif pris sur une connexion dédiée** (plusieurs instances qui démarrent ensemble : une seule migre, les autres attendent, 120 s au plus). Une migration qui échoue est annulée en entier et libère le verrou. Règle de déploiement : une migration doit rester **compatible avec la version précédente de l'API** (ajouter avant d'utiliser, supprimer après), pour qu'un déploiement progressif ne casse rien. *Sur Aurora DSQL, la migration procède autrement (tableau ci-dessous).*
+
+### Deux bases, un seul schéma
+
+Le même fichier de migration et le même SQL (`server/repo.mjs`) servent PostgreSQL (via `pg` ; PGlite, une base embarquée, en développement) et Amazon Aurora DSQL (PostgreSQL distribué, sans serveur, sur AWS). DSQL a des contraintes que PostgreSQL n'a pas ; elles ont façonné le schéma et le code :
+
+| Contrainte d'Aurora DSQL | Conséquence |
+| --- | --- |
+| Pas d'index sur `bytea` | les empreintes sont du **texte hexadécimal de 64 caractères** (`CHECK (char_length(…) = 64)`), calculées par l'API (`toHex`), jamais des octets |
+| Index construits en tâche de fond (`CREATE INDEX ASYNC`), sans `DESC` | `server/lib/sql.mjs` adapte chaque `CREATE INDEX` du fichier de migration pour DSQL ; la migration **attend la fin de chaque construction** (`sys.jobs`) et n'enregistre la version qu'à la fin. Sur PostgreSQL, le fichier s'exécute tel quel |
+| Une seule instruction de définition par transaction | sur DSQL, la migration passe instruction par instruction (chacune rejouable : `IF NOT EXISTS`) |
+| Pas de verrous consultatifs | pas de verrou de migration sur DSQL : la migration se lance **à la main, une fois par déploiement** (fonction d'opérations), jamais au démarrage des instances |
+| Conflits de concurrence optimiste (SQLSTATE 40001, `OC000` / `OC001`) | chaque requête et chaque transaction est **rejouée** (4 fois, attente croissante) par `withRetry` (`server/db.mjs`) ; le code d'une transaction ne fait donc rien en dehors d'elle |
+| 3 000 lignes modifiées au plus par transaction | la purge supprime **par lots de 1 000** |
+| Connexion fermée au bout de 60 minutes | le pool renouvelle ses connexions à 50 minutes |
+| Pas de mot de passe : jeton IAM, rôles de base liés à des rôles IAM | l'API se connecte sous le rôle `pixcar_api` (lecture et écriture des 4 tables, rien d'autre) ; `admin` ne sert qu'à la fonction d'opérations (`ensureRuntimeRole`) |
+| Fonctions SQL | du SQL des plus courants : `rank()`, médiane lue par `OFFSET`, mois et délais calculés en JavaScript : même résultat sur PostgreSQL, vérifié par les tests |
+
+**Ce que cela ne prouve pas** : le comportement réel de DSQL n'a pas pu être essayé hors d'AWS. L'opération `selfcheck` (`server/selfcheck.mjs`) rejoue 18 vérifications sur la vraie base (index valides, création, rejeu, doublons, deux cas de concurrence, relecture des prix, effacement, purge par lots, cascade…) ; elle passe sur PostgreSQL et PGlite, et **doit passer sur DSQL avant l'ouverture au public**.
 
 ## 4. Confidentialité et sécurité
 
 | Donnée | Où | Comment |
 | --- | --- | --- |
-| Plaque d'immatriculation | envoyée à l'API, jamais stockée en clair | `HMAC-SHA256(PLATE_PEPPER, plaque)`, utilisée seulement pour repérer un doublon ; jamais renvoyée ni affichée |
-| Adresse IP | jamais journalisée en clair ni stockée en clair | `HMAC-SHA256(IP_PEPPER, adresse)` dans `write_log`, 30 jours, pour limiter le débit |
-| Jeton de suppression | clair dans le navigateur de l'auteur, empreinte SHA-256 en base | permet à son auteur de retirer sa déclaration, sans compte |
+| Plaque d'immatriculation | envoyée à l'API, jamais stockée en clair | `HMAC-SHA256(PLATE_PEPPER, plaque)` (hexadécimal), utilisée seulement pour repérer un doublon ; jamais renvoyée ni affichée |
+| Adresse IP | jamais journalisée en clair ni stockée en clair | `HMAC-SHA256(IP_PEPPER, adresse)` (hexadécimal) dans `write_log`, 30 jours, pour limiter le débit |
+| Jeton de suppression | clair dans le navigateur de l'auteur, empreinte SHA-256 (hexadécimal) en base | permet à son auteur de retirer sa déclaration, sans compte |
 | Commentaire | envoyé, stocké, **jamais renvoyé** par l'API publique | lisible seulement par la modération (`moderate.mjs list`) |
 | Prix, mois, modèle, année, note, garage | publics | affichés dans la fiche du garage, sans nom |
 
@@ -149,7 +169,7 @@ Les `CHECK` de la base répètent la validation de l'API : **même une erreur de
 
 Un taux de disponibilité chiffré (99,9 %…) **ne se promet pas dans le code** : il dépend de l'hébergeur statique, de la base gérée et des services tiers. Ce que le code garantit :
 
-- **Aucun point de défaillance unique propre à l'application** : page statique (CDN), API sans état (≥ 2 instances), base gérée multi-zones (à choisir ainsi).
+- **Aucun point de défaillance unique propre à l'application** : page statique (CDN), API sans état (≥ 2 instances ; sur AWS, Lambda répartit les exécutions sur plusieurs zones), base gérée multi-zones (à choisir ainsi ; DSQL l'est par conception).
 - **Dégradation plutôt que panne** : voir la matrice ci-dessous.
 - **Déploiements sans interruption** : `/readyz` passe à 503 au signal d'arrêt (le répartiteur retire l'instance), l'instance finit ses requêtes (5 s au plus par défaut) puis s'arrête ; les migrations sont compatibles avec la version précédente.
 - **Nouvelles tentatives sûres** : toutes les requêtes de la page sont rejouables (lecture, déclaration à identifiant fixe, suppression).
@@ -189,7 +209,9 @@ Budgets (vérifiés par `tests/budget.js`, lancé par `npm run test:dist`) : pag
 ## 7. Décisions et alternatives écartées
 
 - **Pas de comptes** : demandé (« pas de session utilisateur »). Le droit de retirer une déclaration repose sur un jeton gardé dans le navigateur ; la contrepartie (jeton perdu = déclaration non retirable par son auteur) est assumée et couverte par l'effacement à la demande.
-- **API sans framework, `fetch(Request) → Response`** : portable (Node, Cloudflare Workers, Deno) et testable sans réseau ; un adaptateur Node (`server/index.mjs`) fournit l'écoute, la compression et l'arrêt propre. Le code de base de données actuel cible PostgreSQL via `pg` : *un déploiement sur Workers demanderait un pilote HTTP (non fait ni testé).*
+- **API sans framework, `fetch(Request) → Response`** : portable (Node, AWS Lambda, Cloudflare Workers, Deno) et testable sans réseau ; deux adaptateurs sont fournis : Node (`server/index.mjs` : écoute, compression, arrêt propre) et AWS Lambda (`server/lambda.mjs` : événements d'API Gateway HTTP API 2.0, adresse du visiteur fournie par la passerelle). Le code de base de données cible PostgreSQL via `pg` et Aurora DSQL : *un déploiement sur Workers demanderait un pilote HTTP (non fait ni testé).*
+- **AWS : API Gateway (HTTP API) + Lambda + Aurora DSQL** plutôt que des conteneurs derrière un équilibreur avec une base PostgreSQL gérée : pas de serveur ni de réseau privé à tenir à jour, pas de forfait mensuel pour un site qui démarre, plusieurs zones par conception, et le même code (le repli, si DSQL déçoit à l'essai : `DATABASE_URL` vers un PostgreSQL géré et l'adaptateur Node). Contreparties assumées : pas de cache devant l'API dans ce premier déploiement (voir exploitation.md), une base plus récente et plus contraignante que PostgreSQL (tableau du § 3), un démarrage à froid à mesurer. Lambda « Web Functions » (le serveur Node tel quel) a été écarté : d'après la documentation d'AWS lue le 3 octobre 2026, un nom de domaine à soi passe par CloudFront, donc par un certificat en `us-east-1`, hors de la région du projet (*à revérifier si l'option est rouverte*).
+- **Une fonction d'opérations au lieu d'un accès direct à la base** : DSQL n'est joignable qu'avec un jeton IAM, et le protocole PostgreSQL ne traverse pas tous les réseaux ; les droits d'administration restent dans AWS (rôle de la fonction) au lieu d'un poste de travail, et la liste des opérations est **fermée** (pas de SQL libre).
 - **Cases de 0,05° plutôt que rayon exact** : toutes les lectures d'une même case sont identiques, donc **mises en cache** (CDN, instance) ; la page affine à la distance exacte.
 - **Compression** : assurée par le CDN ou le répartiteur en production ; l'adaptateur Node compresse aussi (une fois par version d'une réponse, pas à chaque requête) pour fonctionner seul.
 - **Relais Overpass plutôt que miroirs seuls** : les miroirs publics sont lents et parfois saturés ; le relais mutualise les requêtes et garde une copie pendant leurs pannes.
