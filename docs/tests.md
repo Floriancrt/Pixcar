@@ -43,7 +43,8 @@ Mesures : `node tests/perf.js` (chargement), `node tests/perf-search.js` (recher
 | `remote` | **page en mode API, de bout en bout** : navigateur → réseau → vraie API → base ; pannes réglables (API lente, en panne, hors ligne, 429, doublon, relecture, suppression, rejeu) | 53 |
 | `prerender` | le HTML contient déjà les listes de prestations ; le script les reconstruit à l'identique (pas de décalage) | 7 |
 | `budget` *(dist)* | poids gzip, chemin critique (aucune ressource tierce pour afficher), noms à empreinte, en-têtes, politique de sécurité du contenu | 29 |
-| `offline` *(dist)* | service worker : la page démarre sans réseau, survit à l'arrêt de l'hébergeur, se met à jour sans casser les pages ouvertes, nettoie ses anciennes versions | 15 |
+| `offline` *(dist)* | service worker : la page démarre sans réseau, survit à l'arrêt de l'hébergeur, se met à jour sans casser les pages ouvertes, nettoie ses anciennes versions, **et reste à jour chez un hébergeur qui laisse la page en cache HTTP dix minutes** (GitHub Pages) | 16 |
+| `pages` *(dist)* | version GitHub Pages (`--pages`) : domaine dans `CNAME`, pas de `_headers`, politique de sécurité dans une balise `<meta>` **appliquée sans aucun en-tête** (script en ligne et script étranger refusés), site fonctionnel sous cette politique, aucune violation ni erreur | 15 |
 | `a11y` | axe-core sur les états clés (clair/sombre, ordinateur/mobile) | 13 états, 0 violation |
 | `sizes`, `states`, `anchor`, `integrity` | redimensionnement, états visuels, saut de défilement sans ancrage (Safari), identifiants référencés par le script | — |
 | `phone`, `contrast` | lecture des numéros ; contrastes calculés à partir des jetons livrés | 37 cas ; 76 + 76 |

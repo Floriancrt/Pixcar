@@ -30,7 +30,7 @@ Sans adresse d'API la page garde les réparations dans le navigateur ; `npm run 
 
 ## Publier
 
-Trois pièces : la **page** (`PIXCAR_API_BASE=https://api.exemple node scripts/build.mjs --only dist --out /tmp/site`, puis publier `/tmp/site/dist/` sur un hébergeur statique ou un CDN), l'**API** (`Dockerfile` ou `node server/index.mjs`, au moins 2 instances) et une base **PostgreSQL ≥ 14** gérée. Pas à pas, réglages, surveillance, incidents et points à valider avant l'ouverture : [docs/exploitation.md](docs/exploitation.md).
+Trois pièces : la **page** (`PIXCAR_API_BASE=https://api.exemple node scripts/build.mjs --only dist --out /tmp/site`, puis publier `/tmp/site/dist/` sur un hébergeur statique ou un CDN), l'**API** (`Dockerfile` ou `node server/index.mjs`, au moins 2 instances) et une base **PostgreSQL ≥ 14** gérée. Pas à pas, réglages, surveillance, incidents et points à valider avant l'ouverture : [docs/exploitation.md](docs/exploitation.md) (dont la publication sur **GitHub Pages avec un domaine personnalisé**, exemple `pixcar.fr`, et ses limites).
 
 ## Tester
 

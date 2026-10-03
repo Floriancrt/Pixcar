@@ -5,6 +5,8 @@
 //   node scripts/build.mjs --dev    lisible : rien n'est minifié
 //   node scripts/build.mjs --check  reconstruit à part et vérifie que index.html et dist/ du dépôt sont à jour (sort en erreur sinon)
 //   options : --only single|dist · --src <dossier des sources> · --out <dossier de sortie>   (utilisées par les tests de mutation)
+//             --pages <domaine>  sortie dist/ pour GitHub Pages (ex. pixcar.fr) : pas de _headers (GitHub Pages les ignore), la politique
+//                                de sécurité du contenu passe par une balise <meta> dans la page, + CNAME et .nojekyll
 //
 // Variable d'environnement : PIXCAR_API_BASE = URL de l'API des réparations (vide : stockage dans le navigateur).
 //
@@ -30,6 +32,8 @@ const SRC = resolve(arg("src") || join(ROOT, "src"));
 const OUT = check ? await mkdtemp(join(tmpdir(), "pixcar-build-")) : resolve(arg("out") || ROOT);
 const DIST = join(OUT, "dist");
 const only = arg("only"); // « single » ou « dist » : une seule sortie
+const pages = arg("pages"); // domaine servi par GitHub Pages : voir l'en-tête de ce fichier
+if (pages !== undefined && !/^(?!-)[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(pages)) throw new Error(`--pages attend un nom de domaine (ex. pixcar.fr), reçu « ${pages} »`);
 const { OTHER_SERVICE, SERVICES } = await import(pathToFileURL(join(SRC, "js/shared/services.js")).href);
 const dev = process.argv.includes("--dev");
 const apiBase = (process.env.PIXCAR_API_BASE || "").replace(/\/+$/, "");
@@ -181,6 +185,16 @@ export function contentSecurityPolicy(origin = apiOrigin, styleHash = "") {
     "frame-ancestors 'none'",
   ].join("; ");
 }
+// GitHub Pages ne laisse pas choisir les en-têtes de réponse : la politique de sécurité du contenu et la politique de référent
+// passent par des balises <meta>, placées tout en haut de <head>, avant ce qui charge quoi que ce soit. frame-ancestors n'y est pas
+// pris en compte par les navigateurs : on la retire plutôt que de laisser un avertissement dans la console.
+function withPolicyMeta(html, styleHash) {
+  const csp = contentSecurityPolicy(apiOrigin, styleHash).split("; ").filter((d) => !d.startsWith("frame-ancestors")).join("; ");
+  const tags = `<meta http-equiv="Content-Security-Policy" content="${csp}">\n<meta name="referrer" content="strict-origin-when-cross-origin">\n`;
+  const charset = '<meta charset="utf-8">\n';
+  if (html.split(charset).length !== 2) throw new Error("balise <meta charset> introuvable ou en double : impossible de placer la politique de sécurité");
+  return html.replace(charset, charset + tags);
+}
 function headersFile(styleHash) {
   const immutable = "public, max-age=31536000, immutable";
   return `# Généré par scripts/build.mjs. Netlify et Cloudflare Pages lisent ce fichier tel quel.
@@ -247,17 +261,21 @@ async function buildDist(parts) {
     // worker ou d'un 304 aux visites suivantes : l'intégrer ne coûte rien). La politique de sécurité l'autorise par son empreinte.
     `<style>${css}</style>`,
   ].join("\n");
-  const html = await render(parts, { headAssets, scripts: `<script src="assets/${jsName}" defer></script>` });
-  await writeFile(join(DIST, "index.html"), html);
+  let html = await render(parts, { headAssets, scripts: `<script src="assets/${jsName}" defer></script>` });
   const styleSource = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
   const styleHash = createHash("sha256").update(styleSource).digest("base64");
+  if (pages) html = withPolicyMeta(html, styleHash); // avant le calcul de la version du service worker : elle dépend du contenu final
+  await writeFile(join(DIST, "index.html"), html);
 
   // Coque hors ligne : la page, le script à empreinte et la police (Leaflet et la 2e police se chargent à la demande)
   const shell = ["./", `assets/${jsName}`, fontUrls[0], "favicon.svg", "apple-touch-icon.png"];
   const version = hash(Buffer.from([html, ...shell.slice(1)].join("\n") + (await read(SRC, "sw.js"))));
   const sw = (await read(SRC, "sw.js")).replace("__VERSION__", version).replace("__SHELL__", JSON.stringify(shell));
   await writeFile(join(DIST, "sw.js"), dev ? sw : (await transform(sw, { minify: true, legalComments: "none" })).code);
-  await writeFile(join(DIST, "_headers"), headersFile(styleHash));
+  if (pages) {
+    await writeFile(join(DIST, "CNAME"), pages.toLowerCase() + "\n"); // GitHub Pages lit le domaine personnalisé ici
+    await writeFile(join(DIST, ".nojekyll"), ""); // servir les fichiers tels quels, sans passer par Jekyll
+  } else await writeFile(join(DIST, "_headers"), headersFile(styleHash));
   await writeFile(join(DIST, "robots.txt"), "User-agent: *\nAllow: /\n");
   return { html: html.length, js: js.length, css: css.length, version };
 }

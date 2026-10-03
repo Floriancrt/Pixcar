@@ -26,6 +26,7 @@ const SUITES = [
   { name: "prerender", cmd: ["node", "tests/prerender.js", FILE] },
   { name: "budget", cmd: ["node", "tests/budget.js"], distOnly: true },
   { name: "offline", cmd: ["node", "tests/offline.js"], distOnly: true },
+  { name: "pages", cmd: ["node", "tests/pages.js"], distOnly: true }, // construit lui-même la version GitHub Pages
   { name: "a11y", cmd: ["node", "tests/a11y.js", FILE, "new"], a11y: true },
   { name: "sizes", cmd: ["node", "tests/sizes.js"] },
   { name: "states", cmd: ["node", "tests/states.js", FILE] },
