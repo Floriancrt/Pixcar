@@ -1,0 +1,196 @@
+# Architecture
+
+Pixcar se compose de **trois pièces indépendantes**, pensées pour que la panne de l'une ne coupe pas les autres :
+
+```
+┌───────────────────────────── navigateur du visiteur ─────────────────────────────┐
+│  page (dist/)  ·  service worker (coque hors ligne)  ·  localStorage (secours)   │
+└─────────┬────────────────────────┬───────────────────────────────┬───────────────┘
+          │ fichiers statiques     │ réparations déclarées         │ garages, adresses, carte,
+          │                        │ + relais Overpass             │ registre, logos
+          ▼                        ▼                               ▼
+┌───────────────────┐   ┌──────────────────────────┐   ┌───────────────────────────────┐
+│ hébergeur statique│   │ API Pixcar               │   │ services publics tiers        │
+│ / CDN             │   │ ≥ 2 instances, sans état │   │ IGN, SIRENE, DGCCRF, Wikidata,│
+│ (dist/, HTTPS)    │   │ (server/)                │   │ miroirs Overpass              │
+└───────────────────┘   └────────────┬─────────────┘   └───────────────────────────────┘
+                                     │ SQL
+                                     ▼
+                        ┌──────────────────────────┐
+                        │ PostgreSQL ≥ 14 géré,    │
+                        │ multi-zones, sauvegardes │
+                        └──────────────────────────┘
+```
+
+| Pièce | Rôle | Sans elle |
+| --- | --- | --- |
+| **Page** (`src/` → `index.html`, `dist/`) | Recherche, carte, prix, déclaration de réparation. Un seul script, une feuille de style, aucune dépendance au démarrage hors de son hébergeur. | Rien ne s'affiche (sauf visiteurs de retour : le service worker garde la coque). |
+| **API** (`server/`) | Garde les réparations déclarées, les renvoie par zone, relaie et met en cache les requêtes Overpass. Aucun compte, aucune session, aucun état en mémoire dont dépende la justesse. | La page marche : prix des enseignes et réparations *de ce navigateur*, copie de la dernière zone lue. |
+| **Base** (`db/migrations/`) | Réparations, garages, journal de limitation, copie des réponses Overpass. | L'API sert la dernière réponse connue (1 h) puis répond 503 ; la page continue seule. |
+
+Principe directeur : **dégrader, ne pas échouer**. Chaque dépendance qui tombe retire une fonction, jamais la page.
+
+## 1. La page
+
+### Organisation des sources
+
+| Chemin | Contenu |
+| --- | --- |
+| `src/index.html`, `src/partials/` | Gabarit et morceaux de HTML (corps, fenêtre de déclaration, sprite SVG, pictogramme de chargement). Les listes de prestations sont insérées **à la construction** (pas d'attente de script, pas de décalage de mise en page). |
+| `src/css/` | `app.css`, thème sombre (`tokens.dark.css`), Leaflet. |
+| `src/js/app.js` | Script d'origine (noms minifiés, modifié à la main). |
+| `src/js/modules/` | `repair-store.js` (réparations), `api-client.js` (HTTP), `phone.js`, `config.js`, `load-script.js`, `sw-register.js`. |
+| `src/js/shared/` | `rules.js` (formats, bornes), `services.js` (prestations), `overpass.js` (requête et miroirs). **Importé aussi par le serveur** : la page et l'API ne peuvent pas diverger sur ce qu'est une plaque, un prix valide ou une requête Overpass autorisée. |
+| `src/sw.js`, `src/assets/`, `src/data/` | Service worker, polices et icônes, catalogue des modèles. |
+| `scripts/build.mjs` | Produit `index.html` (tout-en-un) et `dist/` (publiable), à l'identique d'un build à l'autre (`--check` le vérifie). |
+
+### Deux modes pour les réparations
+
+| | Mode local | Mode distant |
+| --- | --- | --- |
+| Activé par | aucune adresse d'API (défaut, `index.html` ouvert depuis le disque) | `PIXCAR_API_BASE` au build → `<meta name="pixcar-api">` |
+| Les réparations vivent | dans le navigateur, `jg.repairs.v1` | en base, et dans le navigateur le temps de l'envoi |
+| La fiche d'un garage montre | les réparations de ce navigateur | celles de tous, lues par zone |
+
+La page ne parle qu'à un objet, le **magasin** (`repair-store.js`), qui expose un tableau vivant de réparations (les siennes et, en mode distant, celles de la zone, marquées `shared`). Elle ne sait pas si l'API répond.
+
+### Ce qui se passe quand on déclare une réparation
+
+1. La réparation reçoit **tout de suite** un identifiant (UUID v4) et un **jeton de suppression** secret (192 bits), est ajoutée au tableau et enregistrée dans le navigateur. La page l'affiche (échelle de prix, note, historique) sans attendre le réseau.
+2. En mode distant, une opération « envoyer » est mise dans une **file d'attente** enregistrée (`jg.outbox.v1`) puis traitée en tâche de fond.
+3. L'envoi (`POST /v1/repairs`) est **rejouable sans risque** : l'identifiant est choisi par le navigateur, l'API reconnaît une déclaration déjà reçue (même identifiant, même jeton) et répond comme la première fois.
+4. En cas d'échec réseau, de délai ou d'erreur 5xx (après les nouvelles tentatives du client HTTP), l'opération reste dans la file et est **rejouée avec un délai croissant** (15 s, 30 s, … 15 min), au retour de la connexion (`online`) et au retour sur l'onglet. Un 429 respecte `Retry-After` (au moins 60 s). Au bout de **7 jours** sans succès, la déclaration est abandonnée **côté envoi** : elle reste visible sur l'appareil (« Gardée sur cet appareil »).
+5. Les réponses définitives sont traitées : 201 (envoyée ; `pending` si le prix attend une relecture), 409 `duplicate` (déjà déclarée par ailleurs : la première compte, la copie locale est retirée et un message le dit), 409 `id_conflict` (identifiant déjà pris par une autre déclaration : un nouvel identifiant et un nouveau jeton sont tirés, l'envoi recommence), 400/403/413/415/422 (refusée : renvoyer à l'identique ne changerait rien, la réparation reste sur l'appareil avec un message).
+6. **Annuler / Supprimer** : retire la ligne tout de suite ; si elle était partie, un `DELETE /v1/repairs/:id` avec `X-Delete-Token` suit (même file d'attente). Annuler une suppression recrée la déclaration. Une déclaration jamais partie est simplement retirée de la file.
+
+Les réparations enregistrées **avant** l'arrivée de l'API (sans champ `sync`) ne sont **jamais envoyées d'office** : elles ont été saisies avec la promesse « rien n'est envoyé ».
+
+### Ce que la page lit
+
+À chaque recherche, la page demande `GET /v1/repairs?lat&lon&radius` pour la zone cherchée. La page n'attend ces réparations que **2,5 s au plus** avant d'afficher la liste : si l'API tarde, la liste s'affiche sans elles et elles apparaissent d'elles-mêmes à leur arrivée. La dernière bonne réponse de chaque zone (6 au plus, 7 jours) est gardée (`jg.area.v1`) et ressert quand l'API ne répond plus, dès le premier affichage. Les garages eux-mêmes viennent d'Overpass (via le relais de l'API en premier, puis les miroirs publics), avec le cache et les replis qui existaient déjà (liste enregistrée, registre SIRENE).
+
+### Données enregistrées dans le navigateur
+
+| Clé | Contenu | Durée |
+| --- | --- | --- |
+| `jg.repairs.v1` | réparations de ce navigateur (avec jeton de suppression et état d'envoi) | jusqu'à suppression |
+| `jg.outbox.v1` | opérations en attente (envoi, suppression) | 7 jours au plus |
+| `jg.area.v1` | dernières zones lues (secours) | 7 jours, 6 zones |
+| `jg.vehicles.v1` | derniers véhicules (modèle, année, plaque) pour préremplir le formulaire | 5 au plus |
+| `jg.logos.v2`, `jg.addr.v1`, `jg.osm.v3`… | caches existants (logos, adresses, garages) | selon le cache |
+
+Le stockage du navigateur peut être indisponible (navigation privée, quota) : tout est protégé (aucune exception), la page continue, et la fenêtre de déclaration prévient (« vous ne pourrez pas la retirer plus tard »).
+
+### Client HTTP
+
+`api-client.js` : délai par requête (6 s), jusqu'à 2 nouvelles tentatives avec attente exponentielle et gigue, `Retry-After` respecté (60 s au plus), nouvelles tentatives **seulement** pour une panne réseau, un délai ou 502/503/504, **disjoncteur** (3 appels échoués de suite → plus aucune requête pendant 30 s, puis une sonde ; l'événement `online` le réarme). Il ne lève jamais d'exception.
+
+## 2. L'API
+
+Contrat complet : [openapi.yaml](openapi.yaml). Résumé :
+
+| Route | Rôle | Remarques |
+| --- | --- | --- |
+| `GET /v1/repairs?lat&lon&radius` | Réparations approuvées autour d'une **case de 0,05°** (≈ 5 km), groupées par garage | `radius` ∈ {3, 5, 10, 20, 30, 50}. Champs publics seulement : jamais commentaire, plaque ni jour exact (mois). 30 par garage et prestation (les plus récentes), 3000 au plus. |
+| `POST /v1/repairs` | Déclare une réparation | 201 créée · 200 rejeu · 409 `id_conflict` / `duplicate` · 422 champs · 413/415/400 · 429 · 503. |
+| `DELETE /v1/repairs/:id` | La retire | Jeton dans `X-Delete-Token`. **404 pour tout ce qui ne va pas** (identifiant inconnu, mauvais jeton) : on ne révèle pas ce qui existe. |
+| `GET /v1/overpass?data=` | Relais en cache de la requête de liste des garages | N'accepte **que** la requête exacte de la page (`parseOverpassQuery`) : ce n'est pas un proxy ouvert. |
+| `GET /healthz` · `GET /readyz` | Vivacité · disponibilité (503 si la base ne répond pas ou pendant l'arrêt) | |
+
+**Lecture** : la zone est lue en base une fois par 10 s et par instance (copie en mémoire, une seule requête SQL même pour des centaines de visiteurs simultanés) ; la réponse porte `Cache-Control: public, max-age=30, s-maxage=60, stale-while-revalidate=300, stale-if-error=86400` et un `ETag` (calculé une fois par version de la réponse, 304 sur `If-None-Match`). Si la base tombe, la dernière bonne copie sert jusqu'à 1 h (`x-pixcar-stale`).
+
+**Écriture** : une transaction vérifie le rejeu, applique les limites, crée le garage au besoin (le garage garde la case de sa première déclaration), calcule l'état (`approved`, ou `pending` si le prix est à plus de 3× ou moins de ⅓ de la médiane des déclarations approuvées de la même prestation dans la zone, avec au moins 5 déclarations), insère, journalise. Un doublon (même plaque, même garage, même prestation, même jour) est refusé par un index unique, pas seulement par le code.
+
+**Limites** : par adresse (empreinte) et par heure pour les écritures, global par minute pour les écritures, par minute pour les lectures et pour les requêtes Overpass non servies par le cache. Réglables (voir `exploitation.md`).
+
+**Relais Overpass** : les miroirs sont interrogés en parallèle décalé (le premier qui répond gagne), les réponses sont gardées en mémoire (bornée en nombre **et en octets**) et en base (`upstream_cache`), servies **périmées jusqu'à 7 jours** (`x-pixcar-stale`) quand tous les miroirs tombent, une seule requête amont par clé même sous charge (single-flight), au plus 4 requêtes amont simultanées. Le centre est arrondi à 3 décimales avec 100 m de marge : deux visiteurs voisins partagent la même entrée.
+
+**Sans état** : aucune session, aucun fichier local, aucune donnée en mémoire dont la justesse dépende (les copies en mémoire ne sont que des accélérateurs). On peut donc lancer autant d'instances que nécessaire, les arrêter à tout moment, en faire tourner de plusieurs versions pendant un déploiement.
+
+### Format d'erreur
+
+`{ "error": { "code": "…", "message": "…", "fields": { … } } }` : un code stable, un message en français, jamais de trace ni de détail interne.
+
+## 3. La base
+
+Schéma : `db/migrations/001_init.sql` (PostgreSQL 14 ou plus).
+
+| Table | Contenu | Conservation |
+| --- | --- | --- |
+| `garages` | identifiant (`osm:node/…`, `siret:…`, `custom:…`), nom, adresse, position, enseigne, case de 0,05° | un garage sans réparation est supprimé après 7 jours |
+| `repairs` | prestation, prix (centimes), date, note, commentaire, modèle, année, **empreinte** de la plaque, état (`approved`, `pending`, `rejected`), **empreinte** du jeton de suppression | jusqu'à suppression par son auteur, par la modération ou à la demande |
+| `write_log` | empreinte de l'adresse IP, instant (limitation des écritures) | 30 jours |
+| `upstream_cache` | dernières réponses d'Overpass | 14 jours |
+
+Les `CHECK` de la base répètent la validation de l'API : **même une erreur de l'API ne peut pas y inscrire un prix négatif ou une note de 9**. Index : lecture d'une zone (`garages_area_idx`, `repairs_garage_service_idx`, index partiels sur `approved`), unicité anti-doublon, file de modération, limitation.
+
+**Migrations** : `server/migrate.mjs` applique les fichiers `NNN_nom.sql` pas encore appliqués, chacun dans une transaction, sous un **verrou consultatif pris sur une connexion dédiée** (plusieurs instances qui démarrent ensemble : une seule migre, les autres attendent, 120 s au plus). Une migration qui échoue est annulée en entier et libère le verrou. Règle de déploiement : une migration doit rester **compatible avec la version précédente de l'API** (ajouter avant d'utiliser, supprimer après), pour qu'un déploiement progressif ne casse rien.
+
+## 4. Confidentialité et sécurité
+
+| Donnée | Où | Comment |
+| --- | --- | --- |
+| Plaque d'immatriculation | envoyée à l'API, jamais stockée en clair | `HMAC-SHA256(PLATE_PEPPER, plaque)`, utilisée seulement pour repérer un doublon ; jamais renvoyée ni affichée |
+| Adresse IP | jamais journalisée en clair ni stockée en clair | `HMAC-SHA256(IP_PEPPER, adresse)` dans `write_log`, 30 jours, pour limiter le débit |
+| Jeton de suppression | clair dans le navigateur de l'auteur, empreinte SHA-256 en base | permet à son auteur de retirer sa déclaration, sans compte |
+| Commentaire | envoyé, stocké, **jamais renvoyé** par l'API publique | lisible seulement par la modération (`moderate.mjs list`) |
+| Prix, mois, modèle, année, note, garage | publics | affichés dans la fiche du garage, sans nom |
+
+- **Aucun cookie, aucun compte, aucune session** côté Pixcar. Les requêtes vers l'API sont faites sans identifiants (`credentials: "omit"`).
+- **CORS** : seules les origines de `ALLOWED_ORIGINS` sont autorisées ; la réponse expose seulement `Retry-After`, `X-Pixcar-Stale`, `X-Request-Id`.
+- **Politique de sécurité du contenu** (`dist/_headers`) : pas de script en ligne ni d'`eval` ; une seule feuille de style en ligne, autorisée par son empreinte (les attributs `style` restent permis : positions des repères de l'échelle de prix), `frame-ancestors 'none'`, `object-src 'none'`, `connect-src` limité aux services utilisés **et à l'adresse de l'API** ; `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `COOP`, HSTS.
+- **Entrées** : toute valeur est validée à l'entrée (types, bornes, longueurs, caractères de contrôle) puis par les contraintes SQL ; les paramètres SQL sont toujours passés séparément ; le relais Overpass n'accepte qu'une requête de forme connue.
+- **Anti-abus** : limites par empreinte d'adresse, plafond global, relecture des prix aberrants, **Turnstile facultatif** (`TURNSTILE_SECRET`, côté serveur seulement : *le côté page n'est pas branché*, voir `exploitation.md`).
+- **Journaux** : une ligne JSON par requête (méthode, chemin **sans** paramètres, statut, durée, identifiant de requête) ; ni adresse IP, ni corps, ni requête.
+
+**Points à faire valider avant publication (je ne suis pas juriste)** : la plaque, même sous forme d'empreinte, reste une donnée personnelle (pseudonymisée) ; il faut une base légale, une information des visiteurs (politique de confidentialité), une durée de conservation décidée, et une procédure d'effacement (`moderate.mjs forget`, voir `exploitation.md`). Le texte actuel de la fenêtre de déclaration décrit ce qui est publié et ce qui ne l'est pas, mais ne remplace pas une politique de confidentialité.
+
+## 5. Disponibilité
+
+Un taux de disponibilité chiffré (99,9 %…) **ne se promet pas dans le code** : il dépend de l'hébergeur statique, de la base gérée et des services tiers. Ce que le code garantit :
+
+- **Aucun point de défaillance unique propre à l'application** : page statique (CDN), API sans état (≥ 2 instances), base gérée multi-zones (à choisir ainsi).
+- **Dégradation plutôt que panne** : voir la matrice ci-dessous.
+- **Déploiements sans interruption** : `/readyz` passe à 503 au signal d'arrêt (le répartiteur retire l'instance), l'instance finit ses requêtes (5 s au plus par défaut) puis s'arrête ; les migrations sont compatibles avec la version précédente.
+- **Nouvelles tentatives sûres** : toutes les requêtes de la page sont rejouables (lecture, déclaration à identifiant fixe, suppression).
+- **Limites de ressources** : délais partout (connexion à la base 3 s, requête 5 s, requête HTTP 10 s, miroirs Overpass), pool de connexions borné, caches bornés en taille, concurrence amont bornée, corps de requête limité.
+
+### Que se passe-t-il quand… ?
+
+| Panne | Ce que voit le visiteur | Ce qui le garantit |
+| --- | --- | --- |
+| **Hébergeur statique / CDN** | Visiteur de retour : la page s'ouvre quand même (service worker). Nouveau visiteur : rien. | Coque en cache, copies de l'ancienne génération conservées ; **c'est le maillon à choisir avec un CDN** (plusieurs points de présence, SLA). |
+| **Une instance de l'API** | Rien (le répartiteur l'évite). | ≥ 2 instances sans état, `/readyz`, nouvelles tentatives côté page. |
+| **Toutes les instances de l'API** | Prix des enseignes et réparations de ce navigateur ; encart « momentanément indisponibles » ; les déclarations sont gardées et partent au retour. | Mode dégradé du magasin, file d'envoi, copie de la dernière zone (7 jours), disjoncteur (la page n'attend pas). Les lectures déjà en cache CDN continuent (`stale-if-error` 1 jour). |
+| **La base** | Lectures : la dernière copie de la zone (1 h au plus) si l'instance reste dans le répartiteur, sinon le CDN (`stale-if-error`, 1 jour), puis la copie du navigateur (7 jours). Écritures : 503 + `Retry-After` → la page garde la déclaration et réessaie. | Copie de la dernière bonne réponse, disjoncteur (4 échecs → 5 s sans attendre la base), `/readyz` 503 (voir `exploitation.md` : choix de la sonde du répartiteur). |
+| **Bascule de la base (multi-zones)** | Quelques dizaines de secondes à quelques minutes d'écritures en 503 (durée propre au fournisseur : à vérifier chez lui). | Idem : file d'envoi côté page, reprise automatique des connexions. |
+| **Miroirs Overpass** | Les zones déjà demandées sont servies (même périmées, jusqu'à 7 jours). Une zone jamais demandée : liste enregistrée ou registre SIRENE, sans phrase d'explication. | Relais + cache mémoire et base, repli existant de la page. |
+| **IGN (carte, adresses)** | Pas de carte ni de recherche d'adresse. | **Point de défaillance unique non couvert** (services publics tiers, pas de substitut). |
+| **API Wikidata, sites des enseignes** | Monogrammes à la place des logos. | Repli prévu. |
+| **Navigateur hors ligne** | La page s'ouvre (visiteur de retour), la dernière liste enregistrée s'affiche, les déclarations partent au retour du réseau. | Service worker, caches `localStorage`, file d'envoi. |
+
+## 6. Performances
+
+Chemin critique d'une première visite : **une page HTML avec sa feuille de style intégrée (signée par empreinte dans la CSP), un script différé à nom haché, une police préchargée**, rien d'autre avant l'affichage. Leaflet (147 Ko avant compression) n'est chargé qu'à la première carte, depuis le site puis, à défaut, un CDN. Les listes de prestations et leur texte d'aide sont écrits dans le HTML (pas de tirette vide, pas de décalage de mise en page).
+
+| Étage de cache | Durée | Pour quoi |
+| --- | --- | --- |
+| Navigateur, fichiers à nom haché (`/assets/*`) | 1 an, `immutable` | JS, polices, Leaflet |
+| Page et `sw.js` | `no-cache` (revalidés à chaque visite, 304 si inchangés) | un déploiement est vu dès la visite suivante |
+| Service worker | coque complète, génération courante + précédente | visites suivantes sans réseau |
+| CDN devant l'API | `s-maxage=60` (zone), 3600 (Overpass) ; périmé servi pendant la revalidation (5 min / 1 jour) et en cas d'erreur (1 jour / 7 jours) | la majorité des lectures n'atteint jamais l'API |
+| Instance de l'API | 10 s par zone (copie en mémoire), réponse compressée et empreinte calculées **une fois** par version | des centaines de lecteurs = une requête SQL |
+| Base | index sur la zone et sur (garage, prestation, date) | lecture d'une zone par parcours d'index |
+
+Budgets (vérifiés par `tests/budget.js`, lancé par `npm run test:dist`) : page ≤ 30 Ko gzip (dont feuille de style ≤ 22), script ≤ 52 Ko, police ≤ 30 Ko, **première visite ≤ 108 Ko**, service worker ≤ 3 Ko. Les mesures (chargement sur téléphone d'entrée de gamme simulé, API sous charge) sont dans [tests.md](tests.md).
+
+**Si le trafic augmente** : l'API est sans état, on ajoute des instances ; la lecture est surtout absorbée par le CDN ; la base ne voit qu'une requête de zone par instance toutes les 10 s et par zone chaude ; les écritures sont rares (quelques-unes par minute) et plafonnées. Le premier maillon à surveiller est le pool de connexions de chaque instance (`PG_POOL_MAX`) multiplié par le nombre d'instances face au maximum de connexions de la base.
+
+## 7. Décisions et alternatives écartées
+
+- **Pas de comptes** : demandé (« pas de session utilisateur »). Le droit de retirer une déclaration repose sur un jeton gardé dans le navigateur ; la contrepartie (jeton perdu = déclaration non retirable par son auteur) est assumée et couverte par l'effacement à la demande.
+- **API sans framework, `fetch(Request) → Response`** : portable (Node, Cloudflare Workers, Deno) et testable sans réseau ; un adaptateur Node (`server/index.mjs`) fournit l'écoute, la compression et l'arrêt propre. Le code de base de données actuel cible PostgreSQL via `pg` : *un déploiement sur Workers demanderait un pilote HTTP (non fait ni testé).*
+- **Cases de 0,05° plutôt que rayon exact** : toutes les lectures d'une même case sont identiques, donc **mises en cache** (CDN, instance) ; la page affine à la distance exacte.
+- **Compression** : assurée par le CDN ou le répartiteur en production ; l'adaptateur Node compresse aussi (une fois par version d'une réponse, pas à chaque requête) pour fonctionner seul.
+- **Relais Overpass plutôt que miroirs seuls** : les miroirs publics sont lents et parfois saturés ; le relais mutualise les requêtes et garde une copie pendant leurs pannes.
+- **Modération automatique minimale** : seule règle, un prix à plus de 3× / moins de ⅓ de la médiane locale attend une relecture. Ce n'est pas une protection contre un abus organisé.
