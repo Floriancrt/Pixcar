@@ -1,4 +1,7 @@
 // Accès aux données : tout le SQL de l'API est ici. Les paramètres passent toujours à part ($1, $2…).
+// Le SQL est volontairement du plus courant : il tourne tel quel sur PostgreSQL, PGlite et Amazon Aurora DSQL (rank() plutôt que
+// row_number(), médiane par décalage plutôt que percentile_cont, mois et délais calculés ici plutôt que par to_char / extract).
+// Les empreintes (plaque, adresse IP, jeton) arrivent ici déjà en hexadécimal de 64 caractères (voir db/migrations/001_init.sql).
 import { CELL_DEG, cellOf, cellsAround } from "./lib/geo.mjs";
 
 export const MAX_PER_GARAGE_SERVICE = 30; // réparations renvoyées au plus par garage et par prestation (les plus récentes)
@@ -6,10 +9,10 @@ export const MAX_ROWS = 3000; // et au plus par réponse
 // La page demande des cases entières de 0,05° : le centre de la case peut être à ~4 km du point de recherche réel,
 // on élargit donc le rayon d'autant pour ne manquer aucun garage ; la page affine à la distance exacte.
 export const CELL_MARGIN_KM = 4.5;
+export const PURGE_BATCH = 1000; // lignes supprimées par instruction (DSQL : 3 000 lignes au plus par transaction)
 
-const buf = (u8) => Buffer.from(u8);
-const sameBytes = (a, b) => !!a && !!b && Buffer.from(a).equals(Buffer.from(b));
 const cellCenter = ({ y, x }) => ({ lat: (y + 0.5) * CELL_DEG - 90, lon: (x + 0.5) * CELL_DEG - 180 });
+const seconds = (later, earlier) => (new Date(later).getTime() - new Date(earlier).getTime()) / 1000;
 
 export function createRepo(db) {
   return {
@@ -23,13 +26,13 @@ export function createRepo(db) {
       const { rows } = await db.query(
         `WITH ranked AS (
            SELECT r.id, r.garage_id, r.service_id, r.price_cents, r.repaired_on, r.rating, r.vehicle_model, r.vehicle_year,
-                  row_number() OVER (PARTITION BY r.garage_id, r.service_id ORDER BY r.repaired_on DESC, r.created_at DESC) AS rn
+                  rank() OVER (PARTITION BY r.garage_id, r.service_id ORDER BY r.repaired_on DESC, r.created_at DESC) AS rn
            FROM repairs r
            JOIN garages g ON g.id = r.garage_id
            WHERE r.status = 'approved' AND g.area_y BETWEEN $1 AND $2 AND g.area_x BETWEEN $3 AND $4
          )
          SELECT g.id AS garage_id, g.name, g.addr, g.lat, g.lon, g.chain_id,
-                k.id, k.service_id, k.price_cents, to_char(k.repaired_on, 'YYYY-MM') AS month, k.rating, k.vehicle_model, k.vehicle_year
+                k.id, k.service_id, k.price_cents, k.repaired_on::text AS day, k.rating, k.vehicle_model, k.vehicle_year
          FROM ranked k JOIN garages g ON g.id = k.garage_id
          WHERE k.rn <= $5
          ORDER BY g.id, k.service_id, k.repaired_on DESC, k.id
@@ -44,24 +47,29 @@ export function createRepo(db) {
           g = { id: r.garage_id, name: r.name, addr: r.addr, lat: r.lat, lon: r.lon, chainId: r.chain_id, repairs: [] };
           byGarage.set(r.garage_id, g);
         }
-        g.repairs.push({ id: r.id, serviceId: r.service_id, price: r.price_cents / 100, month: r.month, rating: r.rating, model: r.vehicle_model, year: r.vehicle_year });
+        // le mois seulement (« 2026-09 ») : le jour exact ne sort jamais de la base
+        g.repairs.push({ id: r.id, serviceId: r.service_id, price: r.price_cents / 100, month: String(r.day).slice(0, 7), rating: r.rating, model: r.vehicle_model, year: r.vehicle_year });
       }
       return { cell, truncated, garages: [...byGarage.values()] };
     },
 
     // ---- écriture d'une déclaration
-    // ctx : { tokenHash, plateHash, ipHash, limitPerHour, limitGlobalPerMinute, moderate }
+    // ctx : { tokenHash, plateHash, ipHash (hexadécimal), limitPerHour, limitGlobalPerMinute, moderate }
     // Résultat : { kind: "created" | "replay", status } | { kind: "conflict" | "duplicate" } | { kind: "limited", retryAfter }
+    // La fonction peut être rejouée par la base (DSQL : conflit de concurrence) : elle ne fait rien hors de la transaction.
     insertRepair(v, ctx) {
       return db.tx(async (t) => {
         const known = (await t.query("SELECT delete_token_hash, status FROM repairs WHERE id = $1", [v.id])).rows[0];
-        if (known) return sameBytes(known.delete_token_hash, ctx.tokenHash) ? { kind: "replay", status: known.status } : { kind: "conflict" };
+        if (known) return known.delete_token_hash === ctx.tokenHash ? { kind: "replay", status: known.status } : { kind: "conflict" };
 
         const perIp = (await t.query(
-          "SELECT count(*)::int AS n, extract(epoch FROM (min(at) + interval '1 hour' - now()))::int AS wait FROM write_log WHERE ip_hash = $1 AND at > now() - interval '1 hour'",
-          [buf(ctx.ipHash)],
+          "SELECT count(*)::int AS n, min(at) AS oldest, now() AS db_now FROM write_log WHERE ip_hash = $1 AND at > now() - interval '1 hour'",
+          [ctx.ipHash],
         )).rows[0];
-        if (perIp.n >= ctx.limitPerHour) return { kind: "limited", retryAfter: Math.max(1, perIp.wait || 60) };
+        if (perIp.n >= ctx.limitPerHour) {
+          const wait = perIp.oldest && perIp.db_now ? Math.ceil(3600 - seconds(perIp.db_now, perIp.oldest)) : 60; // l'heure glissante libère sa plus ancienne entrée
+          return { kind: "limited", retryAfter: Math.max(1, wait || 60) };
+        }
         const global = (await t.query("SELECT count(*)::int AS n FROM write_log WHERE at > now() - interval '1 minute'")).rows[0];
         if (global.n >= ctx.limitGlobalPerMinute) return { kind: "limited", retryAfter: 30 };
 
@@ -79,21 +87,21 @@ export function createRepo(db) {
           `INSERT INTO repairs (id, garage_id, service_id, price_cents, repaired_on, rating, comment, vehicle_model, vehicle_year, plate_hmac, status, delete_token_hash)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
            ON CONFLICT DO NOTHING RETURNING id`,
-          [v.id, v.garage.id, v.serviceId, v.priceCents, v.date, v.rating, v.comment, v.model, v.year, buf(ctx.plateHash), status, buf(ctx.tokenHash)],
+          [v.id, v.garage.id, v.serviceId, v.priceCents, v.date, v.rating, v.comment, v.model, v.year, ctx.plateHash, status, ctx.tokenHash],
         );
         if (!ins.rowCount) {
           // même identifiant posé entre-temps par une requête concurrente (rejeu ou conflit), ou même plaque / garage / prestation / jour
           const again = (await t.query("SELECT delete_token_hash, status FROM repairs WHERE id = $1", [v.id])).rows[0];
-          if (again) return sameBytes(again.delete_token_hash, ctx.tokenHash) ? { kind: "replay", status: again.status } : { kind: "conflict" };
+          if (again) return again.delete_token_hash === ctx.tokenHash ? { kind: "replay", status: again.status } : { kind: "conflict" };
           return { kind: "duplicate" };
         }
-        await t.query("INSERT INTO write_log (ip_hash) VALUES ($1)", [buf(ctx.ipHash)]);
+        await t.query("INSERT INTO write_log (ip_hash) VALUES ($1)", [ctx.ipHash]);
         return { kind: "created", status };
       });
     },
 
     async deleteRepair(id, tokenHash) {
-      const r = await db.query("DELETE FROM repairs WHERE id = $1 AND delete_token_hash = $2 RETURNING id", [id, buf(tokenHash)]);
+      const r = await db.query("DELETE FROM repairs WHERE id = $1 AND delete_token_hash = $2 RETURNING id", [id, tokenHash]);
       return r.rowCount > 0;
     },
 
@@ -108,7 +116,7 @@ export function createRepo(db) {
         .then((r) => r.rows),
     setStatus: (id, status) => db.query("UPDATE repairs SET status = $2 WHERE id = $1", [id, status]).then((r) => r.rowCount > 0),
     // demande d'effacement d'une personne : toutes les déclarations portant cette empreinte de plaque (rejetées comprises)
-    deleteByPlate: (plateHash) => db.query("DELETE FROM repairs WHERE plate_hmac = $1", [buf(plateHash)]).then((r) => r.rowCount),
+    deleteByPlate: (plateHash) => db.query("DELETE FROM repairs WHERE plate_hmac = $1", [plateHash]).then((r) => r.rowCount),
     stats: () =>
       db
         .query("SELECT status, count(*)::int AS n FROM repairs GROUP BY status ORDER BY status")
@@ -116,8 +124,9 @@ export function createRepo(db) {
 
     // ---- cache des réponses d'Overpass (servies périmées quand tous les serveurs sont en panne)
     async getUpstream(key) {
-      const r = await db.query("SELECT body, extract(epoch FROM (now() - fetched_at))::int AS age FROM upstream_cache WHERE key = $1", [key]);
-      return r.rows[0] ? { body: r.rows[0].body, ageSeconds: r.rows[0].age } : null;
+      const r = await db.query("SELECT body, fetched_at, now() AS db_now FROM upstream_cache WHERE key = $1", [key]);
+      const row = r.rows[0];
+      return row ? { body: row.body, ageSeconds: Math.max(0, Math.floor(seconds(row.db_now, row.fetched_at))) } : null;
     },
     putUpstream: (key, body) =>
       db.query(
@@ -125,28 +134,41 @@ export function createRepo(db) {
         [key, JSON.stringify(body)],
       ),
 
-    // ---- entretien (idempotent : plusieurs instances peuvent l'exécuter)
+    // ---- entretien (idempotent : plusieurs instances peuvent l'exécuter), par lots pour rester sous la limite de DSQL
     async purge() {
-      const a = await db.query("DELETE FROM write_log WHERE at < now() - interval '30 days'");
-      const b = await db.query("DELETE FROM upstream_cache WHERE fetched_at < now() - interval '14 days'");
-      const c = await db.query(
-        "DELETE FROM garages g WHERE g.created_at < now() - interval '7 days' AND NOT EXISTS (SELECT 1 FROM repairs r WHERE r.garage_id = g.id)",
-      );
-      return { writeLog: a.rowCount, upstreamCache: b.rowCount, garages: c.rowCount };
+      return {
+        writeLog: await deleteInBatches(db, "DELETE FROM write_log WHERE id IN (SELECT id FROM write_log WHERE at < now() - interval '30 days' LIMIT $1)"),
+        upstreamCache: await deleteInBatches(db, "DELETE FROM upstream_cache WHERE key IN (SELECT key FROM upstream_cache WHERE fetched_at < now() - interval '14 days' LIMIT $1)"),
+        garages: await deleteInBatches(
+          db,
+          "DELETE FROM garages WHERE id IN (SELECT g.id FROM garages g WHERE g.created_at < now() - interval '7 days' AND NOT EXISTS (SELECT 1 FROM repairs r WHERE r.garage_id = g.id) LIMIT $1)",
+        ),
+      };
     },
   };
 }
 
+async function deleteInBatches(db, sql) {
+  let total = 0;
+  for (let pass = 0; pass < 100; pass++) {
+    const { rowCount } = await db.query(sql, [PURGE_BATCH]);
+    total += rowCount;
+    if (rowCount < PURGE_BATCH) break;
+  }
+  return total;
+}
+
 // Une déclaration au prix très éloigné de ce que les autres ont déclaré pour la même prestation dans le coin attend une
 // relecture (« pending ») au lieu de fausser les médianes. Sans assez de données, on accepte.
-async function decideStatus(t, serviceId, priceCents, y, x) {
-  const r = (await t.query(
-    `SELECT count(*)::int AS n, percentile_cont(0.5) WITHIN GROUP (ORDER BY r.price_cents) AS med
-     FROM repairs r JOIN garages g ON g.id = r.garage_id
-     WHERE r.status = 'approved' AND r.service_id = $1 AND g.area_y BETWEEN $2 AND $3 AND g.area_x BETWEEN $4 AND $5`,
-    [serviceId, y - 1, y + 1, x - 1, x + 1],
-  )).rows[0];
-  const med = Number(r.med);
-  if (r.n >= 5 && med > 0 && (priceCents < med / 3 || priceCents > med * 3)) return "pending";
+// Médiane = ce que renvoie percentile_cont(0.5) : la valeur du milieu, ou la moyenne des deux du milieu ; lue par décalage.
+export async function decideStatus(t, serviceId, priceCents, y, x) {
+  const scope = `FROM repairs r JOIN garages g ON g.id = r.garage_id
+                 WHERE r.status = 'approved' AND r.service_id = $1 AND g.area_y BETWEEN $2 AND $3 AND g.area_x BETWEEN $4 AND $5`;
+  const args = [serviceId, y - 1, y + 1, x - 1, x + 1];
+  const n = (await t.query(`SELECT count(*)::int AS n ${scope}`, args)).rows[0].n;
+  if (n < 5) return "approved";
+  const mid = (await t.query(`SELECT r.price_cents ${scope} ORDER BY r.price_cents OFFSET $6 LIMIT $7`, [...args, Math.floor((n - 1) / 2), n % 2 ? 1 : 2])).rows;
+  const med = mid.reduce((sum, r) => sum + Number(r.price_cents), 0) / mid.length;
+  if (med > 0 && (priceCents < med / 3 || priceCents > med * 3)) return "pending";
   return "approved";
 }

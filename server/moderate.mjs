@@ -10,7 +10,7 @@
 // sous forme d'empreinte, il faut le MÊME PLATE_PEPPER que l'API (sinon l'empreinte ne correspond à rien : 0 supprimée).
 import { fileURLToPath } from "node:url";
 import { createDb } from "./db.mjs";
-import { hmac } from "./lib/crypto.mjs";
+import { hmac, toHex } from "./lib/crypto.mjs";
 import { createRepo } from "./repo.mjs";
 import { PLATE_RE } from "../src/js/shared/rules.js";
 
@@ -38,7 +38,7 @@ export async function moderate([command, ...args], { db, plateSecret = "", out =
     if (!args.length) throw new Error("usage : moderate.mjs forget <plaque> [<plaque>…]");
     if (plateSecret.length < 16) throw new Error("PLATE_PEPPER absent ou trop court : il faut le même secret que l'API");
     const plates = args.map(normalizePlate); // toutes les plaques sont vérifiées avant d'en supprimer une
-    for (const plate of plates) out(`${plate} : ${await repo.deleteByPlate(await hmac(plateSecret, plate))} déclaration(s) supprimée(s)`);
+    for (const plate of plates) out(`${plate} : ${await repo.deleteByPlate(toHex(await hmac(plateSecret, plate)))} déclaration(s) supprimée(s)`);
   } else {
     err("Commandes : list · approve <id>… · reject <id>… · stats · forget <plaque>…");
     return 2;
@@ -47,7 +47,8 @@ export async function moderate([command, ...args], { db, plateSecret = "", out =
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const db = await createDb({ url: process.env.DATABASE_URL || "", dataDir: process.env.DEV_DATA_DIR || undefined });
+  const dsql = process.env.DSQL_ENDPOINT ? { endpoint: process.env.DSQL_ENDPOINT, user: process.env.DSQL_USER || "admin" } : null;
+  const db = await createDb({ url: process.env.DATABASE_URL || "", dsql, dataDir: process.env.DEV_DATA_DIR || undefined });
   try {
     process.exitCode = await moderate(process.argv.slice(2), { db, plateSecret: process.env.PLATE_PEPPER || "" });
   } catch (e) {

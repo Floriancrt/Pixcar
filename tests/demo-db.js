@@ -28,13 +28,13 @@ const verdict = (ok, text) => {
   const open1 = (opts = {}) => open(browser, server, "index.html", { width: 1440, height: 900, initScript: `window.JG_TUNE.api=${JSON.stringify(api.url)};`, ...opts });
   const table = async () =>
     (await api.db.query(`SELECT left(id::text, 8) AS id, garage_id, service_id, price_cents, repaired_on::text AS day, vehicle_model, vehicle_year, status,
-                                octet_length(plate_hmac) AS plate_bytes, left(encode(plate_hmac, 'hex'), 12) AS plate_hash, comment
+                                char_length(plate_hmac) AS plate_chars, left(plate_hmac, 12) AS plate_hash, comment
                          FROM repairs ORDER BY created_at`)).rows;
   const count = async () => (await api.db.query("SELECT count(*)::int AS n FROM repairs")).rows[0].n;
   const show = async (title) => {
     const rows = await table();
     say(`\n${title}  →  ${rows.length} réparation(s) en base`);
-    for (const r of rows) say(`     ${r.id}…  ${r.garage_id}  ${r.service_id.padEnd(8)} ${euro(r.price_cents).padStart(9)}  ${r.day}  ${r.vehicle_model} (${r.vehicle_year})  ${r.status}  plaque: empreinte ${r.plate_bytes} octets (${r.plate_hash}…)`);
+    for (const r of rows) say(`     ${r.id}…  ${r.garage_id}  ${r.service_id.padEnd(8)} ${euro(r.price_cents).padStart(9)}  ${r.day}  ${r.vehicle_model} (${r.vehicle_year})  ${r.status}  plaque: empreinte de ${r.plate_chars} caractères (${r.plate_hash}…)`);
     return rows;
   };
   const declare = async (page, { price, service }) => {
@@ -72,7 +72,7 @@ const verdict = (ok, text) => {
     verdict(await waitCount(1), "la déclaration « vidange · 59,90 € chez Norauto Bron » est arrivée en base (1 ligne)");
     const [first] = await show("1. Après une déclaration dans la page");
     verdict(first.status === "approved" && first.price_cents === 5990 && first.service_id === "vidange" && first.vehicle_year === 2019, "prix, prestation, modèle, année et statut « approved » enregistrés tels que saisis");
-    verdict(first.plate_bytes === 32 && !JSON.stringify(first).includes("EZ-108-BC"), "la plaque n'est PAS stockée : seulement son empreinte (32 octets)");
+    verdict(first.plate_chars === 64 && !JSON.stringify(first).includes("EZ-108-BC"), "la plaque n'est PAS stockée : seulement son empreinte (64 caractères hexadécimaux)");
     verdict(first.comment === "Très bien, rapide.", "le commentaire est stocké (lisible par la modération), mais n'est jamais renvoyé au public (voir étape 4)");
 
     // ---- 2. la même réparation une seconde fois : doublon refusé

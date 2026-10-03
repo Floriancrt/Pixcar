@@ -129,8 +129,8 @@ describe("POST /v1/repairs", () => {
     assert.ok(!everything.includes("198.51.100.77"), "adresse IP en clair");
     assert.ok(!everything.includes(r.deleteToken), "jeton en clair");
     const row = (await t.db.query("SELECT plate_hmac, delete_token_hash FROM repairs")).rows[0];
-    assert.equal(row.plate_hmac.length, 32);
-    assert.equal(toHex(row.delete_token_hash), toHex(await sha256(r.deleteToken)));
+    assert.match(row.plate_hmac, /^[0-9a-f]{64}$/, "empreinte de la plaque : 64 caractères hexadécimaux");
+    assert.equal(row.delete_token_hash, toHex(await sha256(r.deleteToken)));
   });
 
   test("a date « today » in the visitor's time zone (up to UTC+14) is not in the future", async () => {
@@ -383,7 +383,7 @@ describe("GET /v1/repairs", () => {
     await post(t, repair({ date: isoDay(1) }));
     await t.db.query(
       `INSERT INTO repairs (id, garage_id, service_id, price_cents, repaired_on, rating, vehicle_model, vehicle_year, delete_token_hash)
-       SELECT gen_random_uuid(), 'osm:node/1022', 'vidange', 5000 + i, DATE '2025-01-01' + i, 4, 'Clio', 2018, decode(repeat('ab', 32), 'hex') FROM generate_series(1, 40) AS i`,
+       SELECT gen_random_uuid(), 'osm:node/1022', 'vidange', 5000 + i, DATE '2025-01-01' + i, 4, 'Clio', 2018, repeat('ab', 32) FROM generate_series(1, 40) AS i`,
     );
     const rows = (await list(t)).json.garages[0].repairs;
     assert.equal(rows.length, 30);

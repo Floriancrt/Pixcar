@@ -5,7 +5,7 @@
 // (503 + Retry-After), garde de quoi répondre quand la base tombe (copie de la dernière bonne réponse), et ne retient
 // aucun état en mémoire dont une autre instance aurait besoin : on en lance autant qu'on veut derrière un répartiteur.
 import { apiError, corsHeaders, etagOf, etagResponse, json, readJson, withHeaders } from "./lib/http.mjs";
-import { hmac, randomHex, sha256 } from "./lib/crypto.mjs";
+import { hmac, randomHex, sha256, toHex } from "./lib/crypto.mjs";
 import { RADII_KM, cellOf } from "./lib/geo.mjs";
 import { createMemoryLimiter } from "./lib/ratelimit.mjs";
 import { createOverpassProxy } from "./lib/overpass.mjs";
@@ -165,8 +165,9 @@ export function createApp({ db, config, services, fetchImpl = globalThis.fetch, 
     const v = parsed.value;
     let result;
     try {
-      const [plateHash, ipHash] = await Promise.all([hmac(config.plateSecret, v.plate), hmac(config.ipSecret, ip)]);
-      const tokenHash = await sha256(v.deleteToken);
+      // empreintes en hexadécimal (64 caractères) : c'est ainsi que la base les garde (DSQL n'indexe pas bytea)
+      const [plateHash, ipHash] = (await Promise.all([hmac(config.plateSecret, v.plate), hmac(config.ipSecret, ip)])).map(toHex);
+      const tokenHash = toHex(await sha256(v.deleteToken));
       result = await breaker.run(() =>
         repo.insertRepair(v, { tokenHash, plateHash, ipHash, limitPerHour: config.writeLimitPerHour, limitGlobalPerMinute: config.writeLimitGlobalPerMinute, moderate: config.moderation === "auto" }),
       );
@@ -198,7 +199,7 @@ export function createApp({ db, config, services, fetchImpl = globalThis.fetch, 
     const token = request.headers.get("x-delete-token") || "";
     if (!isUuid(id) || !isToken(token)) return apiError(404, "not_found", "Réparation introuvable.");
     try {
-      const ok = await breaker.run(async () => repo.deleteRepair(id.toLowerCase(), await sha256(token.toLowerCase())));
+      const ok = await breaker.run(async () => repo.deleteRepair(id.toLowerCase(), toHex(await sha256(token.toLowerCase()))));
       return ok ? new Response(null, { status: 204, headers: { "cache-control": "no-store" } }) : apiError(404, "not_found", "Réparation introuvable.");
     } catch (e) {
       log({ level: "error", msg: "suppression impossible", error: e.message });

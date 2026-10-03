@@ -2,6 +2,8 @@
 .git
 node_modules
 dist
+dist-lambda
+infra
 index.html
 original.html
 tests

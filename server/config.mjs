@@ -21,7 +21,8 @@ export function loadConfig(env = process.env) {
   const ip = need("IP_PEPPER", "secret qui sert à calculer l'empreinte des adresses IP");
   const origins = (env.ALLOWED_ORIGINS || (production ? "" : "*")).split(",").map((s) => s.trim()).filter(Boolean);
   if (production && !origins.length) problems.push("ALLOWED_ORIGINS : liste des origines autorisées, séparées par des virgules (ou « * »)");
-  if (production && !env.DATABASE_URL) problems.push("DATABASE_URL : adresse de la base PostgreSQL");
+  if (production && !env.DATABASE_URL && !env.DSQL_ENDPOINT) problems.push("DATABASE_URL (adresse de la base PostgreSQL) ou DSQL_ENDPOINT (adresse du cluster Aurora DSQL)");
+  if (env.DATABASE_URL && env.DSQL_ENDPOINT) problems.push("DATABASE_URL et DSQL_ENDPOINT sont exclusifs : choisir une seule base");
   // pas de valeur par défaut en production : derrière un répartiteur, « 0 » ferait partager à tous les visiteurs la même limite de débit
   if (production && (env.TRUST_PROXY === undefined || env.TRUST_PROXY === "")) problems.push("TRUST_PROXY : 0 (visiteurs directs), N (derrière N relais de confiance) ou cloudflare — à choisir explicitement, sinon tous les visiteurs partagent une même limite de débit");
   if (problems.length) throw new Error("Configuration incomplète :\n  - " + problems.join("\n  - "));
@@ -31,6 +32,8 @@ export function loadConfig(env = process.env) {
     production,
     port: int(env.PORT, 8787),
     databaseUrl: env.DATABASE_URL || "",
+    // Aurora DSQL : l'API se connecte sous un rôle de base à moindre privilège (pixcar_api) ; « admin » est réservé aux migrations
+    dsql: env.DSQL_ENDPOINT ? { endpoint: env.DSQL_ENDPOINT, user: env.DSQL_USER || "pixcar_api", max: int(env.DSQL_POOL_MAX, 2, 1) } : null,
     allowedOrigins: origins,
     plateSecret: plate,
     ipSecret: ip,

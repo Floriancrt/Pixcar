@@ -9,6 +9,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:dev": "node scripts/build.mjs --dev",
+    "build:lambda": "node scripts/build-lambda.mjs",
     "dev": "node server/dev.mjs",
     "start": "node server/index.mjs",
     "db:migrate": "node server/migrate.mjs",
@@ -20,6 +21,10 @@
     "perf": "node tests/perf.js"
   },
   "dependencies": {
+    "@aws-sdk/client-ssm": "^3.1146.0",
+    "@aws-sdk/credential-providers": "^3.1146.0",
+    "@aws-sdk/dsql-signer": "^3.1146.0",
+    "@aws/aurora-dsql-node-postgres-connector": "^0.1.9",
     "pg": "^8.13.0"
   },
   "devDependencies": {

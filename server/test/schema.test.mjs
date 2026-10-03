@@ -116,7 +116,7 @@ describe("constraints (last line of defence)", () => {
     const v = { ...ok, ...over };
     return db.query(
       `INSERT INTO repairs (id, garage_id, service_id, price_cents, repaired_on, rating, vehicle_model, vehicle_year, plate_hmac, delete_token_hash, status, comment)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, CASE WHEN $9::int > 0 THEN decode(repeat('ab', $9::int), 'hex') END, decode(repeat('cd', $10::int), 'hex'), $11, $12)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, CASE WHEN $9::int > 0 THEN repeat('ab', $9::int) END, repeat('cd', $10::int), $11, $12)`,
       [v.id, v.garage_id, v.service_id, v.price_cents, v.repaired_on, v.rating, v.vehicle_model, v.vehicle_year, v.plate, v.token, v.status, v.comment],
     );
   };

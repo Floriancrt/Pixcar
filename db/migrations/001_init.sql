@@ -1,5 +1,9 @@
 -- Pixcar : réparations déclarées par les visiteurs (aucun compte, aucune session).
--- PostgreSQL 14 ou plus. Les contraintes CHECK sont la dernière ligne de défense : l'API valide déjà tout.
+-- Valide sur PostgreSQL 14 ou plus ET sur Amazon Aurora DSQL (server/migrate.mjs adapte la syntaxe à DSQL : « CREATE INDEX ASYNC »,
+-- « IF NOT EXISTS », pas de DESC dans les index, une instruction de structure par transaction). Les contraintes CHECK sont la
+-- dernière ligne de défense : l'API valide déjà tout.
+-- Les empreintes (plaque, adresse IP, jeton) sont stockées en TEXTE hexadécimal de 64 caractères et non en bytea : DSQL ne sait pas
+-- indexer bytea, et l'empreinte de la plaque porte l'index qui interdit les doublons.
 
 CREATE TABLE garages (
   id         text PRIMARY KEY CHECK (char_length(id) BETWEEN 3 AND 120),   -- osm:node/123 · siret:12345678901234 · custom:slug
@@ -24,9 +28,9 @@ CREATE TABLE repairs (
   comment           text NOT NULL DEFAULT '' CHECK (char_length(comment) <= 500),   -- jamais renvoyé par l'API publique
   vehicle_model     text NOT NULL CHECK (char_length(vehicle_model) BETWEEN 2 AND 40),
   vehicle_year      smallint NOT NULL CHECK (vehicle_year BETWEEN 1950 AND 2100),
-  plate_hmac        bytea CHECK (octet_length(plate_hmac) = 32),            -- HMAC-SHA256 de la plaque : la plaque elle-même n'est jamais stockée
+  plate_hmac        text CHECK (char_length(plate_hmac) = 64),             -- HMAC-SHA256 de la plaque (hexadécimal) : la plaque elle-même n'est jamais stockée
   status            text NOT NULL DEFAULT 'approved' CHECK (status IN ('approved', 'pending', 'rejected')),
-  delete_token_hash bytea NOT NULL CHECK (octet_length(delete_token_hash) = 32), -- SHA-256 du jeton qui permet à son auteur de retirer la déclaration
+  delete_token_hash text NOT NULL CHECK (char_length(delete_token_hash) = 64), -- SHA-256 (hexadécimal) du jeton qui permet à son auteur de retirer la déclaration
   created_at        timestamptz NOT NULL DEFAULT now()
 );
 -- lecture d'un garage / d'une prestation (échelle de prix, historique)
@@ -39,7 +43,8 @@ CREATE INDEX repairs_pending_idx ON repairs (created_at) WHERE status = 'pending
 
 -- Limitation du nombre de déclarations par adresse IP (empreinte seulement), purgée après 30 jours
 CREATE TABLE write_log (
-  ip_hash bytea NOT NULL,
+  id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),                      -- sert à purger par lots (DSQL : 3 000 lignes au plus par transaction)
+  ip_hash text NOT NULL CHECK (char_length(ip_hash) = 64),
   at      timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX write_log_ip_idx ON write_log (ip_hash, at DESC);

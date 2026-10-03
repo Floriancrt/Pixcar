@@ -51,7 +51,7 @@ async function main() {
     FROM generate_series(1, ${GARAGES}) g;
     INSERT INTO repairs (id, garage_id, service_id, price_cents, repaired_on, rating, vehicle_model, vehicle_year, plate_hmac, delete_token_hash)
     SELECT gen_random_uuid(), 'osm:node/' || g, (ARRAY['vidange','revision','plaq_av','geo_av'])[1 + (r % 4)], 4000 + (g * 37 + r * 911) % 20000,
-           DATE '2026-09-01' - (r * 9), 1 + (g + r) % 5, 'Peugeot 208', 2019, decode(md5(g || '-' || r) || md5(r || '-' || g), 'hex'), decode(repeat('ab', 32), 'hex')
+           DATE '2026-09-01' - (r * 9), 1 + (g + r) % 5, 'Peugeot 208', 2019, md5(g || '-' || r) || md5(r || '-' || g), repeat('ab', 32)
     FROM generate_series(1, ${GARAGES}) g, generate_series(1, 8) r;
   `);
 

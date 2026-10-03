@@ -2,26 +2,13 @@
 //   DATABASE_URL=postgres://… PLATE_PEPPER=… IP_PEPPER=… ALLOWED_ORIGINS=https://pixcar.example node server/index.mjs
 import http from "node:http";
 import { Readable } from "node:stream";
-import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { createApp, loadServices } from "./app.mjs";
+import { compressIfUseful } from "./lib/compress.mjs";
+import { jsonLog } from "./lib/log.mjs";
 import { loadConfig } from "./config.mjs";
 import { createDb } from "./db.mjs";
 import { migrate } from "./migrate.mjs";
-
-const COMPRESSIBLE = /^(application\/json|text\/|application\/javascript|image\/svg\+xml)/i;
-// Une réponse identique (même ETag) est compressée une fois, pas à chaque requête : c'est le coût le plus lourd d'une lecture.
-const packed = new Map();
-const pack = (key, make) => {
-  if (!key) return make();
-  let hit = packed.get(key);
-  if (!hit) {
-    hit = make();
-    packed.set(key, hit);
-    if (packed.size > 200) packed.delete(packed.keys().next().value);
-  }
-  return hit;
-};
 
 // Pont entre node:http et une fonction fetch(Request) → Response
 export function toNodeListener(app, { onError = () => {} } = {}) {
@@ -36,19 +23,11 @@ export function toNodeListener(app, { onError = () => {} } = {}) {
       response.headers.forEach((value, name) => res.setHeader(name, value));
       if (req.method === "HEAD" || !response.body || response.status === 204 || response.status === 304) return void res.end();
       let body = Buffer.from(await response.arrayBuffer());
-      const type = response.headers.get("content-type") || "";
-      const accept = String(req.headers["accept-encoding"] || "");
-      if (body.length >= 1024 && COMPRESSIBLE.test(type) && !response.headers.has("content-encoding")) {
-        const etag = response.headers.get("etag");
-        const plain = body;
-        if (/\bbr\b/.test(accept)) {
-          body = pack(etag && "br|" + etag, () => brotliCompressSync(plain, { params: { [constants.BROTLI_PARAM_QUALITY]: 4 } }));
-          res.setHeader("content-encoding", "br");
-        } else if (/\bgzip\b/.test(accept)) {
-          body = pack(etag && "gzip|" + etag, () => gzipSync(plain, { level: 6 }));
-          res.setHeader("content-encoding", "gzip");
-        }
-        if (res.hasHeader("content-encoding")) res.setHeader("vary", [res.getHeader("vary"), "Accept-Encoding"].filter(Boolean).join(", "));
+      const packedBody = compressIfUseful({ body, type: response.headers.get("content-type") || "", acceptEncoding: req.headers["accept-encoding"], etag: response.headers.get("etag") || "", alreadyEncoded: response.headers.has("content-encoding") });
+      if (packedBody) {
+        body = packedBody.body;
+        res.setHeader("content-encoding", packedBody.encoding);
+        res.setHeader("vary", [res.getHeader("vary"), "Accept-Encoding"].filter(Boolean).join(", "));
       }
       res.setHeader("content-length", body.length);
       res.end(body);
@@ -63,13 +42,9 @@ export function toNodeListener(app, { onError = () => {} } = {}) {
   };
 }
 
-// LOG_LEVEL : « info » (une ligne par requête, par défaut), « warn » (incidents seulement), « error ». Ni adresse IP, ni requête, ni corps.
-const LEVELS = { error: 0, warn: 1, info: 2 };
-const jsonLog = (min) => (o) => (LEVELS[o.level] ?? 2) <= (LEVELS[min] ?? 2) && console.log(JSON.stringify({ t: new Date().toISOString(), ...o }));
-
 export async function start({ env = process.env, log = jsonLog(env.LOG_LEVEL) } = {}) {
   const config = loadConfig(env);
-  const db = await createDb({ url: config.databaseUrl, dataDir: env.DEV_DATA_DIR || undefined, log: (m) => log({ level: "warn", msg: m }) });
+  const db = await createDb({ url: config.databaseUrl, dsql: config.dsql, dataDir: env.DEV_DATA_DIR || undefined, log: (m) => log({ level: "warn", msg: m }) });
   if (env.MIGRATE_ON_START !== "0") (await migrate(db, undefined, (m) => log({ level: "info", msg: m })));
   const app = createApp({ db, config, services: await loadServices(), log });
   const server = http.createServer(toNodeListener(app, { onError: (e) => log({ level: "error", msg: "requête illisible", error: e.message }) }));

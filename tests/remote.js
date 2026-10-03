@@ -117,7 +117,7 @@ async function until(fn, ms = 6000, step = 80) {
       const rows = await api.rows();
       const mine = rows.find((r) => r.price_cents === 5990);
       check("R2b the database has it: price, service, model, year, status", mine && mine.service_id === "vidange" && mine.vehicle_model === "Peugeot 208" && mine.vehicle_year === 2019 && mine.status === "approved" && rows.length === 5, JSON.stringify(rows.map((r) => r.price_cents)));
-      check("R2c the plate is stored as a 32-byte hash only; the comment never leaves the page's own copy of the public listing", mine && mine.plate_hmac.length === 32 && !JSON.stringify(rows).includes("EZ-108-BC"));
+      check("R2c the plate is stored as a 64-character hex hash only; the comment never leaves the page's own copy of the public listing", mine && /^[0-9a-f]{64}$/.test(mine.plate_hmac) && !JSON.stringify(rows).includes("EZ-108-BC"));
       const row = (await stored(page))[0];
       check("R2d the id is a UUID v4 and the secret is 48 hex characters", /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(row.id) && /^[0-9a-f]{48}$/.test(row.deleteToken) && mine.id === row.id, JSON.stringify(row));
       await openHistory(page);

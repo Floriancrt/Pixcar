@@ -33,7 +33,7 @@ describe("smoke-api : essai d'une API déployée", () => {
     await ctx.reset();
     later();
   });
-  const rows = async () => (await ctx.db.query("SELECT id, garage_id, service_id, price_cents, status, octet_length(plate_hmac) AS plate_bytes, comment FROM repairs")).rows;
+  const rows = async () => (await ctx.db.query("SELECT id, garage_id, service_id, price_cents, status, char_length(plate_hmac) AS plate_chars, comment FROM repairs")).rows;
 
   test("API saine : toutes les étapes passent, et la base est revenue à zéro ensuite", async () => {
     const lines = [];
@@ -54,7 +54,7 @@ describe("smoke-api : essai d'une API déployée", () => {
     assert.equal(row.service_id, "vidange");
     assert.equal(row.price_cents, 4250);
     assert.equal(row.status, "approved");
-    assert.equal(row.plate_bytes, 32);
+    assert.equal(row.plate_chars, 64);
   });
 
   test("deux essais de suite ne se gênent pas (plaque tirée au hasard, identifiants neufs)", async () => {
