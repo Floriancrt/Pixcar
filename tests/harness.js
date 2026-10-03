@@ -36,10 +36,26 @@ const ICON_HOSTS = ["www.euromaster.fr", "www.feuvert.fr", "www.midas.fr", "www.
   "www.carter-cash.com", "www.eurorepar.fr", "www.motrio.fr", "www.boschcarservice.com", "www.top-garage.fr", "www.precisium.fr", "www.delko.fr",
   "www.autoprimo.com", "www.avatacar.com", "www.carglass.fr"];
 const MOCK_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com", "cdnjs.cloudflare.com", "data.geopf.fr", "overpass-api.de", "overpass.openstreetmap.fr", "maps.mail.ru", "recherche-entreprises.api.gouv.fr", "data.economie.gouv.fr", "query.wikidata.org", "commons.wikimedia.org", "upload.wikimedia.org", "*.basemaps.cartocdn.com"];
+// Certificat HTTPS de test (auto-signé, « localhost ») : généré au premier besoin dans tests/.out/tls/ (ignoré par git),
+// renouvelé au bout de 20 jours (validité : 30). Jamais versionné : une clé privée n'a rien à faire dans un dépôt.
+function tlsMaterial() {
+  const dir = path.join(__dirname, ".out", "tls");
+  const key = path.join(dir, "key.pem"), cert = path.join(dir, "cert.pem");
+  const fresh = (f) => fs.existsSync(f) && Date.now() - fs.statSync(f).mtimeMs < 20 * 864e5;
+  if (!fresh(key) || !fresh(cert)) {
+    fs.mkdirSync(dir, { recursive: true });
+    try {
+      require("child_process").execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", key, "-out", cert, "-days", "30", "-subj", "/CN=localhost"], { stdio: "ignore" });
+    } catch (e) {
+      throw new Error("openssl est nécessaire à la suite « logos » (certificat HTTPS de test auto-signé) : " + e.message);
+    }
+  }
+  return { key: fs.readFileSync(key), cert: fs.readFileSync(cert) };
+}
 async function startReal() {
   const real = { config: {}, hits: [], port: 0, handler: null, close: () => {} };
   const srv = https.createServer(
-    { key: fs.readFileSync(path.join(__dirname, "tls/key.pem")), cert: fs.readFileSync(path.join(__dirname, "tls/cert.pem")) },
+    tlsMaterial(),
     async (req, res) => {
       const host = String(req.headers.host || "").split(":")[0], p = req.url.split("?")[0];
       if (ICON_HOSTS.includes(host)) {

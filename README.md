@@ -42,7 +42,7 @@ npm run test:server      # API sur une base embarquée ; TEST_DATABASE_URL=postg
 node scripts/build.mjs --check    # index.html et dist/ du dépôt correspondent bien aux sources
 ```
 
-Il faut un Chromium pour Playwright (`npx playwright install chromium`). Détail des suites, mesures de performance et de charge, et ce qui n'a **pas** pu être vérifié : [docs/tests.md](docs/tests.md).
+Il faut un Chromium pour Playwright (`npx playwright install chromium`) et `openssl` (la suite `logos` génère un certificat HTTPS de test auto-signé, jamais versionné). Détail des suites, mesures de performance et de charge, et ce qui n'a **pas** pu être vérifié : [docs/tests.md](docs/tests.md).
 
 ## Documentation
 

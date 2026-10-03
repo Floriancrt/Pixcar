@@ -5,7 +5,7 @@ Ce document dit ce qui est vérifié, comment le relancer, ce que valent les mes
 ## 1. Lancer
 
 ```sh
-npm ci && npx playwright install chromium
+npm ci && npx playwright install chromium     # + openssl : la suite « logos » génère son certificat HTTPS de test (tests/.out/tls/, jamais versionné)
 npm run build
 
 npm test                          # suites navigateur sur index.html (la page tout-en-un)
