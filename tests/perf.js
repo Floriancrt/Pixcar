@@ -3,6 +3,10 @@
 //   node tests/perf.js                 dist/ (le site publiable)
 //   node tests/perf.js --target single index.html tout-en-un
 //   node tests/perf.js --runs 7 --cpu 6 --json perf.json
+//   node tests/perf.js --third-party-latency 150   ajoute au coût des services tiers (polices, CDN…) un aller-retour de 150 ms par
+//                                                  requête et 3 allers-retours (DNS, TCP, TLS) à la première vers chaque domaine
+// Sans cette option les services tiers sont simulés SANS délai ni débit limité : une page qui en dépend au démarrage (l'ancienne
+// page : feuille de style Google Fonts) paraît alors plus rapide qu'elle ne l'est, une page qui n'en dépend pas n'est pas touchée.
 // Les chiffres varient d'un lancement à l'autre (machine, charge) : comparer des médianes mesurées au même moment.
 const fs = require("fs");
 const path = require("path");
@@ -17,11 +21,24 @@ const RUNS = +arg("runs", 5);
 const CPU = +arg("cpu", 4);
 const WARM = !process.argv.includes("--cold-only");
 const OUT = arg("json", "");
+const TP_LATENCY = +arg("third-party-latency", 0);
 const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; };
 
 async function measure(browser, base, file, { warm }) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true, locale: "fr-FR", timezoneId: "Europe/Paris", serviceWorkers: "allow" });
   await installMocks(ctx, { log: () => {} });
+  if (TP_LATENCY > 0) {
+    // enregistré après les simulations : il passe avant elles, attend, puis leur laisse répondre (route.fallback)
+    const own = new URL(base).origin;
+    const known = new Set();
+    await ctx.route((url) => url.origin !== own, async (route) => {
+      const origin = new URL(route.request().url()).origin;
+      const first = !known.has(origin);
+      known.add(origin);
+      await new Promise((r) => setTimeout(r, first ? 4 * TP_LATENCY : TP_LATENCY)); // 3 allers-retours de connexion + 1 de requête
+      await route.fallback();
+    });
+  }
   await ctx.addInitScript(() => {
     window.JG_TUNE = { today: "2026-10-01" };
     window.__perf = { lcp: 0, fcp: 0, longTasks: [], cls: 0 };
