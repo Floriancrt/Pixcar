@@ -78,3 +78,9 @@ Constraints for each level:
 - MUST flag best practices and explain trade-offs
 - MUST still execute the user's choice if they disagree with a suggestion
 <!-- END AWS Agent Toolkit rules -->
+
+## Préférences AWS de l'utilisateur
+
+Enregistrées hors des balises ci-dessus pour survivre à une mise à jour des règles de l'AWS Agent Toolkit.
+
+- help_level: HIGH — expliquer chaque étape et son intérêt avant de l'exécuter, proposer des alternatives quand il y en a de meilleures, signaler les bonnes pratiques et expliquer les compromis ; exécuter quand même le choix de l'utilisateur s'il n'est pas d'accord avec une suggestion.
