@@ -266,6 +266,14 @@ describe("migrate on DSQL", () => {
     const slow = { query: async () => ({ rows: [{ status: "processing" }] }) };
     await assert.rejects(waitForJob(slow, "j", { pollMs: 1, timeoutMs: 20 }), /trop longue/);
   });
+
+  test("waitForJob says each state once, not once per second (a migration waits for minutes)", async () => {
+    const states = ["submitted", "submitted", "submitted", "processing", "processing", "completed"];
+    const s = { query: async () => ({ rows: [{ status: states.shift() }] }) };
+    const lines = [];
+    await waitForJob(s, "j", { pollMs: 0, wait: noWait }, (m) => lines.push(m));
+    assert.deepEqual(lines, ["index en construction (submitted)…", "index en construction (processing)…"]);
+  });
 });
 
 describe("ensureRuntimeRole", () => {
@@ -284,27 +292,25 @@ describe("ensureRuntimeRole", () => {
     return { log, queries, db: { kind: "dsql", session: (fn) => fn(s) } };
   };
 
-  test("creates the role, binds it to the IAM role of the API, opens the schema and grants only DML on the four tables", async () => {
+  test("creates the role, binds it to the IAM role of the API and grants only DML on the four tables (no grant on the system schema « public »: DSQL refuses it)", async () => {
     const { db, log, queries } = session();
     const steps = await ensureRuntimeRole(db, { iamRoleArn: ARN }, () => {});
     assert.deepEqual(log, [
       "CREATE ROLE pixcar_api WITH LOGIN",
       `AWS IAM GRANT pixcar_api TO '${ARN}'`,
-      "GRANT USAGE ON SCHEMA public TO pixcar_api",
       "GRANT SELECT, INSERT, UPDATE, DELETE ON garages, repairs, write_log, upstream_cache TO pixcar_api",
     ]);
-    assert.equal(steps.length, 4);
+    assert.equal(steps.length, 3);
     assert.deepEqual(queries.map((q) => [q.sql, q.params]), [["SELECT 1 AS ok FROM sys.iam_pg_role_mappings WHERE pg_role_name = $1 AND arn = $2", ["pixcar_api", ARN]]]);
   });
 
   test("can be run again: an existing role or an existing link is not an error (even if the mappings view cannot be read)", async () => {
     const { db, log } = session({ "^CREATE ROLE": Object.assign(new Error('role "pixcar_api" already exists'), { code: "42710" }), "^AWS IAM GRANT": new Error("role already has a trust relationship") });
     const steps = await ensureRuntimeRole(db, { iamRoleArn: ARN }, () => {});
-    assert.equal(log.length, 4);
+    assert.equal(log.length, 3);
     assert.match(steps[0], /déjà en place/);
     assert.match(steps[1], /déjà en place/);
     assert.match(steps[2], /fait/);
-    assert.match(steps[3], /fait/);
   });
 
   test("a link that the mappings view already shows is not granted again — whatever the wording of DSQL's error would be", async () => {
@@ -312,11 +318,18 @@ describe("ensureRuntimeRole", () => {
     const steps = await ensureRuntimeRole(db, { iamRoleArn: ARN }, () => {});
     assert.ok(!log.some((l) => /^AWS IAM GRANT/.test(l)));
     assert.match(steps[1], /lien avec le rôle IAM : déjà en place/);
-    assert.equal(log.length, 3);
+    assert.equal(log.length, 2);
     // un autre rôle IAM lié au même rôle de base n'empêche pas de lier celui-ci
     const other = session({}, [{ pg_role_name: "pixcar_api", arn: "arn:aws:iam::123456789012:role/autre" }]);
     await ensureRuntimeRole(other.db, { iamRoleArn: ARN }, () => {});
     assert.ok(other.log.some((l) => l.startsWith("AWS IAM GRANT")));
+  });
+
+  test("a refusal stops the operation and names the step that caused it (seen on the real database: « feature not supported on system entity »)", async () => {
+    const refused = Object.assign(new Error("feature not supported on system entity"), { code: "0A000" });
+    await assert.rejects(ensureRuntimeRole(session({ "^GRANT SELECT": refused }).db, { iamRoleArn: ARN }), /droits sur les tables : feature not supported on system entity/);
+    await assert.rejects(ensureRuntimeRole(session({ "^CREATE ROLE": new Error("permission denied") }).db, { iamRoleArn: ARN }), /création du rôle : permission denied/);
+    await assert.rejects(ensureRuntimeRole(session({ "^AWS IAM GRANT": new Error("role not supported") }).db, { iamRoleArn: ARN }), /lien avec le rôle IAM : role not supported/);
   });
 
   test("any other failure is reported, and nothing unsafe is ever put into the SQL", async () => {

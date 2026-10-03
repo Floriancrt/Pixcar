@@ -98,6 +98,10 @@ Resources:
   # ---- fonction de l'API (rôle de base à moindre privilège)
   ApiLogGroup:
     Type: AWS::Logs::LogGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "30 jours par défaut (cfn-guard CW_LOGGROUP_RETENTION_PERIOD_CHECK en attend 365, accepté : aucune donnée personnelle dans les journaux) ; chiffrés par la clé du service, pas par une clé gérée par le projet (CLOUDWATCH_LOG_GROUP_ENCRYPTED accepté : 1 USD par mois et une politique de clé pour rien de sensible)"
+        mutable: free-to-tune
     Properties:
       LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-api"
       RetentionInDays: !Ref LogRetentionDays
@@ -106,7 +110,7 @@ Resources:
     Type: AWS::IAM::Role
     Metadata:
       com.aws.cloudformation.Context:
-        why: "identité IAM de l'API ; sa base lui donne le rôle pixcar_api (lien créé par l'opération « migrate »)"
+        why: "identité IAM de l'API ; sa base lui donne le rôle pixcar_api (lien créé par l'opération « migrate ») ; politique en ligne voulue (une par rôle, limitée à ses ressources) : cfn-guard IAM_NO_INLINE_POLICY_CHECK accepté"
         must: ["dsql:DbConnect seulement (jamais DbConnectAdmin)", "ssm:GetParameters sur les 2 secrets seulement"]
     Properties:
       AssumeRolePolicyDocument:
@@ -134,7 +138,7 @@ Resources:
     Type: AWS::Lambda::Function
     Metadata:
       com.aws.cloudformation.Context:
-        why: "toute l'API dans une fonction (server/lambda.mjs) ; arm64 = ~20 % moins cher ; 512 Mo suffisent (E/S, pas de calcul lourd)"
+        why: "toute l'API dans une fonction (server/lambda.mjs) ; arm64 = ~20 % moins cher ; 512 Mo suffisent (E/S, pas de calcul lourd) ; hors VPC voulu (cfn-guard LAMBDA_INSIDE_VPC accepté) : DSQL se joint par jeton IAM sans réseau privé, un VPC exigerait une passerelle NAT payante pour le relais Overpass"
         must: ["REQUEST_TIMEOUT_MS (10 s) < délai d'intégration de la passerelle (12 s) <= Timeout de la fonction (15 s) ; la passerelle coupe à 30 s au plus", "TRUST_PROXY=0 : l'adresse du visiteur vient de la passerelle (requestContext), pas d'en-têtes"]
         mutable: free-to-tune
     Properties:
@@ -224,7 +228,6 @@ Resources:
   CustomDomainMapping:
     Type: AWS::ApiGatewayV2::ApiMapping
     Condition: HasDomain
-    DependsOn: DefaultStage
     Properties:
       DomainName: !Ref CustomDomain
       ApiId: !Ref HttpApi

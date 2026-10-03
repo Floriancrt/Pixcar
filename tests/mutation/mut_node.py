@@ -53,9 +53,10 @@ M = [
  ("DSQL migration: indexes are not asynchronous", "server/lib/sql.mjs", "INDEX ASYNC IF NOT EXISTS ${m[2]}", "INDEX IF NOT EXISTS ${m[2]}", SRV, ["dsql"]),
  ("DSQL migration: DESC kept in the index columns", "server/lib/sql.mjs", r'.replace(/\s+(ASC|DESC)\b/gi, "")', r'.replace(/\s+(ASC)\b/gi, "")', SRV, ["dsql"]),
  ("DSQL migration: the index build is not waited for", "server/migrate.mjs", "if (jobId) await waitForJob(", "if (false) await waitForJob(", SRV, ["dsql"]),
+ ("DSQL migration: the wait for an index logs every second", "server/migrate.mjs", "if (job && job.status !== announced) log(", "if (job) log(", SRV, ["dsql"]),
  ("DSQL migration: a failed index build is ignored", "server/migrate.mjs", 'if (job && job.status === "failed") throw', "if (false) throw", SRV, ["dsql"]),
  ("DSQL role: any IAM role ARN accepted", "server/migrate.mjs", "if (!/^arn:aws:iam::", "if (false && /^arn:aws:iam::", SRV, ["dsql"]),
- ("DSQL role: the schema is not opened to the role", "server/migrate.mjs", "`GRANT USAGE ON SCHEMA public TO ${role}`", "`SELECT 1`", SRV, ["dsql"]),
+ ("DSQL role: a refused step is reported without its name", "server/migrate.mjs", "new Error(`${label} : ${e.message}`)", "new Error(e.message)", SRV, ["dsql"]),
  ("DSQL role: an existing link is granted again", "server/migrate.mjs", "if (linked) steps.push(", "if (false) steps.push(", SRV, ["dsql"]),
  ("DSQL role: any link of the role counts, whatever its IAM role", "server/migrate.mjs", "WHERE pg_role_name = $1 AND arn = $2", "WHERE pg_role_name = $1 AND $2 = $2", SRV, ["dsql"]),
  # ---- fonction Lambda et opérations

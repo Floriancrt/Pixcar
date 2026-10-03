@@ -63,6 +63,7 @@ async function applyOnDsql(s, sql, log, { pollMs, timeoutMs }) {
 export async function waitForJob(s, jobId, { pollMs = 1000, timeoutMs = 600_000, wait = sleep } = {}, log = () => {}) {
   const t0 = Date.now();
   let unseen = 0;
+  let announced = "";
   for (;;) {
     const { rows } = await s.query("SELECT status, details FROM sys.jobs WHERE job_id = $1", [jobId]);
     const job = rows[0];
@@ -70,7 +71,7 @@ export async function waitForJob(s, jobId, { pollMs = 1000, timeoutMs = 600_000,
     if (job && job.status === "failed") throw new Error(`construction d'index échouée (${jobId}) : ${job.details || "sans détail"} — supprimer l'index (DROP INDEX) puis relancer`);
     if (!job && ++unseen > 30) throw new Error(`tâche d'index ${jobId} introuvable dans sys.jobs`);
     if (Date.now() - t0 > timeoutMs) throw new Error(`construction d'index trop longue (${jobId})`);
-    if (job) log(`index en construction (${job.status})…`);
+    if (job && job.status !== announced) log(`index en construction (${(announced = job.status)})…`); // une ligne par changement d'état, pas une par seconde
     await wait(pollMs);
   }
 }
@@ -85,26 +86,30 @@ export async function ensureRuntimeRole(db, { role = "pixcar_api", iamRoleArn, t
   for (const t of tables) if (!/^[a-z_][a-z0-9_]*$/.test(t)) throw new Error(`nom de table invalide : ${t}`);
   return db.session(async (s) => {
     const steps = [];
-    const run = async (label, sql, ignore) => {
+    // ignore(e) renvoie la note à consigner quand l'échec est acceptable (rien sinon) ; toute autre erreur nomme l'étape qui l'a causée
+    const run = async (label, sql, ignore = () => "") => {
       try {
         await withRetry(() => s.exec(sql));
         steps.push(`${label} : fait`);
       } catch (e) {
-        if (!ignore(e)) throw e;
-        steps.push(`${label} : déjà en place`);
+        const note = ignore(e);
+        if (!note) throw Object.assign(new Error(`${label} : ${e.message}`), { code: e.code, cause: e });
+        steps.push(`${label} : ${note}`);
       }
     };
-    await run("création du rôle", `CREATE ROLE ${role} WITH LOGIN`, (e) => e.code === "42710" || /already exists/i.test(e.message));
+    const already = (e) => (e.code === "42710" || /already|exists/i.test(e.message) ? "déjà en place" : "");
+    await run("création du rôle", `CREATE ROLE ${role} WITH LOGIN`, already);
     // Le lien existe-t-il déjà ? Vue documentée de DSQL (sys.iam_pg_role_mappings : arn, pg_role_name). Si elle manque ou change,
     // on tente le lien quand même et on tolère « déjà en place » : cette vérification ne sert qu'à ne pas dépendre du texte d'une erreur.
     const linked = await Promise.resolve()
       .then(() => s.query("SELECT 1 AS ok FROM sys.iam_pg_role_mappings WHERE pg_role_name = $1 AND arn = $2", [role, iamRoleArn]))
       .then((r) => r.rows.length > 0, () => false);
     if (linked) steps.push("lien avec le rôle IAM : déjà en place");
-    else await run("lien avec le rôle IAM", `AWS IAM GRANT ${role} TO '${iamRoleArn}'`, (e) => /already|exists/i.test(e.message));
-    // exemple de la documentation de DSQL : l'accès au schéma s'accorde explicitement, puis les droits sur les tables
-    await run("accès au schéma", `GRANT USAGE ON SCHEMA public TO ${role}`, () => false);
-    await run("droits sur les tables", `GRANT SELECT, INSERT, UPDATE, DELETE ON ${tables.join(", ")} TO ${role}`, () => false);
+    else await run("lien avec le rôle IAM", `AWS IAM GRANT ${role} TO '${iamRoleArn}'`, already);
+    // Pas de « GRANT USAGE ON SCHEMA public » : la documentation de DSQL le montre pour un schéma créé par l'utilisateur, mais pour
+    // « public » (schéma système) la vraie base répond « feature not supported on system entity » (constaté le 3 octobre 2026), et le
+    // rôle accède aux tables sans lui (essai de bout en bout réussi : scripts/smoke-api.mjs sur l'API déployée).
+    await run("droits sur les tables", `GRANT SELECT, INSERT, UPDATE, DELETE ON ${tables.join(", ")} TO ${role}`);
     steps.forEach((m) => log(m));
     return steps;
   });

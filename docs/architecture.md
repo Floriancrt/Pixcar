@@ -144,7 +144,7 @@ Le même fichier de migration et le même SQL (`server/repo.mjs`) servent Postgr
 | Pas de mot de passe : jeton IAM, rôles de base liés à des rôles IAM | l'API se connecte sous le rôle `pixcar_api` (lecture et écriture des 4 tables, rien d'autre) ; `admin` ne sert qu'à la fonction d'opérations (`ensureRuntimeRole`) |
 | Fonctions SQL | du SQL des plus courants : `rank()`, médiane lue par `OFFSET`, mois et délais calculés en JavaScript : même résultat sur PostgreSQL, vérifié par les tests |
 
-**Ce que cela ne prouve pas** : le comportement réel de DSQL n'a pas pu être essayé hors d'AWS. L'opération `selfcheck` (`server/selfcheck.mjs`) rejoue 18 vérifications sur la vraie base (index valides, création, rejeu, doublons, deux cas de concurrence, relecture des prix, effacement, purge par lots, cascade…) ; elle passe sur PostgreSQL et PGlite, et **doit passer sur DSQL avant l'ouverture au public**.
+**Vérifié sur Aurora DSQL réel (3 octobre 2026)** : l'opération `selfcheck` (`server/selfcheck.mjs`) rejoue 18 vérifications sur la vraie base (index valides, création, rejeu, doublons, deux cas de concurrence, relecture des prix, effacement, purge par lots, cascade…) et elles passent toutes ; l'essai de bout en bout de l'API déployée (`scripts/smoke-api.mjs`) aussi. Écart constaté avec la documentation de DSQL : `GRANT USAGE ON SCHEMA public` est refusé (« feature not supported on system entity »), le rôle `pixcar_api` n'en a pas besoin pour accéder aux tables. **Reste à confirmer sous trafic réel** : conflits de concurrence fréquents ou non, latences, consommation de DPU par requête.
 
 ## 4. Confidentialité et sécurité
 
