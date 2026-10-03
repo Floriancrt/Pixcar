@@ -419,7 +419,7 @@ async function installMocks(ctx, opts = {}) {
       return route.fulfill({ status: 404, headers: CORS, body: "" });
     }
     // Overpass
-    if (h.includes("overpass") || h === "maps.mail.ru") {
+    if (h.includes("overpass")) {
       counters.overpass++;
       if (opts.overpassDelayMs) await new Promise((r) => setTimeout(r, opts.overpassDelayMs)); // a slow server: the loading state stays on screen
       if (opts.overpassFail) return route.fulfill({ status: 504, headers: CORS, body: "" });

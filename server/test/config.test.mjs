@@ -14,6 +14,7 @@ describe("loadConfig", () => {
     assert.equal(a.production, false);
     assert.equal(a.trustProxy, 0);
     assert.equal(a.moderation, "auto");
+    assert.equal(a.repairRetentionMonths, 24, "durée de conservation des déclarations : 24 mois sauf avis contraire");
   });
   test("production: lists every missing or weak setting at once", () => {
     assert.throws(() => loadConfig({ NODE_ENV: "production" }), (e) => /PLATE_PEPPER/.test(e.message) && /IP_PEPPER/.test(e.message) && /ALLOWED_ORIGINS/.test(e.message) && /DATABASE_URL/.test(e.message) && /TRUST_PROXY/.test(e.message));
@@ -24,14 +25,18 @@ describe("loadConfig", () => {
     assert.doesNotThrow(() => loadConfig(prod));
   });
   test("parses the knobs, and refuses nonsense", () => {
-    const c = loadConfig({ ...prod, PORT: "3000", TRUST_PROXY: "2", WRITE_LIMIT_PER_HOUR: "5", MODERATION: "off", ALLOWED_ORIGINS: "https://a.example, https://b.example" });
+    const c = loadConfig({ ...prod, PORT: "3000", TRUST_PROXY: "2", WRITE_LIMIT_PER_HOUR: "5", MODERATION: "off", REPAIR_RETENTION_MONTHS: "12", ALLOWED_ORIGINS: "https://a.example, https://b.example" });
     assert.equal(c.port, 3000);
     assert.equal(c.trustProxy, 2);
     assert.equal(c.writeLimitPerHour, 5);
     assert.equal(c.moderation, "off");
+    assert.equal(c.repairRetentionMonths, 12);
+    assert.equal(loadConfig({ ...prod, REPAIR_RETENTION_MONTHS: "0" }).repairRetentionMonths, 0, "0 : conservées sans limite");
     assert.deepEqual(c.allowedOrigins, ["https://a.example", "https://b.example"]);
     assert.equal(loadConfig({ ...prod, TRUST_PROXY: "cloudflare" }).trustProxy, "cloudflare");
     assert.throws(() => loadConfig({ ...prod, PORT: "abc" }), /entière/);
     assert.throws(() => loadConfig({ ...prod, WRITE_LIMIT_PER_HOUR: "0" }), /≥ 1/);
+    assert.throws(() => loadConfig({ ...prod, REPAIR_RETENTION_MONTHS: "-2" }), /≥ 0/);
+    assert.throws(() => loadConfig({ ...prod, REPAIR_RETENTION_MONTHS: "deux ans" }), /entière/);
   });
 });

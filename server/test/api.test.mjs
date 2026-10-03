@@ -617,3 +617,20 @@ describe("when the database fails", () => {
     }
   });
 });
+
+describe("maintenance (toutes les heures sur un serveur ; sur Lambda, c'est la fonction d'opérations qui la lance chaque jour)", () => {
+  test("it applies the retention of the configuration: an old declaration goes, a recent one stays", async () => {
+    const t = await makeApp({ config: { repairRetentionMonths: 12 } });
+    try {
+      const old = repair();
+      const recent = repair({ date: isoDay(20) });
+      assert.equal((await post(t, old)).status, 201);
+      assert.equal((await post(t, recent)).status, 201);
+      await t.db.query("UPDATE repairs SET created_at = now() - interval '13 months' WHERE id = $1", [old.id]);
+      await t.app.maintenance();
+      assert.deepEqual((await t.db.query("SELECT id FROM repairs")).rows.map((r) => r.id), [recent.id]);
+    } finally {
+      await t.close();
+    }
+  });
+});

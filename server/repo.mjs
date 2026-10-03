@@ -135,10 +135,14 @@ export function createRepo(db) {
       ),
 
     // ---- entretien (idempotent : plusieurs instances peuvent l'exécuter), par lots pour rester sous la limite de DSQL
-    async purge() {
+    // repairRetentionMonths : les déclarations déposées il y a plus longtemps sont supprimées, tous états confondus (0 : on les garde).
+    async purge({ repairRetentionMonths = 0, now = Date.now } = {}) {
+      const cutoff = retentionCutoff(repairRetentionMonths, now());
       return {
         writeLog: await deleteInBatches(db, "DELETE FROM write_log WHERE id IN (SELECT id FROM write_log WHERE at < now() - interval '30 days' LIMIT $1)"),
         upstreamCache: await deleteInBatches(db, "DELETE FROM upstream_cache WHERE key IN (SELECT key FROM upstream_cache WHERE fetched_at < now() - interval '14 days' LIMIT $1)"),
+        // avant les garages : un garage resté sans déclaration part dans la même passe s'il a plus de 7 jours
+        repairs: cutoff ? await deleteInBatches(db, "DELETE FROM repairs WHERE id IN (SELECT id FROM repairs WHERE created_at < $2::timestamptz LIMIT $1)", [cutoff]) : 0,
         garages: await deleteInBatches(
           db,
           "DELETE FROM garages WHERE id IN (SELECT g.id FROM garages g WHERE g.created_at < now() - interval '7 days' AND NOT EXISTS (SELECT 1 FROM repairs r WHERE r.garage_id = g.id) LIMIT $1)",
@@ -148,10 +152,18 @@ export function createRepo(db) {
   };
 }
 
-async function deleteInBatches(db, sql) {
+// Date limite de conservation (ISO) : maintenant moins N mois ; null quand N n'est pas un entier positif (pas de limite).
+function retentionCutoff(months, nowMs) {
+  if (!Number.isInteger(months) || months <= 0) return null;
+  const d = new Date(nowMs);
+  d.setUTCMonth(d.getUTCMonth() - months);
+  return d.toISOString();
+}
+
+async function deleteInBatches(db, sql, params = []) {
   let total = 0;
   for (let pass = 0; pass < 100; pass++) {
-    const { rowCount } = await db.query(sql, [PURGE_BATCH]);
+    const { rowCount } = await db.query(sql, [PURGE_BATCH, ...params]);
     total += rowCount;
     if (rowCount < PURGE_BATCH) break;
   }

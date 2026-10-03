@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { loadConfig } from "../config.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
@@ -68,13 +69,20 @@ describe("legal notice and privacy window: the text", () => {
     assert.equal(days(/au plus tard (\d+) jours plus tard/, text), backups);
   });
 
+  test("the retention it announces for declarations is the one the server and the stack apply by default", () => {
+    const stack = read("infra/pixcar-api.yaml");
+    const stackDefault = Number(/\n  RepairRetentionMonths:\n    Type: Number\n    Default: (\d+)/.exec(stack)[1]);
+    assert.ok(/\{\{legal\.repairRetentionMonths\}\} mois après leur dépôt/.test(text), "la phrase de la durée est dans le texte");
+    assert.equal(config.repairRetentionMonths, stackDefault, "src/legal.json = défaut de la pile");
+    assert.equal(loadConfig({}).repairRetentionMonths, stackDefault, "défaut du serveur = défaut de la pile");
+  });
+
   test("every service the page may contact (connect-src of the security policy) is named in it", () => {
     const hosts = [...read("scripts/build.mjs").match(/const CONNECT = \[(.*?)\];/s)[1].matchAll(/"https:\/\/([^"]+)"/g)].map((m) => m[1]);
     const NAMED = {
       "data.geopf.fr": "data.geopf.fr",
       "overpass-api.de": "overpass-api.de",
       "overpass.openstreetmap.fr": "OpenStreetMap France",
-      "maps.mail.ru": "VK Maps",
       "recherche-entreprises.api.gouv.fr": "recherche-entreprises.api.gouv.fr",
       "data.economie.gouv.fr": "data.economie.gouv.fr",
       "query.wikidata.org": "Wikidata",

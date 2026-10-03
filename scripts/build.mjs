@@ -201,7 +201,7 @@ async function buildSingle(parts) {
 // ------------------------------------------------------------------------------------------------ en-têtes (dist/_headers)
 // Même format pour Netlify et Cloudflare Pages ; d'autres hébergeurs : reprendre les mêmes valeurs dans leur configuration.
 // La page appelle ces services, et eux seuls : tout autre hôte est refusé par le navigateur (Content-Security-Policy).
-const CONNECT = ["https://data.geopf.fr", "https://overpass-api.de", "https://overpass.openstreetmap.fr", "https://maps.mail.ru", "https://recherche-entreprises.api.gouv.fr", "https://data.economie.gouv.fr", "https://query.wikidata.org"];
+const CONNECT = ["https://data.geopf.fr", "https://overpass-api.de", "https://overpass.openstreetmap.fr", "https://recherche-entreprises.api.gouv.fr", "https://data.economie.gouv.fr", "https://query.wikidata.org"];
 export function contentSecurityPolicy(origin = apiOrigin, styleHash = "") {
   return [
     "default-src 'self'",

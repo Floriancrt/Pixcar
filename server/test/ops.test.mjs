@@ -43,7 +43,33 @@ describe("operations (Lambda « ops »)", () => {
     assert.equal(stats.code, 0);
     assert.ok(Array.isArray(stats.lines));
     assert.equal((await ops({ op: "list" })).lines[0], "Rien en attente.");
-    assert.deepEqual((await ops({ op: "purge" })).deleted, { writeLog: 0, upstreamCache: 0, garages: 0 });
+    assert.deepEqual((await ops({ op: "purge" })).deleted, { writeLog: 0, upstreamCache: 0, repairs: 0, garages: 0 });
+  });
+
+  test("purge erases the declarations older than REPAIR_RETENTION_MONTHS (24 months when it is not set), and keeps the others", async () => {
+    await db.query("TRUNCATE repairs, garages, write_log CASCADE");
+    await db.query("INSERT INTO garages (id, name, area_y, area_x) VALUES ('osm:node/5', 'Garage', 1, 1)");
+    const insert = (months, c) =>
+      db.query(
+        `INSERT INTO repairs (id, garage_id, service_id, price_cents, repaired_on, rating, vehicle_model, vehicle_year, plate_hmac, delete_token_hash, created_at)
+         VALUES (gen_random_uuid(), 'osm:node/5', 'vidange', 5000, DATE '2024-01-01', 4, 'Clio', 2018, $1, $2, now() - ($3::int * interval '1 month'))`,
+        [c.repeat(64), (c === "a" ? "1" : c === "b" ? "2" : "3").repeat(64), months],
+      );
+    await insert(30, "a");
+    await insert(13, "b");
+    await insert(2, "c");
+    const count = async () => (await db.query("SELECT count(*)::int AS n FROM repairs")).rows[0].n;
+    const purgeWith = (env) => createOps({ openDb: async () => ({ ...db, close: async () => {} }), env })({ op: "purge" });
+    assert.equal((await purgeWith({ REPAIR_RETENTION_MONTHS: "0" })).deleted.repairs, 0);
+    assert.equal(await count(), 3, "0 : tout est gardé");
+    assert.equal((await purgeWith({})).deleted.repairs, 1, "24 mois par défaut : celle de 30 mois part");
+    assert.equal(await count(), 2);
+    assert.equal((await purgeWith({ REPAIR_RETENTION_MONTHS: "12" })).deleted.repairs, 1, "12 mois : celle de 13 mois part");
+    assert.equal(await count(), 1);
+    const wrong = await purgeWith({ REPAIR_RETENTION_MONTHS: "deux ans" });
+    assert.equal(wrong.ok, false, "une valeur absurde est refusée, pas ignorée");
+    assert.equal(await count(), 1);
+    await db.query("TRUNCATE repairs, garages, write_log CASCADE"); // les tests suivants repartent d'une base vide
   });
 
   test("approve / reject take real identifiers only, at most 50, as a list", async () => {

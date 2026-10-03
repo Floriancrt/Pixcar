@@ -4,7 +4,6 @@
 export const OVERPASS_MIRRORS = [
   { url: "https://overpass-api.de/api/interpreter", name: "overpass-api.de" },
   { url: "https://overpass.openstreetmap.fr/api/interpreter", name: "OpenStreetMap France", metro: true },
-  { url: "https://maps.mail.ru/osm/tools/overpass/api/interpreter", name: "VK Maps" },
 ];
 
 // Le serveur français ne couvre que la France métropolitaine.

@@ -27,7 +27,7 @@ function upstream(behaviour = {}) {
   };
   return { fetchImpl, calls };
 }
-const A = "overpass-api.de", B = "overpass.openstreetmap.fr", C = "maps.mail.ru";
+const A = "overpass-api.de", B = "overpass.openstreetmap.fr";
 
 describe("GET /v1/overpass", () => {
   test("only the exact query the page produces is relayed; anything else is a 400 and never reaches OpenStreetMap", async () => {
@@ -108,28 +108,44 @@ describe("GET /v1/overpass", () => {
   });
 
   test("failing servers are skipped (429, 504, unreadable, interrupted); the metropolitan-only one is not asked about overseas areas", async () => {
-    const up = upstream({ [A]: { status: 429 }, [B]: { status: 504 }, [C]: { json: { elements: [{ type: "node", id: 2, lat: 14.6, lon: -61, tags: { name: "Fort-de-France" } }] } } });
-    const t = await makeApp({ fetchImpl: up.fetchImpl, overpassOptions: FAST });
+    // métropole : le premier serveur refuse (429), le suivant répond
+    const refused = upstream({ [A]: { status: 429 } });
+    const t = await makeApp({ fetchImpl: refused.fetchImpl, overpassOptions: FAST });
     try {
-      const out = await get(await t.call("GET", `/v1/overpass?data=${query(14.6, -61.07)}`));
+      const out = await get(await t.call("GET", `/v1/overpass?data=${query()}`));
       assert.equal(out.status, 200);
-      assert.equal(out.json.server, "VK Maps");
-      assert.deepEqual(up.calls.map((c) => c.host), [A, C], "outre-mer : le serveur métropolitain n'est pas interrogé");
+      assert.equal(out.json.server, "OpenStreetMap France");
+      assert.deepEqual(refused.calls.map((c) => c.host), [A, B]);
     } finally {
       await t.close();
     }
-    const odd = upstream({ [A]: { raw: "<html>pas du json</html>" }, [B]: { json: { elements: [], remark: "runtime error: Query timed out in \"query\" at line 4 after 25 seconds." } }, [C]: {} });
-    const t2 = await makeApp({ fetchImpl: odd.fetchImpl, overpassOptions: FAST });
+    // 504, réponse illisible, requête interrompue par le serveur : même repli sur le suivant
+    const odd = [{ status: 504 }, { raw: "<html>pas du json</html>" }, { json: { elements: [], remark: "runtime error: Query timed out in \"query\" at line 4 after 25 seconds." } }];
+    for (const first of odd) {
+      const up = upstream({ [A]: first });
+      const t2 = await makeApp({ fetchImpl: up.fetchImpl, overpassOptions: FAST });
+      try {
+        const out = await get(await t2.call("GET", `/v1/overpass?data=${query()}`));
+        assert.equal(out.json.server, "OpenStreetMap France", JSON.stringify(first).slice(0, 50));
+      } finally {
+        await t2.close();
+      }
+    }
+    // outre-mer : le serveur métropolitain n'est pas interrogé
+    const overseas = upstream({ [A]: { json: { elements: [{ type: "node", id: 2, lat: 14.6, lon: -61, tags: { name: "Fort-de-France" } }] } } });
+    const t3 = await makeApp({ fetchImpl: overseas.fetchImpl, overpassOptions: FAST });
     try {
-      const out = await get(await t2.call("GET", `/v1/overpass?data=${query()}`));
-      assert.equal(out.json.server, "VK Maps");
+      const out = await get(await t3.call("GET", `/v1/overpass?data=${query(14.6, -61.07)}`));
+      assert.equal(out.status, 200);
+      assert.equal(out.json.server, "overpass-api.de");
+      assert.deepEqual(overseas.calls.map((c) => c.host), [A], "outre-mer : le serveur métropolitain n'est pas interrogé");
     } finally {
-      await t2.close();
+      await t3.close();
     }
   });
 
   test("when every server fails: 502 with Retry-After and nothing cached; later a recovered server is used", async () => {
-    const down = { [A]: { status: 503 }, [B]: { status: 503 }, [C]: { status: 503 } };
+    const down = { [A]: { status: 503 }, [B]: { status: 503 } };
     const behaviour = { ...down };
     const up = upstream(behaviour);
     const t = await makeApp({ fetchImpl: up.fetchImpl, overpassOptions: FAST });
@@ -138,7 +154,7 @@ describe("GET /v1/overpass", () => {
       assert.equal(res.status, 502);
       assert.equal((await res.json()).error.code, "upstream_unavailable");
       assert.ok(res.headers.get("retry-after"));
-      for (const h of [A, B, C]) delete behaviour[h];
+      for (const h of [A, B]) delete behaviour[h];
       assert.equal((await t.call("GET", `/v1/overpass?data=${query()}`)).status, 200, "l'échec n'est pas mémorisé");
     } finally {
       await t.close();
@@ -151,7 +167,7 @@ describe("GET /v1/overpass", () => {
     const t = await makeApp({ fetchImpl: up.fetchImpl, overpassOptions: { ...FAST, freshSeconds: 0 } }); // rien n'est jamais « frais » : chaque demande réinterroge
     try {
       assert.equal((await t.call("GET", `/v1/overpass?data=${query()}`)).status, 200);
-      for (const h of [A, B, C]) behaviour[h] = { status: 503 };
+      for (const h of [A, B]) behaviour[h] = { status: 503 };
       const stale = await t.call("GET", `/v1/overpass?data=${query()}`);
       assert.equal(stale.status, 200);
       assert.equal(stale.headers.get("x-pixcar-stale"), "1");
@@ -180,7 +196,7 @@ describe("GET /v1/overpass", () => {
   });
 
   test("a stale database copy is served when upstream is down and the memory is empty", async () => {
-    const behaviour = { [A]: { status: 500 }, [B]: { status: 500 }, [C]: { status: 500 } };
+    const behaviour = { [A]: { status: 500 }, [B]: { status: 500 } };
     const up = upstream(behaviour);
     const t = await makeApp({ fetchImpl: up.fetchImpl, overpassOptions: FAST });
     try {

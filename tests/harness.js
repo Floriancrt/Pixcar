@@ -35,7 +35,7 @@ const ICON_HOSTS = ["www.euromaster.fr", "www.feuvert.fr", "www.midas.fr", "www.
   "www.points.fr", "www.firststop.fr", "www.vulco.fr", "www.profilplus.fr", "www.siligom.fr", "www.eurotyre.fr", "www.bestdrive.fr", "www.auto.leclerc",
   "www.carter-cash.com", "www.eurorepar.fr", "www.motrio.fr", "www.boschcarservice.com", "www.top-garage.fr", "www.precisium.fr", "www.delko.fr",
   "www.autoprimo.com", "www.avatacar.com", "www.carglass.fr"];
-const MOCK_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com", "cdnjs.cloudflare.com", "data.geopf.fr", "overpass-api.de", "overpass.openstreetmap.fr", "maps.mail.ru", "recherche-entreprises.api.gouv.fr", "data.economie.gouv.fr", "query.wikidata.org", "commons.wikimedia.org", "upload.wikimedia.org", "*.basemaps.cartocdn.com"];
+const MOCK_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com", "cdnjs.cloudflare.com", "data.geopf.fr", "overpass-api.de", "overpass.openstreetmap.fr", "recherche-entreprises.api.gouv.fr", "data.economie.gouv.fr", "query.wikidata.org", "commons.wikimedia.org", "upload.wikimedia.org", "*.basemaps.cartocdn.com"];
 // Certificat HTTPS de test (auto-signé, « localhost ») : généré au premier besoin dans tests/.out/tls/ (ignoré par git),
 // renouvelé au bout de 20 jours (validité : 30). Jamais versionné : une clé privée n'a rien à faire dans un dépôt.
 function tlsMaterial() {

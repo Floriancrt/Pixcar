@@ -288,8 +288,8 @@ export function createApp({ db, config, services, fetchImpl = globalThis.fetch, 
       log({ level: "info", msg: "requête", id, method: request.method, path: new URL(request.url).pathname, status: response.status, ms: now() - started });
       return response;
     },
-    // à lancer toutes les heures (index.mjs) : purge des journaux et caches périmés
-    maintenance: () => repo.purge(),
+    // à lancer toutes les heures (index.mjs) : purge des journaux, caches et déclarations périmés
+    maintenance: () => repo.purge({ repairRetentionMonths: config.repairRetentionMonths }),
     drain() {
       draining = true;
     },

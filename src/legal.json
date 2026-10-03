@@ -3,6 +3,6 @@
   "contact": "",
   "hostPages": "GitHub, Inc. (GitHub Pages), 88 Colin P. Kelly Jr. Street, San Francisco, CA 94107, États-Unis",
   "hostApi": "Amazon Web Services EMEA SARL, 38 avenue John F. Kennedy, L-1855 Luxembourg (données hébergées dans la région Europe, à Stockholm)",
-  "repairRetentionMonths": "",
+  "repairRetentionMonths": 24,
   "updated": ""
 }

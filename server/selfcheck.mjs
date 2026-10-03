@@ -150,6 +150,19 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     expect(out.writeLog >= 1200, "au moins 1 200 supprimées, reçu " + out.writeLog);
     expect((await count("SELECT count(*) AS n FROM write_log WHERE ip_hash = $1 AND at > now() - interval '1 day'", [TEST_IP])) === recent, "les récentes sont intactes");
   });
+  await check("purge de conservation : une déclaration de plus de 24 mois est supprimée, une plus récente reste, et 0 mois ne supprime rien", async () => {
+    const old = repair({ id: crypto.randomUUID(), garage: garage(garageB), serviceId: "freins" });
+    const recent = repair({ id: crypto.randomUUID(), garage: garage(garageB), serviceId: "pneus" });
+    await repo.insertRepair(old, ctx());
+    await repo.insertRepair(recent, ctx());
+    await db.query("UPDATE repairs SET created_at = now() - interval '30 months' WHERE id = $1", [old.id]);
+    await db.query("UPDATE repairs SET created_at = now() - interval '12 months' WHERE id = $1", [recent.id]);
+    const there = (id) => count("SELECT count(*) AS n FROM repairs WHERE id = $1", [id]);
+    expect((await repo.purge({ repairRetentionMonths: 0 })).repairs === 0 && (await there(old.id)) === 1, "0 mois : rien n'est supprimé");
+    const out = await repo.purge({ repairRetentionMonths: 24 });
+    expect(out.repairs >= 1, "au moins 1 déclaration supprimée, reçu " + out.repairs);
+    expect((await there(old.id)) === 0 && (await there(recent.id)) === 1, "l'ancienne a disparu, la récente reste");
+  });
   await check("suppression d'un garage : ses réparations disparaissent avec lui (clé étrangère, ON DELETE CASCADE)", async () => {
     await db.query("DELETE FROM garages WHERE id = $1", [garageB]);
     expect((await count("SELECT count(*) AS n FROM repairs WHERE garage_id = $1", [garageB])) === 0, "plus aucune réparation");

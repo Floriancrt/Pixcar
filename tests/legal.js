@@ -84,7 +84,7 @@ const PANEL = ".legal-foot [data-open-legal]";
       const txt = norm(await page.evaluate(() => document.getElementById("legalDlg").innerText));
       check("L4 it shows the editor, the hosting of the pages, a working mailto link to the contact, the update date", txt.includes(LEGAL.editorLine) && txt.includes(LEGAL.hostPages) && txt.includes("3 octobre 2026") && (await page.evaluate(() => [...document.querySelectorAll("#legalDlg a")].some((a) => a.href === "mailto:contact@exemple.test"))), txt.slice(0, 300));
       check("L5 in local mode the declaration sections and the API hosting are hidden, the local-storage sentence is shown", !(await visible(page, "#lg-data")) && !(await visible(page, "#lg-why")) && !(await visible(page, "#lg-keep")) && !txt.includes("API et base de données") && txt.includes("Elles restent dans ce navigateur : rien n'est envoyé à Pixcar") && !txt.includes("24 mois"), txt);
-      check("L6 every service the page contacts is listed, Google only on a click, no cookie", ["IGN", "Overpass", "VK Maps", "Wikimedia", "Recherche d'entreprises", "Avis Google"].every((w) => txt.includes(w)) && txt.includes("Pixcar n'utilise aucun cookie"));
+      check("L6 every service the page contacts is listed, Google only on a click, no cookie", ["IGN", "Overpass", "Wikimedia", "Recherche d'entreprises", "Avis Google"].every((w) => txt.includes(w)) && txt.includes("Pixcar n'utilise aucun cookie"));
       const v = await axeOf(page, "#legalDlg");
       check("L7 axe: no violation in the open window (light theme)", v.length === 0, JSON.stringify(v));
       const tree = await page.locator("#legalDlg").ariaSnapshot();

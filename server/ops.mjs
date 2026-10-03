@@ -7,9 +7,11 @@
 //   {"op":"list"}                         déclarations en attente de relecture (commentaires compris)
 //   {"op":"approve","ids":["…"]}          rend publiques ces déclarations      ("reject" : ne sont jamais renvoyées)
 //   {"op":"forget","plates":["AB-123-CD"]}  efface TOUTES les déclarations de ces plaques
-//   {"op":"purge"}                        entretien (journal > 30 jours, cache Overpass > 14 jours, garages sans réparation > 7 jours)
+//   {"op":"purge"}                        entretien (journal > 30 jours, cache Overpass > 14 jours, déclarations plus vieilles que REPAIR_RETENTION_MONTHS,
+//                                         garages sans réparation > 7 jours)
 //   {"op":"selfcheck"}                    rejoue sur la vraie base tout ce que demande l'application (voir selfcheck.mjs)
 //   {"op":"whoami"}                       rôle de base et type de base utilisés
+import { repairRetentionMonths } from "./config.mjs";
 import { createDb } from "./db.mjs";
 import { jsonLog } from "./lib/log.mjs";
 import { readSecrets } from "./lib/secrets.mjs";
@@ -58,7 +60,7 @@ export function createOps({ openDb, env = process.env, log = () => {} }) {
         const secrets = await readSecrets(env, { names: ["PLATE_PEPPER"] }); // seul le secret des plaques sert ici
         return runModerate(["forget", ...plates], db, secrets.PLATE_PEPPER || env.PLATE_PEPPER || "");
       }),
-    purge: () => withDb(async (db) => ({ deleted: await createRepo(db).purge() })),
+    purge: () => withDb(async (db) => ({ deleted: await createRepo(db).purge({ repairRetentionMonths: repairRetentionMonths(env) }) })),
     selfcheck: () => withDb((db) => selfcheck(db, { log: (m) => log({ level: "info", msg: m }) })),
     whoami: () => withDb(async (db) => ({ db: db.kind, role: (await db.query("SELECT current_user AS who")).rows[0].who })),
   };

@@ -107,11 +107,50 @@ describe("repo.mjs portable SQL", () => {
     let deletes = 0;
     const counting = { ...db, query: (text, params) => { if (/^DELETE FROM write_log/.test(text)) deletes++; return db.query(text, params); } };
     const out = await createRepo(counting).purge();
-    assert.deepEqual(out, { writeLog: 2500, upstreamCache: 1500, garages: 1 });
+    assert.deepEqual(out, { writeLog: 2500, upstreamCache: 1500, repairs: 0, garages: 1 });
     assert.equal(deletes, Math.ceil(2500 / PURGE_BATCH), "trois passes de 1 000, 1 000 et 500 lignes");
     assert.equal((await db.query("SELECT count(*)::int AS n FROM write_log")).rows[0].n, 5);
     assert.deepEqual((await db.query("SELECT key FROM upstream_cache")).rows.map((r) => r.key), ["fresh"]);
     assert.deepEqual((await db.query("SELECT id FROM garages ORDER BY id")).rows.map((r) => r.id), ["osm:node/2", "osm:node/3"]);
-    assert.deepEqual(await createRepo(db).purge(), { writeLog: 0, upstreamCache: 0, garages: 0 }, "relançable sans effet");
+    assert.deepEqual(await createRepo(db).purge(), { writeLog: 0, upstreamCache: 0, repairs: 0, garages: 0 }, "relançable sans effet");
+  });
+
+  test("retention purge: declarations older than the chosen number of months go, in batches and whatever their status; the others stay; 0 keeps everything", async () => {
+    await db.query("TRUNCATE repairs, garages, write_log, upstream_cache CASCADE");
+    await db.query("INSERT INTO garages (id, name, area_y, area_x) VALUES ('osm:node/9', 'Garage', 1, 1)");
+    const insert = (n, months, status) =>
+      db.query(
+        `INSERT INTO repairs (id, garage_id, service_id, price_cents, repaired_on, rating, vehicle_model, vehicle_year, plate_hmac, delete_token_hash, status, created_at)
+         SELECT gen_random_uuid(), 'osm:node/9', 'vidange', 5000, DATE '2024-01-01', 4, 'Clio', 2018,
+                md5($4 || i::text) || md5($4 || (i + 1)::text), md5($4 || i::text) || md5($4 || (i + 7)::text), $3, now() - ($2::int * interval '1 month')
+         FROM generate_series(1, $1::int) AS i`,
+        [n, months, status, `${status}${months}`],
+      );
+    await insert(1200, 30, "approved");
+    await insert(10, 26, "rejected");
+    await insert(10, 25, "pending");
+    await insert(7, 23, "approved");
+    const count = async () => (await db.query("SELECT count(*)::int AS n FROM repairs")).rows[0].n;
+    let deletes = 0;
+    const counting = { ...db, query: (text, params) => { if (/^DELETE FROM repairs/.test(text)) deletes++; return db.query(text, params); } };
+    assert.equal((await createRepo(counting).purge({ repairRetentionMonths: 0 })).repairs, 0);
+    assert.equal(await count(), 1227, "0 : tout est gardé");
+    const fixedNow = () => Date.now();
+    const out = await createRepo(counting).purge({ repairRetentionMonths: 24, now: fixedNow });
+    assert.equal(out.repairs, 1220, "30, 26 et 25 mois : approuvées, rejetées et en attente");
+    assert.equal(deletes, 2, "deux passes : 1 000 puis 220 lignes");
+    assert.equal(await count(), 7, "celles de 23 mois restent");
+    assert.deepEqual((await createRepo(db).purge({ repairRetentionMonths: 24 })).repairs, 0, "relançable sans effet");
+    assert.equal((await db.query("SELECT count(*)::int AS n FROM garages")).rows[0].n, 1, "le garage garde ses déclarations récentes : il reste");
+    // le calcul de la date limite suit le calendrier (et l'horloge qu'on lui donne)
+    await db.query("TRUNCATE repairs CASCADE");
+    await db.query(
+      `INSERT INTO repairs (id, garage_id, service_id, price_cents, repaired_on, rating, vehicle_model, vehicle_year, plate_hmac, delete_token_hash, created_at)
+       VALUES (gen_random_uuid(), 'osm:node/9', 'vidange', 5000, DATE '2024-01-01', 4, 'Clio', 2018, $1, $2, TIMESTAMPTZ '2024-10-14 12:00:00+00'),
+              (gen_random_uuid(), 'osm:node/9', 'freins', 5000, DATE '2024-01-01', 4, 'Clio', 2018, $3, $4, TIMESTAMPTZ '2024-10-16 12:00:00+00')`,
+      [hex64(1), hex64(2), hex64(3), hex64(4)],
+    );
+    const clock = () => Date.parse("2026-10-15T12:00:00Z"); // 24 mois avant : le 15 octobre 2024
+    assert.equal((await createRepo(db).purge({ repairRetentionMonths: 24, now: clock })).repairs, 1, "celle du 14 octobre 2024 part, celle du 16 reste");
   });
 });

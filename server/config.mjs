@@ -8,6 +8,9 @@ const int = (v, d, min = 0) => {
   return n;
 };
 
+// Durée de conservation des déclarations, en mois (24 par défaut : c'est la durée annoncée dans src/legal.json ; 0 = illimitée, déconseillé).
+export const repairRetentionMonths = (env = process.env) => int(env.REPAIR_RETENTION_MONTHS, 24, 0);
+
 export function loadConfig(env = process.env) {
   const production = env.NODE_ENV === "production";
   const problems = [];
@@ -47,6 +50,7 @@ export function loadConfig(env = process.env) {
     overpassUserAgent: env.OVERPASS_USER_AGENT || "Pixcar/1.0 (+contact: configurer OVERPASS_USER_AGENT)",
     turnstileSecret: env.TURNSTILE_SECRET || "",
     moderation: env.MODERATION === "off" ? "off" : "auto",
+    repairRetentionMonths: repairRetentionMonths(env),
     requestTimeoutMs: int(env.REQUEST_TIMEOUT_MS, 10_000, 1000),
   };
 }

@@ -78,6 +78,12 @@ Parameters:
     Default: 30
     AllowedValues: [0, 7, 14, 30, 35, 60, 90, 180, 365]
     Description: Durée de conservation des sauvegardes quotidiennes de la base (AWS Backup), 0 = aucune sauvegarde. Une demande d'effacement n'est complète qu'à l'expiration des sauvegardes ; voir docs/exploitation.md.
+  RepairRetentionMonths:
+    Type: Number
+    Default: 24
+    MinValue: 0
+    MaxValue: 120
+    Description: Durée de conservation des déclarations, en mois ; l'entretien quotidien efface les plus anciennes (0 = jamais, déconseillé). C'est la durée annoncée aux visiteurs (src/legal.json, repairRetentionMonths) ; les deux restent égales.
   BackupSchedule:
     Type: String
     Default: "cron(30 2 * * ? *)"
@@ -303,6 +309,7 @@ Resources:
           API_ROLE_ARN: !GetAtt ApiRole.Arn
           MIGRATIONS_DIR: /var/task/db/migrations
           SSM_PREFIX: !Ref SsmPrefix
+          REPAIR_RETENTION_MONTHS: !Ref RepairRetentionMonths
           LOG_LEVEL: info
       Tags: [{ Key: Project, Value: pixcar }]
 
