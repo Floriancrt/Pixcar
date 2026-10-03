@@ -4,7 +4,7 @@ import { loadScript } from "./modules/load-script.js";
 import { phoneList, phoneParse } from "./modules/phone.js";
 import { createStore, jsonStorage } from "./modules/repair-store.js";
 import { KEEP_TAG, OVERPASS_MIRRORS, inMetroFrance, overpassQuery } from "./shared/overpass.js";
-import { PLATE_RE, YEAR_MIN } from "./shared/rules.js";
+import { PLATE_RE, PRICE_MAX, PRICE_MIN, YEAR_MIN } from "./shared/rules.js";
 import { SERVICES } from "./shared/services.js";
 
 (() => {
@@ -3614,13 +3614,15 @@ import { SERVICES } from "./shared/services.js";
         ),
         d(!ym, Pt.year, Pt.yearErr, ym),
         d(
-          o > 0 && o <= 2e4,
+          o >= PRICE_MIN && o <= PRICE_MAX,
           Pt.price,
           Pt.priceErr,
           i
-            ? o > 2e4
+            ? o > PRICE_MAX
               ? "Montant trop élevé : 20 000 € au maximum."
-              : "Montant non reconnu. Exemple : 89,90"
+              : o > 0
+                ? `Montant trop faible : ${PRICE_MIN} € au minimum.`
+                : "Montant non reconnu. Exemple : 89,90"
             : "Indiquez le prix payé.",
         ),
         d(

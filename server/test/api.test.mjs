@@ -557,6 +557,48 @@ describe("when the database fails", () => {
     await t.close();
   });
 
+  test("a value the database refuses (constraint) is a 422 that is not retried, and never counts as a database failure", async () => {
+    const logs = [];
+    const t = await makeApp({ log: (o) => logs.push(o) });
+    try {
+      const real = t.db.tx;
+      t.db.tx = async () => {
+        throw Object.assign(new Error('new row for relation "repairs" violates check constraint "repairs_price_cents_check"'), { code: "23514" });
+      };
+      for (let i = 0; i < 8; i++) {
+        const res = await post(t, repair(), { ip: `198.51.100.${i + 1}` });
+        assert.equal(res.status, 422, "refusé pour de bon : le navigateur ne doit pas réessayer");
+        assert.equal((await res.json()).error.code, "validation");
+      }
+      assert.ok(logs.some((l) => l.level === "error" && l.code === "23514"), "l'incident est journalisé pour qu'on corrige la validation");
+      t.db.tx = real;
+      // huit refus de données plus tard la base n'est PAS écartée : une déclaration valide passe, une lecture aussi
+      assert.equal((await post(t, repair(), { ip: "198.51.100.50" })).status, 201);
+      assert.equal((await t.call("GET", `/v1/repairs?${area}`, { ip: "198.51.100.51" })).status, 200);
+    } finally {
+      await t.close();
+    }
+  });
+
+  test("a real database failure stays a 503 (the client will retry) and does count for the breaker", async () => {
+    const t = await makeApp();
+    try {
+      const real = t.db.tx;
+      t.db.tx = async () => {
+        throw Object.assign(new Error("terminating connection due to administrator command"), { code: "57P01" });
+      };
+      for (let i = 0; i < 4; i++) {
+        const res = await post(t, repair(), { ip: `198.51.100.${i + 1}` });
+        assert.equal(res.status, 503);
+        assert.ok(res.headers.get("retry-after"));
+      }
+      t.db.tx = real;
+      assert.equal((await post(t, repair(), { ip: "198.51.100.50" })).status, 503, "disjoncteur ouvert après quatre pannes");
+    } finally {
+      await t.close();
+    }
+  });
+
   test("an unexpected error is a 500 without any detail, and is logged with the request id", async () => {
     const logs = [];
     const t = await makeApp({ log: (o) => logs.push(o) });

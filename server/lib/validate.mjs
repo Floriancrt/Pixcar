@@ -1,5 +1,5 @@
 // Validation d'une déclaration de réparation. Ne fait confiance à rien de ce que le navigateur envoie.
-import { COMMENT_MAX, DATE_MIN, GARAGE_ID_RE, MODEL_MAX, MODEL_MIN, PLATE_RE, PRICE_MAX, YEAR_MIN } from "../../src/js/shared/rules.js";
+import { COMMENT_MAX, DATE_MIN, GARAGE_ID_RE, MODEL_MAX, MODEL_MIN, PLATE_RE, PRICE_MAX, PRICE_MIN, YEAR_MIN } from "../../src/js/shared/rules.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TOKEN_RE = /^[0-9a-f]{32,128}$/i;
@@ -62,7 +62,7 @@ export function parseRepair(body, { services, today }) {
   if (!services.has(serviceId)) bad("serviceId", "prestation inconnue");
 
   const price = num(body.price);
-  if (price == null || price <= 0 || price > PRICE_MAX) bad("price", `prix entre 0,01 et ${PRICE_MAX} €`);
+  if (price == null || price < PRICE_MIN || price > PRICE_MAX) bad("price", `prix entre ${PRICE_MIN} et ${PRICE_MAX} €`);
   const priceCents = price == null ? 0 : Math.round(price * 100);
 
   const date = text(body.date);

@@ -24,8 +24,13 @@ export async function loadServices() {
   return new Set(REPAIR_SERVICES);
 }
 
+// Erreur qui tient à la DONNÉE refusée par la base (contrainte violée, valeur hors limites : classes SQLSTATE 22 et 23), pas
+// à son état. La base a répondu : renvoyer la même requête donnerait le même refus, et ce n'est pas une panne.
+const isDataError = (e) => /^(22|23)/.test(String((e && e.code) || ""));
+
 // Disjoncteur : après plusieurs échecs de suite, on cesse d'attendre une base qui ne répond pas (chaque requête
-// attendrait le délai de connexion) et on la sonde de nouveau après cooldownMs.
+// attendrait le délai de connexion) et on la sonde de nouveau après cooldownMs. Une donnée refusée n'est pas un échec :
+// sinon quelques requêtes mal formées suffiraient à écarter la base pour tout le monde.
 function createBreaker({ threshold = 4, cooldownMs = 5000, now = Date.now } = {}) {
   let failures = 0, openUntil = 0;
   return {
@@ -36,6 +41,10 @@ function createBreaker({ threshold = 4, cooldownMs = 5000, now = Date.now } = {}
         failures = 0;
         return out;
       } catch (e) {
+        if (isDataError(e)) {
+          failures = 0;
+          throw e;
+        }
         if (++failures >= threshold) openUntil = now() + cooldownMs;
         throw Object.assign(e, { unavailable: true });
       }
@@ -162,6 +171,11 @@ export function createApp({ db, config, services, fetchImpl = globalThis.fetch, 
         repo.insertRepair(v, { tokenHash, plateHash, ipHash, limitPerHour: config.writeLimitPerHour, limitGlobalPerMinute: config.writeLimitGlobalPerMinute, moderate: config.moderation === "auto" }),
       );
     } catch (e) {
+      if (isDataError(e)) {
+        // la validation de l'API a laissé passer ce que la base refuse : à corriger, mais renvoyer la requête n'y changerait rien
+        log({ level: "error", msg: "déclaration refusée par une contrainte de la base : validation de l'API incomplète", error: e.message, code: e.code });
+        return apiError(422, "validation", "Déclaration refusée : une valeur n'est pas acceptée.");
+      }
       log({ level: "error", msg: "écriture impossible", error: e.message });
       return unavailable();
     }

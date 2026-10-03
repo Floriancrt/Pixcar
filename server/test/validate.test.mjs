@@ -39,11 +39,18 @@ describe("parseRepair", () => {
   });
 
   test("prices become integer cents without floating-point drift", () => {
-    for (const [price, cents] of [[59.9, 5990], [19.99, 1999], [0.01, 1], [20000, 2000000], [89.9, 8990], [1234.56, 123456]]) assert.equal(parse(repair({ price })).value.priceCents, cents, String(price));
+    for (const [price, cents] of [[59.9, 5990], [19.99, 1999], [1, 100], [1.004, 100], [20000, 2000000], [89.9, 8990], [1234.56, 123456]]) assert.equal(parse(repair({ price })).value.priceCents, cents, String(price));
     assert.ok(parse(repair({ price: 20000.01 })).fields.price);
+    // la base refuse moins de 1 € (price_cents ≥ 100) : la validation doit refuser avant, sinon l'écriture échouerait en 5xx
+    for (const price of [0, 0.01, 0.99, 0.999]) assert.ok(parse(repair({ price })).fields.price, String(price));
     assert.ok(parse(repair({ price: -5 })).fields.price);
     assert.ok(parse(repair({ price: Infinity })).fields.price);
     assert.ok(parse(repair({ price: "12" })).fields.price);
+  });
+
+  test("rating: whole numbers from 1 to 5 only", () => {
+    for (const rating of [1, 2, 3, 4, 5]) assert.ok(parse(repair({ rating })).value, String(rating));
+    for (const rating of [0, 6, -1, 3.5, "4", null, undefined, NaN]) assert.ok(parse(repair({ rating })).fields.rating, String(rating));
   });
 
   test("date: today passes, tomorrow does not; the model year may equal the repair year but not exceed it", () => {

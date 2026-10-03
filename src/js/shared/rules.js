@@ -1,6 +1,7 @@
 // Règles de validation d'une réparation déclarée, communes à la page (messages en direct) et à l'API (dernier mot).
 export const PLATE_RE = /^[A-Z]{2}-\d{3}-[A-Z]{2}$/; // format SIV : EZ-108-BC
 export const YEAR_MIN = 1950;
+export const PRICE_MIN = 1; // euros : la base refuse moins (price_cents ≥ 100), la validation et le formulaire aussi
 export const PRICE_MAX = 20000; // euros
 export const COMMENT_MAX = 500;
 export const MODEL_MIN = 2;
