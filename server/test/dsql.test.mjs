@@ -270,30 +270,53 @@ describe("migrate on DSQL", () => {
 
 describe("ensureRuntimeRole", () => {
   const ARN = "arn:aws:iam::123456789012:role/pixcar-api-role";
-  const session = (fail = {}) => {
-    const log = [];
-    const s = { exec: async (sql) => { log.push(sql); for (const [re, err] of Object.entries(fail)) if (new RegExp(re).test(sql)) throw err; } };
-    return { log, db: { kind: "dsql", session: (fn) => fn(s) } };
+  // mappings : lignes de sys.iam_pg_role_mappings que la base « connaît » ; null = la vue n'existe pas (la requête échoue)
+  const session = (fail = {}, mappings = null) => {
+    const log = [], queries = [];
+    const s = {
+      exec: async (sql) => { log.push(sql); for (const [re, err] of Object.entries(fail)) if (new RegExp(re).test(sql)) throw err; },
+      query: async (sql, params) => {
+        queries.push({ sql, params });
+        if (mappings === null) throw new Error('relation "sys.iam_pg_role_mappings" does not exist');
+        return { rows: mappings.filter((m) => m.pg_role_name === params[0] && m.arn === params[1]).map(() => ({ ok: 1 })) };
+      },
+    };
+    return { log, queries, db: { kind: "dsql", session: (fn) => fn(s) } };
   };
 
-  test("creates the role, binds it to the IAM role of the API and grants only DML on the four tables", async () => {
-    const { db, log } = session();
+  test("creates the role, binds it to the IAM role of the API, opens the schema and grants only DML on the four tables", async () => {
+    const { db, log, queries } = session();
     const steps = await ensureRuntimeRole(db, { iamRoleArn: ARN }, () => {});
     assert.deepEqual(log, [
       "CREATE ROLE pixcar_api WITH LOGIN",
       `AWS IAM GRANT pixcar_api TO '${ARN}'`,
+      "GRANT USAGE ON SCHEMA public TO pixcar_api",
       "GRANT SELECT, INSERT, UPDATE, DELETE ON garages, repairs, write_log, upstream_cache TO pixcar_api",
     ]);
-    assert.equal(steps.length, 3);
+    assert.equal(steps.length, 4);
+    assert.deepEqual(queries.map((q) => [q.sql, q.params]), [["SELECT 1 AS ok FROM sys.iam_pg_role_mappings WHERE pg_role_name = $1 AND arn = $2", ["pixcar_api", ARN]]]);
   });
 
-  test("can be run again: an existing role or an existing link is not an error", async () => {
+  test("can be run again: an existing role or an existing link is not an error (even if the mappings view cannot be read)", async () => {
     const { db, log } = session({ "^CREATE ROLE": Object.assign(new Error('role "pixcar_api" already exists'), { code: "42710" }), "^AWS IAM GRANT": new Error("role already has a trust relationship") });
     const steps = await ensureRuntimeRole(db, { iamRoleArn: ARN }, () => {});
-    assert.equal(log.length, 3);
+    assert.equal(log.length, 4);
     assert.match(steps[0], /déjà en place/);
     assert.match(steps[1], /déjà en place/);
     assert.match(steps[2], /fait/);
+    assert.match(steps[3], /fait/);
+  });
+
+  test("a link that the mappings view already shows is not granted again — whatever the wording of DSQL's error would be", async () => {
+    const { db, log } = session({ "^AWS IAM GRANT": new Error("cela ne doit pas être exécuté") }, [{ pg_role_name: "pixcar_api", arn: ARN }]);
+    const steps = await ensureRuntimeRole(db, { iamRoleArn: ARN }, () => {});
+    assert.ok(!log.some((l) => /^AWS IAM GRANT/.test(l)));
+    assert.match(steps[1], /lien avec le rôle IAM : déjà en place/);
+    assert.equal(log.length, 3);
+    // un autre rôle IAM lié au même rôle de base n'empêche pas de lier celui-ci
+    const other = session({}, [{ pg_role_name: "pixcar_api", arn: "arn:aws:iam::123456789012:role/autre" }]);
+    await ensureRuntimeRole(other.db, { iamRoleArn: ARN }, () => {});
+    assert.ok(other.log.some((l) => l.startsWith("AWS IAM GRANT")));
   });
 
   test("any other failure is reported, and nothing unsafe is ever put into the SQL", async () => {

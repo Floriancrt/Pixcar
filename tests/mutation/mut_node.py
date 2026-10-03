@@ -55,6 +55,9 @@ M = [
  ("DSQL migration: the index build is not waited for", "server/migrate.mjs", "if (jobId) await waitForJob(", "if (false) await waitForJob(", SRV, ["dsql"]),
  ("DSQL migration: a failed index build is ignored", "server/migrate.mjs", 'if (job && job.status === "failed") throw', "if (false) throw", SRV, ["dsql"]),
  ("DSQL role: any IAM role ARN accepted", "server/migrate.mjs", "if (!/^arn:aws:iam::", "if (false && /^arn:aws:iam::", SRV, ["dsql"]),
+ ("DSQL role: the schema is not opened to the role", "server/migrate.mjs", "`GRANT USAGE ON SCHEMA public TO ${role}`", "`SELECT 1`", SRV, ["dsql"]),
+ ("DSQL role: an existing link is granted again", "server/migrate.mjs", "if (linked) steps.push(", "if (false) steps.push(", SRV, ["dsql"]),
+ ("DSQL role: any link of the role counts, whatever its IAM role", "server/migrate.mjs", "WHERE pg_role_name = $1 AND arn = $2", "WHERE pg_role_name = $1 AND $2 = $2", SRV, ["dsql"]),
  # ---- fonction Lambda et opérations
  ("Lambda: the visitor's X-Forwarded-For is trusted", "server/lambda.mjs", "!CLIENT_ADDRESS_HEADERS.has(name.toLowerCase())", "true", SRV, ["lambda"]),
  ("Lambda: the address reported by API Gateway is ignored", "server/lambda.mjs", "remoteIp: event.requestContext && event.requestContext.http && event.requestContext.http.sourceIp", "remoteIp: undefined", SRV, ["lambda"]),

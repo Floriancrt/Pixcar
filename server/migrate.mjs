@@ -95,7 +95,15 @@ export async function ensureRuntimeRole(db, { role = "pixcar_api", iamRoleArn, t
       }
     };
     await run("création du rôle", `CREATE ROLE ${role} WITH LOGIN`, (e) => e.code === "42710" || /already exists/i.test(e.message));
-    await run("lien avec le rôle IAM", `AWS IAM GRANT ${role} TO '${iamRoleArn}'`, (e) => /already|exists/i.test(e.message));
+    // Le lien existe-t-il déjà ? Vue documentée de DSQL (sys.iam_pg_role_mappings : arn, pg_role_name). Si elle manque ou change,
+    // on tente le lien quand même et on tolère « déjà en place » : cette vérification ne sert qu'à ne pas dépendre du texte d'une erreur.
+    const linked = await Promise.resolve()
+      .then(() => s.query("SELECT 1 AS ok FROM sys.iam_pg_role_mappings WHERE pg_role_name = $1 AND arn = $2", [role, iamRoleArn]))
+      .then((r) => r.rows.length > 0, () => false);
+    if (linked) steps.push("lien avec le rôle IAM : déjà en place");
+    else await run("lien avec le rôle IAM", `AWS IAM GRANT ${role} TO '${iamRoleArn}'`, (e) => /already|exists/i.test(e.message));
+    // exemple de la documentation de DSQL : l'accès au schéma s'accorde explicitement, puis les droits sur les tables
+    await run("accès au schéma", `GRANT USAGE ON SCHEMA public TO ${role}`, () => false);
     await run("droits sur les tables", `GRANT SELECT, INSERT, UPDATE, DELETE ON ${tables.join(", ")} TO ${role}`, () => false);
     steps.forEach((m) => log(m));
     return steps;

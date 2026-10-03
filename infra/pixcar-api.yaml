@@ -54,7 +54,7 @@ Parameters:
     Type: Number
     Default: 0
     MinValue: 0
-    Description: Exécutions simultanées réservées à l'API (0 = aucune réservation ; à régler après avoir vérifié le quota du compte).
+    Description: Exécutions simultanées réservées à l'API (0 = aucune réservation). Impossible tant que le quota Lambda du projet est de 10 ; voir docs/exploitation.md, 3 bis.
   LogRetentionDays:
     Type: Number
     Default: 30
