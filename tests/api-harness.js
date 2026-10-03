@@ -1,5 +1,6 @@
-// L'API réelle (base PostgreSQL embarquée PGlite) avec une couche de pannes réglable, pour tester la page en mode distant
-// de bout en bout : page → réseau → API → base. Les services publics (adresses, OpenStreetMap…) restent simulés par mocks.js.
+// L'API réelle avec une couche de pannes réglable, pour tester la page en mode distant de bout en bout : page → réseau → API → base.
+// Base : PostgreSQL embarquée (PGlite) par défaut ; avec TEST_DATABASE_URL, un vrai serveur PostgreSQL (son schéma est VIDÉ au départ).
+// Les services publics (adresses, OpenStreetMap…) restent simulés par mocks.js.
 const http = require("http");
 
 async function startApi({ origin, writeLimit = 1000 } = {}) {
@@ -8,7 +9,9 @@ async function startApi({ origin, writeLimit = 1000 } = {}) {
   const { createDb } = await import("../server/db.mjs");
   const { migrate } = await import("../server/migrate.mjs");
   const { toNodeListener } = await import("../server/index.mjs");
-  const db = await createDb({});
+  const databaseUrl = process.env.TEST_DATABASE_URL || "";
+  const db = await createDb({ url: databaseUrl });
+  if (databaseUrl) await db.exec("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
   await migrate(db);
   // L'horloge de l'API suit celle de la page de test (2026-10-01) puis avance en temps réel ; clock.skew permet de la faire sauter
   // (la copie de 10 s d'une zone expire alors sans attendre).

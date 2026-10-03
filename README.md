@@ -30,7 +30,7 @@ Sans adresse d'API la page garde les réparations dans le navigateur ; `npm run 
 
 ## Publier
 
-Trois pièces : la **page** (`PIXCAR_API_BASE=https://api.exemple node scripts/build.mjs --only dist --out /tmp/site`, puis publier `/tmp/site/dist/` sur un hébergeur statique ou un CDN), l'**API** (`Dockerfile` ou `node server/index.mjs`, au moins 2 instances) et une base **PostgreSQL ≥ 14** gérée. Pas à pas, réglages, surveillance, incidents et points à valider avant l'ouverture : [docs/exploitation.md](docs/exploitation.md) (dont la publication sur **GitHub Pages avec un domaine personnalisé**, exemple `pixcar.fr`, et ses limites).
+Trois pièces : la **page** (`PIXCAR_API_BASE=https://api.exemple node scripts/build.mjs --only dist --out /tmp/site`, puis publier `/tmp/site/dist/` sur un hébergeur statique ou un CDN), l'**API** (`Dockerfile` ou `node server/index.mjs`, au moins 2 instances) et une base **PostgreSQL ≥ 14** gérée. Pas à pas, réglages, surveillance, incidents et points à valider avant l'ouverture : [docs/exploitation.md](docs/exploitation.md) (dont la publication sur **GitHub Pages avec un domaine personnalisé**, exemple `pixcar.fr`, et ses limites). Une fois l'API en ligne, pour vérifier que les réparations arrivent bien en base : `node scripts/smoke-api.mjs https://api.pixcar.fr --origin https://pixcar.fr`.
 
 ## Tester
 
@@ -39,6 +39,7 @@ npm test                 # suites navigateur (Playwright + Chromium) sur index.h
 npm run test:dist        # les mêmes sur dist/, servi avec ses en-têtes (CSP, MIME, compression), + budgets et hors ligne
 npm run test:unit        # magasin de réparations, client HTTP, configuration
 npm run test:server      # API sur une base embarquée ; TEST_DATABASE_URL=postgres://… : sur un vrai PostgreSQL
+TEST_DATABASE_URL=postgres://… node tests/demo-db.js    # démonstration : page → API → PostgreSQL, contenu de la table à chaque étape
 node scripts/build.mjs --check    # index.html et dist/ du dépôt correspondent bien aux sources
 ```
 

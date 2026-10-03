@@ -27,6 +27,13 @@ python3 tests/mutation/mut_ux.py --anchors    # vérifie sans navigateur que cha
 
 Mesures : `node tests/perf.js` (chargement), `node tests/perf-search.js` (recherche), `DATABASE_URL=postgres://… node scripts/load-api.mjs` (API sous charge).
 
+Les réparations arrivent-elles en base ? Deux outils, qui ne remplacent pas les suites ci-dessus :
+
+```sh
+TEST_DATABASE_URL=postgres://… node tests/demo-db.js          # démonstration locale : page → API réelle → PostgreSQL réel, contenu de la table à chaque étape (le schéma est vidé !)
+node scripts/smoke-api.mjs https://api.pixcar.fr --origin https://pixcar.fr   # essai d'une API DÉPLOYÉE (voir exploitation.md, « Vérifier que les réparations arrivent en base »)
+```
+
 ## 2. Ce que couvrent les tests
 
 ### Navigateur (Playwright + Chromium, services publics simulés par `tests/mocks.js`)
@@ -54,9 +61,9 @@ Mesures : `node tests/perf.js` (chargement), `node tests/perf-search.js` (recher
 | Dossier | Vérifie | Tests |
 | --- | --- | --- |
 | `tests/unit` | magasin de réparations (file d'envoi, rejeu, reprises, abandon, annulation, zones de secours, véhicule mémorisé), client HTTP (délais, nouvelles tentatives, `Retry-After`, disjoncteur), configuration de la page | 63 |
-| `server/test` | API : validation, idempotence, limites, modération, ETag/304, CORS, disjoncteur, arrêt propre, erreurs sans détail ; relais Overpass (cache, miroirs en échec, copie périmée, une seule requête amont, plafonds) ; schéma SQL et contraintes ; migrations ; contrat OpenAPI (chaque réponse produite est décrite) ; serveur Node réel (compression, 304, corps en morceaux, arrêt) ; outil de modération et effacement | 130 sur PGlite · 134 sur PostgreSQL 16 (+ migrations concurrentes, verrou tenu par sa connexion, migration de plus de 5 s) |
+| `server/test` | API : validation, idempotence, limites, modération, ETag/304, CORS, disjoncteur, arrêt propre, erreurs sans détail ; relais Overpass (cache, miroirs en échec, copie périmée, une seule requête amont, plafonds) ; schéma SQL et contraintes ; migrations ; contrat OpenAPI (chaque réponse produite est décrite) ; serveur Node réel (compression, 304, corps en morceaux, arrêt) ; outil de modération et effacement ; **essai de l'API déployée** (`scripts/smoke-api.mjs`) contre une vraie API (déclaration écrite, relue, rejouée, dédoublonnée, supprimée) **et contre treize API volontairement défectueuses** (site non autorisé, API ou base en panne, écriture refusée, accusé de réception sans écriture, commentaire / plaque / jour exact publiés, CORS absent à la lecture ou à l'écriture, suppression sans jeton ou refusée, « supprimé » sans effet, rejeu et doublon non détectés) : un essai qui ne sait pas échouer ne prouverait rien | 150 sur PGlite · 154 sur PostgreSQL 16 (+ migrations concurrentes, verrou tenu par sa connexion, migration de plus de 5 s) |
 
-**Résultat du 3 octobre 2026** : `npm test` et `npm run test:dist` passent en entier (toutes les suites ci-dessus) ; unitaires 63/63 ; serveur 130/130 (PGlite) et 134/134 (PostgreSQL 16) ; `node scripts/build.mjs --check` : à jour.
+**Résultat du 3 octobre 2026** : `npm test` et `npm run test:dist` passent en entier (toutes les suites ci-dessus) ; unitaires 63/63 ; serveur 150/150 (PGlite) et 154/154 (PostgreSQL 16) ; `node scripts/build.mjs --check` : à jour.
 
 ### Ce que la page n'a pas le droit de faire (vérifié par `budget` et `integrity`)
 
@@ -139,6 +146,7 @@ Aucune erreur (0 réponse 5xx, 0 erreur réseau), plan de la requête de lecture
 **Déploiement et exploitation**
 - Aucun déploiement réel : hébergeur statique, CDN, répartiteur, base gérée, bascule multi-zones (leur durée dépend du fournisseur).
 - **L'image Docker n'a pas été construite** (pas de démon Docker dans l'environnement). Vérifié à la place : le même jeu de fichiers, `npm ci --omit=dev`, démarrage en mode production sur PostgreSQL, sondes, arrêt propre.
+- **Aucune réparation n'a été enregistrée dans une base de production** : `tests/demo-db.js` (page → API → PostgreSQL 16, tout en local, services publics simulés) et `scripts/smoke-api.mjs` (essayé contre l'API en mode production sur ce même PostgreSQL local) prouvent le mécanisme, pas un déploiement. Le premier essai réel est celui de `exploitation.md` (« Vérifier que les réparations arrivent en base »).
 - Aucune charge réelle ; les mesures de §4 sont indicatives.
 - Turnstile : côté serveur seulement ; la page n'envoie pas de jeton.
 - Sauvegarde et restauration de la base : à tester chez l'hébergeur.
