@@ -8,7 +8,7 @@ const { launch, ROOT } = require("./harness");
 const { installMocks, buildElements } = require("./mocks");
 const { serveDir } = require("./static-server");
 
-const DIST = path.join(ROOT, "dist");
+const DIST = path.join(ROOT, process.env.PIXCAR_ROOT || "dist"); // PIXCAR_ROOT : une autre sortie de scripts/build.mjs (ex. la version GitHub Pages)
 const results = [];
 const check = (name, cond, detail = "") => {
   results.push({ name, ok: !!cond });
@@ -26,9 +26,9 @@ async function until(fn, ms = 8000) {
 const copy = (src, dst) => fs.cpSync(src, dst, { recursive: true });
 
 // une « nouvelle version déployée » : même site, autre contenu et autres noms de fichiers à empreinte
-function makeVersion(tag, { brokenShell = false } = {}) {
+function makeVersion(tag, { brokenShell = false, from = DIST } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `pixcar-${tag}-`));
-  copy(DIST, dir);
+  copy(from, dir);
   const assets = fs.readdirSync(path.join(dir, "assets"));
   const js = assets.find((f) => /^app\.[0-9a-f]+\.js$/.test(f));
   const newJs = `app.${tag}.js`;
@@ -65,7 +65,8 @@ function makeVersion(tag, { brokenShell = false } = {}) {
     const cached = await page.evaluate(async () => { const c = await caches.open((await caches.keys())[0]); return (await c.keys()).map((r) => new URL(r.url).pathname); });
     check("O1b the whole shell is in the cache: page (with its stylesheet), JS, font, icons", shell.length === 5 && shell.every((f) => cached.includes(f === "./" ? "/" : "/" + f)), JSON.stringify({ shell, cached }));
     const hdr = await fetch(host.url + "/sw.js");
-    check("O1c sw.js is revalidated on every visit and served as JavaScript", /no-cache/.test(hdr.headers.get("cache-control")) && /javascript/.test(hdr.headers.get("content-type")));
+    const withHeaders = fs.existsSync(path.join(DIST, "_headers")); // la version GitHub Pages n'en a pas : l'hébergeur décide du cache
+    check(`O1c sw.js is served as JavaScript${withHeaders ? " and revalidated on every visit" : " (no _headers in this build)"}`, /javascript/.test(hdr.headers.get("content-type")) && (!withHeaders || /no-cache/.test(hdr.headers.get("cache-control"))));
 
     // ---------------- O2 : visite suivante sans réseau pour la coque
     host.stats.requests.length = 0;
@@ -118,6 +119,9 @@ function makeVersion(tag, { brokenShell = false } = {}) {
     await p2.reload(); // la page (version 1, depuis le cache) demande une vérification
     const two = await until(async () => (await keys()).length === 2 && (await keys()));
     check("O4a a new version is installed in the background while the old page keeps running", two && (await p2.title()) === "Pixcar", JSON.stringify(two));
+    // la liste des caches change dès le début de l'installation : on attend qu'elle soit complète, puis que le nouveau worker ait pris la main
+    await until(async () => (await p2.evaluate(async () => (await (await caches.open("pixcar-v2")).keys()).length)) >= 5);
+    await sleep(500);
     await p2.reload();
     check("O4b the next visit shows the new version, served from the cache", (await p2.title()) === "Pixcar v2" && (await controlled()));
     const oldStill = await p2.evaluate(async (f) => { const r = await fetch("assets/" + f); return r.status; }, oldJs);
@@ -151,6 +155,34 @@ function makeVersion(tag, { brokenShell = false } = {}) {
     await ctx2.close();
     host2.close();
     for (const d of [v2.dir, v3.dir, broken.dir]) fs.rmSync(d, { recursive: true, force: true });
+
+    // ---------------- O8 : un hébergeur qui laisse le navigateur garder la page dix minutes (GitHub Pages)
+    // Sans précaution, le nouveau worker récupère l'ancienne page dans le cache HTTP et la range dans la coque de la nouvelle version.
+    const slow = fs.mkdtempSync(path.join(os.tmpdir(), "pixcar-longcache-"));
+    copy(DIST, slow);
+    fs.writeFileSync(path.join(slow, "_headers"), "/*\n  Cache-Control: max-age=600\n");
+    const v8 = makeVersion("v8", { from: slow });
+    const host3 = await serveDir(slow);
+    const ctx3 = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "fr-FR", serviceWorkers: "allow" });
+    await installMocks(ctx3, { log: () => {} });
+    await ctx3.addInitScript(() => { window.JG_TUNE = { today: "2026-10-01", stagger: 60, retry: 60 }; });
+    const p3 = await ctx3.newPage();
+    const keys3 = () => p3.evaluate(async () => (await caches.keys()).sort());
+    await p3.goto(host3.url + "/index.html");
+    await p3.evaluate(() => navigator.serviceWorker.ready);
+    await p3.reload();
+    await until(() => p3.evaluate(() => !!navigator.serviceWorker.controller));
+    host3.setRoot(v8.dir); // déployé : l'ancienne page est encore « fraîche » dans le cache HTTP du navigateur
+    await p3.reload();
+    await until(async () => (await keys3()).length === 2);
+    await until(async () => (await p3.evaluate(async () => (await (await caches.open("pixcar-v8")).keys()).length)) >= 5);
+    await sleep(500);
+    await p3.reload();
+    const cachedTitle = await p3.evaluate(async () => /<title>([^<]*)/.exec(await (await (await caches.open("pixcar-v8")).match("./")).text())[1]);
+    check("O8 a host that lets the browser keep the page for ten minutes (GitHub Pages) does not make the new version store the OLD page: the next visit shows the new one", (await p3.title()) === "Pixcar v8" && cachedTitle === "Pixcar v8", JSON.stringify([await p3.title(), cachedTitle]));
+    await ctx3.close();
+    host3.close();
+    for (const d of [slow, v8.dir]) fs.rmSync(d, { recursive: true, force: true });
   } catch (e) {
     check("offline section crashed", false, e && e.stack);
   } finally {

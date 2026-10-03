@@ -14,9 +14,7 @@ const SHELL = __SHELL__; // « ./ » (la page) et chaque fichier de la coque, re
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE)
-      .then((cache) => cache.addAll(SHELL))
+    precache()
       .then(() => self.skipWaiting())
       .catch(async (error) => {
         await caches.delete(CACHE); // une coque incomplète ne doit jamais rester : elle passerait pour la « génération précédente »
@@ -24,6 +22,21 @@ self.addEventListener("install", (event) => {
       }),
   );
 });
+
+// Range la coque dans le cache. La page est demandée au réseau et jamais au cache HTTP (cache: "reload") : un hébergeur qui la
+// laisse en cache dix minutes (GitHub Pages) ferait ranger l'ANCIENNE page dans la coque de la nouvelle version, et on y resterait
+// jusqu'au déploiement suivant. Les fichiers à empreinte ne changent jamais : le cache HTTP est bon pour eux.
+async function precache() {
+  const cache = await caches.open(CACHE);
+  await Promise.all(
+    SHELL.map(async (path) => {
+      const request = new Request(path, path === "./" ? { cache: "reload" } : {});
+      const response = await fetch(request);
+      if (!response.ok) throw new Error(`${path} : ${response.status}`); // comme cache.addAll : un fichier absent fait échouer l'installation
+      await cache.put(request, response);
+    }),
+  );
+}
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
