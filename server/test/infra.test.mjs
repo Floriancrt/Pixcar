@@ -178,6 +178,40 @@ describe("CloudFormation template (infra/pixcar-api.yaml)", () => {
     assert.deepEqual([R.Cluster.DeletionPolicy, R.Cluster.UpdateReplacePolicy, R.Cluster.Properties.DeletionProtectionEnabled], ["Retain", "Retain", true]);
   });
 
+  test("backups: one daily plan keeps the database's recovery points for the chosen number of days, in a vault the stack never deletes, under a role only AWS Backup can assume", () => {
+    const ids = ["BackupVault", "BackupPlan", "BackupRole", "BackupSelection"];
+    // 0 jour = pas de sauvegarde ; tout ce qui s'y rapporte tombe avec la condition, sorties comprises
+    assert.deepEqual(t.Conditions.HasBackup, { "Fn::Not": [{ "Fn::Equals": [{ Ref: "BackupRetentionDays" }, "0"] }] });
+    for (const id of ids) assert.equal(R[id].Condition, "HasBackup", id);
+    for (const name of ["BackupVaultName", "BackupRoleArn"]) assert.equal(t.Outputs[name].Condition, "HasBackup", name);
+    // 30 jours par défaut : la durée annoncée dans la politique de confidentialité ; 0 reste permis (sans sauvegarde)
+    const days = t.Parameters.BackupRetentionDays;
+    assert.equal(days.Default, 30);
+    assert.ok(days.AllowedValues.includes(0) && days.AllowedValues.includes(days.Default));
+    // le coffre contient les points de restauration : conservé à la suppression comme au remplacement
+    assert.deepEqual([R.BackupVault.DeletionPolicy, R.BackupVault.UpdateReplacePolicy], ["Retain", "Retain"]);
+    // un plan, une règle : tous les jours, vers ce coffre, conservée le nombre de jours du paramètre
+    const rules = R.BackupPlan.Properties.BackupPlan.BackupPlanRule;
+    assert.equal(rules.length, 1);
+    const [rule] = rules;
+    assert.deepEqual([rule.TargetBackupVault, rule.ScheduleExpression, rule.Lifecycle], [{ Ref: "BackupVault" }, { Ref: "BackupSchedule" }, { DeleteAfterDays: { Ref: "BackupRetentionDays" } }]);
+    assert.match(t.Parameters.BackupSchedule.Default, /^cron\(\d{1,2} \d{1,2} \* \* \? \*\)$/, "une fois par jour, tous les jours");
+    // contraintes d'AWS Backup : lancement dans une fenêtre d'au moins 60 minutes, achèvement au moins 60 minutes plus tard
+    assert.ok(rule.StartWindowMinutes >= 60 && rule.CompletionWindowMinutes >= rule.StartWindowMinutes + 60, `${rule.StartWindowMinutes} / ${rule.CompletionWindowMinutes}`);
+    // la sélection : le cluster de la pile (pas un autre), ce plan, ce rôle
+    const selection = R.BackupSelection.Properties;
+    assert.deepEqual(selection.BackupPlanId, { "Fn::GetAtt": ["BackupPlan", "BackupPlanId"] });
+    assert.deepEqual(selection.BackupSelection.IamRoleArn, { "Fn::GetAtt": ["BackupRole", "Arn"] });
+    assert.deepEqual(selection.BackupSelection.Resources, [{ "Fn::GetAtt": ["Cluster", "ResourceArn"] }]);
+    // le rôle : AWS Backup seul peut le prendre ; les deux stratégies gérées (sauvegarde, restauration), aucune stratégie en ligne
+    const role = R.BackupRole.Properties;
+    assert.deepEqual(role.AssumeRolePolicyDocument.Statement.map((s) => [s.Effect, s.Principal.Service, s.Action]), [["Allow", "backup.amazonaws.com", "sts:AssumeRole"]]);
+    assert.equal(role.Policies, undefined);
+    assert.deepEqual(role.ManagedPolicyArns.map((a) => a["Fn::Sub"].replace(/^.*policy\//, "")), ["service-role/AWSBackupServiceRolePolicyForBackup", "service-role/AWSBackupServiceRolePolicyForRestores"]);
+    // noms physiques : ceux de la pile (plusieurs piles dans un projet ne se marchent pas dessus)
+    for (const name of [R.BackupVault.Properties.BackupVaultName, R.BackupPlan.Properties.BackupPlan.BackupPlanName, selection.BackupSelection.SelectionName]) assert.match(name["Fn::Sub"], /^\$\{AWS::StackName\}-/);
+  });
+
   test("the gateway hands the function the version 2.0 event (it carries the visitor's address), one route, one stage, global throttling", () => {
     assert.deepEqual([R.HttpApi.Properties.ProtocolType, R.ApiIntegration.Properties.IntegrationType, R.ApiIntegration.Properties.PayloadFormatVersion], ["HTTP", "AWS_PROXY", "2.0"]);
     assert.deepEqual([R.DefaultRoute.Properties.RouteKey, R.DefaultStage.Properties.StageName], ["$default", "$default"]);

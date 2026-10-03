@@ -12,6 +12,7 @@ Metadata:
       - "secrets (PLATE_PEPPER, IP_PEPPER) dans SSM SecureString, jamais dans cette pile ni dans l'environnement des fonctions"
       - "PLATE_PEPPER ne change jamais une fois en service (empreintes des plaques, doublons, effacement)"
       - "rôle de base pixcar_api = DML sur 4 tables seulement ; admin réservé à la fonction ops"
+      - "la durée des sauvegardes (BackupRetentionDays) est celle annoncée dans la politique de confidentialité : elles contiennent les empreintes de plaques"
     ref:
       - { at: docs/exploitation.md, has: "déploiement AWS, opérations, coûts, fin du plan gratuit" }
       - { at: docs/architecture.md, has: "schéma, API, choix de la base" }
@@ -72,11 +73,22 @@ Parameters:
     Type: String
     Default: ""
     Description: Adresse qui reçoit les alarmes (erreurs). Vide = pas d'alarme par courriel.
+  BackupRetentionDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [0, 7, 14, 30, 35, 60, 90, 180, 365]
+    Description: Durée de conservation des sauvegardes quotidiennes de la base (AWS Backup), 0 = aucune sauvegarde. Une demande d'effacement n'est complète qu'à l'expiration des sauvegardes ; voir docs/exploitation.md.
+  BackupSchedule:
+    Type: String
+    Default: "cron(30 2 * * ? *)"
+    AllowedPattern: '^cron\(.+\)$'
+    Description: Moment de la sauvegarde quotidienne, en UTC (expression cron d'AWS Backup).
 
 Conditions:
   HasDomain: !And [!Not [!Equals [!Ref ApiDomainName, ""]], !Not [!Equals [!Ref ApiCertificateArn, ""]]]
   HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, ""]]
   HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, "0"]]
+  HasBackup: !Not [!Equals [!Ref BackupRetentionDays, "0"]]
 
 Resources:
   # ---- base de données
@@ -330,6 +342,70 @@ Resources:
         Input: '{"op":"purge"}'
         RetryPolicy: { MaximumEventAgeInSeconds: 3600, MaximumRetryAttempts: 2 }
 
+  # ---- sauvegardes quotidiennes du cluster (AWS Backup) ; BackupRetentionDays = 0 les désactive
+  BackupVault:
+    Type: AWS::Backup::BackupVault
+    Condition: HasBackup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "coffre des points de restauration de la base ; chiffré par la clé gérée par AWS Backup, pas par une clé du projet (1 USD par mois et une politique de clé pour des données que DSQL chiffre déjà au repos) ; pas de politique d'accès qui interdit la suppression des points de restauration : il faut pouvoir en retirer un à la main (erreur, demande d'effacement urgente)"
+        must: ["Retain : un coffre qui contient des points de restauration ne se supprime pas avec la pile (CloudFormation ne sait pas le vider) ; le retirer à la main après avoir supprimé ses points de restauration"]
+        mutable: review-required
+    Properties:
+      BackupVaultName: !Sub "${AWS::StackName}-vault"
+      BackupVaultTags: { Project: pixcar }
+
+  BackupPlan:
+    Type: AWS::Backup::BackupPlan
+    Condition: HasBackup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "une sauvegarde complète par jour (DSQL ne se sauvegarde que par AWS Backup, en entier : ni sauvegarde incrémentale ni restauration à la seconde) ; 30 jours = compromis entre la distance à laquelle on récupère une erreur et le délai avant qu'un effacement demandé disparaisse aussi des sauvegardes"
+        must: ["BackupRetentionDays est la durée à annoncer dans la politique de confidentialité", "aucune copie entre Régions (non prise en charge par le plan gratuit)", "fenêtre de lancement d'au moins 60 minutes et d'achèvement d'au moins 60 minutes de plus (contrainte d'AWS Backup)"]
+        mutable: free-to-tune
+    Properties:
+      BackupPlan:
+        BackupPlanName: !Sub "${AWS::StackName}-daily"
+        BackupPlanRule:
+          - RuleName: daily
+            TargetBackupVault: !Ref BackupVault
+            ScheduleExpression: !Ref BackupSchedule
+            StartWindowMinutes: 60
+            CompletionWindowMinutes: 180
+            Lifecycle: { DeleteAfterDays: !Ref BackupRetentionDays }
+      BackupPlanTags: { Project: pixcar }
+
+  BackupRole:
+    Type: AWS::IAM::Role
+    Condition: HasBackup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "identité que prend AWS Backup pour sauvegarder et restaurer le cluster, avec les deux stratégies gérées par AWS (sauvegarde, restauration), comme le rôle par défaut de la console ; aucune condition aws:SourceAccount dans la confiance : le rôle ne sert qu'aux plans du projet (il faut iam:PassRole pour le confier à AWS Backup) et une condition que le service ne renseignerait pas ferait échouer les sauvegardes sans bruit, faute d'alarme"
+        must: ["approuvé par backup.amazonaws.com seulement"]
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: backup.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup"
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForRestores"
+      Tags: [{ Key: Project, Value: pixcar }]
+
+  BackupSelection:
+    Type: AWS::Backup::BackupSelection
+    Condition: HasBackup
+    Properties:
+      BackupPlanId: !GetAtt BackupPlan.BackupPlanId
+      BackupSelection:
+        SelectionName: !Sub "${AWS::StackName}-database"
+        IamRoleArn: !GetAtt BackupRole.Arn
+        Resources: [!GetAtt Cluster.ResourceArn]
+
   # ---- alarmes par courriel (facultatives)
   AlarmTopic:
     Type: AWS::SNS::Topic
@@ -413,3 +489,11 @@ Outputs:
   ApiRoleArn:
     Description: Rôle IAM de l'API, lié au rôle de base pixcar_api
     Value: !GetAtt ApiRole.Arn
+  BackupVaultName:
+    Condition: HasBackup
+    Description: Coffre des sauvegardes de la base (aws backup list-recovery-points-by-backup-vault)
+    Value: !Ref BackupVault
+  BackupRoleArn:
+    Condition: HasBackup
+    Description: Rôle IAM d'AWS Backup (sauvegarde manuelle, restauration)
+    Value: !GetAtt BackupRole.Arn

@@ -68,7 +68,7 @@ M = [
  ("ops: approve accepts any string as an identifier", "server/ops.mjs", 'approve: (e) => withDb((db) => runModerate(["approve", ...list(e.ids, "ids", isUuid)], db)),', 'approve: (e) => withDb((db) => runModerate(["approve", ...list(e.ids, "ids", () => true)], db)),', SRV, ["ops"]),
  # ---- modèle CloudFormation (contrat avec le code, droits, suppression de la base)
  ("infra: the API role can administer the database", CFN, 'Action: "dsql:DbConnect", Resource', 'Action: "dsql:DbConnectAdmin", Resource', SRV, ["infra"]),
- ("infra: the database is deleted with the stack", CFN, "    DeletionPolicy: Retain\n", "    DeletionPolicy: Delete\n", SRV, ["infra"]),
+ ("infra: the database is deleted with the stack", CFN, "    Type: AWS::DSQL::Cluster\n    DeletionPolicy: Retain\n", "    Type: AWS::DSQL::Cluster\n    DeletionPolicy: Delete\n", SRV, ["infra"]),
  ("infra: deletion protection is off", CFN, "DeletionProtectionEnabled: true", "DeletionProtectionEnabled: false", SRV, ["infra"]),
  ("infra: the gateway's address is read from a header (TRUST_PROXY=1)", CFN, 'TRUST_PROXY: "0"', 'TRUST_PROXY: "1"', SRV, ["infra"]),
  ("infra: the plate secret sits in the function configuration", CFN, '          REQUEST_TIMEOUT_MS: "10000"', '          PLATE_PEPPER: "0123456789abcdef0123"\n          REQUEST_TIMEOUT_MS: "10000"', SRV, ["infra"]),
@@ -82,6 +82,13 @@ M = [
  ("infra: the operations function looks for migrations elsewhere than in the package", CFN, "MIGRATIONS_DIR: /var/task/db/migrations", "MIGRATIONS_DIR: /var/db/migrations", SRV, ["infra"]),
  ("infra: a parameter nobody reads", CFN, "ThrottlingBurstLimit: !Ref ThrottleBurst", "ThrottlingBurstLimit: 100", SRV, ["infra"]),
  ("infra: an unconditional output reads a conditional resource", CFN, "  CustomDomainTarget:\n    Condition: HasDomain\n", "  CustomDomainTarget:\n", SRV, ["infra"]),
+ ("infra: the backup vault is deleted with the stack", CFN, "    Type: AWS::Backup::BackupVault\n    Condition: HasBackup\n    DeletionPolicy: Retain\n", "    Type: AWS::Backup::BackupVault\n    Condition: HasBackup\n    DeletionPolicy: Delete\n", SRV, ["infra"]),
+ ("infra: recovery points are kept one day whatever the parameter says", CFN, "Lifecycle: { DeleteAfterDays: !Ref BackupRetentionDays }", "Lifecycle: { DeleteAfterDays: 1 }", SRV, ["infra"]),
+ ("infra: the backup selection protects another resource than the database", CFN, "Resources: [!GetAtt Cluster.ResourceArn]", "Resources: [!GetAtt ApiFunction.Arn]", SRV, ["infra"]),
+ ("infra: any service can assume the backup role", CFN, "Principal: { Service: backup.amazonaws.com }", 'Principal: { Service: "*" }', SRV, ["infra"]),
+ ("infra: the backup runs weekly, not daily", CFN, 'Default: "cron(30 2 * * ? *)"', 'Default: "cron(30 2 ? * MON *)"', SRV, ["infra"]),
+ ("infra: backups are off unless asked for", CFN, "    Default: 30\n    AllowedValues: [0, 7, 14, 30, 35, 60, 90, 180, 365]", "    Default: 0\n    AllowedValues: [0, 7, 14, 30, 35, 60, 90, 180, 365]", SRV, ["infra"]),
+ ("infra: a backup resource exists whatever the retention", CFN, "  BackupSelection:\n    Type: AWS::Backup::BackupSelection\n    Condition: HasBackup\n", "  BackupSelection:\n    Type: AWS::Backup::BackupSelection\n", SRV, ["infra"]),
  ("ops: MIGRATIONS_DIR is ignored (the bundle looks for db/migrations next to itself)", "server/ops.mjs", "env.MIGRATIONS_DIR || MIGRATIONS_DIR", "MIGRATIONS_DIR", SRV, ["ops"]),
  # ---- SQL portable (PostgreSQL = DSQL)
  ("purge stops after one batch", REPO, "if (rowCount < PURGE_BATCH) break;", "break;", SRV, ["repo-portable"]),
