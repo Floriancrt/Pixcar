@@ -50,7 +50,7 @@ def run(mutations, suite, name_width):
                 bad += 1
                 continue
             shutil.copyfile(WORK / "out" / "index.html", WORK / "mut.html")
-            r = subprocess.run(["node", f"tests/{suite}", ".mut/mut.html", secs], cwd=ROOT, capture_output=True, text=True, timeout=900)
+            r = subprocess.run(["node", f"tests/{suite}", ".mut/mut.html", secs], cwd=ROOT, capture_output=True, text=True, timeout=900, env={**os.environ, "PIXCAR_SRC": str(WORK / "src")})
             fails = re.findall(r"FAIL: (\S+)", r.stdout)
             ok = any(f.startswith(must) for f in fails)
             print(f"[{'tuée' if ok else 'SURVIVANTE'}] {name:{name_width}s} attendu {must:4s} -> échecs : {', '.join(sorted(set(fails))) or 'aucun'}", flush=True)
@@ -65,7 +65,7 @@ def run(mutations, suite, name_width):
 # Une mutation = (nom, fichier, ancre, remplacement, dossier de tests, filtres de fichiers de tests)
 # La variante est vérifiée dans une COPIE minimale du dépôt (.mut/node/) ; elle est « tuée » quand au moins un test échoue
 # (et que l'échec n'est pas une erreur de syntaxe ou d'import : une variante qui ne se charge pas ne prouve rien).
-NODE_COPY = ["server", "db", "infra", "scripts/node-tests.mjs", "scripts/build-lambda.mjs", "package.json", "tests/unit", "src/js/modules", "src/js/shared", "src/js/package.json"]
+NODE_COPY = ["server", "db", "infra", "scripts/node-tests.mjs", "scripts/build-lambda.mjs", "scripts/build.mjs", "package.json", "tests/unit", "src"]
 
 
 def run_node(mutations, name_width):

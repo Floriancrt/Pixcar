@@ -12,6 +12,7 @@ from lib import run_node
 V, APP, UNIT, SRV = "server/lib/validate.mjs", "server/app.mjs", "tests/unit", "server/test"
 REPO, HTTP, STORE, CLIENT = "server/repo.mjs", "server/lib/http.mjs", "src/js/modules/repair-store.js", "src/js/modules/api-client.js"
 CFN = "infra/pixcar-api.yaml"
+BUILD, LEGAL = "scripts/build.mjs", "src/partials/legal.html"
 M = [
  # ---- validation des déclarations
  ("price: under 1 € accepted (the database refuses it)", V, "price < PRICE_MIN ||", "price <= 0 ||", SRV, ["validate"]),
@@ -89,6 +90,22 @@ M = [
  ("infra: the backup runs weekly, not daily", CFN, 'Default: "cron(30 2 * * ? *)"', 'Default: "cron(30 2 ? * MON *)"', SRV, ["infra"]),
  ("infra: backups are off unless asked for", CFN, "    Default: 30\n    AllowedValues: [0, 7, 14, 30, 35, 60, 90, 180, 365]", "    Default: 0\n    AllowedValues: [0, 7, 14, 30, 35, 60, 90, 180, 365]", SRV, ["infra"]),
  ("infra: a backup resource exists whatever the retention", CFN, "  BackupSelection:\n    Type: AWS::Backup::BackupSelection\n    Condition: HasBackup\n", "  BackupSelection:\n    Type: AWS::Backup::BackupSelection\n", SRV, ["infra"]),
+ # ---- mentions légales : texte, durées annoncées, garde du build
+ ("legal: the API can be opened to the public without the notice", BUILD, 'if (apiBase && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1")', "if (false)", SRV, ["legal"]),
+ ("legal: the trial switch is always on", BUILD, 'apiBase && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1"', "apiBase && false", SRV, ["legal"]),
+ ("legal: an incomplete file builds the window anyway", BUILD, "if (problems.length) {\n    if (apiBase", "if (false) {\n    if (apiBase", SRV, ["legal"]),
+ ("legal: any contact is accepted", BUILD, 'if (filled("contact") && !', 'if (false && !', SRV, ["legal"]),
+ ("legal: a retention that is not a whole number of months is accepted", BUILD, 'if (filled("repairRetentionMonths") && !(', 'if (false && !(', SRV, ["legal"]),
+ ("legal: the editor's text is inserted as HTML", BUILD, "return esc(String(config[k]).trim());", "return String(config[k]).trim();", SRV, ["legal"]),
+ ("legal: an unknown variable in the text is left blank", BUILD, "if (!LEGAL_FIELDS.includes(k)) throw", "if (false) throw", SRV, ["legal"]),
+ ("legal: the link of the declaration form is shown without the API too", BUILD, "linkDialog: '<p class=\"dlg-note\" data-store-only=\"remote\">", "linkDialog: '<p class=\"dlg-note\">", SRV, ["legal"]),
+ ("legal: the link at the bottom of the panel opens nothing", BUILD, "data-open-legal>Confidentialité et mentions légales", ">Confidentialité et mentions légales", SRV, ["legal"]),
+ ("legal: the link of the sources opens nothing", BUILD, "data-open-legal>Lire la politique", ">Lire la politique", SRV, ["legal"]),
+ ("legal: the text announces another retention for IP fingerprints", LEGAL, "Empreintes d'adresses IP&nbsp;: 30 jours", "Empreintes d'adresses IP&nbsp;: 90 jours", SRV, ["legal"]),
+ ("legal: the text announces another retention for backups", LEGAL, "Sauvegardes de la base&nbsp;: 30 jours", "Sauvegardes de la base&nbsp;: 7 jours", SRV, ["legal"]),
+ ("legal: the code purges the write log later than announced", REPO, "FROM write_log WHERE at < now() - interval '30 days'", "FROM write_log WHERE at < now() - interval '60 days'", SRV, ["legal"]),
+ ("legal: the page contacts a service the text does not name", BUILD, '"https://query.wikidata.org"];', '"https://query.wikidata.org", "https://nouveau.exemple.test"];', SRV, ["legal"]),
+ ("legal: the text no longer names a mirror the page still queries", LEGAL, "OpenStreetMap France, VK Maps", "OpenStreetMap France", SRV, ["legal"]),
  ("ops: MIGRATIONS_DIR is ignored (the bundle looks for db/migrations next to itself)", "server/ops.mjs", "env.MIGRATIONS_DIR || MIGRATIONS_DIR", "MIGRATIONS_DIR", SRV, ["ops"]),
  # ---- SQL portable (PostgreSQL = DSQL)
  ("purge stops after one batch", REPO, "if (rowCount < PURGE_BATCH) break;", "break;", SRV, ["repo-portable"]),

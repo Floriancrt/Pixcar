@@ -163,7 +163,7 @@ Le même fichier de migration et le même SQL (`server/repo.mjs`) servent Postgr
 - **Anti-abus** : limites par empreinte d'adresse, plafond global, relecture des prix aberrants, **Turnstile facultatif** (`TURNSTILE_SECRET`, côté serveur seulement : *le côté page n'est pas branché*, voir `exploitation.md`).
 - **Journaux** : une ligne JSON par requête (méthode, chemin **sans** paramètres, statut, durée, identifiant de requête) ; ni adresse IP, ni corps, ni requête.
 
-**Points à faire valider avant publication (je ne suis pas juriste)** : la plaque, même sous forme d'empreinte, reste une donnée personnelle (pseudonymisée) ; il faut une base légale, une information des visiteurs (politique de confidentialité), une durée de conservation décidée, et une procédure d'effacement (`moderate.mjs forget`, voir `exploitation.md`). Le texte actuel de la fenêtre de déclaration décrit ce qui est publié et ce qui ne l'est pas, mais ne remplace pas une politique de confidentialité.
+**Points à faire valider avant publication (je ne suis pas juriste)** : la plaque, même sous forme d'empreinte, reste une donnée personnelle (pseudonymisée) ; il faut une base légale, une information des visiteurs (politique de confidentialité), une durée de conservation décidée, et une procédure d'effacement (`moderate.mjs forget`, voir `exploitation.md`). La fenêtre « Confidentialité et mentions légales » (`src/partials/legal.html`, informations de l'éditeur dans `src/legal.json`) décrit ces points ; le build avec l'API refuse de produire la page tant que ce fichier est incomplet (voir exploitation.md, § 6). Le texte de la fenêtre de déclaration, lui, ne remplace pas cette politique.
 
 ## 5. Disponibilité
 

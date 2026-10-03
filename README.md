@@ -9,6 +9,7 @@ Ce dossier est indépendant du thème Shopify du dépôt (un thème Shopify ne c
 | Chemin | Contenu |
 | --- | --- |
 | `src/` | **Sources de la page** (HTML en morceaux, CSS, JS, service worker). C'est ici qu'on modifie. |
+| `src/legal.json` | Informations de l'éditeur pour la fenêtre « Confidentialité et mentions légales » : **à compléter avant d'ouvrir l'API au public** (le build avec l'API refuse sinon ; voir `docs/exploitation.md`, section 6). |
 | `index.html` | Page tout-en-un **générée** (CSS, JS, police en ligne) : s'ouvre depuis le disque. Ne pas modifier à la main. |
 | `dist/` | Site **publiable généré** : fichiers à nom haché, service worker, en-têtes de cache et de sécurité. Ne pas modifier à la main. |
 | `server/` | L'API (Node ≥ 20, sans framework), le relais Overpass, les outils de migration et de modération. |

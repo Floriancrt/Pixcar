@@ -1,0 +1,145 @@
+<dialog id="legalDlg" class="dlg legal" aria-labelledby="legalTitle">
+    <form method="dialog">
+      <div class="dlg-head">
+        <h2 id="legalTitle">Confidentialité et mentions légales</h2>
+        <button type="submit" class="dlg-close" aria-label="Fermer">×</button>
+      </div>
+      <div class="legal-text">
+        <section aria-labelledby="lg-who">
+          <h3 id="lg-who">Qui édite Pixcar</h3>
+          <p>{{legal.editorLine}}</p>
+          <p>
+            Contact (questions, accès ou effacement de données)&nbsp;:
+            <a href="mailto:{{legal.contact}}">{{legal.contact}}</a>.
+          </p>
+        </section>
+        <section aria-labelledby="lg-host">
+          <h3 id="lg-host">Hébergement</h3>
+          <p>Pages du site&nbsp;: {{legal.hostPages}}.</p>
+          <p data-store-only="remote">API et base de données&nbsp;: {{legal.hostApi}}.</p>
+        </section>
+        <section aria-labelledby="lg-data" data-store-only="remote">
+          <h3 id="lg-data">Ce que Pixcar enregistre quand vous déclarez une réparation</h3>
+          <ul>
+            <li>
+              <b>Publié</b> sur la fiche du garage, sans nom ni compte&nbsp;: le garage, la prestation, le prix, le
+              mois, le modèle et l'année du véhicule, la note.
+            </li>
+            <li>
+              <b>Jamais publié</b>&nbsp;: le jour exact de la réparation et le commentaire, que seule la modération
+              lit. N'y écrivez ni nom, ni immatriculation, ni numéro de téléphone.
+            </li>
+            <li>
+              <b>Sous forme d'empreinte seulement</b> (un calcul à sens unique, avec une clé secrète)&nbsp;:
+              l'immatriculation, qui sert à repérer les doublons et à retrouver vos déclarations si vous en demandez
+              l'effacement&nbsp;; l'adresse IP, qui sert à limiter les envois&nbsp;; le jeton qui permet de retirer une
+              déclaration depuis son navigateur. Ni l'immatriculation ni l'adresse IP ne sont conservées en clair.
+            </li>
+            <li>
+              <b>Rien d'autre</b>&nbsp;: ni nom, ni adresse électronique, ni compte, ni cookie.
+            </li>
+          </ul>
+          <p>
+            Les journaux techniques de l'API contiennent la date, la méthode, le chemin sans ses paramètres, le statut,
+            la durée et un identifiant de requête, sans adresse IP.
+          </p>
+          <p>
+            Quand vous cherchez des garages, Pixcar reçoit votre adresse IP et la zone cherchée (arrondie à
+            80&nbsp;mètres environ) pour interroger OpenStreetMap à votre place. Il ne conserve pas votre adresse IP à
+            cette occasion&nbsp;; il garde 14 jours la réponse d'OpenStreetMap pour cette zone, sans lien avec vous.
+          </p>
+        </section>
+        <section aria-labelledby="lg-why" data-store-only="remote">
+          <h3 id="lg-why">Pourquoi, et sur quelle base</h3>
+          <p>
+            Pour montrer à tous l'échelle des prix réellement payés chez chaque garage, repérer les doublons, limiter
+            les abus et relire les prix très éloignés des autres. Base légale&nbsp;: l'intérêt légitime de l'éditeur à
+            proposer un comparateur de prix fiable et à protéger le service (RGPD, article 6, paragraphe 1, point f).
+            Pas de publicité, pas de profilage, aucune revente de données.
+          </p>
+        </section>
+        <section aria-labelledby="lg-keep" data-store-only="remote">
+          <h3 id="lg-keep">Combien de temps</h3>
+          <ul>
+            <li>
+              Déclarations (commentaire et empreintes compris)&nbsp;: {{legal.repairRetentionMonths}} mois après leur
+              dépôt, puis effacées automatiquement.
+            </li>
+            <li>
+              Empreintes d'adresses IP&nbsp;: 30 jours. Journaux techniques de l'API&nbsp;: 30 jours. Copies des
+              réponses d'OpenStreetMap (garages d'une zone)&nbsp;: 14 jours.
+            </li>
+            <li>
+              Sauvegardes de la base&nbsp;: 30 jours. Une déclaration effacée disparaît donc des sauvegardes au plus tard
+              30 jours plus tard.
+            </li>
+          </ul>
+        </section>
+        <section aria-labelledby="lg-third">
+          <h3 id="lg-third">Services que votre navigateur contacte</h3>
+          <p>
+            Pixcar ne vend ni ne partage vos données. Pour afficher la page, la carte et les garages, votre navigateur
+            contacte directement ces services, qui voient son adresse IP et ce qu'il leur demande&nbsp;:
+          </p>
+          <ul>
+            <li>l'IGN (Géoplateforme, data.geopf.fr)&nbsp;: recherche d'adresse et fond de carte&nbsp;;</li>
+            <li>
+              OpenStreetMap, par les serveurs Overpass (overpass-api.de, OpenStreetMap France, VK Maps)&nbsp;: les
+              garages d'une zone, demandés à un serveur après l'autre tant que le précédent ne répond pas<span data-store-only="remote">
+                (avec l'API, c'est Pixcar qui interroge OpenStreetMap à votre place&nbsp;; votre navigateur ne contacte
+                ces serveurs que si l'API est lente ou en panne)</span
+              >&nbsp;;
+            </li>
+            <li>
+              Wikimedia (Wikidata et Commons)&nbsp;: logos des enseignes&nbsp;; à défaut, le site officiel de
+              l'enseigne, pour son icône&nbsp;;
+            </li>
+            <li>
+              l'API Recherche d'entreprises (recherche-entreprises.api.gouv.fr) et data.economie.gouv.fr&nbsp;: fiche
+              d'entreprise et prix du contrôle technique&nbsp;;
+            </li>
+            <li>Google, seulement si vous touchez «&nbsp;Avis Google&nbsp;» (Google Maps s'ouvre dans un nouvel onglet).</li>
+          </ul>
+          <p>Chacun applique sa propre politique de confidentialité.</p>
+        </section>
+        <section aria-labelledby="lg-local">
+          <h3 id="lg-local">Dans votre navigateur</h3>
+          <p>
+            Pixcar n'utilise aucun cookie. Il garde dans le stockage de votre navigateur&nbsp;: vos préférences, votre
+            dernière recherche, des copies de réponses (adresses, garages, logos), le véhicule saisi et vos réparations
+            déclarées<span data-store-only="remote">, avec le jeton qui permet de les retirer</span>.
+            <span data-store-only="local">Elles restent dans ce navigateur&nbsp;: rien n'est envoyé à Pixcar.</span>
+            Un service worker garde une copie de la page pour qu'elle s'ouvre sans connexion. Vous pouvez tout effacer
+            dans les réglages de votre navigateur<span data-store-only="remote">
+              (vous ne pourrez plus alors retirer vos déclarations depuis ce navigateur)</span
+            >.
+          </p>
+          <p>
+            Si vous touchez «&nbsp;Ma position&nbsp;», votre navigateur demande votre autorisation&nbsp;; la position
+            ne sert qu'à lancer la recherche.
+          </p>
+        </section>
+        <section aria-labelledby="lg-rights">
+          <h3 id="lg-rights">Vos droits</h3>
+          <p data-store-only="remote">
+            Vous pouvez demander l'accès à vos données, leur rectification ou leur effacement, la limitation de leur
+            traitement, ou vous y opposer (RGPD, articles 15 à 21), en écrivant à
+            <a href="mailto:{{legal.contact}}">{{legal.contact}}</a>. Pour retrouver vos déclarations, indiquez
+            l'immatriculation concernée&nbsp;: Pixcar n'en garde que l'empreinte, qu'il recalcule pour les retrouver.
+            Réponse sous un mois.
+          </p>
+          <p data-store-only="remote">
+            Sans rien demander, vous retirez une déclaration avec le bouton «&nbsp;Supprimer&nbsp;» de l'historique du
+            garage, depuis le navigateur qui l'a envoyée.
+          </p>
+          <p>
+            Vous pouvez aussi saisir la CNIL (<a href="https://www.cnil.fr" target="_blank" rel="noopener">cnil.fr</a>).
+          </p>
+        </section>
+        <p class="legal-date">Dernière mise à jour&nbsp;: {{legal.updated}}.</p>
+      </div>
+      <div class="dlg-actions">
+        <button type="submit" class="primary">Fermer</button>
+      </div>
+    </form>
+  </dialog>

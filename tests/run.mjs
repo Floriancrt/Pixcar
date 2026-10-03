@@ -23,6 +23,7 @@ const SUITES = [
   { name: "load", cmd: ["node", "tests/load.js", FILE] },
   { name: "veh", cmd: ["node", "tests/veh.js", FILE] },
   { name: "remote", cmd: ["node", "tests/remote.js", FILE] },
+  { name: "legal", cmd: ["node", "tests/legal.js"] }, // construit lui-même la page avec une copie des sources dont src/legal.json est complet
   { name: "prerender", cmd: ["node", "tests/prerender.js", FILE] },
   { name: "budget", cmd: ["node", "tests/budget.js"], distOnly: true },
   { name: "offline", cmd: ["node", "tests/offline.js"], distOnly: true },

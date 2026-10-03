@@ -2883,6 +2883,63 @@ html.dlg-open {
 .dlg-actions .primary {
   min-height: 50px;
 }
+/* Fenêtre « Confidentialité et mentions légales » (src/partials/legal.html) : le même dialogue, avec un long texte. */
+@media (min-width: 600px) {
+  .dlg.legal {
+    width: min(40rem, calc(100vw - 24px));
+  }
+}
+.legal-text {
+  display: grid;
+  gap: 18px;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.legal-text section {
+  display: grid;
+  gap: 8px;
+}
+.legal-text h3 {
+  margin: 0;
+  font: 700 1rem/1.3 var(--font);
+  color: var(--ink);
+}
+.legal-text p,
+.legal-text ul {
+  margin: 0;
+}
+.legal-text ul {
+  display: grid;
+  gap: 6px;
+  padding-left: 1.2rem;
+}
+.legal-text a {
+  color: var(--accent-ink);
+}
+.legal-date {
+  font-size: 0.82rem;
+  color: var(--ink-3);
+}
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-ink);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.legal-foot {
+  margin: 4px 0 0;
+  padding: 0 4px 8px;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+  text-align: center;
+}
+.legal-foot .link-btn {
+  color: inherit;
+}
 .toast {
   position: fixed;
   left: 50%;

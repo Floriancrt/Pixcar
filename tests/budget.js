@@ -28,6 +28,10 @@ if (!fs.existsSync(path.join(DIST, "index.html"))) {
   process.exit(2);
 }
 const html = read("index.html").toString("utf8");
+// La fenêtre « Confidentialité et mentions légales » (présente quand src/legal.json est complet) pèse environ 2,5 Ko gzip dans la page :
+// le budget la prévoit quand elle est là, sans se desserrer quand elle est absente.
+const LEGAL_GZ = html.includes('id="legalDlg"') ? 3 : 0;
+for (const k of ["page", "html", "critical", "single"]) BUDGET[k] += LEGAL_GZ;
 const assets = fs.readdirSync(path.join(DIST, "assets"));
 const find = (re) => assets.find((f) => re.test(f));
 const jsFile = find(/^app\.[0-9a-f]{10}\.js$/), leafletFile = find(/^leaflet\.[0-9a-f]{10}\.js$/);

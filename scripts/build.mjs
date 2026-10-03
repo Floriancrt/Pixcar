@@ -9,6 +9,7 @@
 //                                de sécurité du contenu passe par une balise <meta> dans la page, + CNAME et .nojekyll
 //
 // Variable d'environnement : PIXCAR_API_BASE = URL de l'API des réparations (vide : stockage dans le navigateur).
+//                            PIXCAR_ALLOW_NO_LEGAL=1 : construire avec l'API même si src/legal.json est incomplet (essai seulement, voir legalParts).
 //
 // Deux sorties à partir des mêmes sources :
 //   index.html   page tout-en-un (CSS, JS, police et icônes en ligne) : s'ouvre depuis le disque, se déploie n'importe où ;
@@ -114,6 +115,33 @@ function optionsHtml(list, extra = "") {
   }
   return groups.map((g) => `<optgroup label="${esc(g.name)}">${g.items.map((s) => `<option value="${s.id}">${esc(s.label)}</option>`).join("")}</optgroup>`).join("") + extra;
 }
+// Mentions légales et politique de confidentialité : src/legal.json (ce qui dépend de l'éditeur) + src/partials/legal.html (le texte).
+// Complet : la fenêtre « Confidentialité et mentions légales » et ses liens sont dans la page. Incomplet : ni fenêtre ni liens, SAUF si
+// l'API est branchée (PIXCAR_API_BASE) : le build échoue alors, on n'ouvre pas au public des déclarations sans informer les visiteurs.
+// PIXCAR_ALLOW_NO_LEGAL=1 lève cette garde pour un essai.
+const LEGAL_FIELDS = ["editorLine", "contact", "hostPages", "hostApi", "repairRetentionMonths", "updated"];
+async function legalParts() {
+  const config = JSON.parse(await read(SRC, "legal.json"));
+  const filled = (k) => String(config[k] ?? "").trim() !== "";
+  const problems = LEGAL_FIELDS.filter((k) => !filled(k)).map((k) => `${k} : à renseigner`);
+  if (filled("contact") && !/^[^\s@<>"]+@[^\s@<>"]+\.[A-Za-z]{2,}$/.test(String(config.contact).trim())) problems.push("contact : une adresse électronique est attendue");
+  if (filled("repairRetentionMonths") && !(Number.isInteger(config.repairRetentionMonths) && config.repairRetentionMonths > 0)) problems.push("repairRetentionMonths : un nombre entier de mois est attendu");
+  if (problems.length) {
+    if (apiBase && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1")
+      throw new Error(`mentions légales incomplètes dans src/legal.json (${problems.join(" ; ")}) : l'API est branchée (PIXCAR_API_BASE), des visiteurs y déposeraient des données sans en être informés. Complétez ce fichier (docs/exploitation.md, section 6) ; PIXCAR_ALLOW_NO_LEGAL=1 le permet pour un simple essai.`);
+    return { dialog: "", linkPanel: "", linkSources: "", linkDialog: "" };
+  }
+  const dialog = (await read(SRC, "partials/legal.html")).replace(/\{\{legal\.([A-Za-z]+)\}\}/g, (m, k) => {
+    if (!LEGAL_FIELDS.includes(k)) throw new Error(`partials/legal.html : {{legal.${k}}} n'existe pas dans src/legal.json`);
+    return esc(String(config[k]).trim());
+  });
+  return {
+    dialog,
+    linkPanel: '<p class="legal-foot"><button type="button" class="link-btn" data-open-legal>Confidentialité et mentions légales</button></p>',
+    linkSources: '<p><b>Confidentialité et mentions légales.</b> <button type="button" class="link-btn" data-open-legal>Lire la politique de confidentialité</button></p>',
+    linkDialog: '<p class="dlg-note" data-store-only="remote"><button type="button" class="link-btn" data-open-legal>Comment Pixcar traite vos données</button></p>',
+  };
+}
 async function pageParts() {
   const road = oneLine(await read(SRC, "partials/ld-road.svg"));
   const car = oneLine(await read(SRC, "partials/ld-car.svg"));
@@ -126,14 +154,20 @@ async function pageParts() {
     }
     return text;
   };
+  const legal = await legalParts();
   body = fill(body, [
     ["<!--LD_ROAD-->", road],
     ["<!--LD_CAR-->", car],
     ["<!--SERVICE_OPTIONS-->", optionsHtml(SERVICES), 2],
     ["<!--SERVICE_HINT-->", esc(SERVICES[0].hint)], // la première prestation est celle que la page sélectionne à la première visite
+    ["<!--LEGAL_LINK_PANEL-->", legal.linkPanel],
+    ["<!--LEGAL_LINK_SOURCES-->", legal.linkSources],
   ]);
-  dialog = fill(dialog, [["<!--REPAIR_OPTIONS-->", optionsHtml(SERVICES.filter((s) => s.kind !== "ct"), `<optgroup label="Autre"><option value="${OTHER_SERVICE}">Autre réparation (précisez en commentaire)</option></optgroup>`)]]);
-  return { body, sprite: await read(SRC, "partials/sprite.html"), dialog };
+  dialog = fill(dialog, [
+    ["<!--REPAIR_OPTIONS-->", optionsHtml(SERVICES.filter((s) => s.kind !== "ct"), `<optgroup label="Autre"><option value="${OTHER_SERVICE}">Autre réparation (précisez en commentaire)</option></optgroup>`)],
+    ["<!--LEGAL_LINK_DIALOG-->", legal.linkDialog],
+  ]);
+  return { body, sprite: await read(SRC, "partials/sprite.html"), dialog, legal: legal.dialog };
 }
 function squeeze(html) {
   if (dev) return html;
@@ -142,7 +176,7 @@ function squeeze(html) {
 }
 async function render(parts, { headAssets, scripts }) {
   const tpl = await read(SRC, "index.html");
-  const fill = { API_BASE: apiBase, PRECONNECT: preconnect(), HEAD_ASSETS: headAssets, SPRITE: parts.sprite, BODY: parts.body, DIALOG: parts.dialog, SCRIPTS: scripts };
+  const fill = { API_BASE: apiBase, PRECONNECT: preconnect(), HEAD_ASSETS: headAssets, SPRITE: parts.sprite, BODY: parts.body, DIALOG: parts.dialog, LEGAL: parts.legal, SCRIPTS: scripts };
   return squeeze(tpl.replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => (k in fill ? fill[k] : m)));
 }
 
