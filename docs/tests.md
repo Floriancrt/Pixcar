@@ -21,7 +21,7 @@ Mutations (une variante cassée volontairement doit faire échouer un test ; voi
 
 ```sh
 python3 tests/mutation/mut_load.py     # chargement (24)            python3 tests/mutation/mut_ux.py     # prix, téléphones, messages… (25)
-python3 tests/mutation/mut_veh.py      # véhicule (41)              python3 tests/mutation/mut_node.py   # serveur, magasin, client HTTP, DSQL, Lambda, modèle CloudFormation (85)
+python3 tests/mutation/mut_veh.py      # véhicule (41)              python3 tests/mutation/mut_node.py   # serveur, magasin, client HTTP, DSQL, Lambda, modèle CloudFormation (92)
 python3 tests/mutation/mut_ux.py --anchors    # vérifie sans navigateur que chaque ancre existe encore
 ```
 
@@ -80,7 +80,7 @@ Principe : on casse **une** règle dans une **copie** des sources (`.mut/`, igno
 | Chargement (`mut_load.py`) | 24 | 24 |
 | UX : « dès », téléphones, médianes, notes, barre de défilement (`mut_ux.py`) | 25 | 25 |
 | Véhicule : plaque, année, modèle, stockage (`mut_veh.py`) | 41 | 41 |
-| Serveur, magasin, client HTTP, DSQL, Lambda, opérations, modèle CloudFormation (`mut_node.py`) | 85 | 85 |
+| Serveur, magasin, client HTTP, DSQL, Lambda, opérations, modèle CloudFormation (`mut_node.py`) | 92 | 92 |
 
 Ce qui a été trouvé **en écrivant ces mutations** (et corrigé) : un prix entre 0,01 et 0,99 € passait la validation mais violait la contrainte de la base (réponse 503 réessayée pendant 7 jours, et comptée pour le disjoncteur) ; des longueurs comptées en unités UTF-16 au lieu de caractères ; un identifiant OSM de longueur illimitée ; le plafond de requêtes simultanées vers Overpass, l'abandon à 7 jours et la péremption des zones n'étaient testés qu'« au-delà », pas « pas avant ». Une mutation **ne prouve pas** l'absence de défaut : elle mesure la force des tests sur les règles choisies.
 
