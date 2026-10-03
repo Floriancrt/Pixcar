@@ -224,6 +224,17 @@ describe("GET /v1/overpass", () => {
     }
   });
 
+  test("with the default settings, four upstream calls at once at most: of six zones asked together, two are told to retry", async () => {
+    const up = upstream({ [A]: { delay: 150 } });
+    const t = await makeApp({ fetchImpl: up.fetchImpl, overpassOptions: { ...FAST }, config: { readLimitPerMinute: 1000, upstreamMissLimitPerMinute: 1000 } });
+    try {
+      const all = await Promise.all(Array.from({ length: 6 }, (_, i) => t.call("GET", `/v1/overpass?data=${query(45 + i * 0.3, 4.9)}`)));
+      assert.deepEqual(all.map((r) => r.status).sort(), [200, 200, 200, 200, 429, 429]);
+    } finally {
+      await t.close();
+    }
+  });
+
   test("the in-memory copies are bounded in number and in bytes (a big city's 50 km area is several MB)", async () => {
     const big = Array.from({ length: 400 }, (_, i) => ({ type: "node", id: i, lat: 45, lon: 4, tags: { name: "Garage numéro " + i + " ".repeat(200) } })); // ≈ 100 Ko par zone
     const up = upstream({ [A]: { json: { elements: big } } });

@@ -12,6 +12,8 @@ export const isToken = (v) => typeof v === "string" && TOKEN_RE.test(v);
 
 const text = (v) => (typeof v === "string" ? v.replace(CONTROL, "").replace(/[ \t]+/g, " ").trim() : "");
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+// La base compte des caractères Unicode, JavaScript des unités UTF-16 : un émoji vaut 1 pour la base et 2 pour `.length`.
+const chars = (s) => [...s].length;
 
 function isRealDate(s) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
@@ -44,8 +46,8 @@ export function parseRepair(body, { services, today }) {
     chainId: text(g.chainId),
   };
   if (!GARAGE_ID_RE.test(garage.id)) bad("garage.id", "identifiant de garage non reconnu");
-  if (garage.name.length < 2 || garage.name.length > 120) bad("garage.name", "nom de 2 à 120 caractères");
-  if (garage.addr.length > 200) bad("garage.addr", "adresse de 200 caractères au plus");
+  if (chars(garage.name) < 2 || chars(garage.name) > 120) bad("garage.name", "nom de 2 à 120 caractères");
+  if (chars(garage.addr) > 200) bad("garage.addr", "adresse de 200 caractères au plus");
   if (!CHAIN_RE.test(garage.chainId)) bad("garage.chainId", "enseigne non reconnue");
   const hasPos = garage.lat != null || garage.lon != null;
   if (hasPos && (garage.lat == null || garage.lon == null || Math.abs(garage.lat) > 90 || Math.abs(garage.lon) > 180))
@@ -73,11 +75,11 @@ export function parseRepair(body, { services, today }) {
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) bad("rating", "note entière de 1 à 5");
 
   const comment = typeof body.comment === "string" ? body.comment.replace(CONTROL, "").trim() : "";
-  if (comment.length > COMMENT_MAX) bad("comment", `commentaire de ${COMMENT_MAX} caractères au plus`);
+  if (chars(comment) > COMMENT_MAX) bad("comment", `commentaire de ${COMMENT_MAX} caractères au plus`);
 
   const v = body.vehicle && typeof body.vehicle === "object" ? body.vehicle : {};
   const model = text(v.model);
-  if (model.length < MODEL_MIN || model.length > MODEL_MAX) bad("vehicle.model", `modèle de ${MODEL_MIN} à ${MODEL_MAX} caractères`);
+  if (chars(model) < MODEL_MIN || chars(model) > MODEL_MAX) bad("vehicle.model", `modèle de ${MODEL_MIN} à ${MODEL_MAX} caractères`);
   const year = v.year;
   const thisYear = +today.slice(0, 4);
   if (!Number.isInteger(year) || year < YEAR_MIN || year > thisYear) bad("vehicle.year", `année entre ${YEAR_MIN} et ${thisYear}`);

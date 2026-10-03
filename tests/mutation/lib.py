@@ -12,7 +12,7 @@ Une mutation = (nom, ancre, remplacement, sections, vérification attendue)
 Rien n'est modifié dans src/ : les sources sont copiées dans .mut/ (ignoré par git), la page est reconstruite à partir
 de la copie (scripts/build.mjs --src --out) et testée sous .mut/mut.html.
 """
-import pathlib, re, shutil, subprocess, sys
+import os, pathlib, re, shutil, subprocess, sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
@@ -57,5 +57,58 @@ def run(mutations, suite, name_width):
             bad += not ok
         finally:
             target.write_text(originals[path], encoding="utf-8")
+    print("ancres périmées :" if anchors_only else "mutations non tuées :", bad)
+    sys.exit(1 if bad else 0)
+
+
+# ---- mutations sans navigateur : serveur, magasin de réparations, client HTTP (tests node:test) ----------------------------
+# Une mutation = (nom, fichier, ancre, remplacement, dossier de tests, filtres de fichiers de tests)
+# La variante est vérifiée dans une COPIE minimale du dépôt (.mut/node/) ; elle est « tuée » quand au moins un test échoue
+# (et que l'échec n'est pas une erreur de syntaxe ou d'import : une variante qui ne se charge pas ne prouve rien).
+NODE_COPY = ["server", "db", "scripts/node-tests.mjs", "package.json", "tests/unit", "src/js/modules", "src/js/shared", "src/js/package.json"]
+
+
+def run_node(mutations, name_width):
+    args = sys.argv[1:]
+    anchors_only = "--anchors" in args
+    only = [a for a in args if not a.startswith("--")]
+    work = WORK / "node"
+    if not anchors_only:
+        shutil.rmtree(work, ignore_errors=True)
+        for rel in NODE_COPY:
+            src, dst = ROOT / rel, work / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src, dst) if src.is_dir() else shutil.copyfile(src, dst)
+        (work / "node_modules").symlink_to(ROOT / "node_modules")
+    env = {k: v for k, v in os.environ.items() if k != "TEST_DATABASE_URL"}  # base embarquée : rapide et sans effet de bord
+    bad = 0
+    for name, rel, find, rep, suite, filters in mutations:
+        if only and not any(o.lower() in name.lower() for o in only):
+            continue
+        original = (ROOT / rel).read_text(encoding="utf-8")
+        n = original.count(find)
+        if n != 1:
+            print(f"[skip] {name}: ancre trouvée {n} fois dans {rel}", flush=True)
+            bad += 1
+            continue
+        if anchors_only:
+            continue
+        target = work / rel
+        target.write_text(original.replace(find, rep), encoding="utf-8")
+        try:
+            r = subprocess.run(["node", "scripts/node-tests.mjs", suite, *filters], cwd=work, capture_output=True, text=True, timeout=900, env=env)
+            out = r.stdout + r.stderr
+            broken = re.search(r"(SyntaxError|ERR_MODULE_NOT_FOUND|Cannot find module|ReferenceError)[^\n]*", out)
+            if broken:
+                print(f"[skip] {name:{name_width}s} la variante ne se charge pas : {broken.group(0)[:100]}", flush=True)
+                bad += 1
+                continue
+            failed = [re.sub(r"\s*\([\d.]+ms\)$", "", m) for m in re.findall(r"^\s*✖ (.+)$", out, re.M) if "failing tests" not in m]
+            ok = r.returncode != 0 and bool(failed)
+            shown = "; ".join(dict.fromkeys(f[:60] for f in failed))[:140] or "aucun test en échec"
+            print(f"[{'tuée' if ok else 'SURVIVANTE'}] {name:{name_width}s} -> {shown}", flush=True)
+            bad += not ok
+        finally:
+            target.write_text(original, encoding="utf-8")
     print("ancres périmées :" if anchors_only else "mutations non tuées :", bad)
     sys.exit(1 if bad else 0)

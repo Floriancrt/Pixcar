@@ -412,7 +412,12 @@ describe("remote mode: declaring", () => {
     const { store, clock, notices, ls } = make({ client: fakeClient(() => NETWORK) });
     const r = store.add(row());
     await store.flush();
-    clock.t += 7 * 864e5 + 1000;
+    clock.t += 6 * 864e5; // six jours : on essaie encore
+    await store.flush();
+    assert.equal(r.sync, "pending", "pas d'abandon avant sept jours");
+    assert.equal(read(ls, KEYS.outbox).length, 1);
+    assert.deepEqual(notices().map((n) => n.kind), ["queued"]);
+    clock.t += 864e5 + 1000; // plus de sept jours depuis la première tentative
     await store.flush();
     assert.equal(r.sync, "local");
     assert.deepEqual(read(ls, KEYS.outbox), []);
@@ -585,7 +590,10 @@ describe("remote mode: reading what others declared", () => {
     }
     assert.equal(Object.keys(read(ls, KEYS.area)).length, 6);
     client.request = async () => NETWORK;
-    clock.t += 8 * 864e5;
+    clock.t += 6 * 864e5;
+    const week = await store.load({ lat: 47, lon: 3, km: 10 });
+    assert.deepEqual([week.source, week.stale], ["cache", true], "à six jours la copie sert encore");
+    clock.t += 2 * 864e5;
     assert.equal((await store.load({ lat: 47, lon: 3, km: 10 })).source, "none");
   });
 

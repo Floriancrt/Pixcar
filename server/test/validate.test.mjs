@@ -48,6 +48,16 @@ describe("parseRepair", () => {
     assert.ok(parse(repair({ price: "12" })).fields.price);
   });
 
+  test("lengths count characters the way the database does (an emoji is one), and garage ids have a bounded number of digits", () => {
+    assert.ok(parse(repair({ vehicle: { model: "😀", year: 2019, plate: "EZ-108-BC" } })).fields["vehicle.model"], "un émoji ne fait pas deux caractères pour la base");
+    assert.ok(parse(repair({ vehicle: { model: "😀😀", year: 2019, plate: "EZ-108-BC" } })).value);
+    const base = repair();
+    assert.ok(parse({ ...base, garage: { ...base.garage, name: "😀" } }).fields["garage.name"]);
+    assert.ok(parse({ ...base, comment: "😀".repeat(500) }).value && parse({ ...base, comment: "😀".repeat(501) }).fields.comment);
+    assert.ok(parse({ ...base, garage: { ...base.garage, id: "osm:node/" + "1".repeat(15) } }).value);
+    assert.ok(parse({ ...base, garage: { ...base.garage, id: "osm:node/" + "1".repeat(16) } }).fields["garage.id"], "l'identifiant doit tenir dans les 120 caractères de la colonne");
+  });
+
   test("rating: whole numbers from 1 to 5 only", () => {
     for (const rating of [1, 2, 3, 4, 5]) assert.ok(parse(repair({ rating })).value, String(rating));
     for (const rating of [0, 6, -1, 3.5, "4", null, undefined, NaN]) assert.ok(parse(repair({ rating })).fields.rating, String(rating));
