@@ -13,7 +13,7 @@ M = [
  ("tags ignored (addr:city, contact:city, addr:suburb)", '    if (g.city) return g.city;\n', '', "A", "A1"),
  ("address not read for the city", '    const fromAddr = cityFromAddr(g.addr);\n    if (fromAddr) return fromAddr;\n', '', "AE", "A1"),
  ("city of the answer ignored (only its address is read)", 'return (e && (e.c || cityFromAddr(e.a))) || "";', 'return (e && cityFromAddr(e.a)) || "";', "C", "C1"),
- ("cached address (old entry) no longer gives the city", 'return (e && (e.c || cityFromAddr(e.a))) || "";', 'return (e && e.c) || "";', "C", "C7"),
+ ("cached address (old entry) no longer gives the city", 'return (e && (e.c || cityFromAddr(e.a))) || "";', 'return (e && e.c) || "";', "C", "C7b"),
  ("city taken from an answer up to 50 m only", 'const cityRange = 250,', 'const cityRange = 50,', "C", "C1"),
  ("city taken from an answer up to 400 m", 'const cityRange = 250,', 'const cityRange = 400,', "C", "C3"),
  ("no limit on simultaneous requests", '    cityMax = 3,', '    cityMax = 50,', "B", "B3"),
@@ -39,7 +39,7 @@ M = [
  ("cedex kept", '    .replace(/\\s*\\bcedex\\b.*$/i, "")\n', '', "E", "E2"),
  ("arrondissement kept long", '(m, n) => ` ${n}${+n === 1 ? "er" : "e"}`,', '(m) => m,', "E", "E2"),
  ("long city overflows the chip (track not bounded)", '  grid-template-columns: minmax(0, 1fr);\n  gap: 6px;', '  gap: 6px;', "AF", "A6"),
- ("chip cannot shrink", '  max-width: 100%;\n  min-width: 0;\n}\n.dist .ic {', '  max-width: 100%;\n}\n.dist .ic {', "AF", "A6"),
+ ("chip neither bounded nor shrinkable (max-width and min-width: 0 each cover for the other)", '  max-width: 100%;\n  min-width: 0;\n}\n.dist .ic {', '}\n.dist .ic {', "AF", "A6"),
  ("long city cut without an ellipsis", '  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 600;', '  white-space: nowrap;\n  font-weight: 600;', "F", "F2"),
 ]
 

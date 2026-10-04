@@ -35,10 +35,13 @@ const bareNum = (id) => (/^osm:node\/94\d\d$/.test(id) ? +id.slice(-2) : -1);
 const dist = async (page) => { await page.click("[data-sort=dist]"); await page.waitForTimeout(350); };
 // A cards are ~190 px tall and the list starts ~650 px down the page: a 1440 × 900 window shows two of them.
 // `tall` windows show more at once, which is what the queue (3 at a time) needs to be seen at work.
+// `noSort`: read the page as the search left it. Sorting redraws every card, which would hide a chip that a late answer
+// forgot to repaint (the redraw reads the cache again).
 const opened = async (env, elements, mock = {}, o = {}) => {
-  const r = await open(env.browser, env.server, FILE, { width: 1440, height: 900, mock: { elements, ...mock }, ...o });
+  const { noSort, ...openOpts } = o;
+  const r = await open(env.browser, env.server, FILE, { width: 1440, height: 900, mock: { elements, ...mock }, ...openOpts });
   await search(r.page, { service: "vidange" });
-  await dist(r.page);
+  if (!noSort) await dist(r.page);
   return r;
 };
 const chips = (page) => page.evaluate(() => [...document.querySelectorAll("#list > li.card")].map((c) => {
@@ -108,7 +111,7 @@ const addrText = (page, id) => page.$eval(`#list [data-id="${id}"] [data-ad]`, (
 
   if (has("B")) {
   // ===== B. no address tag: the city comes from the nearest-address lookup, for the cards that come on screen =====
-  ({ page, ctx, logs } = await opened(env, BARE.concat(ONE), { reverse: { delayMs: 120, at } }, { height: 1800 }));
+  ({ page, ctx, logs } = await opened(env, BARE.concat(ONE), { reverse: { delayMs: 120, at } }, { height: 1800, noSort: true }));
   c = ctx.__counters;
   await settle(ctx);
   ch = await chips(page);
@@ -199,6 +202,13 @@ const addrText = (page, id) => page.$eval(`#list [data-id="${id}"] [data-ad]`, (
   c = ctx.__counters; await settle(ctx, 500);
   ch = await chips(page);
   check("C7 a cached address from before (no « c » field) already gives the city, with no request", c.reverse === 0 && ch.every((x) => x.city === "Villeurbanne"), JSON.stringify([c.reverse, ch.map((x) => x.city)]));
+  await ctx.close();
+  // C7b: a garage with a street but no city, whose position holds an address cached before (the garage had no street then,
+  // or another garage stood at the same spot): the city is read from that cached address, without any request
+  ({ page, ctx } = await opened(env, [mk(9500, "Garage Rue Sans Ville", 0.0004, { "addr:street": "Rue Test", "addr:housenumber": "3" })], { reverse: {} }, { storage: { "jg.addr.v1": { [`${(CENTER.lat + 0.0004).toFixed(5)},${CENTER.lon.toFixed(5)}`]: { a: "5 Rue Ancienne, 69100 Villeurbanne", d: 10, t: Date.now() } } } }));
+  c = ctx.__counters; await settle(ctx, 500);
+  ch = await chips(page);
+  check("C7b a garage with a street but no city takes the city of the address cached for its position, with no request", c.reverse === 0 && ch.length === 1 && ch[0].city === "Villeurbanne", JSON.stringify([c.reverse, ch.map((x) => x.city)]));
   await ctx.close();
   // C8: the service is down (all 12 cards on screen), then comes back
   const down = { fail: true };
