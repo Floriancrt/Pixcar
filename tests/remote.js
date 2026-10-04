@@ -84,7 +84,7 @@ async function until(fn, ms = 6000, step = 80) {
       let { page, ctx, logs } = await fresh();
       await others([55, 60, 65, 70]);
       check("R1a the page is in remote mode (store flag, Sources text variant)", (await page.evaluate(() => document.body.dataset.store)) === "remote" && (await page.isVisible('[data-store-only="remote"] >> nth=0').catch(() => false)) !== undefined);
-      check("R1b only the remote wording is displayed in « Sources » (declared repairs, garages relay), not the local one", await page.evaluate(() => { const vis = (e) => getComputedStyle(e).display !== "none"; const remote = [...document.querySelectorAll('[data-store-only="remote"]')], local = [...document.querySelectorAll('[data-store-only="local"]')]; return remote.length === 2 && local.length === 1 && remote.every(vis) && local.every((e) => !vis(e)); }));
+      check("R1b only the remote wording is displayed in « Sources » (declared repairs, garages relay), not the local one", await page.evaluate(() => { const vis = (e) => getComputedStyle(e).display !== "none"; const remote = [...document.querySelectorAll('details.sources [data-store-only="remote"]')], local = [...document.querySelectorAll('details.sources [data-store-only="local"]')]; return remote.length === 2 && local.length === 1 && remote.every(vis) && local.every((e) => !vis(e)); }));
       await search(page, { service: "vidange" });
       await page.click("[data-sort=dist]");
       await page.waitForTimeout(300);

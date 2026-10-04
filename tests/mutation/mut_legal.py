@@ -21,6 +21,7 @@ M = [
  ("the declaration sections show in local mode", '<section aria-labelledby="lg-data" data-store-only="remote">', '<section aria-labelledby="lg-data">', "", "L5"),
  ("the local-storage sentence shows in API mode", '<span data-store-only="local">Elles restent dans ce navigateur', '<span>Elles restent dans ce navigateur', "", "M3"),
  ("the rights section does not give the contact", '<a href="mailto:{{legal.contact}}">{{legal.contact}}</a>. Pour retrouver', '{{legal.contact}}. Pour retrouver', "", "M3"),
+ ("the link at the bottom of the panel stays hidden for good", 'win && win.requestAnimationFrame ? win.requestAnimationFrame(() => win.requestAnimationFrame(reveal)) : reveal();', 'void reveal;', "", "L2"),
 ]
 
 if __name__ == "__main__":

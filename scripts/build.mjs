@@ -137,7 +137,9 @@ async function legalParts() {
   });
   return {
     dialog,
-    linkPanel: '<p class="legal-foot"><button type="button" class="link-btn" data-open-legal>Confidentialité et mentions légales</button></p>',
+    // Masqué dans le HTML, montré par modules/legal.js une fois la page construite : sous le panneau des résultats, que le script remplit, il
+    // descendrait de plusieurs lignes au démarrage (décalage de mise en page).
+    linkPanel: '<p class="legal-foot" hidden><button type="button" class="link-btn" data-open-legal>Confidentialité et mentions légales</button></p>',
     linkSources: '<p><b>Confidentialité et mentions légales.</b> <button type="button" class="link-btn" data-open-legal>Lire la politique de confidentialité</button></p>',
     linkDialog: '<p class="dlg-note" data-store-only="remote"><button type="button" class="link-btn" data-open-legal>Comment Pixcar traite vos données</button></p>',
   };

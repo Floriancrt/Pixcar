@@ -78,6 +78,15 @@ const PANEL = ".legal-foot [data-open-legal]";
       const whole = await axeOf(page, null);
       check("L2b axe: no violation on the whole page with the link at the bottom of the panel (light theme)", whole.length === 0, JSON.stringify(whole));
       check("L2 the link sits at the bottom of the Garages panel from the first screen; the declaration form's link is hidden in local mode", (await visible(page, PANEL)) && !(await visible(page, "#repairDlg [data-open-legal]")));
+      {
+        // Sous le panneau des résultats, que le script remplit, le lien descendrait de plusieurs lignes au démarrage : il est absent de la mise en page jusque-là.
+        const noScript = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 }, locale: "fr-FR" });
+        const bareLoad = await noScript.newPage();
+        await bareLoad.goto(`${withNotice.url}/index.html`, { waitUntil: "load" });
+        const shownBefore = await bareLoad.evaluate((s) => { const e = document.querySelector(s); return !e || e.getClientRects().length > 0; }, PANEL);
+        await noScript.close();
+        check("L2c the panel link is left out of the layout until the script has built the page (nothing moves under it), then shown", !shownBefore && (await visible(page, PANEL)), String(shownBefore));
+      }
       await openFromPanel(page);
       let s = await state(page);
       check("L3 clicking it opens the modal window, scrolling is locked, the focus moves inside it", s.open && s.locked && s.focusInside, JSON.stringify(s));
