@@ -99,11 +99,13 @@ const listLyon = async (page, extraOpts = {}) => { await search(page, { service:
   const nw = css.find((x) => x.id === "norauto");
   check("A7 Norauto is red with white text", nw && nw.bg === "rgb(226, 35, 26)" && nw.fg === "rgb(255, 255, 255)", JSON.stringify(nw));
   const geo = await page.evaluate(() => [...document.querySelectorAll("#list .card")].slice(0, 14).map((c) => {
-    const av = c.querySelector(".avatar"), a = av.getBoundingClientRect(), t = c.querySelector(".g-id").getBoundingClientRect(), m = getComputedStyle(av);
-    return { id: av.dataset.c || "-", rendered: a.height > 0 && t.height > 0, dy: Math.round(a.top + a.height / 2 - (t.top + t.height / 2)), margin: [m.marginTop, m.marginRight, m.marginBottom, m.marginLeft].join(" ") };
+    // The title block is the name and the distance chip. The type (« Indépendant ») is not part of it: when the city makes the chip
+    // too wide for both on one line, the type drops to a third line and the avatar stays level with the name and the chip.
+    const av = c.querySelector(".avatar"), a = av.getBoundingClientRect(), t = c.querySelector(".g-id").getBoundingClientRect(), d = c.querySelector(".dist").getBoundingClientRect(), m = getComputedStyle(av);
+    return { id: av.dataset.c || "-", rendered: a.height > 0 && t.height > 0, dy: Math.round(a.top + a.height / 2 - (t.top + d.bottom) / 2), margin: [m.marginTop, m.marginRight, m.marginBottom, m.marginLeft].join(" ") };
   }));
   const geoOk = geo.filter((g) => g.rendered), geoBad = geo.filter((g) => g.margin !== "0px 0px 0px 0px" || (g.rendered && Math.abs(g.dy) > 3));
-  check("A9 avatars have no stray margin and sit on the centre line of the title block (chains and independents)", geo.length >= 10 && geoOk.length >= 4 && geoBad.length === 0, JSON.stringify(geoBad));
+  check("A9 avatars have no stray margin and sit on the centre line of the title block: name and distance chip (chains and independents)", geo.length >= 10 && geoOk.length >= 4 && geoBad.length === 0, JSON.stringify(geoBad));
   await shot(page, "av-01-offline-monograms");
   check("A8 no page error", logs.errors.length === 0, JSON.stringify(logs.errors));
   await ctx.close();

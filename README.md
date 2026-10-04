@@ -59,6 +59,7 @@ Il faut un Chromium pour Playwright (`npx playwright install chromium`) et `open
 
 ## Ce qui a changé dans cette série
 
+- **La ville dans la puce distance des cartes** (« 2,5 km · Bron ») : lue dans les balises OpenStreetMap, l'adresse ou, pour un garage qui n'a ni l'un ni l'autre, demandée à la Base Adresse Nationale pour les cartes qui entrent à l'écran (voir `docs/interface.md`).
 - **L'onglet « Mes réparations » est supprimé** : sans session utilisateur, il n'y avait rien à y gérer. Une réparation déclarée met à jour l'onglet « Garages » (échelle de prix, note, historique du garage) ; elle s'annule tout de suite (« Annuler ») ou se supprime depuis l'historique de la fiche.
 - **Les réparations vont en base** quand la page est construite avec l'adresse d'une API : partagées par zone, avec file d'envoi hors ligne, envois rejouables sans risque, plaque conservée uniquement sous forme d'empreinte, commentaire jamais publié, relecture des prix aberrants, effacement à la demande.
 - **Performances et disponibilité** : première visite d'une centaine de Ko, aucune ressource tierce avant l'affichage, service worker (la page s'ouvre hors ligne et quand l'hébergeur est en panne), caches à tous les étages, API sans état avec copies de secours, arrêt propre, retours arrière simples. Chaque panne retire une fonction sans jamais retirer la page : [matrice des pannes](docs/architecture.md#que-se-passe-t-il-quand-).

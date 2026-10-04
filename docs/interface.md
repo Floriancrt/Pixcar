@@ -71,7 +71,7 @@ Fonctionnement et limites :
 
 ## Adresses manquantes
 
-OpenStreetMap n'a pas toujours l'adresse d'un garage (beaucoup de Speedy, par exemple). Quand la rue manque, la page demande à la **Base Adresse Nationale** (géocodeur inverse de la Géoplateforme IGN, déjà utilisé pour la recherche d'adresse) l'adresse la plus proche de la position du garage, **à l'ouverture de sa fiche ou à sa sélection** (une requête par garage, jamais pour toute la liste) :
+OpenStreetMap n'a pas toujours l'adresse d'un garage (beaucoup de Speedy, par exemple). Quand la rue manque, la page demande à la **Base Adresse Nationale** (géocodeur inverse de la Géoplateforme IGN, déjà utilisé pour la recherche d'adresse) l'adresse la plus proche de la position du garage, **à l'ouverture de sa fiche ou à sa sélection** (une requête par garage, jamais pour toute la liste ; la seule autre demande de ce genre est celle de la commune pour la puce distance, voir la section suivante, qui partage la même requête et le même cache) :
 
 - affichée précédée de **« ≈ »** (« Environ » pour les lecteurs d'écran) avec une infobulle « adresse la plus proche de la position du garage (à 14 m), à titre indicatif » : c'est une approximation, pas l'adresse déclarée ;
 - **refusée au-delà de 80 m** (distance recalculée à partir de la géométrie renvoyée, la propriété `distance` n'étant qu'un repli) : le garage garde « Adresse non renseignée » ;
@@ -79,6 +79,29 @@ OpenStreetMap n'a pas toujours l'adresse d'un garage (beaucoup de Speedy, par ex
 - reprise partout : fiche, frise du trajet, bulle de la carte, lien « Avis Google » (le nom + l'adresse précisent la recherche), liste de suggestions et confirmation du formulaire « Déclarer une réparation » (l'adresse enregistrée garde le « ≈ ») ;
 - OpenStreetMap lui-même est mieux lu : `addr:full`, `addr:place`, `addr:suburb` et `contact:*` complètent `addr:*` (cache OSM passé en `jg.osm.v3` pour que ces balises soient conservées) ;
 - sans effet sur le contrôle technique et le registre SIRENE, dont l'adresse vient des données.
+
+## Ville dans la puce distance
+
+La puce distance de chaque carte dit où se trouve le garage : **« (épingle) 2,5 km · Bron »** (les lecteurs d'écran entendent « à 2,5 km, Bron »). La ville vient, dans cet ordre :
+
+1. **la balise OpenStreetMap** : `addr:city`, `contact:city`, sinon `addr:suburb` (le quartier vaut mieux que rien) ;
+2. **l'adresse déjà connue** : ce qui suit le dernier code postal (« 12 rue X, 69100 Villeurbanne » → « Villeurbanne ») ; vaut pour `addr:full`, le contrôle technique, le registre SIRENE et l'adresse approchée ci-dessus ;
+3. **pour un garage qui n'a ni l'un ni l'autre** (beaucoup de Speedy) : la **commune de l'adresse la plus proche**, demandée à la Base Adresse Nationale (celle de la section précédente : même requête `reverse?limit=1`, même cache `jg.addr.v1`, où l'entrée garde la commune dans le champ `c`).
+
+Règles de la demande (étape 3) :
+
+- **seulement pour les cartes qui entrent à l'écran** (`IntersectionObserver`, marge de 160 px), pas pour toute la liste : un lecteur qui descend la liste voit les villes arriver une à une ; une liste parcourue d'un bond n'interroge pas les cartes sautées. Sans `IntersectionObserver`, les 12 premières cartes ;
+- **3 demandes à la fois**, 80 ms entre deux, **300 par visite** au plus ; une carte déjà servie par le cache (90 jours si l'adresse a été acceptée, sinon 7 jours) ne redemande rien, et une commune en cache sert même périmée (elle ne change pas) ;
+- **refusée au-delà de 250 m** de l'adresse la plus proche (l'adresse elle-même reste refusée au-delà de 80 m : une réponse à 200 m donne la commune mais pas l'adresse). Si la réponse n'a pas de propriété `city`, la commune est lue dans son `label` ;
+- **échec réseau** : une nouvelle tentative au plus par garage ; **4 échecs de suite arrêtent les demandes pendant une minute** (réglage `cityPause` de `window.JG_TUNE`), puis un nouvel affichage de la liste reprend ; un échec n'est jamais mémorisé ;
+- **ouvrir une fiche pendant que sa demande court** rejoint la même requête (une seule par garage) ; la fiche montre alors l'adresse « ≈ » et la puce la commune ;
+- interrupteur : `window.JG_CITY_LOOKUP = false` (plus aucune demande ; la puce montre la commune quand elle est dans les données ou dans l'adresse d'une fiche ouverte).
+
+Mise en forme (`modules/city.js`, testée sans navigateur par `tests/city_unit.js`) : un nom tout en majuscules est remis en casse de titre avec ses particules (« SAINT-GENIS-LAVAL » → « Saint-Genis-Laval », « VILLEFRANCHE-SUR-SAONE » → « Villefranche-sur-Saone » : les accents manquants dans la source ne sont pas devinés), « Cedex » est retiré, un arrondissement s'écrit « 3e » / « 1er » (« LYON 3EME », « Lyon 03 » → « Lyon 3e »). Un texte déjà en minuscules reste tel quel.
+
+Mise en page : la ville s'abrège avec « … » sur un écran étroit au lieu de déborder de la carte (`.g-id` a une colonne `minmax(0, 1fr)` ; `.dist` a `min-width: 0`, `.d-city` `overflow: hidden; text-overflow: ellipsis`). Sur un téléphone de 390 px il reste ~170 px à la colonne du nom : « Saint-Genis-Laval » y est écourté, « Villeurbanne » non.
+
+Limite : la commune de l'adresse la plus proche peut différer de celle du garage quand il se trouve à cheval sur une limite communale. Le format réel de la réponse du géocodeur (`city`, `label`) n'a pas pu être vérifié depuis le bac à sable (hôte bloqué) : voir `exploitation.md`.
 
 ## Repères de prix
 
@@ -152,13 +175,14 @@ Une fenêtre (`<dialog>`, même habillage que le formulaire de déclaration) dit
 
 ## Maintenance du JS
 
-`src/js/app.js` est le script d'origine (noms de variables minifiés), reformaté et modifié à la main. Autour de lui, des modules ES : `modules/repair-store.js` (réparations : local ou API, file d'envoi), `modules/api-client.js` (HTTP : délai, nouvelles tentatives, disjoncteur), `modules/phone.js` (lecture des numéros), `modules/config.js` (adresse de l'API), `modules/load-script.js` (Leaflet local puis CDN de secours), `modules/sw-register.js`. Le dossier `shared/` (règles de validation, prestations, requête Overpass) est **partagé avec l'API** : une seule source, importée par la page et par le serveur. Le catalogue des modèles est `src/data/models.txt`. Après toute modification : `npm run build` (voir README).
+`src/js/app.js` est le script d'origine (noms de variables minifiés), reformaté et modifié à la main. Autour de lui, des modules ES : `modules/repair-store.js` (réparations : local ou API, file d'envoi), `modules/api-client.js` (HTTP : délai, nouvelles tentatives, disjoncteur), `modules/phone.js` (lecture des numéros), `modules/city.js` (mise en forme et lecture de la ville), `modules/config.js` (adresse de l'API), `modules/load-script.js` (Leaflet local puis CDN de secours), `modules/sw-register.js`. Le dossier `shared/` (règles de validation, prestations, requête Overpass) est **partagé avec l'API** : une seule source, importée par la page et par le serveur. Le catalogue des modèles est `src/data/models.txt`. Après toute modification : `npm run build` (voir README).
 
 | Fonction | Rôle |
 | --- | --- |
 | `bt()`, `av()`, `kd()` | gabarit de fiche, avatar (logo, monogramme ou initiale), libellé du type de garage |
 | `logoLoad()`, `logoTry()`, `logoApply()`, `logoShow()`, `logoHostOk()` | résolution Wikidata → Commons puis icône du site, cache 30 jours, remplacement du monogramme par le logo ; `logoBrand` / `ctBrand` : monogrammes |
 | `adEnsure()`, `adFetch()`, `adRepaint()`, `adInit()` | adresses manquantes : requête BAN, cache, mise à jour de la fiche, de la bulle et du lien Google |
+| `cityOf()`, `distHtml()`, `cityRepaint()`, `cityWatch()`, `cityPump()`, `cityHalted()` | ville de la puce distance : source (balise, adresse, cache), rendu, mise à jour d'une puce, mise en file des cartes à l'écran, 3 demandes à la fois, disjoncteur ; `cityTidy()` et `cityFromAddr()` sont dans `modules/city.js` |
 | `ct()`, `dt()` | `ct()` : état « recherche en cours » (bouton, `body.is-searching`) ; `dt()` : encart d'état, avec la phrase d'attente pendant une recherche |
 | `wt()`, `rb()` | détails de fiche (lignes Téléphone / Horaires / Site), frise du trajet |
 | `it()` | échelle de prix : médiane des enseignes (▼), médiane du garage (▲), écart |

@@ -33,7 +33,9 @@ const val = (page, n) => page.evaluate((id) => {
 }, ID(n));
 const waitDone = (page, n) => page.waitForFunction((id) => { const v = document.querySelector(`#list [data-id="${CSS.escape(id)}"] [data-ad]`); return v && !v.classList.contains("is-busy"); }, ID(n), { timeout: 5000 }).catch(() => {});
 const opened = async (page, mock, o = {}) => {
-  const r = await open(page.browser, page.server, FILE, { ...W, mock: { elements: ELEMENTS, ...mock }, ...o });
+  // The lookup that fills the city of the cards on screen (tests/city.js) is switched off here: every request counted
+  // in this suite must come from the opening of a card.
+  const r = await open(page.browser, page.server, FILE, { ...W, mock: { elements: ELEMENTS, ...mock }, ...o, initScript: "window.JG_CITY_LOOKUP=false;" + ((o && o.initScript) || "") });
   await search(r.page, { service: "vidange" });
   await r.page.click("[data-sort=dist]"); await r.page.waitForTimeout(400);
   return r;

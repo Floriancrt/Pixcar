@@ -1,4 +1,5 @@
 import MODELS_TXT from "../data/models.txt";
+import { cityFromAddr, cityTidy } from "./modules/city.js";
 import { apiBase } from "./modules/config.js";
 import { loadScript } from "./modules/load-script.js";
 import { phoneList, phoneParse } from "./modules/phone.js";
@@ -14,7 +15,7 @@ import { SERVICES } from "./shared/services.js";
     // Avec une API configurée, son relais (cache partagé, serveurs OpenStreetMap interrogés en cascade, copie périmée en
     // cas de panne) passe en premier ; les serveurs publics restent le secours, et partent tout de suite s'il ne répond pas.
     t = ((api) => (api ? [{ url: api + "/v1/overpass", name: "Pixcar" }, ...OVERPASS_MIRRORS] : OVERPASS_MIRRORS))(apiBase()),
-    a = Object.assign({ stagger: 4e3, osmTimeout: 3e4, retry: 2500, sirenePace: 400 }, window.JG_TUNE || {}),
+    a = Object.assign({ stagger: 4e3, osmTimeout: 3e4, retry: 2500, sirenePace: 400, cityPause: 6e4 }, window.JG_TUNE || {}),
     n = 864e5,
     r = 40,
     s = (() => {
@@ -1191,7 +1192,7 @@ import { SERVICES } from "./shared/services.js";
     }
     me.sel === g.id && Mk.has(g.id) && bindTip(Mk.get(g.id), g, !0);
     const c = pe.list.querySelector(`[data-id="${CSS.escape(g.id)}"] .act-reviews`);
-    c && (c.href = adGoogle(g));
+    (c && (c.href = adGoogle(g)), cityRepaint(g));
   }
   function adFetch(g) {
     const k = adId(g);
@@ -1216,7 +1217,12 @@ import { SERVICES } from "./shared/services.js";
             Array.isArray(c) && Number.isFinite(+c[0]) && Number.isFinite(+c[1])
               ? 1e3 * _(g, { lat: +c[1], lon: +c[0] })
               : +o.distance,
-          e = a && d >= 0 && d <= adRange ? { a, d: Math.round(d), t: Date.now() } : { a: "", t: Date.now() };
+          // la commune de l'adresse la plus proche (250 m au plus) sert à la puce distance, même quand l'adresse elle-même est refusée
+          cy = d >= 0 && d <= cityRange ? cityTidy(o.city) || cityFromAddr(o.label) : "",
+          e =
+            a && d >= 0 && d <= adRange
+              ? { a, d: Math.round(d), c: cy, t: Date.now() }
+              : { a: "", c: cy, t: Date.now() };
         return ((adMem[k] = e), adSave(), e);
       } catch (e) {
         return null;
@@ -1244,6 +1250,95 @@ import { SERVICES } from "./shared/services.js";
           adRepaint(g));
       })
     );
+  }
+  // ----- Ville dans la puce distance (« 2,5 km · Bron ») -----
+  // La ville dit de quel côté se trouve le garage. Elle vient, dans l'ordre : de la balise OpenStreetMap (addr:city,
+  // contact:city, addr:suburb), de l'adresse déjà connue (ce qui suit le code postal : OpenStreetMap, contrôle technique,
+  // SIRENE, adresse approchée), puis, pour un garage qui n'a ni l'un ni l'autre, de la commune de l'adresse la plus proche
+  // (250 m au plus). Celle-ci est demandée au géocodeur inverse ci-dessus (même requête, même cache) pour les seules
+  // cartes qui entrent à l'écran, 3 à la fois, 300 par visite au plus ; après 4 échecs de suite on s'arrête une minute
+  // (réglage cityPause), puis on réessaie. Une commune ne change pas : une réponse en cache sert même périmée.
+  // Interrupteur : window.JG_CITY_LOOKUP = false.
+  const cityRange = 250,
+    cityMax = 3,
+    cityCap = 300,
+    cityLook = window.JG_CITY_LOOKUP !== !1,
+    cityQueue = [];
+  let cityIO = null,
+    cityRun = 0,
+    cityAsked = 0,
+    cityFails = 0,
+    cityFailAt = 0;
+  // disjoncteur : 4 échecs de suite arrêtent les demandes pendant cityPause ; ensuite on repart avec un compte à zéro
+  function cityHalted() {
+    if (cityFails < 4) return !1;
+    if (Date.now() - cityFailAt < a.cityPause) return !0;
+    return ((cityFails = 0), !1);
+  }
+  function cityOf(g) {
+    if (!g) return "";
+    if (g.city) return g.city;
+    const fromAddr = cityFromAddr(g.addr);
+    if (fromAddr) return fromAddr;
+    if (!Number.isFinite(g.lat) || !Number.isFinite(g.lon)) return "";
+    const e = adMem[adId(g)];
+    return (e && (e.c || cityFromAddr(e.a))) || "";
+  }
+  function distHtml(g) {
+    const c = cityOf(g);
+    return `${he("pin")}<span class="sr-only">à </span><span class="d-km">${y(E(g.dist))}</span>${c ? `<span class="sr-only">, </span><span class="d-sep" aria-hidden="true">·</span><span class="d-city">${y(c)}</span>` : ""}`;
+  }
+  function cityRepaint(g) {
+    for (const n of document.querySelectorAll(`.dist[data-dist="${CSS.escape(g.id)}"]`)) n.innerHTML = distHtml(g);
+  }
+  // réponse absente, périmée, ou ancienne (sans commune) : à redemander
+  const cityStale = (e) => !adFresh(e) || (!e.a && "string" != typeof e.c),
+    cityNeeds = (g) =>
+      !!g &&
+      "osm" === g.src &&
+      Number.isFinite(g.lat) &&
+      Number.isFinite(g.lon) &&
+      (g.cityFail || 0) < 2 &&
+      !g.cityBusy &&
+      !cityOf(g) &&
+      cityStale(adMem[adId(g)]);
+  function cityPump() {
+    while (cityRun < cityMax && cityAsked < cityCap && cityQueue.length && !cityHalted()) {
+      const g = cityQueue.shift();
+      if (!cityNeeds(g)) continue;
+      ((g.cityBusy = !0), cityRun++, cityAsked++);
+      adFetch(g)
+        .then((e) => {
+          g.cityBusy = !1;
+          if (e) cityFails = 0;
+          else ((g.cityFail = (g.cityFail || 0) + 1), ++cityFails >= 4 && (cityFailAt = Date.now()));
+          cityRepaint(g);
+        })
+        .catch(() => {})
+        .then(() => S(80))
+        .then(() => (cityRun--, cityPump()));
+    }
+  }
+  // Appelé après chaque affichage de la liste : met en file les garages sans ville dont la carte est (ou arrive) à l'écran
+  function cityWatch(items) {
+    (cityIO && cityIO.disconnect(), (cityIO = null), (cityQueue.length = 0));
+    if (!cityLook || cityHalted()) return;
+    const todo = new Map(items.filter(cityNeeds).map((g) => [g.id, g]));
+    if (!todo.size) return;
+    const nodes = [...pe.list.querySelectorAll(".dist[data-dist]")].filter((n) => todo.has(n.dataset.dist)),
+      take = (n) => {
+        const g = todo.get(n.dataset.dist);
+        g && cityQueue.push(g);
+      };
+    if ("function" != typeof window.IntersectionObserver) return (nodes.slice(0, 12).forEach(take), cityPump());
+    const io = new IntersectionObserver(
+      (es) => {
+        for (const e of es) e.isIntersecting && (io.unobserve(e.target), take(e.target));
+        cityPump();
+      },
+      { rootMargin: "160px 0px" },
+    );
+    ((cityIO = io), nodes.forEach((n) => io.observe(n)));
   }
   function Be(e) {
     const t = e.tags || {},
@@ -1291,6 +1386,7 @@ import { SERVICES } from "./shared/services.js";
       shop: s,
       chain: r,
       addr: [l, d].filter(Boolean).join(", ") || q(t["addr:full"] || ""),
+      city: cityTidy(t["addr:city"] || t["contact:city"] || t["addr:suburb"]),
       addrGap: gap,
       phone: [t.phone, t["contact:phone"], t.mobile, t["contact:mobile"], t["phone:mobile"]]
         .filter(Boolean)
@@ -2171,7 +2267,8 @@ import { SERVICES } from "./shared/services.js";
       (pe.moreBtn.textContent = `Afficher ${Math.min(a, r)} de plus (${a} restant${a > 1 ? "s" : ""})`),
       !me.view.length &&
         me.raw.length &&
-        (pe.list.innerHTML = '<li class="status">Aucun résultat avec ce filtre.</li>'));
+        (pe.list.innerHTML = '<li class="status">Aucun résultat avec ce filtre.</li>'),
+      cityWatch(t));
   }
   const vt = (e) => (phoneList(e)[0] || {}).text || "";
   // ----- Enseignes : monogramme de marque, puis vrai logo dès qu'on le trouve --------------------------
@@ -2477,7 +2574,7 @@ import { SERVICES } from "./shared/services.js";
       ${av(e.name, e.chain, e.network)}
       <div class="g-id">
         <h3><button type="button" class="g-name linkless" data-act="more" aria-expanded="${i}" aria-controls="m-${t}">${y(e.name)}</button></h3>
-        <p class="g-meta"><span class="dist">${he("pin")}<span class="sr-only">à </span>${y(E(e.dist))}</span><span class="kind">${y(a)}</span>${n}</p>
+        <p class="g-meta"><span class="dist" data-dist="${y(e.id)}">${distHtml(e)}</span><span class="kind">${y(a)}</span>${n}</p>
       </div>
       <div class="g-price">${r}</div>
       ${s.avail || ""}

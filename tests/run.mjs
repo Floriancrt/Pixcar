@@ -19,6 +19,7 @@ const SUITES = [
   { name: "logos", cmd: ["node", "tests/logos.js"], env: { FILE } },
   { name: "brand", cmd: ["node", "tests/brand.js"], env: { FILE } },
   { name: "addr", cmd: ["node", "tests/addr.js"], env: { FILE } },
+  { name: "city", cmd: ["node", "tests/city.js"], env: { FILE } },
   { name: "ux", cmd: ["node", "tests/ux.js", FILE] },
   { name: "load", cmd: ["node", "tests/load.js", FILE] },
   { name: "veh", cmd: ["node", "tests/veh.js", FILE] },
@@ -34,6 +35,7 @@ const SUITES = [
   { name: "integrity", cmd: ["node", "tests/integrity.js"] },
   { name: "anchor", cmd: ["node", "tests/anchor_test.js"] },
   { name: "phone", cmd: ["node", "tests/phone_unit.js"] },
+  { name: "cityunit", cmd: ["node", "tests/city_unit.js"] },
   { name: "contrast", cmd: ["python3", "tests/contrast/contrast_css.py"], contrast: true },
 ];
 

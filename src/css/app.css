@@ -1548,6 +1548,8 @@ select {
 .g-id {
   min-width: 0;
   display: grid;
+  /* une colonne de la largeur du bloc : sans cela, une ville longue élargit la piste et fait déborder la puce distance */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 .g-id h3 {
@@ -1575,11 +1577,32 @@ select {
   color: var(--ink);
   font: 700 0.76rem/1.2 var(--font);
   box-shadow: inset 0 0 0 1px var(--hair);
+  /* « 2,5 km · Villeurbanne » : la ville s'abrège avec « … » plutôt que de déborder de la carte */
+  max-width: 100%;
+  min-width: 0;
 }
 .dist .ic {
   width: 13px;
   height: 13px;
+  flex: none;
   color: var(--accent);
+}
+.dist .d-km,
+.dist .d-sep {
+  flex: none;
+  white-space: nowrap;
+}
+.dist .d-sep {
+  margin: 0 -0.05rem;
+  color: var(--ink-3);
+}
+.dist .d-city {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--ink-2);
 }
 .kind {
   font-weight: 600;

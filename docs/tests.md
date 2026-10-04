@@ -23,6 +23,7 @@ Mutations (une variante cassée volontairement doit faire échouer un test ; voi
 python3 tests/mutation/mut_load.py     # chargement (24)            python3 tests/mutation/mut_ux.py     # prix, téléphones, messages… (25)
 python3 tests/mutation/mut_veh.py      # véhicule (41)              python3 tests/mutation/mut_node.py   # serveur, magasin, client HTTP, DSQL, Lambda, modèle CloudFormation, mentions légales, conservation (117)
 python3 tests/mutation/mut_legal.py   # fenêtre de confidentialité dans le navigateur (16)
+python3 tests/mutation/mut_city.py    # ville des cartes dans le navigateur (31)    python3 tests/mutation/mut_city.py --unit   # modules/city.js, sans navigateur (13)
 python3 tests/mutation/mut_ux.py --anchors    # vérifie sans navigateur que chaque ancre existe encore
 ```
 
@@ -44,7 +45,8 @@ node scripts/smoke-api.mjs https://api.pixcar.fr --origin https://pixcar.fr   # 
 | `func` | recherche, tri, filtres, rayon, contrôle technique, déclaration d'une réparation, navigation, ordinateur et mobile | 72 |
 | `logos` | avatars des enseignes : logo Wikidata, icône du site, monogramme, garde-fous, cache | 62 |
 | `brand` | charte Pixcar : logos, rail, jetons, marqueurs, favicon, couleurs forcées | 31 |
-| `addr` | adresses manquantes (géocodage inverse, « ≈ », cache, limite de 80 m) | 31 |
+| `addr` | adresses manquantes (géocodage inverse, « ≈ », cache, limite de 80 m) ; la demande de ville des cartes y est coupée (`JG_CITY_LOOKUP=false`) pour que chaque requête comptée vienne d'une ouverture de fiche | 31 |
+| `city` | **ville dans la puce distance** : balises OpenStreetMap, adresse lue, contrôle technique, registre SIRENE ; demande de la commune (cartes à l'écran seulement, 3 à la fois, 300 par visite, 250 m, cache et anciennes entrées, repli sur le `label`, panne puis reprise, échecs non consécutifs, interrupteur, ouverture d'une fiche pendant la demande) ; puce sur mobile (ellipsis, pas de débordement), lecteurs d'écran, axe en clair et en sombre | 46 |
 | `ux` | textes, prix sans « dès », échelle de prix et ses deux médianes, téléphones, barre de défilement | 98 |
 | `load` | état de chargement : rond-point animé, phrase d'attente, rien d'animé au repos | 39 |
 | `veh` | immatriculation, modèle (suggestions), année, prix (bornes), stockage, confidentialité, mise en page | 194 |
@@ -56,7 +58,7 @@ node scripts/smoke-api.mjs https://api.pixcar.fr --origin https://pixcar.fr   # 
 | `pages` *(dist)* | version GitHub Pages (`--pages`) : domaine dans `CNAME`, pas de `_headers`, politique de sécurité dans une balise `<meta>` **appliquée sans aucun en-tête** (script en ligne et script étranger refusés), site fonctionnel sous cette politique, aucune violation ni erreur ; **la même version construite pour une API** (c'est ce qui est publié à l'ouverture au public ; adresse fictive interceptée par le navigateur) : adresse d'API dans la page, hôte ajouté à la politique et rien d'autre, recherche par le relais de l'API sans violation, texte du mode API dans la fenêtre de confidentialité, lien vers elle dans le formulaire de déclaration | 20 |
 | `a11y` | axe-core sur les états clés (clair/sombre, ordinateur/mobile) | 13 états, 0 violation |
 | `sizes`, `states`, `anchor`, `integrity` | redimensionnement, états visuels, saut de défilement sans ancrage (Safari), identifiants référencés par le script | — |
-| `phone`, `contrast` | lecture des numéros ; contrastes calculés à partir des jetons livrés | 37 cas ; 76 + 76 |
+| `phone`, `cityunit`, `contrast` | lecture des numéros ; mise en forme et lecture de la ville (`modules/city.js`) ; contrastes calculés à partir des jetons livrés | 37 cas ; 56 cas ; 76 + 76 |
 
 ### Sans navigateur (`node:test`)
 

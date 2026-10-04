@@ -355,21 +355,29 @@ async function installMocks(ctx, opts = {}) {
       const limit = +(url.searchParams.get("limit") || 5);
       return route.fulfill({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify({ type: "FeatureCollection", features: feats.slice(0, limit) }) });
     }
-    // IGN reverse geocoder (Géoplateforme): nearest address to a point. opts.reverse = { offsetM, delayMs, fail, empty, noDistance, noGeometry, label }
+    // IGN reverse geocoder (Géoplateforme): nearest address to a point.
+    // opts.reverse = { offsetM, delayMs, fail, failAt(lat, lon) -> boolean, empty, noDistance, noGeometry, label, city, postcode, noCity, at(lat, lon) -> overrides }
+    // counters.reverseMax = most requests in flight at once
     if (h === "data.geopf.fr" && url.pathname.startsWith("/geocodage/reverse")) {
       counters.reverse++; counters.reverseUrls.push(url.search);
-      const mode = opts.reverse || {};
-      if (mode.delayMs) await new Promise((r) => setTimeout(r, mode.delayMs));
-      if (mode.fail) return route.fulfill({ status: 503, headers: CORS, body: "" });
-      const lon = +url.searchParams.get("lon"), lat = +url.searchParams.get("lat");
-      const json = (o) => route.fulfill({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify(o) });
-      if (mode.empty) return json({ type: "FeatureCollection", features: [] });
-      const off = mode.offsetM == null ? 14 : mode.offsetM, n = 1 + (Math.round(lat * 1e4) % 97);
-      const props = { label: mode.label || `${n} Rue du Test 69007 Lyon`, name: mode.label ? mode.label.split(" 6")[0] : `${n} Rue du Test`, housenumber: String(n), street: "Rue du Test", postcode: "69007", city: "Lyon", type: "housenumber" };
-      if (!mode.noDistance) props.distance = Math.round(off);
-      const feature = { type: "Feature", properties: props };
-      if (!mode.noGeometry) feature.geometry = { type: "Point", coordinates: [lon, lat + off / 111200] };
-      return json({ type: "FeatureCollection", features: [feature] });
+      counters.reverseNow = (counters.reverseNow || 0) + 1;
+      counters.reverseMax = Math.max(counters.reverseMax || 0, counters.reverseNow);
+      try {
+        const mode = opts.reverse || {};
+        if (mode.delayMs) await new Promise((r) => setTimeout(r, mode.delayMs));
+        const lon = +url.searchParams.get("lon"), lat = +url.searchParams.get("lat");
+        if (mode.fail || (mode.failAt && mode.failAt(lat, lon))) return await route.fulfill({ status: 503, headers: CORS, body: "" });
+        const mo = { ...mode, ...(mode.at ? mode.at(lat, lon) || {} : {}) };
+        const json = (o) => route.fulfill({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify(o) });
+        if (mode.empty) return await json({ type: "FeatureCollection", features: [] });
+        const off = mo.offsetM == null ? 14 : mo.offsetM, n = 1 + (Math.round(lat * 1e4) % 97), pc = mo.postcode || "69007", city = mo.city || "Lyon";
+        const props = { label: mo.label || `${n} Rue du Test ${pc} ${city}`, name: mo.label ? mo.label.split(" 6")[0] : `${n} Rue du Test`, housenumber: String(n), street: "Rue du Test", postcode: pc, city, type: "housenumber" };
+        if (mo.noCity) delete props.city;
+        if (!mode.noDistance) props.distance = Math.round(off);
+        const feature = { type: "Feature", properties: props };
+        if (!mode.noGeometry) feature.geometry = { type: "Point", coordinates: [lon, lat + off / 111200] };
+        return await json({ type: "FeatureCollection", features: [feature] });
+      } finally { counters.reverseNow--; }
     }
     // IGN tiles
     if (h === "data.geopf.fr" && url.pathname.startsWith("/wmts")) {
