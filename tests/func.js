@@ -255,7 +255,11 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
       await page.waitForTimeout(700);
       s = await st();
       check("D5 clicking a far marker renders + opens + selects its card", s.open[0] === far.id && s.sel[0] === far.id && s.bar, JSON.stringify({ ...s, far: far.id }));
-      check("D5b card scrolled into the panel viewport", await page.$eval(`[data-id="${far.id}"]`, (c) => { const r = c.getBoundingClientRect(), p = document.getElementById("panelCol").getBoundingClientRect(); return r.top >= p.top - 2 && r.top < p.bottom; }));
+      // Le défilement est lissé (scrollIntoView « smooth ») : mesuré, la carte entre dans la fenêtre du panneau 650 à 680 ms après le clic et le
+      // défilement s'arrête vers 730 à 760 ms. Une attente fixe de 700 ms est donc trop juste (échec de temps en temps) : on attend l'état voulu, avec une échéance.
+      const inPanel = () => page.$eval(`[data-id="${far.id}"]`, (c) => { const r = c.getBoundingClientRect(), p = document.getElementById("panelCol").getBoundingClientRect(); return r.top >= p.top - 2 && r.top < p.bottom; });
+      for (let i = 0; i < 40 && !(await inPanel()); i++) await page.waitForTimeout(50);
+      check("D5b card scrolled into the panel viewport", await inPanel());
     }
     // selecting an unpriced garage then filtering on priced clears the selection
     await page.evaluate(() => document.getElementById("panelCol").scrollTo(0, 0));
