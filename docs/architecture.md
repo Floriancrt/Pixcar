@@ -202,7 +202,7 @@ Chemin critique d'une première visite : **une page HTML avec sa feuille de styl
 | Instance de l'API | 10 s par zone (copie en mémoire), réponse compressée et empreinte calculées **une fois** par version | des centaines de lecteurs = une requête SQL |
 | Base | index sur la zone et sur (garage, prestation, date) | lecture d'une zone par parcours d'index |
 
-Budgets (vérifiés par `tests/budget.js`, lancé par `npm run test:dist`) : page ≤ 30 Ko gzip (dont feuille de style ≤ 22), script ≤ 52 Ko, police ≤ 30 Ko, **première visite ≤ 108 Ko**, service worker ≤ 3 Ko. Les mesures (chargement sur téléphone d'entrée de gamme simulé, API sous charge) sont dans [tests.md](tests.md).
+Budgets (vérifiés par `tests/budget.js`, lancé par `npm run test:dist`) : page ≤ 30 Ko gzip (dont feuille de style ≤ 22), script ≤ 52 Ko, police ≤ 34 Ko, **première visite ≤ 112 Ko**, service worker ≤ 3 Ko. Les mesures (chargement sur téléphone d'entrée de gamme simulé, API sous charge) sont dans [tests.md](tests.md).
 
 **Si le trafic augmente** : l'API est sans état, on ajoute des instances ; la lecture est surtout absorbée par le CDN ; la base ne voit qu'une requête de zone par instance toutes les 10 s et par zone chaude ; les écritures sont rares (quelques-unes par minute) et plafonnées. Le premier maillon à surveiller est le pool de connexions de chaque instance (`PG_POOL_MAX`) multiplié par le nombre d'instances face au maximum de connexions de la base.
 

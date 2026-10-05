@@ -380,7 +380,9 @@ describe("GET /v1/repairs", () => {
   });
 
   test("at most 30 repairs per garage and service, the most recent ones", async () => {
-    await post(t, repair({ date: isoDay(1) }));
+    // « hier » se compte sur l'horloge figée de ce bloc (2 octobre 2026), pas sur la date réelle : avec isoDay(1) le test a cessé de
+    // passer le 5 octobre 2026 (la déclaration était datée d'après l'horloge de l'application, donc refusée, et la ligne de garage manquait)
+    await post(t, repair({ date: new Date(clock - 864e5).toISOString().slice(0, 10) }));
     await t.db.query(
       `INSERT INTO repairs (id, garage_id, service_id, price_cents, repaired_on, rating, vehicle_model, vehicle_year, delete_token_hash)
        SELECT gen_random_uuid(), 'osm:node/1022', 'vidange', 5000 + i, DATE '2025-01-01' + i, 4, 'Clio', 2018, repeat('ab', 32) FROM generate_series(1, 40) AS i`,

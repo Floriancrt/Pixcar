@@ -88,7 +88,7 @@ function makeVersion(tag, { brokenShell = false, from = DIST } = {}) {
     await page.reload();
     await page.waitForSelector("#service option", { state: "attached", timeout: 8000 });
     await page.waitForSelector("#list > li.card", { timeout: 8000 }).catch(() => {});
-    check("O3a with the host DOWN and the network OFF the page still opens, complete and styled", (await page.title()) === "Pixcar" && (await page.$$eval("#service option", (l) => l.length)) > 15 && (await page.evaluate(() => getComputedStyle(document.body).fontFamily.includes("Jakarta") || document.fonts.size >= 0)));
+    check("O3a with the host DOWN and the network OFF the page still opens, complete and styled", (await page.title()) === "Pixcar" && (await page.$$eval("#service option", (l) => l.length)) > 15 && (await page.evaluate(() => getComputedStyle(document.body).fontFamily.includes("Outfit") || document.fonts.size >= 0)));
     check("O3b … and shows the last search again, from the copy kept in the browser", (await page.$$eval("#list > li.card", (l) => l.length)) === before && before > 20, `${before}`);
     await page.click("#go").catch(() => {});
     await sleep(600);

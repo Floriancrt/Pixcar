@@ -18,7 +18,7 @@ Ce que voit et fait le visiteur, et les choix de présentation. Le fonctionnemen
 - **Ordinateur (≥ 1024 px)** : rail d'icônes à gauche, panneau (recherche + liste) flottant sur une **carte persistante plein écran**. Cliquer une fiche ou un marqueur la **sélectionne** : contour vert, fiche dépliée avec la frise « Votre adresse → garage », marqueur agrandi avec bulle noire, barre récapitulative sur la carte.
 - **Mobile** : barre du haut + navigation flottante en bas ; bouton **Carte / Liste** ; carte plein écran avec barre récapitulative (« Voir la fiche » ramène à la fiche).
 - **Fiches** : une seule fiche ouverte à la fois (accordéon), avatars (logo ou monogramme de l'enseigne, initiale pastel pour un indépendant), distance en pastille, statuts en pastilles à point, actions teintées, bouton noir « Déclarer une réparation ».
-- **Style** : charte Pixcar (noir, vert menthe, vert vif, blanc cassé : voir ci-dessous), grands rayons, police *Plus Jakarta Sans* (remplace Barlow), thème sombre complet (préférence système, ou `data-theme="light|dark"` sur `<html>`).
+- **Style** : charte Pixcar (noir, vert menthe, vert vif, blanc cassé : voir ci-dessous), grands rayons, police *Outfit* (remplace Plus Jakarta Sans, elle-même arrivée à la place de Barlow : voir « Typographie »), thème sombre complet (préférence système, ou `data-theme="light|dark"` sur `<html>`).
 - **Accessibilité** : lien d'évitement, titres ordonnés, cibles tactiles de 42 à 44 px (`pointer: coarse`), contrastes calculés y compris au pic des lueurs du fond (texte ≥ 4,5:1, bordures de champs ≥ 3:1), `prefers-reduced-motion`, `prefers-contrast`, `forced-colors`.
 
 ## Charte Pixcar
@@ -68,6 +68,24 @@ Fonctionnement et limites :
 - **Imposer un logo** (enseigne introuvable, logo officiel de meilleure qualité) : `window.JG_LOGOS = { norauto: "https://…/logo.png" }` avant le script (URL ou `data:`). Les identifiants sont ceux du tableau `l` du JS (`norauto`, `feuvert`, `speedy`, `midas`, `roady`, `euromaster`, `points`, …). Seul Driver Center n'a aucun site connu (aucun site français trouvé) : sans surcharge il reste en monogramme. Profil Plus, Siligom, Carter-Cash et Eurorepar n'ont pas d'identifiant Wikidata : leur logo ne peut venir que de l'icône de leur site. Pour garantir un logo **sans aucun appel réseau**, intégrez le fichier : `window.JG_LOGOS = { speedy: "data:image/svg+xml;base64,…" }` (à définir avant le script, ou à écrire en dur dans `logoPin`).
 - Diagnostic : `jgLogos()` dans la console liste, pour chaque enseigne, le logo Wikidata trouvé, le site utilisé et l'image affichée.
 - Les logos sont des marques de leurs propriétaires ; les fichiers de Commons ont leurs propres licences.
+
+## Typographie
+
+La police est **Outfit** (The Outfit Project Authors, licence SIL OFL 1.1 : texte dans `src/assets/fonts/OFL-Outfit.txt`), variable de 100 à 900, en **fichiers officiels de Google Fonts, non modifiés**, hébergés avec le site (aucun appel à un service de polices) : `outfit-latin.woff2` (32 Ko, préchargé : Latin-1, œ, €, ponctuation française) et `outfit-latin-ext.woff2` (15 Ko, chargé seulement si un caractère l'exige). Elle remplace *Plus Jakarta Sans* depuis le 5 octobre 2026, au choix de l'utilisateur, qui avait d'abord retenu *Epilogue* (parmi 12 polices comparées dans le vrai site ; publiée le même jour, puis abandonnée).
+
+Réglages faits pour elle :
+
+- **Échelle** : Outfit a des lettres plus petites que la police précédente (hauteur d'x 0,46 em contre 0,54, capitales 0,68 contre 0,75) et un texte plus étroit de 6 % (largeur mesurée sur 17 textes de l'interface, graisses 400 à 800 : 0,94 fois l'ancienne). Le `@font-face` porte donc `size-adjust: 108%` (`SIZE_ADJUST` dans `scripts/build.mjs`) : la largeur des textes redevient celle de l'ancien rendu (+0,7 % en moyenne ; de −6 % à +7 % selon le mot), donc les mêmes retours à la ligne et les mêmes hauteurs de cartes, la hauteur d'x passe à 0,50 em et le milieu des lettres retombe à la même place dans les pastilles et les boutons (mesuré à 12, 14, 16 et 18 px). Le descripteur ne touche que Outfit (les polices de repli gardent leur taille) et laisse intacts les `rem` et les `em` du CSS. Il est pris en charge par Chrome, Edge et Firefox depuis la version 92 et par Safari 17 (données MDN) ; sans lui (Safari 16 et avant), le texte est affiché 8 % plus petit, sans autre dégât.
+- **Point médian** : celui d'Outfit n'a aucune marge propre (chasse de 0,08 em, contre 0,29 em avant) ; le séparateur de la puce distance (`.dist .d-sep`) reçoit 0,03 rem de marge pour garder l'air qu'il avait. Partout ailleurs, « · » est entouré d'espaces.
+- **Chiffres** : Outfit a des chiffres tabulaires (`tnum`) : les `font-variant-numeric: tabular-nums` du CSS sont effectifs (ses chiffres sont proportionnels par défaut).
+- **Graisses** : le CSS emploie 400 à 800 ; toutes existent (la police va de 100 à 900).
+- **Italique** : deux usages (`font-style: italic`) restent en oblique synthétisée (Outfit n'a pas d'italique).
+- **Caractères absents de la police** (`✓`, `→`, `▲▼`, `≈`, `★`…) : repli sur la police du système.
+- **Champs de formulaire** : `input, select, textarea { font: inherit }` ; les boutons radio et les cases à cocher ne dessinent aucun texte, mais ils annonçaient Arial.
+- **Typographie française** : espaces insécables dans « à partir de » et devant « · 10 km » (une ligne ne commence jamais par « » » ni par « · »).
+- **Contrôle** : Chrome (`CSS.getPlatformFontsForNode`, nœud par nœud) ne dessine que « Outfit » dans les vues clair, sombre, mobile, fiche ouverte, déclaration, mentions légales et Prix ; aucun élément ni pseudo-élément n'annonce une autre police.
+
+Changer de police : remplacer les fichiers de `src/assets/fonts/`, adapter `FONTS`, `SIZE_ADJUST` et `fontFace()` dans `scripts/build.mjs`, la pile `--font` et les budgets de `tests/budget.js`, mesurer la largeur des textes (un petit script qui compare les deux polices sur les textes de l'interface avec plusieurs valeurs de `size-adjust`, retenir celle qui rend la largeur d'origine) puis le centrage vertical, revoir les captures et lancer la régression. **Choisir une police à licence libre (OFL, Apache)** : le dépôt est public. Clash Grotesk (ITF Free Font License 2.0) a été écartée : sa licence interdit de modifier le fichier (sous-ensemble, conversion de format) et de le diffuser par un dépôt ou un serveur public ; elle n'est pas non plus dans Google Fonts.
 
 ## Adresses manquantes
 

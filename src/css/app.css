@@ -88,7 +88,7 @@
   --rail-w: 76px;
   --gap: 16px;
   --panel-w: clamp(400px, 32vw, 500px);
-  --font: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font: "Outfit", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -150,6 +150,12 @@ button {
   font: inherit;
   color: inherit;
   cursor: pointer;
+}
+/* les champs de formulaire reprennent la police de la page (les boutons radio et cases à cocher ne dessinent aucun texte, mais ils annonçaient Arial) */
+input,
+select,
+textarea {
+  font: inherit;
 }
 h1,
 h2,
@@ -1593,7 +1599,8 @@ select {
   white-space: nowrap;
 }
 .dist .d-sep {
-  margin: 0 -0.05rem;
+  /* le point médian d'Outfit n'a aucune marge propre (chasse de 0,08 em) : on lui rend l'air que lui donnait la police précédente */
+  margin: 0 0.03rem;
   color: var(--ink-3);
 }
 .dist .d-city {
