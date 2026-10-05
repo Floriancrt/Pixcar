@@ -10,6 +10,9 @@
 //
 // Variable d'environnement : PIXCAR_API_BASE = URL de l'API des réparations (vide : stockage dans le navigateur).
 //                            PIXCAR_ALLOW_NO_LEGAL=1 : construire avec l'API même si src/legal.json est incomplet (essai seulement, voir legalParts).
+//                            PIXCAR_GA_ID = identifiant de mesure Google Analytics (« G-… ») : bandeau de consentement, texte de confidentialité
+//                            et politique de sécurité en tiennent compte. Sans cette variable, la version publiée (--pages) prend celui de
+//                            src/analytics.json ; les autres sorties n'en ont aucun. PIXCAR_GA_ID= (vide) le désactive même avec --pages.
 //
 // Deux sorties à partir des mêmes sources :
 //   index.html   page tout-en-un (CSS, JS, police et icônes en ligne) : s'ouvre depuis le disque, se déploie n'importe où ;
@@ -40,6 +43,24 @@ const dev = process.argv.includes("--dev");
 const apiBase = (process.env.PIXCAR_API_BASE || "").replace(/\/+$/, "");
 const read = (...p) => readFile(join(...p), "utf8");
 const hash = (buf) => createHash("sha256").update(buf).digest("hex").slice(0, 10);
+
+// Mesure d'audience (Google Analytics) : l'identifiant vient de src/analytics.json pour la version publiée (--pages) seulement, ou de
+// PIXCAR_GA_ID (qui l'emporte ; vide : désactivée). Sans identifiant, la page n'a ni bandeau, ni texte sur Google, ni hôte Google dans sa
+// politique de sécurité, et le module modules/analytics.js ne fait rien : page tout-en-un, développement et tests n'envoient rien à Google.
+const analytics = await (async () => {
+  let config = {};
+  try {
+    config = JSON.parse(await read(SRC, "analytics.json"));
+  } catch {
+    /* pas de fichier : pas de mesure d'audience par défaut */
+  }
+  const fromEnv = process.env.PIXCAR_GA_ID;
+  const id = String(fromEnv !== undefined ? fromEnv : pages !== undefined ? config.measurementId ?? "" : "").trim();
+  if (!id) return null;
+  if (!/^G-[A-Z0-9]{6,12}$/.test(id)) throw new Error(`identifiant de mesure invalide (« G-XXXXXXXXXX » attendu) : ${id}`);
+  const months = Number.isInteger(config.retentionMonths) && config.retentionMonths > 0 ? config.retentionMonths : 14;
+  return { id, cookie: id.slice(2), retentionMonths: months };
+})();
 
 // Leaflet est chargé à la demande (premier affichage de la carte). Page tout-en-un : CDN. dist : copie locale puis CDN.
 const LEAFLET_CDN = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js";
@@ -133,19 +154,27 @@ async function legalParts() {
   if (filled("contact") && !/^[^\s@<>"]+@[^\s@<>"]+\.[A-Za-z]{2,}$/.test(String(config.contact).trim())) problems.push("contact : une adresse électronique est attendue");
   if (filled("repairRetentionMonths") && !(Number.isInteger(config.repairRetentionMonths) && config.repairRetentionMonths > 0)) problems.push("repairRetentionMonths : un nombre entier de mois est attendu");
   if (problems.length) {
-    if (apiBase && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1")
-      throw new Error(`mentions légales incomplètes dans src/legal.json (${problems.join(" ; ")}) : l'API est branchée (PIXCAR_API_BASE), des visiteurs y déposeraient des données sans en être informés. Complétez ce fichier (docs/exploitation.md, section 6) ; PIXCAR_ALLOW_NO_LEGAL=1 le permet pour un simple essai.`);
+    if ((apiBase || analytics) && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1")
+      throw new Error(`mentions légales incomplètes dans src/legal.json (${problems.join(" ; ")}) : ${analytics ? "la mesure d'audience est branchée (PIXCAR_GA_ID, src/analytics.json) : le bandeau de consentement renvoie à cette fenêtre" : "l'API est branchée (PIXCAR_API_BASE), des visiteurs y déposeraient des données sans en être informés"}. Complétez ce fichier (docs/exploitation.md, section 6) ; PIXCAR_ALLOW_NO_LEGAL=1 le permet pour un simple essai.`);
     return { dialog: "", linkPanel: "", linkSources: "", linkDialog: "" };
   }
-  const dialog = (await read(SRC, "partials/legal.html")).replace(/\{\{legal\.([A-Za-z]+)\}\}/g, (m, k) => {
-    if (!LEGAL_FIELDS.includes(k)) throw new Error(`partials/legal.html : {{legal.${k}}} n'existe pas dans src/legal.json`);
-    return esc(String(config[k]).trim());
-  });
+  // Variantes du texte selon la mesure d'audience : <!--GA:on-->…<!--/GA:on--> (avec Google Analytics) et <!--GA:off-->…<!--/GA:off--> (sans).
+  const variants = (html) => html.replace(/<!--GA:(on|off)-->([\s\S]*?)<!--\/GA:\1-->/g, (m, mode, text) => ((mode === "on") === !!analytics ? text : ""));
+  const gaFields = { cookie: analytics && analytics.cookie, retentionMonths: analytics && analytics.retentionMonths };
+  const dialog = variants(await read(SRC, "partials/legal.html"))
+    .replace(/\{\{legal\.([A-Za-z]+)\}\}/g, (m, k) => {
+      if (!LEGAL_FIELDS.includes(k)) throw new Error(`partials/legal.html : {{legal.${k}}} n'existe pas dans src/legal.json`);
+      return esc(String(config[k]).trim());
+    })
+    .replace(/\{\{ga\.([A-Za-z]+)\}\}/g, (m, k) => {
+      if (!analytics || gaFields[k] === undefined) throw new Error(`partials/legal.html : {{ga.${k}}} inconnu, ou hors d'un bloc <!--GA:on-->`);
+      return esc(String(gaFields[k]));
+    });
   return {
     dialog,
     // Masqué dans le HTML, montré par modules/legal.js une fois la page construite : sous le panneau des résultats, que le script remplit, il
-    // descendrait de plusieurs lignes au démarrage (décalage de mise en page).
-    linkPanel: '<p class="legal-foot" hidden><button type="button" class="link-btn" data-open-legal>Confidentialité et mentions légales</button></p>',
+    // descendrait de plusieurs lignes au démarrage (décalage de mise en page). Avec la mesure d'audience : un second lien rouvre le choix.
+    linkPanel: `<p class="legal-foot" hidden><button type="button" class="link-btn" data-open-legal>Confidentialité et mentions légales</button>${analytics ? '<span aria-hidden="true"> · </span><button type="button" class="link-btn" data-consent-open>Mesure d\'audience</button>' : ""}</p>`,
     linkSources: '<p><b>Confidentialité et mentions légales.</b> <button type="button" class="link-btn" data-open-legal>Lire la politique de confidentialité</button></p>',
     linkDialog: '<p class="dlg-note" data-store-only="remote"><button type="button" class="link-btn" data-open-legal>Comment Pixcar traite vos données</button></p>',
   };
@@ -175,7 +204,7 @@ async function pageParts() {
     ["<!--REPAIR_OPTIONS-->", optionsHtml(SERVICES.filter((s) => s.kind !== "ct"), `<optgroup label="Autre"><option value="${OTHER_SERVICE}">Autre réparation (précisez en commentaire)</option></optgroup>`)],
     ["<!--LEGAL_LINK_DIALOG-->", legal.linkDialog],
   ]);
-  return { body, sprite: await read(SRC, "partials/sprite.html"), dialog, legal: legal.dialog };
+  return { body, sprite: await read(SRC, "partials/sprite.html"), dialog, legal: legal.dialog, consent: analytics ? await read(SRC, "partials/consent.html") : "" };
 }
 function squeeze(html) {
   if (dev) return html;
@@ -184,7 +213,7 @@ function squeeze(html) {
 }
 async function render(parts, { headAssets, scripts }) {
   const tpl = await read(SRC, "index.html");
-  const fill = { API_BASE: apiBase, PRECONNECT: preconnect(), HEAD_ASSETS: headAssets, SPRITE: parts.sprite, BODY: parts.body, DIALOG: parts.dialog, LEGAL: parts.legal, SCRIPTS: scripts };
+  const fill = { API_BASE: apiBase, GA_ID: analytics ? analytics.id : "", PRECONNECT: preconnect(), HEAD_ASSETS: headAssets, SPRITE: parts.sprite, CONSENT: parts.consent, BODY: parts.body, DIALOG: parts.dialog, LEGAL: parts.legal, SCRIPTS: scripts };
   return squeeze(tpl.replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => (k in fill ? fill[k] : m)));
 }
 
@@ -210,15 +239,19 @@ async function buildSingle(parts) {
 // Même format pour Netlify et Cloudflare Pages ; d'autres hébergeurs : reprendre les mêmes valeurs dans leur configuration.
 // La page appelle ces services, et eux seuls : tout autre hôte est refusé par le navigateur (Content-Security-Policy).
 const CONNECT = ["https://data.geopf.fr", "https://overpass-api.de", "https://overpass.openstreetmap.fr", "https://recherche-entreprises.api.gouv.fr", "https://data.economie.gouv.fr", "https://query.wikidata.org"];
-export function contentSecurityPolicy(origin = apiOrigin, styleHash = "") {
+// Google Analytics (seulement si la page est construite avec un identifiant) : la bibliothèque gtag.js vient de googletagmanager.com, les mesures
+// partent vers *.google-analytics.com (adresses régionales comprises) et analytics.google.com. Les images, déjà permises en https, couvrent les pixels.
+const GOOGLE_SCRIPT = ["https://www.googletagmanager.com"];
+const GOOGLE_CONNECT = ["https://*.google-analytics.com", "https://analytics.google.com", "https://*.analytics.google.com", "https://*.googletagmanager.com"]; // un joker ne couvre pas le domaine lui-même : analytics.google.com est donc nommé
+export function contentSecurityPolicy(origin = apiOrigin, styleHash = "", ga = !!analytics) {
   return [
     "default-src 'self'",
-    "script-src 'self' https://cdnjs.cloudflare.com", // le CDN ne sert que de secours à la copie locale de Leaflet
+    `script-src ${["'self'", "https://cdnjs.cloudflare.com", ...(ga ? GOOGLE_SCRIPT : [])].join(" ")}`, // le CDN ne sert que de secours à la copie locale de Leaflet
     `style-src 'self'${styleHash ? ` 'sha256-${styleHash}'` : ""}`, // la feuille de style est dans la page : autorisée par son empreinte
     "style-src-attr 'unsafe-inline'", // quelques positions calculées (repères de l'échelle de prix, marqueurs)
     "img-src 'self' data: blob: https:", // tuiles de la carte, logos (Wikimedia Commons), icônes des sites d'enseignes
     "font-src 'self'",
-    `connect-src ${["'self'", origin, ...CONNECT].filter(Boolean).join(" ")}`,
+    `connect-src ${["'self'", origin, ...CONNECT, ...(ga ? GOOGLE_CONNECT : [])].filter(Boolean).join(" ")}`,
     "worker-src 'self'",
     "manifest-src 'self'",
     "object-src 'none'",

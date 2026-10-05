@@ -2970,6 +2970,68 @@ html.dlg-open {
 .legal-foot .link-btn {
   color: inherit;
 }
+/* Mesure d'audience : bandeau de consentement, présent seulement dans la version construite avec un identifiant Google Analytics.
+   Posé par-dessus la page (aucun décalage de mise en page), au-dessus de la barre de navigation sur mobile, en bas à droite sur ordinateur ;
+   « Refuser » et « Accepter » ont le même poids. */
+.consent {
+  position: fixed;
+  z-index: 90;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + 64px + 12px + env(safe-area-inset-bottom, 0px));
+  max-width: 440px;
+  margin-inline: auto;
+  padding: 16px 16px 14px;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  color: var(--ink);
+  box-shadow:
+    0 0 0 1px var(--hair),
+    var(--shadow-lg);
+}
+.consent[hidden] {
+  display: none;
+}
+.consent h2 {
+  margin: 0 0 6px;
+  font: 700 1rem/1.25 var(--font);
+}
+.consent p {
+  margin: 0 0 12px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.consent .consent-more {
+  margin: 10px 0 0;
+  text-align: center;
+}
+.consent-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (min-width: 1024px) {
+  .consent {
+    left: auto;
+    right: var(--gap);
+    bottom: 44px;
+    width: 400px;
+    margin-inline: 0;
+  }
+}
+#lg-audience {
+  scroll-margin-top: 20px;
+}
+.legal-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.legal-choice .btn[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--card-2);
+}
 .toast {
   position: fixed;
   left: 50%;

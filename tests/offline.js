@@ -143,6 +143,10 @@ function makeVersion(tag, { brokenShell = false, from = DIST } = {}) {
     await p2.reload();
     await sleep(1500);
     await p2.reload();
+    // Chaque ouverture relance l'installation de la version cassée, qui échoue à chaque fois : pendant une tentative, son cache existe un instant
+    // avant d'être supprimé. Regarder tout de suite après le second rechargement tombait parfois en plein milieu d'une tentative (échec
+    // intermittent) : on attend la fin de la dernière avant de contrôler qu'aucun cache à moitié rempli ne reste.
+    await sleep(1500);
     const stay = await p2.title();
     check("O6 a deployment whose shell cannot be fetched is not installed and leaves no half-filled cache: visitors stay on the working version", stay === "Pixcar v3" && (await keys()).join() === "pixcar-v2,pixcar-v3", `${stay} ${JSON.stringify(await keys())}`);
 

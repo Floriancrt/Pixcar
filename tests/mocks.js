@@ -303,7 +303,7 @@ async function installMocks(ctx, opts = {}) {
   const log = opts.log || (() => {});
   const fonts = (key) => fs.readFileSync(path.join(__dirname, "fixtures", "fonts", key));
   const elements = opts.elements || buildElements();
-  const counters = (ctx.__counters = { overpass: 0, geocode: 0, tiles: 0, ct: 0, sirene: 0, wikidata: 0, upload: 0, logoFiles: [], siteIcons: [], sparql: "", other: [], reverse: 0, reverseUrls: [] });
+  const counters = (ctx.__counters = { overpass: 0, geocode: 0, tiles: 0, ct: 0, sirene: 0, wikidata: 0, upload: 0, logoFiles: [], siteIcons: [], sparql: "", other: [], google: [], reverse: 0, reverseUrls: [] });
 
   await ctx.route("**/*", async (route) => {
     const url = new URL(route.request().url());
@@ -448,6 +448,24 @@ async function installMocks(ctx, opts = {}) {
     if (h === "data.economie.gouv.fr") {
       counters.ct++;
       return route.fulfill({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify(ctRows()) });
+    }
+    // Google Analytics (suite « consent », opts.google) : la bibliothèque gtag.js est remplacée par un script qui fait ce que fait la vraie à
+    // l'arrivée (dépose _ga et _ga_<flux>, envoie des mesures par fetch, balise et image vers les hôtes de mesure) ; chaque appel est compté dans
+    // counters.google. Sans opts.google, ces hôtes sont refusés comme tout hôte inconnu (et comptés dans counters.other).
+    if (opts.google && (h === "www.googletagmanager.com" || /(^|\.)google-analytics\.com$/.test(h) || /(^|\.)analytics\.google\.com$/.test(h))) {
+      counters.google.push(url.href);
+      if (h === "www.googletagmanager.com" && url.pathname === "/gtag/js") {
+        const id = url.searchParams.get("id") || "G-UNKNOWN";
+        const body = `(function(){window.__gtagLoaded=(window.__gtagLoaded||0)+1;
+document.cookie="_ga=GA1.1.111.222; Max-Age=34128000; Path=/";
+document.cookie="_ga_${id.slice(2)}=GS1.1.333.1.1.1.0.0.0; Max-Age=34128000; Path=/";
+fetch("https://region1.google-analytics.com/g/collect?v=2&tid=${id}",{method:"POST",mode:"no-cors"}).catch(function(){});
+if(navigator.sendBeacon)navigator.sendBeacon("https://www.google-analytics.com/g/collect?v=2&tid=${id}");
+new Image().src="https://www.google-analytics.com/g/collect?v=2&img=1&tid=${id}";
+fetch("https://analytics.google.com/g/collect?v=2&tid=${id}",{mode:"no-cors"}).catch(function(){});})();`;
+        return route.fulfill({ status: 200, contentType: "application/javascript", headers: CORS, body });
+      }
+      return route.fulfill({ status: 204, headers: CORS, body: "" });
     }
     // anything else: record + block
     counters.other.push(url.href.slice(0, 140));
