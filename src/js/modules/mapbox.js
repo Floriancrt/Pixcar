@@ -14,16 +14,23 @@ const STYLE_FORMAT = /^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/;
 const TILES = "https://api.mapbox.com/styles/v1/";
 export const DEFAULT_STYLE = "mapbox/light-v11"; // fond sobre, fait pour porter des repères : les marqueurs de garages restent lisibles
 
+// Fiches complétées par Mapbox (téléphone, horaires, site : modules/mapbox-fiches.js) : « off » jamais, « map » seulement tant que la carte affiche des tuiles
+// Mapbox (lecture prudente des conditions de Mapbox : ses résultats de recherche se montrent avec une carte Mapbox), « always » dès que le jeton est là.
+export const ENRICH_MODES = ["off", "map", "always"];
+export const DEFAULT_ENRICH = "map";
+
 export const isPublicToken = (token) => TOKEN_FORMAT.test(String(token));
 export const isStyle = (style) => STYLE_FORMAT.test(String(style));
+export const isEnrichMode = (mode) => ENRICH_MODES.includes(String(mode));
 
-// { token, style } lu dans la page, ou null (pas de balise, jeton vide ou qui n'a pas la forme d'un jeton public).
+// { token, style, enrich } lu dans la page, ou null (pas de balise, jeton vide ou qui n'a pas la forme d'un jeton public).
 export function mapboxConfig(doc = document) {
   const meta = doc.querySelector('meta[name="pixcar-mapbox"]');
   const token = String((meta && meta.content) || "").trim();
   if (!isPublicToken(token)) return null;
   const style = String((meta && meta.getAttribute("data-style")) || "").trim();
-  return { token, style: isStyle(style) ? style : DEFAULT_STYLE };
+  const enrich = String((meta && meta.getAttribute("data-enrich")) || "").trim();
+  return { token, style: isStyle(style) ? style : DEFAULT_STYLE, enrich: isEnrichMode(enrich) ? enrich : DEFAULT_ENRICH };
 }
 
 // Adresse des tuiles pour Leaflet ({z} {x} {y}, et {r} : « @2x » sur les écrans à haute densité). Tuiles de 512 px, comme Mapbox le recommande :

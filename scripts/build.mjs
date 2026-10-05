@@ -16,6 +16,7 @@
 //                            PIXCAR_MAPBOX_TOKEN = jeton PUBLIC Mapbox (« pk.… ») : fond de carte Mapbox. Sans cette variable, la version publiée (--pages)
 //                            prend celui de src/mapbox.json (vide tant qu'il n'est pas renseigné : fond de l'IGN) ; les autres sorties n'en ont aucun.
 //                            PIXCAR_MAPBOX_TOKEN= (vide) le désactive même avec --pages. PIXCAR_MAPBOX_STYLE = style (« mapbox/light-v11 »).
+//                            PIXCAR_MAPBOX_ENRICH = « off », « map » (par défaut) ou « always » : fiches complétées par Mapbox (téléphone, horaires, site), voir src/mapbox.json.
 //
 // Deux sorties à partir des mêmes sources :
 //   index.html   page tout-en-un (CSS, JS, police et icônes en ligne) : s'ouvre depuis le disque, se déploie n'importe où ;
@@ -83,7 +84,10 @@ const mapbox = await (async () => {
     throw new Error("jeton Mapbox refusé : seul un jeton PUBLIC (« pk.… ») est accepté ; un jeton secret (« sk.… ») ne doit jamais figurer dans la page ni dans le dépôt");
   const style = String(process.env.PIXCAR_MAPBOX_STYLE || config.style || "mapbox/light-v11").trim();
   if (!/^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/.test(style)) throw new Error(`style Mapbox invalide (« mapbox/light-v11 » attendu) : ${style}`);
-  return { token, style };
+  // Fiches complétées par Mapbox (téléphone, horaires, site, à l'ouverture d'une fiche) : « map » par défaut, « always », ou « off » (PIXCAR_MAPBOX_ENRICH l'emporte).
+  const enrich = String(process.env.PIXCAR_MAPBOX_ENRICH || config.enrich || "map").trim();
+  if (!["off", "map", "always"].includes(enrich)) throw new Error(`réglage Mapbox « enrich » invalide (« off », « map » ou « always » attendu) : ${enrich}`);
+  return { token, style, enrich };
 })();
 
 // Leaflet est chargé à la demande (premier affichage de la carte). Page tout-en-un : CDN. dist : copie locale puis CDN.
@@ -167,8 +171,9 @@ function optionsHtml(list, extra = "") {
   return groups.map((g) => `<optgroup label="${esc(g.name)}">${g.items.map((s) => `<option value="${s.id}">${esc(s.label)}</option>`).join("")}</optgroup>`).join("") + extra;
 }
 // Variantes du texte selon ce que la page contient : <!--GA:on-->…<!--/GA:on--> (avec Google Analytics) et <!--GA:off-->…<!--/GA:off--> (sans) ;
-// de même <!--MB:on--> et <!--MB:off--> pour le fond de carte Mapbox. Pas d'imbrication.
-const variants = (html) => html.replace(/<!--(GA|MB):(on|off)-->([\s\S]*?)<!--\/\1:\2-->/g, (m, flag, mode, text) => ((mode === "on") === !!(flag === "GA" ? analytics : mapbox) ? text : ""));
+// de même <!--MB:on--> et <!--MB:off--> pour le fond de carte Mapbox, <!--MX:on--> et <!--MX:off--> pour les fiches complétées par Mapbox. Pas d'imbrication.
+const variantOn = { GA: () => !!analytics, MB: () => !!mapbox, MX: () => !!mapbox && mapbox.enrich !== "off" }; // MX : fiches complétées par Mapbox
+const variants = (html) => html.replace(/<!--(GA|MB|MX):(on|off)-->([\s\S]*?)<!--\/\1:\2-->/g, (m, flag, mode, text) => ((mode === "on") === variantOn[flag]() ? text : ""));
 // Mentions légales et politique de confidentialité : src/legal.json (ce qui dépend de l'éditeur) + src/partials/legal.html (le texte).
 // Complet : la fenêtre « Confidentialité et mentions légales » et ses liens sont dans la page. Incomplet : ni fenêtre ni liens, SAUF si
 // l'API est branchée (PIXCAR_API_BASE) : le build échoue alors, on n'ouvre pas au public des déclarations sans informer les visiteurs.
@@ -238,7 +243,7 @@ function squeeze(html) {
 }
 async function render(parts, { headAssets, scripts }) {
   const tpl = await read(SRC, "index.html");
-  const fill = { API_BASE: apiBase, GA_ID: analytics ? analytics.id : "", MAPBOX_TOKEN: mapbox ? mapbox.token : "", MAPBOX_STYLE: mapbox ? mapbox.style : "", PRECONNECT: preconnect(), HEAD_ASSETS: headAssets, SPRITE: parts.sprite, CONSENT: parts.consent, BODY: parts.body, DIALOG: parts.dialog, LEGAL: parts.legal, SCRIPTS: scripts };
+  const fill = { API_BASE: apiBase, GA_ID: analytics ? analytics.id : "", MAPBOX_TOKEN: mapbox ? mapbox.token : "", MAPBOX_STYLE: mapbox ? mapbox.style : "", MAPBOX_ENRICH: mapbox ? mapbox.enrich : "", PRECONNECT: preconnect(), HEAD_ASSETS: headAssets, SPRITE: parts.sprite, CONSENT: parts.consent, BODY: parts.body, DIALOG: parts.dialog, LEGAL: parts.legal, SCRIPTS: scripts };
   return squeeze(tpl.replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => (k in fill ? fill[k] : m)));
 }
 
@@ -268,7 +273,9 @@ const CONNECT = ["https://data.geopf.fr", "https://overpass-api.de", "https://ov
 // partent vers *.google-analytics.com (adresses régionales comprises) et analytics.google.com. Les images, déjà permises en https, couvrent les pixels.
 const GOOGLE_SCRIPT = ["https://www.googletagmanager.com"];
 const GOOGLE_CONNECT = ["https://*.google-analytics.com", "https://analytics.google.com", "https://*.analytics.google.com", "https://*.googletagmanager.com"]; // un joker ne couvre pas le domaine lui-même : analytics.google.com est donc nommé
-export function contentSecurityPolicy(origin = apiOrigin, styleHash = "", ga = !!analytics) {
+// Fiches complétées par Mapbox : la page interroge api.mapbox.com (Search Box) à l'ouverture d'une fiche. Les tuiles sont des images (img-src https: les couvre).
+const MAPBOX_CONNECT = ["https://api.mapbox.com"];
+export function contentSecurityPolicy(origin = apiOrigin, styleHash = "", ga = !!analytics, mbx = !!mapbox && mapbox.enrich !== "off") {
   return [
     "default-src 'self'",
     `script-src ${["'self'", "https://cdnjs.cloudflare.com", ...(ga ? GOOGLE_SCRIPT : [])].join(" ")}`, // le CDN ne sert que de secours à la copie locale de Leaflet
@@ -276,7 +283,7 @@ export function contentSecurityPolicy(origin = apiOrigin, styleHash = "", ga = !
     "style-src-attr 'unsafe-inline'", // quelques positions calculées (repères de l'échelle de prix, marqueurs)
     "img-src 'self' data: blob: https:", // tuiles de la carte (Mapbox, IGN, CARTO), logos (Wikimedia Commons), icônes des sites d'enseignes
     "font-src 'self'",
-    `connect-src ${["'self'", origin, ...CONNECT, ...(ga ? GOOGLE_CONNECT : [])].filter(Boolean).join(" ")}`,
+    `connect-src ${["'self'", origin, ...CONNECT, ...(ga ? GOOGLE_CONNECT : []), ...(mbx ? MAPBOX_CONNECT : [])].filter(Boolean).join(" ")}`,
     "worker-src 'self'",
     "manifest-src 'self'",
     "object-src 'none'",

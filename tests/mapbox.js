@@ -67,8 +67,8 @@ const attempt = (name, { token, style, legal, file, pages } = {}) => {
 };
 const metaOf = (dir) => {
   const html = fs.readFileSync(path.join(dir, "index.html"), "utf8");
-  const m = /<meta name="pixcar-mapbox" content="([^"]*)" data-style="([^"]*)">/.exec(html);
-  return m ? { token: m[1], style: m[2] } : null;
+  const m = /<meta name="pixcar-mapbox" content="([^"]*)" data-style="([^"]*)" data-enrich="([^"]*)">/.exec(html);
+  return m ? { token: m[1], style: m[2], enrich: m[3] } : null;
 };
 const policyOf = (dir) => (/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/.exec(fs.readFileSync(path.join(dir, "index.html"), "utf8")) || [])[1] || "";
 
@@ -141,7 +141,7 @@ const viewOf = async (browser, srv, { mock, dpr = 1, colorScheme = "light", widt
     return r.status !== 0 && /Mapbox/.test(r.stderr);
   })());
   const pubPolicy = policyOf(pubFile), pubPolicyOff = policyOf(pubOff);
-  check("M12 Mapbox adds nothing to the content security policy (tiles are images, img-src already allows https:) and the policy stays narrow", pubPolicy === pubPolicyOff && /img-src [^;]*https:/.test(pubPolicy) && !/mapbox/.test(pubPolicy) && !/unsafe-eval/.test(pubPolicy), pubPolicy);
+  check("M12 Mapbox adds one thing to the content security policy: api.mapbox.com in connect-src, for the completion of the cards (tests/mapbox-fiches.js) — the tiles are images, img-src already allows https: — and the policy stays narrow", pubPolicy.replace(" https://api.mapbox.com", "") === pubPolicyOff && /connect-src [^;]*https:\/\/api\.mapbox\.com/.test(pubPolicy) && !/mapbox/.test(pubPolicyOff) && /img-src [^;]*https:/.test(pubPolicy) && !/unsafe-eval/.test(pubPolicy), pubPolicy);
 
   // ============ navigateur ============
   const plain = await serve(none);
@@ -284,7 +284,7 @@ const viewOf = async (browser, srv, { mock, dpr = 1, colorScheme = "light", widt
       const without = await texts(plain, MOCK());
       const withMb = await texts(mapped, MOCK({ mapbox: {} }));
       check("M60 without Mapbox the privacy text does not mention it, and names the IGN and CARTO backgrounds that the page can use", !/Mapbox/.test(without.legal) && /fond de carte/.test(without.legal) && /basemaps\.cartocdn\.com/.test(without.legal) && /Plan IGN/.test(without.sources) && !/Mapbox/.test(without.sources), without.legal.slice(without.legal.indexOf("Services que votre navigateur"), 900));
-      check("M61 with Mapbox the privacy text says who sees what: Mapbox, Inc., its host, the IP address and the area viewed, only once the map is shown, a possible transfer outside the EU", /Mapbox, Inc\./.test(withMb.legal) && /api\.mapbox\.com/.test(withMb.legal) && /adresse IP/.test(withMb.legal.slice(withMb.legal.indexOf("Mapbox, Inc."), withMb.legal.indexOf("Mapbox, Inc.") + 500)) && /zone que vous regardez/.test(withMb.legal) && /dès qu'elle s'affiche/.test(withMb.legal) && /hors de l'Union européenne/.test(withMb.legal.slice(withMb.legal.indexOf("Mapbox, Inc."), withMb.legal.indexOf("Mapbox, Inc.") + 600)), withMb.legal.slice(withMb.legal.indexOf("Mapbox, Inc."), withMb.legal.indexOf("Mapbox, Inc.") + 600));
+      check("M61 with Mapbox the privacy text says who sees what: Mapbox, Inc., its host, the IP address and the area viewed, only once the map is shown, a possible transfer outside the EU", /Mapbox, Inc\./.test(withMb.legal) && /api\.mapbox\.com/.test(withMb.legal) && /adresse IP/.test(withMb.legal.slice(withMb.legal.indexOf("Mapbox, Inc."), withMb.legal.indexOf("Mapbox, Inc.") + 500)) && /zone que vous regardez/.test(withMb.legal) && /dès qu'elle s'affiche/.test(withMb.legal) && /hors de l'Union européenne/.test(withMb.legal.slice(withMb.legal.indexOf("Mapbox, Inc."), withMb.legal.indexOf("Mapbox, Inc.") + 1000)), withMb.legal.slice(withMb.legal.indexOf("Mapbox, Inc."), withMb.legal.indexOf("Mapbox, Inc.") + 1000));
       check("M62 …the IGN is then described as address search and fallback, CARTO stays the last resort", /recherche d'adresse, et fond de carte si celui de Mapbox ne répond pas/.test(withMb.legal) && /basemaps\.cartocdn\.com/.test(withMb.legal), withMb.legal.slice(withMb.legal.indexOf("l'IGN"), withMb.legal.indexOf("l'IGN") + 300));
       check("M63 the « Sources et méthode » text names the background that is shown, and the chain behind it", /Fond de carte : Mapbox \(© Mapbox, © les contributeurs d'OpenStreetMap\)/.test(withMb.sources) && /Plan IGN \(Géoplateforme\), puis CARTO/.test(withMb.sources) && !/Fond de carte : Plan IGN \(Géoplateforme\)\./.test(withMb.sources), withMb.sources.slice(withMb.sources.indexOf("Fond de carte"), withMb.sources.indexOf("Fond de carte") + 220));
     }

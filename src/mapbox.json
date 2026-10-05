@@ -1,4 +1,5 @@
 {
   "accessToken": "",
-  "style": "mapbox/light-v11"
+  "style": "mapbox/light-v11",
+  "enrich": "map"
 }

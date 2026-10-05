@@ -2,13 +2,13 @@
 // comportement dans le navigateur (tuiles demandées, repli sur l'IGN, crédit sur la carte) est vérifié par tests/mapbox.js.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { DEFAULT_STYLE, MAPBOX_ATTRIBUTION, MAPBOX_OPTIONS, isPublicToken, isStyle, mapboxConfig, mapboxTileUrl } from "../../src/js/modules/mapbox.js";
+import { DEFAULT_ENRICH, DEFAULT_STYLE, ENRICH_MODES, MAPBOX_ATTRIBUTION, MAPBOX_OPTIONS, isEnrichMode, isPublicToken, isStyle, mapboxConfig, mapboxTileUrl } from "../../src/js/modules/mapbox.js";
 
 // jetons fictifs ; la forme secrète est écrite en morceaux : tests/mapbox.js (M08) cherche ce motif dans tout le dépôt
 const PUBLIC = ["pk", "eyJ1IjoiZXhlbXBsZSIsImEiOiJjbHh4eHh4eHgwMDAwMnFxeHh4eHh4eHh4In0", "AbCdEfGhIjKlMnOpQrStUv"].join(".");
 const SECRET = ["sk", "eyJ1IjoiZXhlbXBsZSIsImEiOiJjbHh4eHh4eHgwMDAwMnFxeHh4eHh4eHh4In0", "AbCdEfGhIjKlMnOpQrStUv"].join(".");
-const docWith = (content, style) =>
-  ({ querySelector: (sel) => (sel === 'meta[name="pixcar-mapbox"]' && content !== undefined ? { content, getAttribute: (n) => (n === "data-style" ? style ?? null : null) } : null) });
+const docWith = (content, style, enrich) =>
+  ({ querySelector: (sel) => (sel === 'meta[name="pixcar-mapbox"]' && content !== undefined ? { content, getAttribute: (n) => (n === "data-style" ? style ?? null : n === "data-enrich" ? enrich ?? null : null) } : null) });
 
 describe("isPublicToken", () => {
   test("un jeton public (pk.<charge>.<signature>) est accepté", () => {
@@ -37,15 +37,23 @@ describe("isStyle", () => {
 
 describe("mapboxConfig", () => {
   test("jeton public et style lus dans la balise", () => {
-    assert.deepEqual(mapboxConfig(docWith(PUBLIC, "mapbox/streets-v12")), { token: PUBLIC, style: "mapbox/streets-v12" });
+    assert.deepEqual(mapboxConfig(docWith(PUBLIC, "mapbox/streets-v12")), { token: PUBLIC, style: "mapbox/streets-v12", enrich: "map" });
   });
   test("espaces autour du jeton retirés ; style absent ou invalide : le style par défaut", () => {
-    assert.deepEqual(mapboxConfig(docWith("  " + PUBLIC + " ", "")), { token: PUBLIC, style: DEFAULT_STYLE });
-    assert.deepEqual(mapboxConfig(docWith(PUBLIC, undefined)), { token: PUBLIC, style: DEFAULT_STYLE });
-    assert.deepEqual(mapboxConfig(docWith(PUBLIC, "../../x")), { token: PUBLIC, style: DEFAULT_STYLE });
+    assert.deepEqual(mapboxConfig(docWith("  " + PUBLIC + " ", "")), { token: PUBLIC, style: DEFAULT_STYLE, enrich: "map" });
+    assert.deepEqual(mapboxConfig(docWith(PUBLIC, undefined)), { token: PUBLIC, style: DEFAULT_STYLE, enrich: "map" });
+    assert.deepEqual(mapboxConfig(docWith(PUBLIC, "../../x")), { token: PUBLIC, style: DEFAULT_STYLE, enrich: "map" });
   });
   test("pas de balise, balise vide, jeton secret ou mal formé : null (la carte garde le fond de l'IGN)", () => {
     for (const bad of [undefined, "", "   ", SECRET, "pk.abc", "n'importe quoi", "https://exemple.test"]) assert.equal(mapboxConfig(docWith(bad, "mapbox/light-v11")), null, String(bad));
+  });
+  test("réglage « enrich » (fiches complétées par Mapbox) : off, map ou always ; absent ou invalide : map, le plus prudent des modes actifs", () => {
+    for (const mode of ["off", "map", "always"]) assert.equal(mapboxConfig(docWith(PUBLIC, "mapbox/light-v11", mode)).enrich, mode);
+    for (const bad of [undefined, "", "oui", "ALWAYS", "map ", "1", "true"]) assert.equal(mapboxConfig(docWith(PUBLIC, "mapbox/light-v11", bad)).enrich, bad === "map " ? "map" : DEFAULT_ENRICH, String(bad));
+    assert.deepEqual(ENRICH_MODES, ["off", "map", "always"]);
+    assert.equal(DEFAULT_ENRICH, "map");
+    assert.equal(isEnrichMode("always"), true);
+    assert.equal(isEnrichMode("partout"), false);
   });
   test("le style par défaut est un fond sobre fait pour porter des repères", () => {
     assert.equal(DEFAULT_STYLE, "mapbox/light-v11");
