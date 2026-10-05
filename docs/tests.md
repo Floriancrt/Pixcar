@@ -103,10 +103,10 @@ Ce qui a été trouvé **en écrivant ces mutations** (et corrigé) : un prix en
 
 | | gzip | brotli |
 | --- | --- | --- |
-| Page (HTML + feuille de style intégrée) | 27,6 Ko (dont feuille de style 20,0) | 24,0 Ko |
-| Script de l'application | 46,1 Ko | 40,7 Ko |
-| Police principale (latin) | 26,7 Ko (woff2, déjà compressée) | — |
-| **Première visite, avant de pouvoir s'en servir** | **≈ 103 Ko** (budget 108) | **≈ 94 Ko** |
+| Page (HTML + feuille de style intégrée) | 30,2 Ko (dont feuille de style 20,2) | 26,3 Ko |
+| Script de l'application | 47,3 Ko | 41,8 Ko |
+| Police principale (latin, Epilogue) | 34,9 Ko (woff2, déjà compressée ; 26,7 Ko avec Plus Jakarta Sans jusqu'au 5 octobre 2026) | — |
+| **Première visite, avant de pouvoir s'en servir** | **≈ 112 Ko** (budget 115) | **≈ 103 Ko** |
 | Leaflet (chargé au premier affichage de la carte) | 41,8 Ko, à la demande | — |
 | Service worker | 0,9 Ko | — |
 | Visite suivante (page, script et police viennent du service worker) | 0,8 Ko transférés | — |

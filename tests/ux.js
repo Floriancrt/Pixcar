@@ -149,7 +149,7 @@ async function cornerDiff(browser, page, selector, radius, inset) {
       const rp = await page.$$eval("#refList .ref-price", (l) => l.map((e) => e.textContent));
       check(`D8 Prix page ${s}: no « dès » before prices`, rp.length > 0 && !rp.some(bad), JSON.stringify(rp.filter(bad)));
     }
-    check("D9 the « à partir de » disclosure stays once on the Prix page", /à partir de/.test(await page.textContent("#refsSub")));
+    check("D9 the « à partir de » disclosure stays once on the Prix page (its spaces are non-breaking: « \u00a0à\u00a0partir\u00a0de\u00a0 »)", /à\spartir\sde/.test(await page.textContent("#refsSub")));
     await page.selectOption("#refService", "vidange");
     await page.waitForTimeout(150);
     check("D10 promo wording from the chains' own offers is untouched", /vidange dès 49,95/.test(norm(await page.textContent("#refList"))), "expected the Norauto offer wording to be kept as published");

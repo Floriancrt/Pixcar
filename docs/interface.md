@@ -18,7 +18,7 @@ Ce que voit et fait le visiteur, et les choix de présentation. Le fonctionnemen
 - **Ordinateur (≥ 1024 px)** : rail d'icônes à gauche, panneau (recherche + liste) flottant sur une **carte persistante plein écran**. Cliquer une fiche ou un marqueur la **sélectionne** : contour vert, fiche dépliée avec la frise « Votre adresse → garage », marqueur agrandi avec bulle noire, barre récapitulative sur la carte.
 - **Mobile** : barre du haut + navigation flottante en bas ; bouton **Carte / Liste** ; carte plein écran avec barre récapitulative (« Voir la fiche » ramène à la fiche).
 - **Fiches** : une seule fiche ouverte à la fois (accordéon), avatars (logo ou monogramme de l'enseigne, initiale pastel pour un indépendant), distance en pastille, statuts en pastilles à point, actions teintées, bouton noir « Déclarer une réparation ».
-- **Style** : charte Pixcar (noir, vert menthe, vert vif, blanc cassé : voir ci-dessous), grands rayons, police *Plus Jakarta Sans* (remplace Barlow), thème sombre complet (préférence système, ou `data-theme="light|dark"` sur `<html>`).
+- **Style** : charte Pixcar (noir, vert menthe, vert vif, blanc cassé : voir ci-dessous), grands rayons, police *Epilogue* (remplace Plus Jakarta Sans, elle-même arrivée à la place de Barlow : voir « Typographie »), thème sombre complet (préférence système, ou `data-theme="light|dark"` sur `<html>`).
 - **Accessibilité** : lien d'évitement, titres ordonnés, cibles tactiles de 42 à 44 px (`pointer: coarse`), contrastes calculés y compris au pic des lueurs du fond (texte ≥ 4,5:1, bordures de champs ≥ 3:1), `prefers-reduced-motion`, `prefers-contrast`, `forced-colors`.
 
 ## Charte Pixcar
@@ -68,6 +68,22 @@ Fonctionnement et limites :
 - **Imposer un logo** (enseigne introuvable, logo officiel de meilleure qualité) : `window.JG_LOGOS = { norauto: "https://…/logo.png" }` avant le script (URL ou `data:`). Les identifiants sont ceux du tableau `l` du JS (`norauto`, `feuvert`, `speedy`, `midas`, `roady`, `euromaster`, `points`, …). Seul Driver Center n'a aucun site connu (aucun site français trouvé) : sans surcharge il reste en monogramme. Profil Plus, Siligom, Carter-Cash et Eurorepar n'ont pas d'identifiant Wikidata : leur logo ne peut venir que de l'icône de leur site. Pour garantir un logo **sans aucun appel réseau**, intégrez le fichier : `window.JG_LOGOS = { speedy: "data:image/svg+xml;base64,…" }` (à définir avant le script, ou à écrire en dur dans `logoPin`).
 - Diagnostic : `jgLogos()` dans la console liste, pour chaque enseigne, le logo Wikidata trouvé, le site utilisé et l'image affichée.
 - Les logos sont des marques de leurs propriétaires ; les fichiers de Commons ont leurs propres licences.
+
+## Typographie
+
+La police est **Epilogue** (Etcetera Type Co., licence SIL OFL 1.1 : texte dans `src/assets/fonts/OFL-Epilogue.txt`), variable de 100 à 900, en **fichiers officiels de Google Fonts, non modifiés**, hébergés avec le site (aucun appel à un service de polices) : `epilogue-latin.woff2` (35 Ko, préchargé : Latin-1, œ, €, ponctuation française) et `epilogue-latin-ext.woff2` (32 Ko, chargé seulement si un caractère l'exige). Elle remplace *Plus Jakarta Sans* depuis le 5 octobre 2026, au choix de l'utilisateur après comparaison de 12 polices rendues dans le vrai site.
+
+Réglages faits pour elle (`src/css/app.css`) :
+
+- **Espacement** : Epilogue est 4,7 % plus large que la police précédente (mesuré sur 17 textes de l'interface, graisses 400 à 800) et son espace vaut 0,25 em. `body` porte `letter-spacing: -0.01em; word-spacing: -0.04em` : les largeurs restent à +1,5 % de l'ancien rendu (mêmes retours à la ligne, mêmes hauteurs de cartes). Les contrôles de formulaire le reprennent par héritage (`:where(button, select, input, textarea)`, sans spécificité : `.plate-in` garde son propre espacement) ; les titres gardent leur espacement négatif propre.
+- **Chiffres** : Epilogue a les chiffres tabulaires (`tnum`) : les `font-variant-numeric: tabular-nums` du CSS sont effectifs (ses chiffres sont proportionnels par défaut).
+- **Graisses** : le CSS emploie 400 à 800 ; toutes existent (la police va de 100 à 900).
+- **Italique** : deux usages (`font-style: italic`) restent en oblique synthétisée (l'italique de la police pèse autant que la droite, pour deux usages).
+- **Caractères absents de la police** (`✓`, `→`, `▲▼`…) : repli sur la police du système.
+- **Typographie française** : espaces insécables dans « à partir de » et devant « · 10 km » : une ligne ne commence jamais par « » » ni par « · ».
+- **Centrage vertical** : le milieu des minuscules d'Epilogue tombe au centre de la ligne (celui de l'ancienne police était 0,14 em plus bas) ; les capitales sont 1 à 2 px plus hautes dans leurs pastilles.
+
+Changer de police : remplacer les fichiers de `src/assets/fonts/`, adapter `PJS_FACES`/`FONTS` et `fontFace()` dans `scripts/build.mjs`, la pile `--font` et les budgets de `tests/budget.js`, mesurer la largeur des textes (un petit script qui compare les deux polices sur les textes de l'interface, puis ajuster `letter-spacing` / `word-spacing`), revoir les captures et lancer la régression. **Choisir une police à licence libre (OFL, Apache)** : le dépôt est public. Clash Grotesk (ITF Free Font License 2.0) a été écartée : sa licence interdit de modifier le fichier (sous-ensemble, conversion de format) et de le diffuser par un dépôt ou un serveur public ; elle n'est pas non plus dans Google Fonts.
 
 ## Adresses manquantes
 

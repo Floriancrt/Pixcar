@@ -88,7 +88,7 @@
   --rail-w: 76px;
   --gap: 16px;
   --panel-w: clamp(400px, 32vw, 500px);
-  --font: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font: "Epilogue", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -133,6 +133,10 @@ body {
   min-height: 100dvh;
   color: var(--ink);
   font: 400 1rem/1.5 var(--font);
+  /* Epilogue est ~4,7 % plus large que la police précédente (mesuré sur les textes de l'interface, graisses 400 à 800) et son
+     espace vaut 0,25 em : ce léger resserrement garde les retours à la ligne et les largeurs d'origine (+1,5 % au lieu de +4,7 %) */
+  letter-spacing: -0.01em;
+  word-spacing: -0.04em;
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
   background:
@@ -150,6 +154,10 @@ button {
   font: inherit;
   color: inherit;
   cursor: pointer;
+}
+:where(button, select, input, textarea) {
+  letter-spacing: inherit;
+  word-spacing: inherit;
 }
 h1,
 h2,

@@ -938,7 +938,7 @@ import { SERVICES } from "./shared/services.js";
       if (a.length > 1) {
         const n = a.reduce((e, t) => (t.p < e.p ? t : e)),
           r = a.reduce((e, t) => (t.p > e.p ? t : e));
-        t = `Dans les grandes enseignes, de <b>${C(n.p)}</b> chez ${y(D(n.c).name)} à <b>${C(r.p)}</b> chez ${y(D(r.c).name)}${e.unit ? " " + y(e.unit) : ""} (prix « à partir de »).`;
+        t = `Dans les grandes enseignes, de <b>${C(n.p)}</b> chez ${y(D(n.c).name)} à <b>${C(r.p)}</b> chez ${y(D(r.c).name)}${e.unit ? " " + y(e.unit) : ""} (prix «\u00a0à\u00a0partir\u00a0de\u00a0»).`;
       } else
         t = a.length
           ? `Prix publié : <b>${C(a[0].p)}</b> chez ${y(D(a[0].c).name)}${e.unit ? " " + y(e.unit) : ""}.`
@@ -1028,7 +1028,7 @@ import { SERVICES } from "./shared/services.js";
   }
   function Fe() {
     const e = me.place ? me.place.label : pe.address.value.trim() || "Adresse à préciser";
-    pe.sumWhere.textContent = `${e} · ${pe.radius.value} km`;
+    pe.sumWhere.textContent = `${e}\u00a0· ${pe.radius.value}\u00a0km`; // insécables : la ligne ne commence jamais par « · »
   }
   function Pe(e) {
     (pe.form.classList.toggle("is-collapsed", e),

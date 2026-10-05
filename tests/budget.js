@@ -11,7 +11,10 @@ const { parseHeaders } = require("./static-server");
 const DIST = path.join(ROOT, "dist");
 const KB = 1024;
 // gzip, en Ko (mesuré le 2 octobre 2026 : page 7,7 hors feuille de style · feuille de style 19,9 · js 46 · police 27 ; marge d'environ 10 %)
-const BUDGET = { page: 30, html: 10, js: 52, css: 22, font: 30, critical: 108, sw: 3, single: 112, icon: 20 };
+// Police : Epilogue (35 Ko, fichier Google non modifié) remplace Plus Jakarta Sans (27 Ko) le 5 octobre 2026 : +8 Ko sur le chemin critique
+// et sur la page tout-en-un (mesuré : police 34,9 · page 30,2 · js 47,3 ; tout-en-un 114,9 contre 106,6) ; les budgets de la police, du
+// chemin critique et de la page tout-en-un montent d'autant (6, 7 et 8 Ko), les autres ne bougent pas.
+const BUDGET = { page: 30, html: 10, js: 52, css: 22, font: 36, critical: 115, sw: 3, single: 120, icon: 20 };
 
 const results = [];
 const check = (name, cond, detail = "") => {
@@ -38,7 +41,7 @@ const jsFile = find(/^app\.[0-9a-f]{10}\.js$/), leafletFile = find(/^leaflet\.[0
 const style = (/<style>([\s\S]*?)<\/style>/.exec(html) || [])[1] || ""; // la feuille de style est dans la page (un aller-retour de moins)
 const htmlOnly = html.replace(/<style>[\s\S]*?<\/style>/, "");
 const fontFiles = fs.readdirSync(path.join(DIST, "assets/fonts"));
-const latin = fontFiles.find((f) => /^pjs-latin\.[0-9a-f]{10}\.woff2$/.test(f));
+const latin = fontFiles.find((f) => /^epilogue-latin\.[0-9a-f]{10}\.woff2$/.test(f));
 
 // ---- poids
 check("B1 the page (with its stylesheet), its script and its font are all there", html && style && jsFile && latin);
