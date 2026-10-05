@@ -2,6 +2,7 @@ import MODELS_TXT from "../data/models.txt";
 import { cityFromAddr, cityTidy } from "./modules/city.js";
 import { apiBase } from "./modules/config.js";
 import { loadScript } from "./modules/load-script.js";
+import { MAPBOX_OPTIONS, mapboxConfig, mapboxTileUrl } from "./modules/mapbox.js";
 import { phoneList, phoneParse } from "./modules/phone.js";
 import { createStore, jsonStorage } from "./modules/repair-store.js";
 import { KEEP_TAG, OVERPASS_MIRRORS, inMetroFrance, overpassQuery } from "./shared/overpass.js";
@@ -2982,32 +2983,45 @@ import { SERVICES } from "./shared/services.js";
                   ((Mt = L.map(pe.map, { preferCanvas: !0, scrollWheelZoom: ge(), zoomSnap: 0.5 })),
                     Mt.zoomControl.setPosition("topright"),
                     Mt.fitBounds(a, fo()));
-                  const e = L.tileLayer(
-                      "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}",
-                      {
-                        maxZoom: 19,
-                        maxNativeZoom: 18,
-                        attribution: "Fond : Plan IGN © IGN – Géoplateforme",
-                      },
-                    ),
-                    t = L.tileLayer(
-                      "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-                      {
+                  // Fonds de carte, du préféré au dernier recours : Mapbox (seulement si la page en a le jeton, voir modules/mapbox.js), le Plan IGN, puis
+                  // CARTO. Un seul est affiché : s'il n'a chargé aucune tuile et en a refusé deux (jeton refusé, service en panne), on passe au suivant.
+                  const bases = [],
+                    mapbox = mapboxConfig();
+                  (mapbox && bases.push(L.tileLayer(mapboxTileUrl(mapbox), MAPBOX_OPTIONS)),
+                    bases.push(
+                      L.tileLayer(
+                        "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}",
+                        {
+                          maxZoom: 19,
+                          maxNativeZoom: 18,
+                          attribution: "Fond : Plan IGN © IGN – Géoplateforme",
+                        },
+                      ),
+                      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
                         subdomains: "abcd",
                         maxZoom: 19,
                         attribution: "Fond : © CARTO, © les contributeurs d'OpenStreetMap",
-                      },
-                    );
-                  let n = 0,
-                    r = 0,
-                    s = !1;
-                  (e.on("tileload", () => {
-                    n++;
-                  }),
-                    e.on("tileerror", () => {
-                      (r++, !s && 0 === n && r >= 2 && ((s = !0), Mt.removeLayer(e), t.addTo(Mt)));
+                      }),
+                    ));
+                  const showBase = (i) => {
+                    const layer = bases[i];
+                    let loaded = 0,
+                      failed = 0,
+                      passed = !1;
+                    (layer.on("tileload", () => {
+                      loaded++;
                     }),
-                    e.addTo(Mt),
+                      layer.on("tileerror", () => {
+                        (failed++,
+                          !passed &&
+                            0 === loaded &&
+                            failed >= 2 &&
+                            i + 1 < bases.length &&
+                            ((passed = !0), Mt.removeLayer(layer), showBase(i + 1)));
+                      }),
+                      layer.addTo(Mt));
+                  };
+                  (showBase(0),
                     Mt.attributionControl.addAttribution("Garages © les contributeurs d'OpenStreetMap"),
                     (xt = L.layerGroup().addTo(Mt)));
                 }

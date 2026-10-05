@@ -13,6 +13,9 @@
 //                            PIXCAR_GA_ID = identifiant de mesure Google Analytics (« G-… ») : bandeau de consentement, texte de confidentialité
 //                            et politique de sécurité en tiennent compte. Sans cette variable, la version publiée (--pages) prend celui de
 //                            src/analytics.json ; les autres sorties n'en ont aucun. PIXCAR_GA_ID= (vide) le désactive même avec --pages.
+//                            PIXCAR_MAPBOX_TOKEN = jeton PUBLIC Mapbox (« pk.… ») : fond de carte Mapbox. Sans cette variable, la version publiée (--pages)
+//                            prend celui de src/mapbox.json (vide tant qu'il n'est pas renseigné : fond de l'IGN) ; les autres sorties n'en ont aucun.
+//                            PIXCAR_MAPBOX_TOKEN= (vide) le désactive même avec --pages. PIXCAR_MAPBOX_STYLE = style (« mapbox/light-v11 »).
 //
 // Deux sorties à partir des mêmes sources :
 //   index.html   page tout-en-un (CSS, JS, police et icônes en ligne) : s'ouvre depuis le disque, se déploie n'importe où ;
@@ -60,6 +63,27 @@ const analytics = await (async () => {
   if (!/^G-[A-Z0-9]{6,12}$/.test(id)) throw new Error(`identifiant de mesure invalide (« G-XXXXXXXXXX » attendu) : ${id}`);
   const months = Number.isInteger(config.retentionMonths) && config.retentionMonths > 0 ? config.retentionMonths : 14;
   return { id, cookie: id.slice(2), retentionMonths: months };
+})();
+
+// Fond de carte Mapbox : le jeton vient de src/mapbox.json pour la version publiée (--pages) seulement, ou de PIXCAR_MAPBOX_TOKEN (qui l'emporte ;
+// vide : désactivé). Sans jeton, la carte garde le fond de l'IGN (puis CARTO) : rien n'est demandé à Mapbox, ni par la page tout-en-un, ni en
+// développement, ni dans les tests. Seul un jeton PUBLIC (« pk.… ») est accepté : il finit dans la page, donc dans le dépôt et chez tout visiteur ;
+// un jeton secret (« sk.… ») y serait publié à la vue de tous, le build refuse. Un jeton public se restreint à l'adresse du site dans le compte Mapbox.
+const mapbox = await (async () => {
+  let config = {};
+  try {
+    config = JSON.parse(await read(SRC, "mapbox.json"));
+  } catch {
+    /* pas de fichier : pas de fond Mapbox par défaut */
+  }
+  const fromEnv = process.env.PIXCAR_MAPBOX_TOKEN;
+  const token = String(fromEnv !== undefined ? fromEnv : pages !== undefined ? config.accessToken ?? "" : "").trim();
+  if (!token) return null;
+  if (!/^pk\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token))
+    throw new Error("jeton Mapbox refusé : seul un jeton PUBLIC (« pk.… ») est accepté ; un jeton secret (« sk.… ») ne doit jamais figurer dans la page ni dans le dépôt");
+  const style = String(process.env.PIXCAR_MAPBOX_STYLE || config.style || "mapbox/light-v11").trim();
+  if (!/^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/.test(style)) throw new Error(`style Mapbox invalide (« mapbox/light-v11 » attendu) : ${style}`);
+  return { token, style };
 })();
 
 // Leaflet est chargé à la demande (premier affichage de la carte). Page tout-en-un : CDN. dist : copie locale puis CDN.
@@ -142,6 +166,9 @@ function optionsHtml(list, extra = "") {
   }
   return groups.map((g) => `<optgroup label="${esc(g.name)}">${g.items.map((s) => `<option value="${s.id}">${esc(s.label)}</option>`).join("")}</optgroup>`).join("") + extra;
 }
+// Variantes du texte selon ce que la page contient : <!--GA:on-->…<!--/GA:on--> (avec Google Analytics) et <!--GA:off-->…<!--/GA:off--> (sans) ;
+// de même <!--MB:on--> et <!--MB:off--> pour le fond de carte Mapbox. Pas d'imbrication.
+const variants = (html) => html.replace(/<!--(GA|MB):(on|off)-->([\s\S]*?)<!--\/\1:\2-->/g, (m, flag, mode, text) => ((mode === "on") === !!(flag === "GA" ? analytics : mapbox) ? text : ""));
 // Mentions légales et politique de confidentialité : src/legal.json (ce qui dépend de l'éditeur) + src/partials/legal.html (le texte).
 // Complet : la fenêtre « Confidentialité et mentions légales » et ses liens sont dans la page. Incomplet : ni fenêtre ni liens, SAUF si
 // l'API est branchée (PIXCAR_API_BASE) : le build échoue alors, on n'ouvre pas au public des déclarations sans informer les visiteurs.
@@ -154,12 +181,10 @@ async function legalParts() {
   if (filled("contact") && !/^[^\s@<>"]+@[^\s@<>"]+\.[A-Za-z]{2,}$/.test(String(config.contact).trim())) problems.push("contact : une adresse électronique est attendue");
   if (filled("repairRetentionMonths") && !(Number.isInteger(config.repairRetentionMonths) && config.repairRetentionMonths > 0)) problems.push("repairRetentionMonths : un nombre entier de mois est attendu");
   if (problems.length) {
-    if ((apiBase || analytics) && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1")
-      throw new Error(`mentions légales incomplètes dans src/legal.json (${problems.join(" ; ")}) : ${analytics ? "la mesure d'audience est branchée (PIXCAR_GA_ID, src/analytics.json) : le bandeau de consentement renvoie à cette fenêtre" : "l'API est branchée (PIXCAR_API_BASE), des visiteurs y déposeraient des données sans en être informés"}. Complétez ce fichier (docs/exploitation.md, section 6) ; PIXCAR_ALLOW_NO_LEGAL=1 le permet pour un simple essai.`);
+    if ((apiBase || analytics || mapbox) && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1")
+      throw new Error(`mentions légales incomplètes dans src/legal.json (${problems.join(" ; ")}) : ${analytics ? "la mesure d'audience est branchée (PIXCAR_GA_ID, src/analytics.json) : le bandeau de consentement renvoie à cette fenêtre" : mapbox ? "le fond de carte Mapbox est branché (PIXCAR_MAPBOX_TOKEN, src/mapbox.json) : Mapbox verrait l'adresse IP des visiteurs sans que le texte de confidentialité le dise" : "l'API est branchée (PIXCAR_API_BASE), des visiteurs y déposeraient des données sans en être informés"}. Complétez ce fichier (docs/exploitation.md, section 6) ; PIXCAR_ALLOW_NO_LEGAL=1 le permet pour un simple essai.`);
     return { dialog: "", linkPanel: "", linkSources: "", linkDialog: "" };
   }
-  // Variantes du texte selon la mesure d'audience : <!--GA:on-->…<!--/GA:on--> (avec Google Analytics) et <!--GA:off-->…<!--/GA:off--> (sans).
-  const variants = (html) => html.replace(/<!--GA:(on|off)-->([\s\S]*?)<!--\/GA:\1-->/g, (m, mode, text) => ((mode === "on") === !!analytics ? text : ""));
   const gaFields = { cookie: analytics && analytics.cookie, retentionMonths: analytics && analytics.retentionMonths };
   const dialog = variants(await read(SRC, "partials/legal.html"))
     .replace(/\{\{legal\.([A-Za-z]+)\}\}/g, (m, k) => {
@@ -182,7 +207,7 @@ async function legalParts() {
 async function pageParts() {
   const road = oneLine(await read(SRC, "partials/ld-road.svg"));
   const car = oneLine(await read(SRC, "partials/ld-car.svg"));
-  let body = await read(SRC, "partials/body.html");
+  let body = variants(await read(SRC, "partials/body.html"));
   let dialog = await read(SRC, "partials/dialog.html");
   const fill = (text, pairs) => {
     for (const [mark, value, times = 1] of pairs) {
@@ -213,7 +238,7 @@ function squeeze(html) {
 }
 async function render(parts, { headAssets, scripts }) {
   const tpl = await read(SRC, "index.html");
-  const fill = { API_BASE: apiBase, GA_ID: analytics ? analytics.id : "", PRECONNECT: preconnect(), HEAD_ASSETS: headAssets, SPRITE: parts.sprite, CONSENT: parts.consent, BODY: parts.body, DIALOG: parts.dialog, LEGAL: parts.legal, SCRIPTS: scripts };
+  const fill = { API_BASE: apiBase, GA_ID: analytics ? analytics.id : "", MAPBOX_TOKEN: mapbox ? mapbox.token : "", MAPBOX_STYLE: mapbox ? mapbox.style : "", PRECONNECT: preconnect(), HEAD_ASSETS: headAssets, SPRITE: parts.sprite, CONSENT: parts.consent, BODY: parts.body, DIALOG: parts.dialog, LEGAL: parts.legal, SCRIPTS: scripts };
   return squeeze(tpl.replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => (k in fill ? fill[k] : m)));
 }
 
@@ -249,7 +274,7 @@ export function contentSecurityPolicy(origin = apiOrigin, styleHash = "", ga = !
     `script-src ${["'self'", "https://cdnjs.cloudflare.com", ...(ga ? GOOGLE_SCRIPT : [])].join(" ")}`, // le CDN ne sert que de secours à la copie locale de Leaflet
     `style-src 'self'${styleHash ? ` 'sha256-${styleHash}'` : ""}`, // la feuille de style est dans la page : autorisée par son empreinte
     "style-src-attr 'unsafe-inline'", // quelques positions calculées (repères de l'échelle de prix, marqueurs)
-    "img-src 'self' data: blob: https:", // tuiles de la carte, logos (Wikimedia Commons), icônes des sites d'enseignes
+    "img-src 'self' data: blob: https:", // tuiles de la carte (Mapbox, IGN, CARTO), logos (Wikimedia Commons), icônes des sites d'enseignes
     "font-src 'self'",
     `connect-src ${["'self'", origin, ...CONNECT, ...(ga ? GOOGLE_CONNECT : [])].filter(Boolean).join(" ")}`,
     "worker-src 'self'",

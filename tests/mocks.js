@@ -303,7 +303,7 @@ async function installMocks(ctx, opts = {}) {
   const log = opts.log || (() => {});
   const fonts = (key) => fs.readFileSync(path.join(__dirname, "fixtures", "fonts", key));
   const elements = opts.elements || buildElements();
-  const counters = (ctx.__counters = { overpass: 0, geocode: 0, tiles: 0, ct: 0, sirene: 0, wikidata: 0, upload: 0, logoFiles: [], siteIcons: [], sparql: "", other: [], google: [], reverse: 0, reverseUrls: [] });
+  const counters = (ctx.__counters = { overpass: 0, geocode: 0, tiles: 0, ct: 0, sirene: 0, wikidata: 0, upload: 0, logoFiles: [], siteIcons: [], sparql: "", other: [], google: [], mapbox: [], reverse: 0, reverseUrls: [] });
 
   await ctx.route("**/*", async (route) => {
     const url = new URL(route.request().url());
@@ -382,12 +382,24 @@ async function installMocks(ctx, opts = {}) {
     // IGN tiles
     if (h === "data.geopf.fr" && url.pathname.startsWith("/wmts")) {
       counters.tiles++;
+      if (opts.ignStatus) return route.fulfill({ status: opts.ignStatus, headers: CORS, body: "" }); // fond de l'IGN en panne : la carte passe à CARTO
       const z = +url.searchParams.get("TILEMATRIX"), y = +url.searchParams.get("TILEROW"), x = +url.searchParams.get("TILECOL");
       return route.fulfill({ status: 200, contentType: "image/png", headers: CORS, body: tilePNG(z, x, y) });
     }
     if (h.endsWith("basemaps.cartocdn.com")) {
       counters.tiles++;
       const m = url.pathname.match(/\/(\d+)\/(\d+)\/(\d+)/);
+      return route.fulfill({ status: 200, contentType: "image/png", headers: CORS, body: tilePNG(+m[1], +m[2], +m[3]) });
+    }
+    // Mapbox (suite « mapbox », opts.mapbox) : tuiles raster de 512 px (…/tiles/512/z/x/y[@2x]?access_token=…), chaque requête comptée dans
+    // counters.mapbox. opts.mapbox.status (401, 429…) les refuse : la carte doit passer au fond de l'IGN ; opts.mapbox.failFirst = n : seules les n premières échouent. Sans opts.mapbox, l'hôte est refusé comme
+    // tout hôte inconnu (et compté dans counters.other) : une page qui appellerait Mapbox sans en avoir le jeton le ferait savoir.
+    if (opts.mapbox && h === "api.mapbox.com") {
+      counters.mapbox.push(url.href);
+      const status = counters.mapbox.length <= (opts.mapbox.failFirst || 0) ? 500 : opts.mapbox.status || 200; // failFirst : les n premières tuiles seulement échouent
+      if (status !== 200) return route.fulfill({ status, contentType: "application/json", headers: CORS, body: JSON.stringify({ message: "Not Authorized - Invalid Token" }) });
+      const m = url.pathname.match(/\/tiles\/512\/(\d+)\/(\d+)\/(\d+)(@2x)?$/);
+      if (!m) return route.fulfill({ status: 404, contentType: "application/json", headers: CORS, body: "{}" });
       return route.fulfill({ status: 200, contentType: "image/png", headers: CORS, body: tilePNG(+m[1], +m[2], +m[3]) });
     }
     // Wikidata (logos) -> SPARQL, then Commons Special:FilePath (302) -> upload.wikimedia.org (png)

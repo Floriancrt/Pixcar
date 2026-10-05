@@ -7,6 +7,7 @@
 <meta name="theme-color" content="#000000">
 <meta name="pixcar-api" content="">
 <meta name="pixcar-analytics" content="">
+<meta name="pixcar-mapbox" content="" data-style="">
 <title>Pixcar</title>
 <link rel="preconnect" href="https://data.geopf.fr" crossorigin>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -292,8 +293,7 @@ target="_blank" rel="noopener">OpenStreetMap</a>
 (ODbL), la base de données cartographique ouverte et collaborative : elle ne recense pas tous les garages, et
 un garage y est parfois sans adresse ni numéro de téléphone. Quand l'adresse manque, la page affiche
 l'adresse la plus proche de la position du garage (Base Adresse Nationale, 80 m au plus), précédée de « ≈ » :
-c'est une approximation. Fond de
-carte : Plan IGN (Géoplateforme). Avis : le bouton « Avis Google » ouvre la fiche du garage
+c'est une approximation. Fond de carte : Plan IGN (Géoplateforme). Avis : le bouton « Avis Google » ouvre la fiche du garage
 sur Google Maps. Contrôle technique : prix déclarés par les centres, publiés par la DGCCRF sur
 <a href="https://prix.conso.gouv.fr/controle-technique" target="_blank" rel="noopener">prix.conso.gouv.fr</a
 >. Registre : INSEE, via l'API Recherche d'entreprises. Licence Ouverte pour les données publiques.
@@ -576,6 +576,9 @@ contacte directement ces services, qui voient son adresse IP et ce qu'il leur de
 <ul>
 <li>l'IGN (Géoplateforme, data.geopf.fr)&nbsp;: recherche d'adresse et fond de carte&nbsp;;</li>
 <li>
+CARTO (basemaps.cartocdn.com)&nbsp;: fond de carte de dernier recours, seulement si les autres ne répondent pas&nbsp;;
+</li>
+<li>
 OpenStreetMap, par les serveurs Overpass (overpass-api.de, OpenStreetMap France)&nbsp;: les
 garages d'une zone, demandés à un serveur après l'autre tant que le précédent ne répond pas<span data-store-only="remote">
 (avec l'API, c'est Pixcar qui interroge OpenStreetMap à votre place&nbsp;; votre navigateur ne contacte
@@ -642,6 +645,6 @@ Vous pouvez aussi saisir la CNIL (<a href="https://www.cnil.fr" target="_blank" 
 </form>
 </dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-<script src="assets/app.db9b55f3d5.js" defer></script>
+<script src="assets/app.d9dcdfc5fa.js" defer></script>
 </body>
 </html>

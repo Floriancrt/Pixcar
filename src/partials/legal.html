@@ -82,7 +82,18 @@
             contacte directement ces services, qui voient son adresse IP et ce qu'il leur demande&nbsp;:
           </p>
           <ul>
-            <li>l'IGN (Géoplateforme, data.geopf.fr)&nbsp;: recherche d'adresse et fond de carte&nbsp;;</li>
+            <!--MB:off--><li>l'IGN (Géoplateforme, data.geopf.fr)&nbsp;: recherche d'adresse et fond de carte&nbsp;;</li><!--/MB:off-->
+            <!--MB:on--><li>
+              l'IGN (Géoplateforme, data.geopf.fr)&nbsp;: recherche d'adresse, et fond de carte si celui de Mapbox ne répond pas&nbsp;;
+            </li>
+            <li>
+              Mapbox, Inc. (États-Unis ; api.mapbox.com)&nbsp;: le fond de la carte, dès qu'elle s'affiche après une recherche. Mapbox
+              reçoit l'adresse IP de votre navigateur et les tuiles demandées, qui désignent la zone que vous regardez&nbsp;; il
+              applique sa propre politique de confidentialité et peut traiter ces données hors de l'Union européenne&nbsp;;
+            </li><!--/MB:on-->
+            <li>
+              CARTO (basemaps.cartocdn.com)&nbsp;: fond de carte de dernier recours, seulement si les autres ne répondent pas&nbsp;;
+            </li>
             <li>
               OpenStreetMap, par les serveurs Overpass (overpass-api.de, OpenStreetMap France)&nbsp;: les
               garages d'une zone, demandés à un serveur après l'autre tant que le précédent ne répond pas<span data-store-only="remote">

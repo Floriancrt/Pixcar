@@ -26,6 +26,7 @@ const SUITES = [
   { name: "remote", cmd: ["node", "tests/remote.js", FILE] },
   { name: "legal", cmd: ["node", "tests/legal.js"] }, // construit lui-même la page avec une copie des sources dont src/legal.json est complet
   { name: "consent", cmd: ["node", "tests/consent.js"] }, // mesure d'audience : construit lui-même ses pages (avec et sans identifiant Google)
+  { name: "mapbox", cmd: ["node", "tests/mapbox.js"] }, // fond de carte Mapbox : construit lui-même ses pages (avec et sans jeton)
   { name: "prerender", cmd: ["node", "tests/prerender.js", FILE] },
   { name: "budget", cmd: ["node", "tests/budget.js"], distOnly: true },
   { name: "offline", cmd: ["node", "tests/offline.js"], distOnly: true },
