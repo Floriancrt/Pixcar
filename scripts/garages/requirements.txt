@@ -1,0 +1,6 @@
+# Dépendances de la construction de la table de garages (scripts/garages/). Installées par le workflow .github/workflows/garages.yml.
+pyarrow
+fsspec
+aiohttp
+shapely
+numpy

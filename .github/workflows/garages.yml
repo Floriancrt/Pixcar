@@ -1,0 +1,68 @@
+# Construction de la table de garages (tuiles statiques tirées d'Overture Maps) : voir scripts/garages/README.md et docs/exploitation.md, section 8.
+# Ce workflow NE PUBLIE RIEN : il construit les tuiles, les contrôle, les range dans un artefact (14 jours) et écrit un résumé en agrégats.
+# Pour les joindre au site : télécharger l'artefact, puis `node scripts/build.mjs --pages pixcar.fr --garages <dossier>` (après accord de l'éditeur).
+name: Table de garages
+
+on:
+  workflow_dispatch:
+    inputs:
+      area:
+        description: "france | bbox:ouest,sud,est,nord | dept:<nom Overture>"
+        default: "dept:Haute-Garonne"
+      rough:
+        description: "avec dept: : boîte large autour du département (ouest,sud,est,nord)"
+        default: "0.2,42.5,2.3,44.1"
+      dept_codes:
+        description: "codes des départements pour le registre (31 ; ignoré avec france)"
+        default: "31"
+      sirene:
+        description: "écarter les lieux fermés d'après le registre SIRENE"
+        type: choice
+        options: ["on", "off"]
+        default: "on"
+  # Mensuel, à activer le jour où la table est publiée (Overture publie une version par mois) :
+  # schedule:
+  #   - cron: "17 4 4 * *"
+  push:
+    branches: [garages-table]
+    paths:
+      - "scripts/garages/**"
+      - ".github/workflows/garages.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: garages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Dépendances
+        run: pip install --quiet -r scripts/garages/requirements.txt
+      - name: Tests (sans réseau)
+        run: python scripts/garages/test_garages.py | tail -4
+      - name: Construction
+        env:
+          AREA: ${{ inputs.area || 'dept:Haute-Garonne' }}
+          ROUGH: ${{ inputs.rough || '0.2,42.5,2.3,44.1' }}
+          CODES: ${{ inputs.dept_codes || '31' }}
+          SIRENE: ${{ inputs.sirene || 'on' }}
+        run: |
+          python scripts/garages/build.py --area "$AREA" --rough "$ROUGH" --dept-codes "$CODES" --sirene "$SIRENE" \
+            --out build/garages --probe 43.217426,1.10145,10 --print-dropped --summary "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garages
+          path: build/garages
+          retention-days: 14
