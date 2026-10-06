@@ -302,8 +302,6 @@ def sirene_class_table(sir, osm, ovt, near_m, spot_m, linker=None):
         ("tous", lambda x: True),
         ("entrepreneur individuel (nature 1000)", lambda x: x.get("nj") == "1000"),
         ("autre forme (société…)", lambda x: x.get("nj") not in ("", "1000")),
-        ("employeur", lambda x: x.get("emp") == "O"),
-        ("non employeur", lambda x: x.get("emp") == "N"),
         ("enseigne renseignée", lambda x: x.get("ens")),
         ("sans enseigne", lambda x: not x.get("ens")),
     ]
@@ -317,3 +315,14 @@ def sirene_class_table(sir, osm, ovt, near_m, spot_m, linker=None):
         tel = sum(1 for i in idx if (mo[i] and mo[i]["phone"]) or (mv[i] and mv[i]["phone"]))
         out.append("| %s | %d | %s | %s | %s | %s |" % (label, n, cell(o, n), cell(v, n), cell(either, n), cell(tel, n)))
     return out
+
+
+def closure_lines(label, X, active, closed, near_m, spot_m):
+    """Part des lieux de X qui rejoignent un établissement SIRENE fermé (même nom, ≤ 150 m) sans en rejoindre un actif : borne basse des lieux disparus."""
+    ma = M.link(X, active, near_m, spot_m)
+    mc = M.link(X, closed, near_m, spot_m)
+    n = len(X)
+    a = sum(1 for p in ma if p)
+    c_only = sum(1 for p, q in zip(ma, mc) if q and not p)
+    both = sum(1 for p, q in zip(ma, mc) if q and p)
+    return "- %s (%d) : rejoint un établissement actif %s ; rejoint un établissement fermé et aucun actif %s ; fermé et actif à la fois %s." % (label, n, cell(a, n), cell(c_only, n), cell(both, n))

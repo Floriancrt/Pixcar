@@ -131,7 +131,7 @@ check(sk == {"réseau social": 1, "domaine propre": 1, "annuaire": 1}, "nature d
 prof = "\n".join(R.overture_only_profile(ents))
 check("1 lieux Overture sans équivalent ailleurs : téléphone 1 (100 %)" in prof, "profil des garages d'Overture seul : %s" % prof)
 ct = "\n".join(R.sirene_class_table([dict(x, nj="1000" if i < 4 else "5710", emp="N" if i < 4 else "O") for i, x in enumerate(sir)], osm, sets["ovt"], 150, 40))
-check("| entrepreneur individuel (nature 1000) | 4 |" in ct and "| employeur | 6 |" in ct, "classes SIRENE : %s" % ct)
+check("| entrepreneur individuel (nature 1000) | 4 |" in ct and "| autre forme (société…) | 6 |" in ct, "classes SIRENE : %s" % ct)
 pt = "\n".join(R.proximity_table(sets))
 check("SIRENE (10)" in pt and "25 m" in pt, "tableau de proximité")
 
@@ -192,6 +192,7 @@ e = {
 out, st = {}, {"inactifs": 0, "sans_position": 0, "ecartes": 0, "naf": {}}
 S.sirene_add(e, out, st)
 check(sorted(out) == ["11111111100011", "11111111100052", "11111111100078"], "établissements retenus : %r" % sorted(out))
+check(sorted(st.get("closed", {})) == ["11111111100037"], "l'établissement fermé est gardé à part : %r" % sorted(st.get("closed", {})))
 check(st["inactifs"] == 1 and st["sans_position"] == 1 and st["ecartes"] == 2, "décomptes SIRENE : %r" % st)
 check(out["11111111100011"]["name"] == "MARTIN AUTO" and out["11111111100011"]["ens"] and out["11111111100011"]["cp"], "enseigne et code postal")
 check(out["11111111100078"]["name"] == "GARAGE MARTIN" and not out["11111111100078"]["cp"], "nom de l'entreprise, hors département")
@@ -199,9 +200,13 @@ check(not out["11111111100011"]["phone"] and not out["11111111100011"]["web"], "
 check(out["11111111100011"]["nj"] == "1000" and out["11111111100011"]["emp"] == "N", "forme juridique et employeur")
 
 # ------------------------------------------------------------------------------------------------------------------ rapport complet
-lines = RUN.build(osm, ovt, sir, {"name": "Test", "release": "release/test", "osm_how": "essai", "sirene_mode": "essai", "osm_rejected": 0, "sir_discarded": 0, "sir_inactive": 0, "sir_nopos": 0})
+cl = R.closure_lines("essai", sets["ovt"], sets["sir"], [S.entity("sir", "closed1", "MOREAU ANCIEN", at(9)[0], at(9)[1], [], [], "", naf="45.20A", ens=False, cp=True)], 150, 40)
+check("rejoint un établissement fermé et aucun actif 0 (0 %)" in cl, "aucun lieu n'a le nom de l'établissement fermé : %s" % cl)
+cl2 = R.closure_lines("essai", [x for x in sets["ovt"] if x["id"] == "ovt9"], sets["sir"], [S.entity("sir", "closed1", "Faure ancien", at(9)[0], at(9)[1], [], [], "", naf="45.20A", ens=False, cp=True)], 150, 40)
+check("rejoint un établissement fermé et aucun actif 1 (100 %)" in cl2, "garage rapproché d'un établissement fermé seul : %s" % cl2)
+lines = RUN.build(osm, ovt, sir, {"name": "Test", "release": "release/test", "osm_how": "essai", "sirene_mode": "essai", "osm_rejected": 0, "sir_discarded": 0, "sir_inactive": 0, "sir_nopos": 0}, sir_closed=[])
 text = "\n".join(lines)
-for needle in ("Profil des garages que seul Overture connaît", "Selon leur nature", "## 1.", "## 2. Recouvrement (150 m", "## 2. Recouvrement (300 m", "## 2b. Plafond", "## 2c. Garages réunis, nom ou adresse", "Ce que chaque source apporte", "## 3. Garages réunis (150 m)", "## 4. Par zone", "## 5. Qualité", "## 6. Disque de 10 km autour de Cazères", "Total"):
+for needle in ("ont peut-être disparu", "Profil des garages que seul Overture connaît", "Selon leur nature", "## 1.", "## 2. Recouvrement (150 m", "## 2. Recouvrement (300 m", "## 2b. Plafond", "## 2c. Garages réunis, nom ou adresse", "Ce que chaque source apporte", "## 3. Garages réunis (150 m)", "## 4. Par zone", "## 5. Qualité", "## 6. Disque de 10 km autour de Cazères", "Total"):
     check(needle in text, "le rapport contient « %s »" % needle)
 check("01 99" not in text and "garage0.example" not in text and "+33" not in text, "le rapport ne contient ni numéro ni adresse web")
 print("\n".join(lines[:60]))

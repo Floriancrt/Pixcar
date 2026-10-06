@@ -18,7 +18,7 @@ import report as R  # noqa: E402
 import sources as S  # noqa: E402
 
 
-def build(osm, ovt, sir, info):
+def build(osm, ovt, sir, info, sir_closed=None):
     """Rapport (liste de lignes) à partir des trois listes de garages normalisés."""
     osm_core = [x for x in osm if x["lvl"] == "core"]
     ovt_core = [x for x in ovt if x["cat"] in S.OVT_CORE]
@@ -149,6 +149,12 @@ def build(osm, ovt, sir, info):
     add("- Overture : %d lieux dont le numéro est partagé avec au moins deux autres lieux (standard de réseau)." % R.shared_phones(ovt_core))
     add("- OpenStreetMap : %d éléments dont le numéro est partagé avec au moins deux autres." % R.shared_phones(osm))
     add("")
+    if sir_closed is not None:
+        add("### Lieux qui ont peut-être disparu (rapprochés d'un établissement SIRENE fermé : %d établissements fermés du même NAF)" % len(sir_closed))
+        add("")
+        for label, X in (("OpenStreetMap", osm), ("Overture (cœur)", ovt_core), ("  dont origine meta", [x for x in ovt_core if "meta" in x["ds"]]), ("  dont origine Foursquare", [x for x in ovt_core if "Foursquare" in x["ds"]]), ("  dont confiance < 0,5", [x for x in ovt_core if x["conf"] is not None and x["conf"] < 0.5]), ("  dont confiance ≥ 0,7", [x for x in ovt_core if x["conf"] is not None and x["conf"] >= 0.7])):
+            add(R.closure_lines(label, X, sir, sir_closed, M.NEAR_M, M.SAME_SPOT_M))
+        add("")
     add("## 6. Disque de 10 km autour de Cazères (comparaison avec le banc)")
     add("")
     cz = {k: [x for x in v if M.meters(R.CAZERES, x) <= 10000] for k, v in sets.items()}
@@ -186,6 +192,7 @@ def main(argv=None):
     bbox = poly.bounds  # ouest, sud, est, nord
     info = {"name": a.name}
     ovt = osm = sir = []
+    sir_closed = None
     try:
         ovt, info["release"], _ = S.load_overture(poly, rel, log)
     except Exception as e:  # noqa: BLE001
@@ -205,12 +212,13 @@ def main(argv=None):
     try:
         sir_raw, st, info["sirene_mode"] = S.load_sirene(a.dept, poly, log)
         sir = [x for x in sir_raw if poly.contains(Point(x["lon"], x["lat"]))]
+        sir_closed = [x for x in st["closed"].values() if poly.contains(Point(x["lon"], x["lat"]))]
         info.update({"sir_discarded": st["ecartes"], "sir_inactive": st["inactifs"], "sir_nopos": st["sans_position"]})
         log("SIRENE : %d établissements dont %d dans le contour" % (len(sir_raw), len(sir)))
     except Exception as e:  # noqa: BLE001
         failed.append("sirene")
         log("ÉCHEC SIRENE : %r" % e)
-    lines = build(osm, ovt, sir, info)
+    lines = build(osm, ovt, sir, info, sir_closed)
     print("\n".join(lines), flush=True)
     out = os.environ.get("GITHUB_STEP_SUMMARY")
     if out:

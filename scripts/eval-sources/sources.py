@@ -269,38 +269,42 @@ def sirene_pages(endpoint, params, log=print, pace=0.25, cap_pages=400):
 
 
 def sirene_add(e, out, stats):
-    """Établissements actifs d'une entreprise du résultat, comme la page (src/js/app.js, fonction de lecture des résultats)."""
+    """Établissements d'une entreprise du résultat, comme la page (src/js/app.js, fonction de lecture des résultats). Les actifs vont dans out ;
+    les fermés (même NAF, même position) sont gardés à part dans stats["closed"] : ils servent à repérer des lieux qui ont probablement fermé."""
     for s in e.get("matching_etablissements") or []:
-        if s.get("etat_administratif") and s["etat_administratif"] != "A":
+        closed = bool(s.get("etat_administratif") and s["etat_administratif"] != "A")
+        if closed:
             stats["inactifs"] += 1
-            continue
         siret = s.get("siret")
         try:
             lat, lon = float(s.get("latitude")), float(s.get("longitude"))
             if not (math.isfinite(lat) and math.isfinite(lon)):
                 raise ValueError
         except (TypeError, ValueError):
-            stats["sans_position"] += 1
+            if not closed:
+                stats["sans_position"] += 1
             continue
-        if not siret or siret in out:
+        target = stats.setdefault("closed", {}) if closed else out
+        if not siret or siret in target:
             continue
         naf = str(s.get("activite_principale") or e.get("activite_principale") or "")
         ens = [x for x in (s.get("liste_enseignes") or []) if x]
         nom = ens[0] if ens else (s.get("nom_commercial") or e.get("nom_complet") or e.get("nom_raison_sociale") or "")
         chain = bool(CHAIN.search(" | ".join(ens + [s.get("nom_commercial") or "", e.get("nom_complet") or "", e.get("nom_raison_sociale") or "", e.get("sigle") or ""])))
-        stats["naf"][naf] = stats["naf"].get(naf, 0) + 1
+        if not closed:
+            stats["naf"][naf] = stats["naf"].get(naf, 0) + 1
         if naf.startswith("45.20") or (naf == "45.32Z" and chain):
-            out[siret] = entity(
+            target[siret] = entity(
                 "sir", "siret:" + siret, nom, lat, lon, [], [], "", address=s.get("adresse"), naf=naf, ens=bool(ens), cp=bool(re.search(r"\b31\d{3}\b", s.get("adresse") or "")),
                 nj=str(e.get("nature_juridique") or ""), emp=str(e.get("caractere_employeur") or ""),
             )
-        else:
+        elif not closed:
             stats["ecartes"] += 1
 
 
 def load_sirene(dept, poly, log=print):
     """Établissements SIRENE : /search?departement=… ; si l'API refuse ce filtre, repli sur des cercles /near_point."""
-    out, stats = {}, {"inactifs": 0, "sans_position": 0, "ecartes": 0, "naf": {}}
+    out, stats = {}, {"inactifs": 0, "sans_position": 0, "ecartes": 0, "naf": {}, "closed": {}}
     base = {"activite_principale": SIRENE_NAF, "per_page": "25", "limite_matching_etablissements": "25", "minimal": "true", "include": "matching_etablissements"}
     t0 = time.time()
     try:
@@ -316,7 +320,7 @@ def load_sirene(dept, poly, log=print):
     except Exception as e:  # noqa: BLE001
         log("SIRENE : le filtre département échoue (%s), repli sur les cercles" % type(e).__name__)
     out.clear()
-    stats.update({"inactifs": 0, "sans_position": 0, "ecartes": 0, "naf": {}})
+    stats.update({"inactifs": 0, "sans_position": 0, "ecartes": 0, "naf": {}, "closed": {}})
     minx, miny, maxx, maxy = poly.bounds
     from shapely.geometry import Point
 
