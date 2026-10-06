@@ -3,6 +3,8 @@ import { cityFromAddr, cityTidy } from "./modules/city.js";
 import { apiBase, garagesBase } from "./modules/config.js";
 import { createTable, fieldLabels, mergeTable, toGarage } from "./modules/garages-table.js";
 import { loadScript } from "./modules/load-script.js";
+import { MAPBOX_OPTIONS, mapboxConfig, mapboxTileUrl } from "./modules/mapbox.js";
+import { createEnricher, missingOf } from "./modules/mapbox-fiches.js";
 import { phoneList, phoneParse } from "./modules/phone.js";
 import { createStore, jsonStorage } from "./modules/repair-store.js";
 import { KEEP_TAG, OVERPASS_MIRRORS, inMetroFrance, overpassQuery } from "./shared/overpass.js";
@@ -1251,6 +1253,67 @@ import { SERVICES } from "./shared/services.js";
           adRepaint(g));
       })
     );
+  }
+  // ----- Fiches complétées par Mapbox (téléphone, horaires, site) -----
+  // OpenStreetMap n'a pas toujours le téléphone, les horaires ou le site d'un garage (et le registre SIRENE n'en a aucun). À l'ouverture d'une fiche qui
+  // en manque, une requête « Search Box » à Mapbox (modules/mapbox-fiches.js) cherche le lieu au même endroit, de même nom, et ne remplit que ce qui
+  // manque, avec la mention « Mapbox ». Une requête par garage et par visite au plus (40 au plus, rien si la fiche est complète), aucune réponse gardée
+  // sur le disque. Actif seulement avec un jeton Mapbox (réglage « enrich » de src/mapbox.json : « map » = tant que la carte affiche des tuiles Mapbox,
+  // « always », « off »). Interrupteur : window.JG_MAPBOX_ENRICH = false.
+  let mbxLive = !1, // la carte affiche des tuiles Mapbox
+    mbxFallen = !1, // Mapbox a été abandonné pour l'IGN ou CARTO (tuiles refusées)
+    mbxEnr = null;
+  const mbxCfg = mapboxConfig(),
+    mbxOn = () =>
+      !!mbxCfg &&
+      "off" !== mbxCfg.enrich &&
+      window.JG_MAPBOX_ENRICH !== !1 &&
+      ("always" === mbxCfg.enrich ? !mbxFallen : mbxLive),
+    mbxWant = (g) =>
+      mbxOn() &&
+      !!g &&
+      ("osm" === g.src || "sirene" === g.src || "ovt" === g.src) &&
+      Number.isFinite(g.lat) &&
+      Number.isFinite(g.lon) &&
+      !g.mbxDone &&
+      !g.mbxBusy &&
+      (g.mbxTry || 0) < 2 &&
+      missingOf(g);
+  // Repeint ce que la réponse change : les lignes de la fiche (téléphone, horaires, site) et le bouton « Appeler » de la carte
+  function mbxRepaint(g) {
+    const li = pe.list.querySelector(`[data-id="${CSS.escape(g.id)}"]`);
+    if (!li) return;
+    const act = li.querySelector(".g-actions");
+    act && (act.innerHTML = gActions(g));
+    const dl = li.querySelector("dl.facts[data-facts]");
+    if (dl) {
+      const tmp = document.createElement("div");
+      tmp.innerHTML = wt(g);
+      const nd = tmp.querySelector("dl.facts"),
+        cur = dl.querySelectorAll("dd"),
+        nxt = nd ? nd.querySelectorAll("dd") : [];
+      // Les lignes sont mises à jour sur place, pas remplacées : téléphone, horaires et site sont des zones « polite », un lecteur d'écran annonce
+      // celles qui changent (et elles seules). Si la fiche n'a plus les mêmes lignes, on la remplace.
+      if (cur.length === nxt.length) cur.forEach((dd, i) => dd.innerHTML !== nxt[i].innerHTML && (dd.innerHTML = nxt[i].innerHTML));
+      else nd && dl.replaceWith(nd);
+    }
+  }
+  // Appelé à l'ouverture d'une fiche : une seule demande par garage, une nouvelle tentative au plus si elle n'a pas pu se faire
+  function mbxEnsure(g) {
+    if (!mbxWant(g)) return;
+    mbxEnr || (mbxEnr = createEnricher({ token: mbxCfg.token }));
+    ((g.mbxBusy = !0), mbxRepaint(g));
+    mbxEnr.lookup(g).then((r) => {
+      g.mbxBusy = !1;
+      if (!r) g.mbxTry = (g.mbxTry || 0) + 1;
+      else {
+        g.mbxDone = !0;
+        const f = r.fields;
+        (f.phone && (g.phone = f.phone), f.hours && (g.hours = f.hours), f.web && (g.web = f.web));
+        g.mbx = Object.fromEntries(Object.keys(f).map((k) => [k, !0]));
+      }
+      mbxRepaint(g);
+    });
   }
   // ----- Ville dans la puce distance (« 2,5 km · Bron ») -----
   // La ville dit de quel côté se trouve le garage. Elle vient, dans l'ordre : de la balise OpenStreetMap (addr:city,
@@ -2603,6 +2666,12 @@ import { SERVICES } from "./shared/services.js";
               ? "Spécialiste pneus"
               : "Indépendant";
   }
+  // Boutons de la carte : appeler (si on a un numéro), itinéraire, avis Google
+  function gActions(e) {
+    const t = vt(e),
+      a = (phoneList(e)[0] || {}).tel || "";
+    return `\n      ${t ? `<a class="mini act-call" href="tel:${y(a)}" aria-label="Appeler le ${y(t)}">Appeler</a>` : ""}\n      <a class="mini act-route" href="https://www.google.com/maps/dir/?api=1&amp;destination=${e.lat},${e.lon}" target="_blank" rel="noopener">Itinéraire</a>\n      <a class="mini google act-reviews" href="${y(adGoogle(e))}" target="_blank" rel="noopener">Avis Google</a>\n    `;
+  }
   function bt(e, t, a, n, r, s) {
     const i = me.openIds.has(e.id);
     return `<li class="card${i ? " is-open" : ""}${me.sel === e.id ? " is-selected" : ""}" id="c-${t}" data-id="${y(e.id)}">
@@ -2617,21 +2686,7 @@ import { SERVICES } from "./shared/services.js";
       <span class="chev" aria-hidden="true">${i ? "Masquer" : "Détails"}</span>
     </div>
     ${s.strip || ""}
-    ${(function (e) {
-      const t = vt(e),
-        a = (phoneList(e)[0] || {}).tel || "";
-      return `<div class="g-actions">\n      ${t ? `<a class="mini act-call" href="tel:${y(a)}" aria-label="Appeler le ${y(t)}">Appeler</a>` : ""}\n      <a class="mini act-route" href="https://www.google.com/maps/dir/?api=1&amp;destination=${e.lat},${e.lon}" target="_blank" rel="noopener">Itinéraire</a>\n      <a class="mini google act-reviews" href="${y(
-        (function (e) {
-          const t = [
-            e.name && !/^(Garage \(nom|Spécialiste pneus \(sans)/.test(e.name) ? e.name : "garage",
-            e.addr,
-          ]
-            .filter(Boolean)
-            .join(", ");
-          return `https://www.google.com/maps/search/${encodeURIComponent(t)}/@${e.lat.toFixed(6)},${e.lon.toFixed(6)},17z`;
-        })(e),
-      )}" target="_blank" rel="noopener">Avis Google</a>\n    </div>`;
-    })(e)}
+    <div class="g-actions">${gActions(e)}</div>
     <div class="g-more" id="m-${t}"${i ? "" : " hidden"}>${i ? s.details() : ""}</div>
   </li>`;
   }
@@ -2650,6 +2705,11 @@ import { SERVICES } from "./shared/services.js";
     const n = rb(e),
       p = phoneList(e),
       none = (x) => `<span class="fact-none">${x}</span>`,
+      wait = e.mbxBusy,
+      src = (k) =>
+        e.mbx && e.mbx[k]
+          ? ' <span class="fact-src" title="Information fournie par Mapbox, à titre indicatif">Mapbox</span>'
+          : "",
       r = [
         n
           ? null
@@ -2663,23 +2723,23 @@ import { SERVICES } from "./shared/services.js";
             ? `<span class="phones">${p
                 .slice(0, 2)
                 .map(
-                  (x) =>
-                    `<span class="ph"><a class="phone" href="tel:${y(x.tel)}">${y(x.text)}</a> <button type="button" class="linkish" data-act="copy" data-v="${y(x.text)}">Copier</button></span>`,
+                  (x, i) =>
+                    `<span class="ph"><a class="phone" href="tel:${y(x.tel)}">${y(x.text)}</a> <button type="button" class="linkish" data-act="copy" data-v="${y(x.text)}">Copier</button>${i ? "" : src("phone")}</span>`,
                 )
                 .join("")}</span>`
-            : `${none("Non renseigné")} · <a href="${y(adGoogle(e))}" target="_blank" rel="noopener">chercher sur Google Maps</a>`,
+            : `${none(wait ? "Recherche…" : "Non renseigné")} · <a href="${y(adGoogle(e))}" target="_blank" rel="noopener">chercher sur Google Maps</a>`,
         ],
-        ["Horaires", e.hours ? y(I(e.hours)) : none("Non renseignés")],
+        ["Horaires", e.hours ? y(I(e.hours)) + src("hours") : none(wait ? "Recherche…" : "Non renseignés")],
         [
           "Site",
           e.web
-            ? `<a href="${y(e.web)}" target="_blank" rel="noopener">${y(R(e.web))}</a>`
-            : none("Non renseigné"),
+            ? `<a href="${y(e.web)}" target="_blank" rel="noopener">${y(R(e.web))}</a>${src("web")}`
+            : none(wait ? "Recherche…" : "Non renseigné"),
         ],
       ]
         .concat(t || [])
         .filter(Boolean);
-    return `${n}${r.length ? `<dl class="facts">${r.map(([e, t]) => `<dt>${e}</dt><dd>${t}</dd>`).join("")}</dl>` : ""}${tableNote(e)}`;
+    return `${n}${r.length ? `<dl class="facts" data-facts="${y(e.id)}">${r.map(([e, t]) => `<dt>${e}</dt><dd${/^(Téléphone|Horaires|Site)$/.test(e) ? ' aria-live="polite"' : ""}>${t}</dd>`).join("")}</dl>` : ""}${tableNote(e)}`;
   }
   function yt(e, t) {
     const a = e.price,
@@ -2760,7 +2820,7 @@ import { SERVICES } from "./shared/services.js";
       e.classList.toggle("is-open", r),
       e.querySelector(".g-name").setAttribute("aria-expanded", String(r)),
       (e.querySelector(".chev").textContent = r ? "Masquer" : "Détails"));
-    r && n && adEnsure(n);
+    r && n && (adEnsure(n), mbxEnsure(n));
   }
   // Une seule fiche ouverte à la fois : l'ouvrir la sélectionne (carte + barre récapitulative)
   function kt(e, t) {
@@ -3018,32 +3078,47 @@ import { SERVICES } from "./shared/services.js";
                   ((Mt = L.map(pe.map, { preferCanvas: !0, scrollWheelZoom: ge(), zoomSnap: 0.5 })),
                     Mt.zoomControl.setPosition("topright"),
                     Mt.fitBounds(a, fo()));
-                  const e = L.tileLayer(
-                      "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}",
-                      {
-                        maxZoom: 19,
-                        maxNativeZoom: 18,
-                        attribution: "Fond : Plan IGN © IGN – Géoplateforme",
-                      },
-                    ),
-                    t = L.tileLayer(
-                      "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-                      {
+                  // Fonds de carte, du préféré au dernier recours : Mapbox (seulement si la page en a le jeton, voir modules/mapbox.js), le Plan IGN, puis
+                  // CARTO. Un seul est affiché : s'il n'a chargé aucune tuile et en a refusé deux (jeton refusé, service en panne), on passe au suivant.
+                  const bases = [],
+                    mapbox = mapboxConfig();
+                  (mapbox && bases.push(L.tileLayer(mapboxTileUrl(mapbox), MAPBOX_OPTIONS)),
+                    bases.push(
+                      L.tileLayer(
+                        "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}",
+                        {
+                          maxZoom: 19,
+                          maxNativeZoom: 18,
+                          attribution: "Fond : Plan IGN © IGN – Géoplateforme",
+                        },
+                      ),
+                      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
                         subdomains: "abcd",
                         maxZoom: 19,
                         attribution: "Fond : © CARTO, © les contributeurs d'OpenStreetMap",
-                      },
-                    );
-                  let n = 0,
-                    r = 0,
-                    s = !1;
-                  (e.on("tileload", () => {
-                    n++;
-                  }),
-                    e.on("tileerror", () => {
-                      (r++, !s && 0 === n && r >= 2 && ((s = !0), Mt.removeLayer(e), t.addTo(Mt)));
+                      }),
+                    ));
+                  const showBase = (i) => {
+                    const layer = bases[i],
+                      isMapbox = !!mapbox && 0 === i;
+                    let loaded = 0,
+                      failed = 0,
+                      passed = !1;
+                    mbxLive = isMapbox; // les fiches ne sont complétées par Mapbox que tant que la carte affiche ses tuiles (réglage « map »)
+                    (layer.on("tileload", () => {
+                      loaded++;
                     }),
-                    e.addTo(Mt),
+                      layer.on("tileerror", () => {
+                        (failed++,
+                          !passed &&
+                            0 === loaded &&
+                            failed >= 2 &&
+                            i + 1 < bases.length &&
+                            ((passed = !0), isMapbox && (mbxFallen = !0), Mt.removeLayer(layer), showBase(i + 1)));
+                      }),
+                      layer.addTo(Mt));
+                  };
+                  (showBase(0),
                     Mt.attributionControl.addAttribution("Garages © les contributeurs d'OpenStreetMap" + (GT.enabled ? ", Overture Maps" : "")),
                     (xt = L.layerGroup().addTo(Mt)));
                 }

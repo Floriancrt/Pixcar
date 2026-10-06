@@ -303,7 +303,7 @@ async function installMocks(ctx, opts = {}) {
   const log = opts.log || (() => {});
   const fonts = (key) => fs.readFileSync(path.join(__dirname, "fixtures", "fonts", key));
   const elements = opts.elements || buildElements();
-  const counters = (ctx.__counters = { overpass: 0, geocode: 0, tiles: 0, ct: 0, sirene: 0, wikidata: 0, upload: 0, logoFiles: [], siteIcons: [], sparql: "", other: [], google: [], reverse: 0, reverseUrls: [] });
+  const counters = (ctx.__counters = { overpass: 0, geocode: 0, tiles: 0, ct: 0, sirene: 0, wikidata: 0, upload: 0, logoFiles: [], siteIcons: [], sparql: "", other: [], google: [], mapbox: [], mapboxSearch: [], reverse: 0, reverseUrls: [] });
 
   await ctx.route("**/*", async (route) => {
     const url = new URL(route.request().url());
@@ -382,12 +382,52 @@ async function installMocks(ctx, opts = {}) {
     // IGN tiles
     if (h === "data.geopf.fr" && url.pathname.startsWith("/wmts")) {
       counters.tiles++;
+      if (opts.ignStatus) return route.fulfill({ status: opts.ignStatus, headers: CORS, body: "" }); // fond de l'IGN en panne : la carte passe à CARTO
       const z = +url.searchParams.get("TILEMATRIX"), y = +url.searchParams.get("TILEROW"), x = +url.searchParams.get("TILECOL");
       return route.fulfill({ status: 200, contentType: "image/png", headers: CORS, body: tilePNG(z, x, y) });
     }
     if (h.endsWith("basemaps.cartocdn.com")) {
       counters.tiles++;
       const m = url.pathname.match(/\/(\d+)\/(\d+)\/(\d+)/);
+      return route.fulfill({ status: 200, contentType: "image/png", headers: CORS, body: tilePNG(+m[1], +m[2], +m[3]) });
+    }
+    // Mapbox (suite « mapbox », opts.mapbox) : tuiles raster de 512 px (…/tiles/512/z/x/y[@2x]?access_token=…), chaque requête comptée dans
+    // counters.mapbox. opts.mapbox.status (401, 429…) les refuse : la carte doit passer au fond de l'IGN ; opts.mapbox.failFirst = n : seules les n premières échouent. Sans opts.mapbox, l'hôte est refusé comme
+    // tout hôte inconnu (et compté dans counters.other) : une page qui appellerait Mapbox sans en avoir le jeton le ferait savoir.
+    // Mapbox Search Box, catégorie (fiches complétées : modules/mapbox-fiches.js) : opts.mapbox.search = { places, status, failFirst, abortFirst, abort, delay }.
+    // places = [{ name, lat, lon, metadata, id }] (ou une fonction de l'URL) ; seuls ceux de la « bbox » demandée sont rendus, dans la forme réelle de la
+    // réponse (relevée à Cazères le 5 octobre 2026 : properties.metadata.phone / website / open_hours.periods ; les données ici sont fictives : les
+    // résultats de Mapbox ne se conservent pas, donc pas dans le dépôt). Chaque requête est comptée dans counters.mapboxSearch, pas dans counters.mapbox (les tuiles).
+    if (opts.mapbox && h === "api.mapbox.com" && url.pathname.startsWith("/search/searchbox/v1/category/")) {
+      counters.mapboxSearch.push(url.href);
+      const sx = opts.mapbox.search || {};
+      const n = counters.mapboxSearch.length;
+      if (sx.delay) await new Promise((r) => setTimeout(r, sx.delay));
+      if (sx.abort || n <= (sx.abortFirst || 0)) return route.abort();
+      const status = n <= (sx.failFirst || 0) ? 500 : sx.status || 200;
+      if (status !== 200) return route.fulfill({ status, contentType: "application/json", headers: CORS, body: JSON.stringify({ message: "Not Authorized - Invalid Token" }) });
+      const bb = (url.searchParams.get("bbox") || "").split(",").map(Number);
+      const inBox = (p) => bb.length === 4 && p.lon >= bb[0] && p.lon <= bb[2] && p.lat >= bb[1] && p.lat <= bb[3];
+      const places = (typeof sx.places === "function" ? sx.places(url) : sx.places || []).filter(inBox);
+      const feature = (p, i) => ({
+        type: "Feature",
+        geometry: { coordinates: [p.lon, p.lat], type: "Point" },
+        properties: {
+          name: p.name, mapbox_id: p.id || `dXJuOm1ieHBvaTpmaWN0aWY${i}`, feature_type: "poi", address: "1 Rue de l'Essai", full_address: "1 Rue de l'Essai, 69002 Lyon, France", place_formatted: "69002 Lyon, France",
+          context: { country: { name: "France", country_code: "FR", country_code_alpha_3: "FRA" }, postcode: { id: "x", name: "69002" }, place: { id: "y", name: "Lyon" } },
+          coordinates: { latitude: p.lat, longitude: p.lon, routable_points: [{ name: "POI", latitude: p.lat, longitude: p.lon }] },
+          language: "en", maki: "car-repair", poi_category: ["mécanicien", "prestations de service"], poi_category_ids: ["auto_repair", "services"], external_ids: { dataplor: "00000000-0000-4000-8000-00000000000" + (i % 10) },
+          metadata: p.metadata || {}, distance: 0,
+        },
+      });
+      return route.fulfill({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify({ type: "FeatureCollection", attribution: "© 2026 Mapbox and its suppliers. All rights reserved.", features: places.map(feature) }) });
+    }
+    if (opts.mapbox && h === "api.mapbox.com") {
+      counters.mapbox.push(url.href);
+      const status = counters.mapbox.length <= (opts.mapbox.failFirst || 0) ? 500 : opts.mapbox.status || 200; // failFirst : les n premières tuiles seulement échouent
+      if (status !== 200) return route.fulfill({ status, contentType: "application/json", headers: CORS, body: JSON.stringify({ message: "Not Authorized - Invalid Token" }) });
+      const m = url.pathname.match(/\/tiles\/512\/(\d+)\/(\d+)\/(\d+)(@2x)?$/);
+      if (!m) return route.fulfill({ status: 404, contentType: "application/json", headers: CORS, body: "{}" });
       return route.fulfill({ status: 200, contentType: "image/png", headers: CORS, body: tilePNG(+m[1], +m[2], +m[3]) });
     }
     // Wikidata (logos) -> SPARQL, then Commons Special:FilePath (302) -> upload.wikimedia.org (png)

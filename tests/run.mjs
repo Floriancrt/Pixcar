@@ -27,6 +27,9 @@ const SUITES = [
   { name: "legal", cmd: ["node", "tests/legal.js"] }, // construit lui-même la page avec une copie des sources dont src/legal.json est complet
   { name: "consent", cmd: ["node", "tests/consent.js"] }, // mesure d'audience : construit lui-même ses pages (avec et sans identifiant Google)
   { name: "garages", cmd: ["node", "tests/garages.js", FILE] }, // table de garages (Overture) dans la page : tuiles simulées par la suite
+  { name: "mapbox", cmd: ["node", "tests/mapbox.js"] }, // fond de carte Mapbox : construit lui-même ses pages (avec et sans jeton)
+  { name: "mbxfiches", cmd: ["node", "tests/mapbox-fiches.js"] }, // fiches complétées par Mapbox (téléphone, horaires, site) : construit lui-même ses pages
+  { name: "garagesmbx", cmd: ["node", "tests/garages-mapbox.js"] }, // table de garages ET fiches complétées par Mapbox, ensemble : construit lui-même sa page
   { name: "prerender", cmd: ["node", "tests/prerender.js", FILE] },
   { name: "budget", cmd: ["node", "tests/budget.js"], distOnly: true },
   { name: "offline", cmd: ["node", "tests/offline.js"], distOnly: true },

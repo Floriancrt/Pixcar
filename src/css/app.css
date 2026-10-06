@@ -1828,6 +1828,18 @@ select {
   line-height: 1.45;
   color: var(--ink-3);
 }
+/* Mention de l'origine d'une information complétée par Mapbox (téléphone, horaires, site) */
+.fact-src {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
 .price-note {
   margin: 0;
   padding: 11px 14px;

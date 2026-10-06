@@ -14,7 +14,10 @@ const KB = 1024;
 // Police : Outfit (32 Ko, fichier Google non modifié) remplace Plus Jakarta Sans (27 Ko) le 5 octobre 2026 : +5 Ko sur le chemin critique et
 // sur la page tout-en-un (mesuré : police 31,5 · page 30,2 · js 47,3 ; première visite 109,0 ; tout-en-un 111,9) ; les budgets de la police,
 // du chemin critique et de la page tout-en-un montent de 4 Ko, les autres ne bougent pas.
-const BUDGET = { page: 30, html: 10, js: 52, css: 22, font: 34, critical: 112, sw: 3, single: 116, icon: 20 };
+// Table de garages (+3,1 Ko) et fonds / fiches Mapbox (+3,1 Ko, inactifs tant que src/mapbox.json n'a pas de jeton) fusionnés dans main le 6 octobre 2026 : tous les
+// visiteurs téléchargent ce code même quand ces fonctions sont éteintes (mesuré : js 54,2 · première visite 116,2 · tout-en-un 119,2) ; les budgets du script, du chemin
+// critique et de la page tout-en-un montent de 6 Ko, les autres ne bougent pas. Pour les rabaisser : ne charger ces modules qu'à la demande (le build n'a pas de découpage du JS).
+const BUDGET = { page: 30, html: 10, js: 58, css: 22, font: 34, critical: 118, sw: 3, single: 122, icon: 20 };
 
 const results = [];
 const check = (name, cond, detail = "") => {
