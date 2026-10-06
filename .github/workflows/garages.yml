@@ -1,6 +1,6 @@
 # Construction de la table de garages (tuiles statiques tirées d'Overture Maps) : voir scripts/garages/README.md et docs/exploitation.md, section 8.
 # Ce workflow NE PUBLIE RIEN : il construit les tuiles, les contrôle, les range dans un artefact (14 jours) et écrit un résumé en agrégats.
-# Pour les joindre au site : télécharger l'artefact, puis `node scripts/build.mjs --pages pixcar.fr --garages <dossier>` (après accord de l'éditeur).
+# Pour les joindre au site : télécharger l'artefact (ou, avec data_branch, récupérer la branche garages-data…), puis `node scripts/build.mjs --pages pixcar.fr --garages <dossier>` (après accord de l'éditeur).
 name: Table de garages
 
 on:
@@ -20,6 +20,9 @@ on:
         type: choice
         options: ["on", "off"]
         default: "on"
+      data_branch:
+        description: "déposer aussi les tuiles sur cette branche (garages-data… ; vide : artefact seulement). Une branche à un seul commit, remplacée à chaque fois ; rien n'est publié"
+        default: ""
   # Mensuel, à activer le jour où la table est publiée (Overture publie une version par mois) :
   # schedule:
   #   - cron: "17 4 4 * *"
@@ -30,10 +33,10 @@ on:
       - ".github/workflows/garages.yml"
 
 permissions:
-  contents: read
+  contents: write # seulement pour l'étape « Déposer les tuiles » (branche garages-data…) ; le reste du travail ne fait que lire
 
 concurrency:
-  group: garages
+  group: garages-${{ inputs.area || 'push' }}
   cancel-in-progress: true
 
 jobs:
@@ -69,3 +72,20 @@ jobs:
           name: garages
           path: build/garages
           retention-days: 14
+      - name: Déposer les tuiles sur une branche de données (facultatif, ne publie rien)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.data_branch != '' }}
+        env:
+          BRANCH: ${{ inputs.data_branch }}
+          AREA: ${{ inputs.area }}
+          TOKEN: ${{ github.token }}
+        run: |
+          # Le nom est contrôlé : jamais main, jamais gh-pages, jamais une branche de travail (le dépôt est forcé, un seul commit).
+          if ! [[ "$BRANCH" =~ ^garages-data[a-z0-9-]*$ ]]; then echo "::error::data_branch doit commencer par garages-data (reçu : $BRANCH)"; exit 1; fi
+          cd build/garages
+          git init -q -b "$BRANCH"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Tuiles de la table de garages ($AREA, $(date -u +%F)), construites depuis ${GITHUB_SHA::7}"
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" push -f "https://github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
+          echo "Tuiles déposées sur la branche $BRANCH ($(git rev-parse --short HEAD))" >> "$GITHUB_STEP_SUMMARY"
