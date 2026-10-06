@@ -355,7 +355,7 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
     // ---- dark theme tokens + reduced motion ----
     ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, colorScheme: "dark" }));
     const dk = await page.evaluate(() => ({ card: getComputedStyle(document.documentElement).getPropertyValue("--card").trim(), scheme: getComputedStyle(document.documentElement).colorScheme }));
-    check("D18 dark tokens applied", dk.card === "#101410" && /dark/.test(dk.scheme), JSON.stringify(dk));
+    check("D18 dark tokens applied", dk.card === "#151829" && /dark/.test(dk.scheme), JSON.stringify(dk));
     await ctx.close();
     ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, reducedMotion: "reduce" }));
     await search(page, { service: "vidange" });

@@ -15,6 +15,7 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
 
   for (const scheme of ["light", "dark"]) {
     const T = scheme.toUpperCase().slice(0, 1);
+    const NV = scheme === "light" ? "16, 18, 31" : "7, 8, 15"; // le chrome est marine : #10121F en clair, #07080F en sombre
     // ===================== desktop =====================
     let { page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, colorScheme: scheme });
     const head = await page.evaluate(() => ({
@@ -34,40 +35,40 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
           return /<svg/.test(svg) && /<path/.test(svg) && png[0] === 0x89 && png[1] === 0x50 && png[2] === 0x4e && png[3] === 0x47;
         }, [head.icon, head.touch]);
     check(`${T}2 favicon is an SVG holding the symbol (data URI, or favicon.svg), apple-touch-icon a PNG`, iconsOk, head.icon.slice(0, 60));
-    check(`${T}3 single black theme-color`, head.themeColors.length === 1 && head.themeColors[0] === "#000000", JSON.stringify(head.themeColors));
+    check(`${T}3 single navy theme-color`, head.themeColors.length === 1 && head.themeColors[0] === "#10121F", JSON.stringify(head.themeColors));
     check(`${T}4 symbol path has 16 sectors, an arc pair each`, head.sprite && (head.sprite.match(/M/g) || []).length === 16 && (head.sprite.match(/A/g) || []).length === 32, head.sprite && head.sprite.slice(0, 80));
     const brand = await page.evaluate(() => {
       const a = document.querySelector(".rail .brand"), svg = a.querySelector("svg"), w = a.querySelector(".brand-word"), cs = getComputedStyle(svg), ws = getComputedStyle(w);
       return { label: a.getAttribute("aria-label"), use: svg.querySelector("use").getAttribute("href"), fill: cs.fill, svgW: Math.round(svg.getBoundingClientRect().width), word: ws.display, wordImg: /^url\("data:image\/png;base64,/.test(ws.backgroundImage), hidden: w.getAttribute("aria-hidden") };
     });
-    check(`${T}5 brand link: label, symbol via sprite in the logo mint (#9DFC8C), 48 px on desktop, wordmark hidden in the narrow rail`, brand.label === "Pixcar, accueil" && brand.use === "#px-mark" && eq(brand.fill, 157, 252, 140) && brand.svgW === 48 && brand.word === "none" && brand.wordImg && brand.hidden === "true", JSON.stringify(brand));
+    check(`${T}5 brand link: label, symbol via sprite in the logo light orange (#FF9A72), 48 px on desktop, wordmark hidden in the narrow rail`, brand.label === "Pixcar, accueil" && brand.use === "#px-mark" && eq(brand.fill, 255, 154, 114) && brand.svgW === 48 && brand.word === "none" && brand.wordImg && brand.hidden === "true", JSON.stringify(brand));
     const title = await page.evaluate(() => {
       const h = document.getElementById("garagesTitle"), p = h.querySelector(".t-brand"), t = h.querySelector(".t-text"), img = h.querySelector(".px-word");
       const pr = p.getBoundingClientRect(), tr = t.getBoundingClientRect(), cs = getComputedStyle(p), im = img.getBoundingClientRect();
       return { plate: [Math.round(pr.width), Math.round(pr.height)], bg: cs.backgroundColor, display: cs.display, textBox: [Math.round(tr.width), Math.round(tr.height)], label: img.getAttribute("aria-label"), role: img.getAttribute("role"), wordH: Math.round(im.height), name: (img.getAttribute("aria-label") + " " + h.querySelector(".t-text").textContent + h.querySelector(".sr-only").textContent).trim() };
     });
-    check(`${T}6 desktop: the wordmark on a black plate replaces the visible title; the text stays for screen readers`, title.display === "inline-flex" && eq(title.bg, 0, 0, 0) && title.plate[0] > 120 && title.textBox[0] <= 1 && title.wordH === 30 && title.label === "Pixcar" && title.role === "img" && title.name === "Pixcar Garages autour de votre adresse", JSON.stringify(title));
-    // pixel check of the plate: black background, near-white "pix", lime "car"
+    check(`${T}6 desktop: the wordmark on a navy plate replaces the visible title; the text stays for screen readers`, title.display === "inline-flex" && eq(title.bg, 16, 18, 31) && title.plate[0] > 120 && title.textBox[0] <= 1 && title.wordH === 30 && title.label === "Pixcar" && title.role === "img" && title.name === "Pixcar Garages autour de votre adresse", JSON.stringify(title));
+    // pixel check of the plate: navy background, near-white "pix", orange "car"
     const plateShot = path.join(__dirname, ".out", "shots", `brand-${scheme}-plate.png`);
     const shotOk = await page.locator(".t-brand").screenshot({ path: plateShot, timeout: 4000 }).then(() => true, () => false);
     const hist = shotOk ? execSync(`convert ${plateShot} -format %c histogram:info:-`, { maxBuffer: 64 * 1024 * 1024 }).toString().split("\n") : [];
-    let nBlack = 0, nLime = 0, nIce = 0;
+    let nNavy = 0, nOrange = 0, nIce = 0;
     for (const l of hist) {
       const m = l.match(/^\s*(\d+):\s*\(\s*(\d+),\s*(\d+),\s*(\d+)/);
       if (!m) continue;
       const [n, r, g, b] = m.slice(1).map(Number);
-      if (r <= 6 && g <= 6 && b <= 6) nBlack += n;
-      else if (Math.abs(r - 121) <= 8 && Math.abs(g - 250) <= 6 && Math.abs(b - 82) <= 10) nLime += n;
-      else if (r >= 238 && r <= 246 && Math.abs(r - g) <= 3 && Math.abs(r - b) <= 3) nIce += n;
+      if (Math.abs(r - 16) <= 6 && Math.abs(g - 18) <= 6 && Math.abs(b - 31) <= 6) nNavy += n;
+      else if (Math.abs(r - 253) <= 8 && Math.abs(g - 83) <= 10 && Math.abs(b - 25) <= 12) nOrange += n;
+      else if (r >= 238 && r <= 250 && g >= 238 && b >= 244 && Math.abs(r - g) <= 4) nIce += n;
     }
-    check(`${T}7 plate pixels: black background, near-white "pix" (#F2F2F2) and lime "car" (#79FA52) all present`, nBlack > 3000 && nLime > 150 && nIce > 150, JSON.stringify({ nBlack, nLime, nIce }));
+    check(`${T}7 plate pixels: navy background, near-white "pix" (#F4F5FA) and orange "car" (#FD5319) all present`, nNavy > 3000 && nOrange > 150 && nIce > 150, JSON.stringify({ nNavy, nOrange, nIce }));
     const chrome = await page.evaluate(() => {
       const dock = getComputedStyle(document.querySelector(".dock")), cur = getComputedStyle(document.querySelector('.tab[aria-current="page"]')), add = getComputedStyle(document.getElementById("addRepairBtn")), rail = getComputedStyle(document.querySelector(".rail"));
       return { dock: dock.backgroundImage.slice(0, 80), cur: [cur.backgroundColor, cur.color], add: [add.backgroundColor, add.color], railInk: rail.color };
     });
-    check(`${T}8 chrome is black in both themes: black dock under the rail, lime active tab with black icon, mint-tinted add button`, /rgb\(0, 0, 0\) 0px, rgb\(0, 0, 0\) 76px/.test(chrome.dock) && eq(chrome.cur[0], 121, 250, 82) && eq(chrome.cur[1], 0, 0, 0) && eq(chrome.railInk, 242, 242, 242), JSON.stringify(chrome));
+    check(`${T}8 chrome is navy in both themes: navy dock under the rail, orange active tab with navy icon, orange-tinted add button`, chrome.dock.includes(`rgb(${NV}) 0px, rgb(${NV}) 76px`) && eq(chrome.cur[0], 253, 83, 25) && eq(chrome.cur[1], 16, 18, 31) && eq(chrome.railInk, 244, 245, 250), JSON.stringify(chrome));
     const tok = await page.evaluate(() => { const s = getComputedStyle(document.documentElement); const g = (k) => s.getPropertyValue(k).trim(); return { accent: g("--accent"), btn: g("--btn"), indigo: g("--indigo"), pink: g("--pink"), canvas: g("--canvas") }; });
-    check(`${T}9 tokens: accent ${scheme === "light" ? "#0a7427 (forest, 4.5:1 on tinted backgrounds)" : "#79fa52 (lime)"}, old indigo/pink tokens gone`, tok.accent === (scheme === "light" ? "#0a7427" : "#79fa52") && tok.indigo === "" && tok.pink === "", JSON.stringify(tok));
+    check(`${T}9 tokens: accent ${scheme === "light" ? "#b13506 (burnt orange, 4.5:1 on tinted backgrounds)" : "#ff7c49 (light orange)"}, old indigo/pink tokens gone`, tok.accent === (scheme === "light" ? "#b13506" : "#ff7c49") && tok.indigo === "" && tok.pink === "", JSON.stringify(tok));
     // markers read the tokens
     await search(page, { service: "vidange" });
     await page.click("#list > li:nth-child(2) .g-main"); await page.waitForTimeout(800);
@@ -84,7 +85,7 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
       });
       return out;
     });
-    const exp = scheme === "light" ? { user: ["#ffffff", "#0a0d0a"], selected: ["#0a7427", "#ffffff"], priced: ["#0a0d0a", "#ffffff"], radius: ["#0a7427", "#0a7427"] } : { user: ["#040604", "#79fa52"], selected: ["#79fa52", "#040604"], priced: ["#f2f2f2", "#040604"], radius: ["#79fa52", "#79fa52"] };
+    const exp = scheme === "light" ? { user: ["#ffffff", "#10121F"], selected: ["#E5440B", "#ffffff"], priced: ["#10121F", "#ffffff"], radius: ["#E5440B", "#E5440B"] } : { user: ["#07080f", "#ff7c49"], selected: ["#ff7c49", "#07080f"], priced: ["#f4f5fa", "#07080f"], radius: ["#ff7c49", "#ff7c49"] };
     check(`${T}10 markers use the Pixcar tokens (user ring, selected, priced, search radius)`, JSON.stringify(mk.user) === JSON.stringify(exp.user) && JSON.stringify(mk.selected) === JSON.stringify(exp.selected) && JSON.stringify(mk.priced) === JSON.stringify(exp.priced) && JSON.stringify(mk.radius) === JSON.stringify(exp.radius), JSON.stringify(mk));
     const av = await page.evaluate(() => [...document.querySelectorAll("#list .avatar:not([data-c])")].slice(0, 12).map((a) => getComputedStyle(a).backgroundColor));
     const hue = (c) => { const [r, g, b] = rgb(c).map((x) => x / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b); if (mx === mn) return -1; const d = mx - mn; let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return Math.round(((h * 60) + 360) % 360); };
@@ -100,8 +101,8 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
       const add = getComputedStyle(document.getElementById("addRepairBtn")), cur = getComputedStyle(document.querySelector('.tab[aria-current="page"]')), tabs = getComputedStyle(document.getElementById("tabs"));
       return { plate: getComputedStyle(p).display, text: [getComputedStyle(t).position, Math.round(t.getBoundingClientRect().width)], word: [Math.round(w.width), Math.round(w.height)], symbol: Math.round(s.width), bar: before.backgroundColor, add: [add.backgroundColor, add.color], cur: [cur.backgroundColor, cur.color], tabs: tabs.backgroundColor };
     });
-    check(`${T}13 mobile: black top bar with symbol (40 px) + wordmark (24 px high, ~71 px wide), title stays text`, mob.plate === "none" && mob.text[0] !== "absolute" && mob.text[1] > 60 && mob.word[1] === 24 && mob.word[0] >= 70 && mob.word[0] <= 72 && mob.symbol === 40 && /rgba\(0, 0, 0, 0\.95\)/.test(mob.bar), JSON.stringify(mob));
-    check(`${T}14 mobile: lime add button and lime active tab on a black floating nav`, eq(mob.add[0], 121, 250, 82) && eq(mob.add[1], 0, 0, 0) && eq(mob.cur[0], 121, 250, 82) && /rgba\(0, 0, 0, 0\.93\)/.test(mob.tabs), JSON.stringify(mob));
+    check(`${T}13 mobile: navy top bar with symbol (40 px) + wordmark (24 px high, ~71 px wide), title stays text`, mob.plate === "none" && mob.text[0] !== "absolute" && mob.text[1] > 60 && mob.word[1] === 24 && mob.word[0] >= 70 && mob.word[0] <= 72 && mob.symbol === 40 && mob.bar === `rgba(${NV}, 0.95)`, JSON.stringify(mob));
+    check(`${T}14 mobile: orange add button and orange active tab on a navy floating nav`, eq(mob.add[0], 253, 83, 25) && eq(mob.add[1], 16, 18, 31) && eq(mob.cur[0], 253, 83, 25) && mob.tabs === `rgba(${NV}, 0.93)`, JSON.stringify(mob));
     check(`${T}15 mobile: no page error`, logs.errors.length === 0 && logs.console.length === 0, JSON.stringify([logs.errors, logs.console]));
     await ctx.close();
   }
@@ -112,7 +113,7 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
   const fpage = await fctx.newPage();
   await fpage.goto(`${server.url}/${FILE}`); await fpage.waitForTimeout(500);
   const fc = await fpage.evaluate(() => ({ plate: getComputedStyle(document.querySelector(".t-brand")).backgroundColor, rail: getComputedStyle(document.querySelector(".dock")).backgroundImage.slice(0, 60), adj: getComputedStyle(document.querySelector(".t-brand")).forcedColorAdjust }));
-  check("F1 forced colors: the wordmark plate and the rail keep their black background (the wordmark has a white part)", /rgb\(0, 0, 0\)/.test(fc.plate) && /rgb\(0, 0, 0\)/.test(fc.rail) && fc.adj === "none", JSON.stringify(fc));
+  check("F1 forced colors: the wordmark plate and the rail keep their navy background (the wordmark has a white part)", /rgb\(16, 18, 31\)/.test(fc.plate) && /rgb\(16, 18, 31\)/.test(fc.rail) && fc.adj === "none", JSON.stringify(fc));
   await fctx.close();
 
   await browser.close(); server.close();

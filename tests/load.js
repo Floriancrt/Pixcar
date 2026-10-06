@@ -223,10 +223,10 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
         return { road: g(".ld-asphalt", "stroke"), dash: g(".ld-dash", "stroke"), car: g(".ld-body", "fill"), edge: g(".ld-edge", "stroke"), island: g(".ld-island", "fill"), all: [...all] };
       });
       const want = scheme === "light"
-        ? { road: "rgb(10, 13, 10)", dash: "rgb(242, 242, 242)", car: "rgb(121, 250, 82)", island: "rgb(255, 255, 255)" }
-        : { road: "rgb(43, 51, 43)", dash: "rgb(242, 242, 242)", car: "rgb(121, 250, 82)", island: "rgb(16, 20, 16)" };
-      check(`A1 [${scheme}] charte colours: black / grey asphalt, off-white markings (#F2F2F2), lime car (#79FA52)`, col.road === want.road && col.dash === want.dash && col.car === want.car && col.island === want.island, JSON.stringify(col));
-      const allowed = new Set(["rgb(10, 13, 10)", "rgb(43, 51, 43)", "rgb(61, 70, 61)", "rgb(242, 242, 242)", "rgb(121, 250, 82)", "rgb(255, 255, 255)", "rgb(16, 20, 16)", "rgba(0, 0, 0, 0)"]);
+        ? { road: "rgb(16, 18, 31)", dash: "rgb(244, 245, 250)", car: "rgb(253, 83, 25)", island: "rgb(255, 255, 255)" }
+        : { road: "rgb(38, 43, 69)", dash: "rgb(244, 245, 250)", car: "rgb(253, 83, 25)", island: "rgb(21, 24, 41)" };
+      check(`A1 [${scheme}] charte colours: navy / grey-blue asphalt, off-white markings (#F4F5FA), orange car (#FD5319)`, col.road === want.road && col.dash === want.dash && col.car === want.car && col.island === want.island, JSON.stringify(col));
+      const allowed = new Set(["rgb(16, 18, 31)", "rgb(38, 43, 69)", "rgb(58, 64, 95)", "rgb(244, 245, 250)", "rgb(253, 83, 25)", "rgb(255, 255, 255)", "rgb(21, 24, 41)", "rgba(0, 0, 0, 0)"]);
       check(`A2 [${scheme}] nothing outside the charte (no red, blue or yellow anywhere in the pictogram)`, col.all.every((c) => allowed.has(c)), JSON.stringify(col.all));
       await injectScript(page, AXE);
       const ax = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } })).violations.map((v) => ({ id: v.id, n: v.nodes.length })));
