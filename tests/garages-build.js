@@ -42,7 +42,7 @@ function build(name, { garages, only = "dist", pages, legal = LEGAL } = {}) {
   fs.rmSync(src, { recursive: true, force: true });
   fs.cpSync(SRC, src, { recursive: true });
   fs.writeFileSync(path.join(src, "legal.json"), JSON.stringify(legal));
-  const env = { ...process.env, PIXCAR_API_BASE: "", PIXCAR_GA_ID: "" }; // ni API ni mesure d'audience : seule la table est en cause
+  const env = { ...process.env, PIXCAR_API_BASE: "", PIXCAR_GA_ID: "", PIXCAR_MAPBOX_TOKEN: "" }; // ni API, ni mesure d'audience, ni Mapbox (src/mapbox.json a un jeton, une construction --pages le prend) : seule la table est en cause
   const args = [BUILD, "--src", src, "--out", path.join(OUT, name)];
   if (only) args.push("--only", only);
   if (pages) args.push("--pages", pages);
