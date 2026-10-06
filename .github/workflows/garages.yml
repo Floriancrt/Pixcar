@@ -40,6 +40,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 240
+    defaults:
+      run:
+        shell: bash # « bash -eo pipefail » : un échec dans un tube arrête l'étape
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -51,7 +54,7 @@ jobs:
       - name: Dépendances
         run: pip install --quiet -r scripts/garages/requirements.txt
       - name: Tests (sans réseau)
-        run: python scripts/garages/test_garages.py | tail -4
+        run: python scripts/garages/test_garages.py
       - name: Construction
         env:
           AREA: ${{ inputs.area || 'dept:Haute-Garonne' }}
