@@ -1,7 +1,7 @@
 """Rapprochement de deux garages : même règle que la page (src/js/modules/garages-table.js), en Python.
 
 Un lieu correspond à un garage s'il est à moins de 150 m ET porte le même nom (un mot distinctif en commun, ou un nom contenu dans l'autre) ;
-un garage sans nom ne correspond qu'à l'unique lieu situé à moins de 40 m. Le test tests/garages.diff.mjs (voir README) compare ce fichier au module
+un garage sans nom ne correspond qu'à l'unique lieu situé à moins de 40 m. Le script scripts/garages/diff_js.mjs (lancé par test_garages.py) compare ce fichier au module
 JavaScript sur des milliers de paires : les deux ne doivent jamais diverger.
 """
 import math

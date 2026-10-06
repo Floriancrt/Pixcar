@@ -9,7 +9,7 @@
 //                                de sécurité du contenu passe par une balise <meta> dans la page, + CNAME et .nojekyll
 //             --garages <dossier> joint à dist/ (dist/garages/) les tuiles de la table de garages construites par scripts/garages/build.py : la page
 //                                les charge à côté d'OpenStreetMap, et les textes de sources et de confidentialité en parlent. Sans cette option, la table
-//                                est inactive (balise pixcar-garages vide) et les textes n'en disent rien. Jamais jointes à la page tout-en-un.
+//                                est inactive (balise pixcar-garages vide) et les textes n'en disent rien. Jamais jointes (ni citées dans les textes) à la page tout-en-un.
 //
 // Variable d'environnement : PIXCAR_API_BASE = URL de l'API des réparations (vide : stockage dans le navigateur).
 //                            PIXCAR_ALLOW_NO_LEGAL=1 : construire avec l'API même si src/legal.json est incomplet (essai seulement, voir legalParts).
@@ -83,8 +83,9 @@ const garages = await (async () => {
   if (!keys.length) throw new Error("--garages : aucune case dans index.json");
   return { dir, index, keys };
 })();
-// Variantes du texte selon la table : <!--GT:on-->…<!--/GT:on--> (avec les tuiles) et <!--GT:off-->…<!--/GT:off--> (sans).
-const garagesVariants = (html) => html.replace(/<!--GT:(on|off)-->([\s\S]*?)<!--\/GT:\1-->/g, (m, mode, text) => ((mode === "on") === !!garages ? text : ""));
+// Variantes du texte selon la table : <!--GT:on-->…<!--/GT:on--> (avec les tuiles) et <!--GT:off-->…<!--/GT:off--> (sans). La page tout-en-un n'a jamais les
+// tuiles : ses textes sont toujours ceux « sans », même quand le site (dist/) est construit avec.
+const garagesVariants = (html, on) => html.replace(/<!--GT:(on|off)-->([\s\S]*?)<!--\/GT:\1-->/g, (m, mode, text) => ((mode === "on") === !!on ? text : ""));
 
 // Leaflet est chargé à la demande (premier affichage de la carte). Page tout-en-un : CDN. dist : copie locale puis CDN.
 const LEAFLET_CDN = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js";
@@ -171,7 +172,7 @@ function optionsHtml(list, extra = "") {
 // l'API est branchée (PIXCAR_API_BASE) : le build échoue alors, on n'ouvre pas au public des déclarations sans informer les visiteurs.
 // PIXCAR_ALLOW_NO_LEGAL=1 lève cette garde pour un essai.
 const LEGAL_FIELDS = ["editorLine", "contact", "hostPages", "hostApi", "repairRetentionMonths", "updated"];
-async function legalParts() {
+async function legalParts(withGarages) {
   const config = JSON.parse(await read(SRC, "legal.json"));
   const filled = (k) => String(config[k] ?? "").trim() !== "";
   const problems = LEGAL_FIELDS.filter((k) => !filled(k)).map((k) => `${k} : à renseigner`);
@@ -185,7 +186,7 @@ async function legalParts() {
   // Variantes du texte selon la mesure d'audience : <!--GA:on-->…<!--/GA:on--> (avec Google Analytics) et <!--GA:off-->…<!--/GA:off--> (sans).
   const variants = (html) => html.replace(/<!--GA:(on|off)-->([\s\S]*?)<!--\/GA:\1-->/g, (m, mode, text) => ((mode === "on") === !!analytics ? text : ""));
   const gaFields = { cookie: analytics && analytics.cookie, retentionMonths: analytics && analytics.retentionMonths };
-  const dialog = garagesVariants(variants(await read(SRC, "partials/legal.html")))
+  const dialog = garagesVariants(variants(await read(SRC, "partials/legal.html")), withGarages)
     .replace(/\{\{legal\.([A-Za-z]+)\}\}/g, (m, k) => {
       if (!LEGAL_FIELDS.includes(k)) throw new Error(`partials/legal.html : {{legal.${k}}} n'existe pas dans src/legal.json`);
       return esc(String(config[k]).trim());
@@ -203,10 +204,10 @@ async function legalParts() {
     linkDialog: '<p class="dlg-note" data-store-only="remote"><button type="button" class="link-btn" data-open-legal>Comment Pixcar traite vos données</button></p>',
   };
 }
-async function pageParts() {
+async function pageParts(withGarages) {
   const road = oneLine(await read(SRC, "partials/ld-road.svg"));
   const car = oneLine(await read(SRC, "partials/ld-car.svg"));
-  let body = garagesVariants(await read(SRC, "partials/body.html"));
+  let body = garagesVariants(await read(SRC, "partials/body.html"), withGarages);
   let dialog = await read(SRC, "partials/dialog.html");
   const fill = (text, pairs) => {
     for (const [mark, value, times = 1] of pairs) {
@@ -215,7 +216,7 @@ async function pageParts() {
     }
     return text;
   };
-  const legal = await legalParts();
+  const legal = await legalParts(withGarages);
   body = fill(body, [
     ["<!--LD_ROAD-->", road],
     ["<!--LD_CAR-->", car],
@@ -386,10 +387,11 @@ async function buildDist(parts) {
 }
 
 // ------------------------------------------------------------------------------------------------
-const parts = await pageParts();
+const parts = await pageParts(false);
+const distParts = garages ? await pageParts(true) : parts;
 await mkdir(OUT, { recursive: true });
 const single = only === "dist" ? null : await buildSingle(parts);
-const dist = only === "single" ? null : await buildDist(parts);
+const dist = only === "single" ? null : await buildDist(distParts);
 const kb = (n) => (n / 1024).toFixed(1) + " Ko";
 
 if (check) {

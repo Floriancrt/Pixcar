@@ -130,6 +130,14 @@ def county_polygon(name, rough_bbox, release, log=print):
     raise RuntimeError("contour introuvable pour " + name)
 
 
+def keep_place(r, country="FR"):
+    """Une ligne d'Overture est-elle un lieu de garage à garder ? Catégorie de la liste KINDS, et adresse du pays voulu (sans adresse ni pays : gardée ; country=None : tout pays)."""
+    if ((r.get("taxonomy") or {}).get("primary")) not in KINDS:
+        return False
+    addr = (r.get("addresses") or [{}])[0] or {}
+    return not (country and addr.get("country") not in (country, None))
+
+
 def read_places(poly, release, log=print, country="FR"):
     """Lieux de garage de la zone « poly » (forme shapely) : lignes brutes (dict) avec la position au centre de la boîte du lieu."""
     import numpy as np
@@ -151,12 +159,7 @@ def read_places(poly, release, log=print, country="FR"):
         xs = np.array([(r["bbox"]["xmin"] + r["bbox"]["xmax"]) / 2 for r in rows])
         ys = np.array([(r["bbox"]["ymin"] + r["bbox"]["ymax"]) / 2 for r in rows])
         for r, ok in zip(rows, contains_xy(poly, xs, ys)):
-            if not ok:
-                continue
-            if ((r.get("taxonomy") or {}).get("primary")) not in KINDS:
-                continue
-            addr = (r.get("addresses") or [{}])[0] or {}
-            if country and addr.get("country") not in (country, None):
+            if not ok or not keep_place(r, country):
                 continue
             b = r["bbox"]
             r["_lat"], r["_lon"] = (b["ymin"] + b["ymax"]) / 2, (b["xmin"] + b["xmax"]) / 2

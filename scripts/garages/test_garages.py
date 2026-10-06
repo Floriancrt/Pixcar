@@ -4,6 +4,7 @@ Les lieux, noms et numéros ci-dessous sont fictifs (numéros en +33 1 99 …). 
 fonctions de lecture ; le reste de la chaîne (mise en forme, doublons, fermés, écriture, contrôle) tourne pour de bon.
 """
 import json
+import math
 import os
 import shutil
 import sys
@@ -55,6 +56,14 @@ check(T.clean_site("garage-dupont.fr") == "https://garage-dupont.fr", "schéma a
 check(T.clean_site("https://www.pagesjaunes.fr/pros/123") == "" and T.clean_site("https://fr.frmap.org/x") == "", "annuaires écartés")
 check(T.clean_site("javascript:alert(1)") == "" and T.clean_site("ftp://x.example.fr") == "" and T.clean_site("https://user:pw@x.example.fr/") == "", "schémas et identifiants refusés")
 check(T.clean_site("https://localhost/") == "" and T.clean_site("") == "" and T.clean_site("https://" + "a" * 300 + ".fr") == "", "adresses inutilisables")
+check(T.clean_site("https://x.example.fr/" + "p" * 220) == "" and T.clean_site("https://x.example.fr/" + "p" * 150).endswith("p" * 150), "une adresse de plus de 200 caractères est refusée (la page n'en lit pas davantage), une de 170 est gardée")
+
+# ------------------------------------------------------------------------------------------------------------------ numéros
+check(M.phone_parse("05 61 97 65 45 ; +33561976545") == ["+33561976545"], "même numéro écrit de deux façons : une fois")
+check(M.phone_parse("0561976545") == ["+33561976545"] and M.phone_parse("00 33 5 61 97 65 45") == ["+33561976545"] and M.phone_parse("+33 (0)5 61 97 65 45") == ["+33561976545"], "formes françaises reconnues")
+check(M.phone_parse("+33 5 61 97 65") == [] and M.phone_parse("+33 5 61 97 65 45 6") == [] and M.phone_parse("01 23") == [] and M.phone_parse("0461976545 12") == [], "numéro français de la mauvaise longueur : ignoré")
+check(M.phone_parse("+44 20 7946 0958") == ["+442079460958"] and M.phone_parse("+44 12") == [] and M.phone_parse("+" + "1" * 16) == [], "numéro étranger : gardé s'il est plausible, ignoré trop court ou trop long")
+check(M.phone_parse(["0561976545", None, "", "05 61 97 65 46"]) == ["+33561976545", "+33561976546"] and M.phone_parse(None) == [], "liste et valeurs absentes")
 
 # ------------------------------------------------------------------------------------------------------------------ enregistrement
 r1 = row(1, "  GARAGE   DUPONT ", 43.21741234, 1.10146789, phones=["05 61 97 65 45", "+33 6 12 34 56 78", "0199000001"], websites=["https://www.annuaire.pagesjaunes.fr/x", "https://www.garage-dupont.fr/?utm_medium=x"],
@@ -66,6 +75,9 @@ check(rec["web"] == "https://www.garage-dupont.fr/" and rec["addr"] == "12 Rue d
 check(rec["brand"] == "Dupont Auto" and rec["conf"] == 0.88 and rec["src"] == "fm", "enseigne, confiance, origines : %r" % rec)
 check(T.build_record(row(2, "", 43.2, 1.1), O.KINDS) is None and T.build_record(row(3, "1234", 43.2, 1.1), O.KINDS) is None, "nom vide ou sans lettre : écarté")
 check(T.build_record(row(4, "Garage X", 43.2, 1.1, cat="car_wash"), O.KINDS) is None, "catégorie non retenue : écartée")
+check(T.build_record(row(66, "A", 43.2, 1.1), O.KINDS) is None, "nom d'une seule lettre : écarté")
+check("pc" not in T.build_record(row(61, "Garage Pc", 43.2, 1.1, pc="3122"), O.KINDS) and "pc" not in T.build_record(row(62, "Garage Pc", 43.2, 1.1, pc="311220"), O.KINDS) and T.build_record(row(63, "Garage Pc", 43.2, 1.1, pc="31 220"), O.KINDS)["pc"] == "31220", "code postal : cinq chiffres ou rien")
+check(T.build_record(dict(row(64, "Garage N", 43.2, 1.1), _lat=float("nan")), O.KINDS) is None and T.build_record(dict(row(65, "Garage N", 43.2, 1.1), _lon=float("inf")), O.KINDS) is None, "position qui n'est pas un nombre fini : écartée")
 check(T.build_record(dict(row(5, "Garage Y", 43.2, 1.1), _lat=None), O.KINDS) is None, "position absente : écartée")
 minimal = T.build_record(row(6, "Pneus Express", 43.3, 1.2, cat="tire_dealer_and_repair", phones=None, websites=None, street="", pc="", loc=""), O.KINDS)
 check(minimal == {"id": row(6, "x", 0, 0)["id"], "name": "Pneus Express", "lat": 43.3, "lon": 1.2, "kind": "t", "conf": 0.8, "src": "m"}, "champs vides omis : %r" % minimal)
@@ -81,9 +93,45 @@ out, absorbed, big = T.merge_duplicates([a, b, c, d])
 check(len(out) == 3 and absorbed == 1 and big == 0, "deux fiches du même garage réunies, les autres intactes : %d/%d" % (len(out), absorbed))
 m = next(r for r in out if r["name"] in ("Garage Martin", "Martin Automobiles") and r["lat"] < 43.4)
 check(m["id"] == b["id"] and m["phones"] == ["+33199000011", "+33199000010"] and m["web"] == "https://martin-auto.fr" and "f" in m["src"] and "m" in m["src"], "la fiche la plus complète garde la main, numéros réunis : %r" % m)
+e1 = dict(T.build_record(row(70, "Garage Roux", 43.2000, 1.1000, phones=["0199000070"], conf=0.9), O.KINDS))
+e2 = dict(T.build_record(row(71, "Roux Automobiles", 43.2003, 1.1002, websites=["https://roux-auto.example.fr"], brand="Roux", conf=0.5), O.KINDS))
+mm, _, _ = T.merge_duplicates([e1, e2])
+check(len(mm) == 1 and mm[0]["id"] == e1["id"] and mm[0].get("web") == "https://roux-auto.example.fr" and mm[0].get("brand") == "Roux", "la fiche gardée reprend le site et l'enseigne que l'autre avait seule : %r" % mm)
 five = [dict(T.build_record(row(20 + i, "Garage Durand", 43.2 + i * 0.0001, 1.1), O.KINDS)) for i in range(5)]
 out5, ab5, big5 = T.merge_duplicates(five)
 check(len(out5) == 5 and ab5 == 0 and big5 == 1, "un amas de plus de trois lieux n'est pas réuni : %d/%d/%d" % (len(out5), ab5, big5))
+
+# ------------------------------------------------------------------------------------------------------------------ grille
+def at(north_m, east_m, base=(43.2174, 1.1014)):
+    return {"lat": base[0] + north_m / 111320, "lon": base[1] + east_m / (111320 * math.cos(math.radians(base[0])))}
+
+
+pts = [dict(name="p%d" % i, **at(i * 30, i * 41)) for i in range(-12, 13)]
+grid = M.Grid(pts)
+for c0 in pts:
+    want = sorted(p["name"] for p in pts if M.meters(c0, p) <= M.NEAR_M)
+    got = sorted(p["name"] for p in grid.near(c0["lat"], c0["lon"]) if M.meters(c0, p) <= M.NEAR_M)
+    check(got == want, "l'index en cases rend tous les voisins, d'une case à l'autre : %s %r %r" % (c0["name"], got, want))
+
+# ------------------------------------------------------------------------------------------------------------------ lignes d'Overture
+fr = {"taxonomy": {"primary": "automotive_repair"}, "addresses": [{"country": "FR"}]}
+check(O.keep_place(fr) and O.keep_place(dict(fr, addresses=[])) and O.keep_place(dict(fr, addresses=None)) and O.keep_place(dict(fr, addresses=[{"country": None}])), "lieu de garage français, ou sans pays : gardé")
+check(not O.keep_place(dict(fr, addresses=[{"country": "ES"}])) and not O.keep_place(dict(fr, taxonomy={"primary": "car_wash"})) and not O.keep_place({"addresses": [{"country": "FR"}]}), "autre pays ou autre catégorie : écarté")
+check(O.keep_place(dict(fr, addresses=[{"country": "ES"}]), country=None), "country=None : tout pays")
+# lecture d'une zone, sans réseau : les fichiers et les groupes de lignes sont simulés, le tri des lignes (zone, catégorie, pays) tourne pour de bon
+from shapely.geometry import box  # noqa: E402
+
+rows_in = [row(80, "Garage Dans", 43.2, 1.1), row(81, "Garage Hors", 44.2, 2.1), row(82, "Garage Espagnol", 43.21, 1.11, country="ES"), row(83, "Lavage", 43.22, 1.12, cat="car_wash")]
+saved_io = (O.open_fs, O.theme_files, O.row_group_hits, O.read_groups)
+O.open_fs = lambda: None
+O.theme_files = lambda release, theme, typ: ["places/part-1.parquet"]
+O.row_group_hits = lambda fs, k, bbox: [0]
+O.read_groups = lambda fs, k, hits, columns: [dict(r) for r in rows_in]
+try:
+    got, scanned = O.read_places(box(0.9, 43.0, 1.3, 43.4), "release/essai", log=lambda *a: None)
+finally:
+    O.open_fs, O.theme_files, O.row_group_hits, O.read_groups = saved_io
+check([r["names"]["primary"] for r in got] == ["Garage Dans"] and scanned == 4 and (got[0]["_lat"], got[0]["_lon"]) == (43.2, 1.1), "lecture d'une zone : seul le garage français de la zone est gardé : %r" % [r["names"]["primary"] for r in got])
 
 # ------------------------------------------------------------------------------------------------------------------ fermés
 recs = [dict(T.build_record(row(30 + i, nm, 43.20 + i * 0.01, 1.10), O.KINDS)) for i, nm in enumerate(["Garage Fermé", "Garage Ouvert", "Garage Renommé", "Garage Inconnu"])]
@@ -133,6 +181,30 @@ try:
     broken(lambda d: d["g"][0].update(web="javascript:alert(1)"), "site inattendu")
     broken(lambda d: d["g"].append(dict(d["g"][0])), "en double")
     broken(lambda d: d["g"].pop(), "l'index en annonce")
+    ipath = os.path.join(tmp, "index.json")
+    igood = open(ipath, "rb").read()
+
+    def broken_index(mutate, needle):
+        data = json.loads(igood)
+        mutate(data)
+        open(ipath, "w", encoding="utf-8").write(json.dumps(data))
+        probs = T.validate_dir(tmp)
+        open(ipath, "wb").write(igood)
+        check(any(needle in p for p in probs), "défaut d'index vu (%s) : %r" % (needle, probs))
+
+    broken_index(lambda d: d.update(step=0.5), "pas ou origine")
+    broken_index(lambda d: d.update(x0=0), "pas ou origine")
+    broken_index(lambda d: d.update(count=d["count"] + 1), "dans les cases, l'index en annonce")
+    broken_index(lambda d: d["tiles"].update({t0[:-5]: d["tiles"][t0[:-5]] + 1}), "l'index en annonce")
+    broken_index(lambda d: d.update(closure="peut-être"), "closure")
+    broken_index(lambda d: d.update(v=2), "version inconnue")
+    broken_index(lambda d: d.pop("built"), "« built » manque")
+    heavy = T.MAX_TILE_BYTES
+    T.MAX_TILE_BYTES = 50
+    try:
+        check(any("au-delà de" in p for p in T.validate_dir(tmp)), "case trop lourde vue")
+    finally:
+        T.MAX_TILE_BYTES = heavy
     check(T.validate_dir(tmp) == [], "après réparation, la sortie est de nouveau conforme")
     os.remove(os.path.join(tmp, "index.json"))
     check(any("index.json illisible" in p for p in T.validate_dir(tmp)), "index absent vu")
@@ -224,6 +296,17 @@ try:
         check(False, "la construction aurait dû être refusée")
     except SystemExit as e:
         check("sans réponse" in str(e), "refus quand le registre est muet : %s" % e)
+    # un registre muet sur quelques départements seulement : construction acceptée, et l'index le dit
+    S.load = lambda codes, log=print, workers=4, fetcher=None: ([{"name": "Garage Dupont", "lat": 43.2174, "lon": 1.1014, "siret": "1"}], [], ["09"])
+    code = B.main(["--area", "bbox:0.9,43.0,1.3,43.4", "--dept-codes", "31,09", "--out", out_dir + "5", "--built", "2026-10-06"])
+    idx5 = json.load(open(os.path.join(out_dir + "5", "index.json"), encoding="utf-8"))
+    check(code == 0 and idx5["closure"] == "partial" and idx5["closure_missing"] == ["09"], "registre partiel : %r" % {k: v for k, v in idx5.items() if k != "tiles"})
+    # le registre demande les départements de la zone
+    try:
+        B.main(["--area", "bbox:0.9,43.0,1.3,43.4", "--out", out_dir + "6", "--built", "2026-10-06"])
+        check(False, "la construction aurait dû demander les codes de département")
+    except SystemExit as e:
+        check("--dept-codes" in str(e), "sans codes de département : %s" % e)
     # --sirene off : aucun retrait, closure « none »
     code = B.main(["--area", "bbox:0.9,43.0,1.3,43.4", "--sirene", "off", "--out", out_dir + "3", "--built", "2026-10-06"])
     idx3 = json.load(open(os.path.join(out_dir + "3", "index.json"), encoding="utf-8"))

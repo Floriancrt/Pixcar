@@ -3044,7 +3044,7 @@ import { SERVICES } from "./shared/services.js";
                       (r++, !s && 0 === n && r >= 2 && ((s = !0), Mt.removeLayer(e), t.addTo(Mt)));
                     }),
                     e.addTo(Mt),
-                    Mt.attributionControl.addAttribution("Garages © les contributeurs d'OpenStreetMap"),
+                    Mt.attributionControl.addAttribution("Garages © les contributeurs d'OpenStreetMap" + (GT.enabled ? ", Overture Maps" : "")),
                     (xt = L.layerGroup().addTo(Mt)));
                 }
                 const n =

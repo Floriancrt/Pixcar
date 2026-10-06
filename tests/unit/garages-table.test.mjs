@@ -68,6 +68,8 @@ describe("cleanTile : lecture défensive", () => {
     assert.equal(cleanTile(tileJson([{ ...ok, web: 'https://a.example/"onload=x' }]))[0].web, "", "guillemet dans l'adresse");
     assert.equal(cleanTile(tileJson([{ ...ok, web: "https://a.example/" + "x".repeat(300) }]))[0].web, "", "adresse trop longue");
     assert.equal(cleanTile(tileJson([{ ...ok, name: "x".repeat(300) }]))[0].name.length, 120);
+    const long = cleanTile(tileJson([{ ...ok, addr: "a".repeat(300), loc: "l".repeat(300), brand: "b".repeat(300) }]))[0];
+    assert.deepEqual([long.addr.length, long.loc.length, long.brand.length], [160, 80, 60], "adresse, commune et enseigne sont bornées");
   });
 });
 
@@ -78,6 +80,14 @@ describe("rapprochement (même règle que la page et que matching.py)", () => {
     assert.ok(!sameName("Carrosserie Martin", "Carrosserie Dupont"), "les mots génériques seuls ne suffisent pas");
     assert.ok(!sameName("", "Garage Dupont") && !sameName("Garage Dupont", ""));
     assert.ok(!hasRealName("") && !hasRealName("Garage (nom non renseigné)") && !hasRealName("Spécialiste pneus (sans nom)") && hasRealName("Garage Dupont"));
+    assert.ok(!sameName("Garage A2", "Atelier A2"), "un mot de deux lettres ne distingue pas un garage d'un autre");
+    assert.ok(!sameName("AB", "AB Auto"), "un nom très court n'est pas « contenu » dans un autre");
+  });
+  test("distance : valeurs connues (Paris–Lyon environ 392 km, un millième de degré de latitude 111,2 m)", () => {
+    const d = meters({ lat: 48.8566, lon: 2.3522 }, { lat: 45.764, lon: 4.8357 });
+    assert.ok(d > 390800 && d < 393200, String(d));
+    assert.ok(Math.abs(meters({ lat: 43, lon: 1 }, { lat: 43.001, lon: 1 }) - 111.2) < 0.5);
+    assert.equal(meters(C, C), 0);
   });
   test("même nom à moins de 150 m", () => {
     const g = garage("Garage Dupont", C);
@@ -182,6 +192,13 @@ describe("createTable : chargement", () => {
     f["garages/t/172-44.json"] = { v: 9, g: [] };
     const r = await mk(f, []).load(C.lat, C.lon, 10);
     assert.equal(r.failed, 1);
+  });
+  test("une réponse en erreur n'est pas lue, même si son corps ressemble à une tuile", async () => {
+    const f = files();
+    f["garages/t/172-44.json"] = () => ({ ok: false, status: 503, json: async () => clone(tileJson([here])) });
+    const r = await mk(f, []).load(C.lat, C.lon, 10);
+    assert.equal(r.failed, 1);
+    assert.ok(!r.recs.some((x) => x.name === "Garage Ici"));
   });
   test("index illisible, d'un autre format ou périmé : la table reste éteinte", async () => {
     for (const bad of [index({ v: 2 }), index({ step: 0.5 }), index({ x0: 0 }), index({ tiles: null }), index({ built: "hier" }), index({ built: "2026-01-01" }), null]) {
@@ -361,6 +378,13 @@ describe("mergeTable", () => {
     const second = mergeTable(first.list, recs, H);
     assert.equal(second.list.length, first.list.length);
     assert.equal(second.added, 0);
+    assert.equal(second.matched, 0, "les garages ajoutés la première fois ne sont pas des garages d'OpenStreetMap à compléter");
+  });
+  test("un garage de la liste sans nom de garage n'écarte pas un lieu qui partage seulement un mot de son libellé de remplacement", () => {
+    const g = garage("Spécialiste pneus (sans nom)", C);
+    const m = mergeTable([g], [rec("Spécialiste Pneus Dupont", at(100, 0))], H);
+    assert.equal(m.added, 1, "à 100 m, un libellé de remplacement ne vaut pas un nom");
+    assert.equal(m.dup, 0);
   });
   test("sans lieu, la liste est celle d'OpenStreetMap", () => {
     const gs = [garage("Garage Dupont", C)];
