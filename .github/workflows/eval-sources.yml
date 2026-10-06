@@ -1,0 +1,35 @@
+# Évaluation ponctuelle (hors production) : que donnent le registre SIRENE, OpenStreetMap et Overture en téléphone, site et couverture
+# sur un département ? Aucune donnée n'est conservée : le rapport ne contient que des agrégats (voir scripts/eval-sources/README.md).
+# Cette branche n'est pas destinée à être fusionnée dans main.
+name: Évaluation des sources de garages
+
+on:
+  push:
+    branches: [evaluation-sources]
+    paths:
+      - "scripts/eval-sources/**"
+      - ".github/workflows/eval-sources.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-sources
+  cancel-in-progress: true
+
+jobs:
+  evaluation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dépendances
+        run: pip install --quiet pyarrow fsspec aiohttp shapely numpy osmium
+      - name: Tests de l'évaluation (sans réseau)
+        run: python scripts/eval-sources/test_eval.py | tail -3
+      - name: Évaluation de la Haute-Garonne
+        run: python scripts/eval-sources/run.py --dept 31 --name Haute-Garonne
