@@ -7,6 +7,9 @@
 //   options : --only single|dist · --src <dossier des sources> · --out <dossier de sortie>   (utilisées par les tests de mutation)
 //             --pages <domaine>  sortie dist/ pour GitHub Pages (ex. pixcar.fr) : pas de _headers (GitHub Pages les ignore), la politique
 //                                de sécurité du contenu passe par une balise <meta> dans la page, + CNAME et .nojekyll
+//             --garages <dossier> joint à dist/ (dist/garages/) les tuiles de la table de garages construites par scripts/garages/build.py : la page
+//                                les charge à côté d'OpenStreetMap, et les textes de sources et de confidentialité en parlent. Sans cette option, la table
+//                                est inactive (balise pixcar-garages vide) et les textes n'en disent rien. Jamais jointes à la page tout-en-un.
 //
 // Variable d'environnement : PIXCAR_API_BASE = URL de l'API des réparations (vide : stockage dans le navigateur).
 //                            PIXCAR_ALLOW_NO_LEGAL=1 : construire avec l'API même si src/legal.json est incomplet (essai seulement, voir legalParts).
@@ -37,6 +40,7 @@ const OUT = check ? await mkdtemp(join(tmpdir(), "pixcar-build-")) : resolve(arg
 const DIST = join(OUT, "dist");
 const only = arg("only"); // « single » ou « dist » : une seule sortie
 const pages = arg("pages"); // domaine servi par GitHub Pages : voir l'en-tête de ce fichier
+const garagesDir = arg("garages"); // dossier de tuiles de la table de garages : voir l'en-tête de ce fichier
 if (pages !== undefined && !/^(?!-)[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(pages)) throw new Error(`--pages attend un nom de domaine (ex. pixcar.fr), reçu « ${pages} »`);
 const { OTHER_SERVICE, SERVICES } = await import(pathToFileURL(join(SRC, "js/shared/services.js")).href);
 const dev = process.argv.includes("--dev");
@@ -61,6 +65,26 @@ const analytics = await (async () => {
   const months = Number.isInteger(config.retentionMonths) && config.retentionMonths > 0 ? config.retentionMonths : 14;
   return { id, cookie: id.slice(2), retentionMonths: months };
 })();
+
+// Table de garages : tuiles de scripts/garages/build.py. Contrôle minimal ici (la construction a déjà contrôlé la sortie : tests/garages.js le vérifie aussi) : un
+// index que la page ne saurait pas lire ne doit jamais être publié.
+const garages = await (async () => {
+  if (garagesDir === undefined) return null;
+  const dir = resolve(garagesDir);
+  let index;
+  try {
+    index = JSON.parse(await readFile(join(dir, "index.json"), "utf8"));
+  } catch (e) {
+    throw new Error(`--garages : index.json illisible dans ${dir} (${e.message})`);
+  }
+  if (index.v !== 1 || index.step !== 0.25 || index.x0 !== -10 || !index.tiles || typeof index.tiles !== "object") throw new Error("--garages : index.json inattendu (version, pas ou origine différents de ceux de la page)");
+  const keys = Object.keys(index.tiles);
+  for (const k of keys) if (!/^-?\d+--?\d+$/.test(k)) throw new Error(`--garages : case « ${k} » inattendue`);
+  if (!keys.length) throw new Error("--garages : aucune case dans index.json");
+  return { dir, index, keys };
+})();
+// Variantes du texte selon la table : <!--GT:on-->…<!--/GT:on--> (avec les tuiles) et <!--GT:off-->…<!--/GT:off--> (sans).
+const garagesVariants = (html) => html.replace(/<!--GT:(on|off)-->([\s\S]*?)<!--\/GT:\1-->/g, (m, mode, text) => ((mode === "on") === !!garages ? text : ""));
 
 // Leaflet est chargé à la demande (premier affichage de la carte). Page tout-en-un : CDN. dist : copie locale puis CDN.
 const LEAFLET_CDN = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js";
@@ -161,7 +185,7 @@ async function legalParts() {
   // Variantes du texte selon la mesure d'audience : <!--GA:on-->…<!--/GA:on--> (avec Google Analytics) et <!--GA:off-->…<!--/GA:off--> (sans).
   const variants = (html) => html.replace(/<!--GA:(on|off)-->([\s\S]*?)<!--\/GA:\1-->/g, (m, mode, text) => ((mode === "on") === !!analytics ? text : ""));
   const gaFields = { cookie: analytics && analytics.cookie, retentionMonths: analytics && analytics.retentionMonths };
-  const dialog = variants(await read(SRC, "partials/legal.html"))
+  const dialog = garagesVariants(variants(await read(SRC, "partials/legal.html")))
     .replace(/\{\{legal\.([A-Za-z]+)\}\}/g, (m, k) => {
       if (!LEGAL_FIELDS.includes(k)) throw new Error(`partials/legal.html : {{legal.${k}}} n'existe pas dans src/legal.json`);
       return esc(String(config[k]).trim());
@@ -182,7 +206,7 @@ async function legalParts() {
 async function pageParts() {
   const road = oneLine(await read(SRC, "partials/ld-road.svg"));
   const car = oneLine(await read(SRC, "partials/ld-car.svg"));
-  let body = await read(SRC, "partials/body.html");
+  let body = garagesVariants(await read(SRC, "partials/body.html"));
   let dialog = await read(SRC, "partials/dialog.html");
   const fill = (text, pairs) => {
     for (const [mark, value, times = 1] of pairs) {
@@ -211,9 +235,9 @@ function squeeze(html) {
   // commentaires HTML et indentation retirés ; les retours à la ligne restent (ils valent une espace entre éléments en ligne)
   return html.replace(/<!--(?!\[)[\s\S]*?-->/g, "").replace(/^[ \t]+/gm, "").replace(/\n{2,}/g, "\n");
 }
-async function render(parts, { headAssets, scripts }) {
+async function render(parts, { headAssets, scripts, garagesBase = "" }) {
   const tpl = await read(SRC, "index.html");
-  const fill = { API_BASE: apiBase, GA_ID: analytics ? analytics.id : "", PRECONNECT: preconnect(), HEAD_ASSETS: headAssets, SPRITE: parts.sprite, CONSENT: parts.consent, BODY: parts.body, DIALOG: parts.dialog, LEGAL: parts.legal, SCRIPTS: scripts };
+  const fill = { API_BASE: apiBase, GA_ID: analytics ? analytics.id : "", GARAGES_BASE: garagesBase, PRECONNECT: preconnect(), HEAD_ASSETS: headAssets, SPRITE: parts.sprite, CONSENT: parts.consent, BODY: parts.body, DIALOG: parts.dialog, LEGAL: parts.legal, SCRIPTS: scripts };
   return squeeze(tpl.replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => (k in fill ? fill[k] : m)));
 }
 
@@ -272,6 +296,7 @@ function withPolicyMeta(html, styleHash) {
 }
 function headersFile(styleHash) {
   const immutable = "public, max-age=31536000, immutable";
+  const garagesRule = garages ? "\n# Table de garages : renouvelée une fois par mois ; une heure de cache allège le site sans retarder une mise à jour.\n/garages/*\n  Cache-Control: public, max-age=3600\n" : "";
   return `# Généré par scripts/build.mjs. Netlify et Cloudflare Pages lisent ce fichier tel quel.
 /*
   Content-Security-Policy: ${contentSecurityPolicy(apiOrigin, styleHash)}
@@ -298,7 +323,7 @@ function headersFile(styleHash) {
   Cache-Control: public, max-age=86400
 /apple-touch-icon.png
   Cache-Control: public, max-age=86400
-`;
+${garagesRule}`;
 }
 
 // ------------------------------------------------------------------------------------------------ dist
@@ -336,7 +361,12 @@ async function buildDist(parts) {
     // worker ou d'un 304 aux visites suivantes : l'intégrer ne coûte rien). La politique de sécurité l'autorise par son empreinte.
     `<style>${css}</style>`,
   ].join("\n");
-  let html = await render(parts, { headAssets, scripts: `<script src="assets/${jsName}" defer></script>` });
+  let html = await render(parts, { headAssets, scripts: `<script src="assets/${jsName}" defer></script>`, garagesBase: garages ? "garages/" : "" });
+  if (garages) {
+    await mkdir(join(DIST, "garages/t"), { recursive: true });
+    await copyFile(join(garages.dir, "index.json"), join(DIST, "garages/index.json"));
+    for (const k of garages.keys) await copyFile(join(garages.dir, "t", k + ".json"), join(DIST, "garages/t", k + ".json"));
+  }
   const styleSource = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
   const styleHash = createHash("sha256").update(styleSource).digest("base64");
   if (pages) html = withPolicyMeta(html, styleHash); // avant le calcul de la version du service worker : elle dépend du contenu final
@@ -351,7 +381,7 @@ async function buildDist(parts) {
     await writeFile(join(DIST, "CNAME"), pages.toLowerCase() + "\n"); // GitHub Pages lit le domaine personnalisé ici
     await writeFile(join(DIST, ".nojekyll"), ""); // servir les fichiers tels quels, sans passer par Jekyll
   } else await writeFile(join(DIST, "_headers"), headersFile(styleHash));
-  await writeFile(join(DIST, "robots.txt"), "User-agent: *\nAllow: /\n");
+  await writeFile(join(DIST, "robots.txt"), "User-agent: *\nAllow: /\n" + (garages ? "Disallow: /garages/\n" : ""));
   return { html: html.length, js: js.length, css: css.length, version };
 }
 

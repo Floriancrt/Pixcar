@@ -1,6 +1,7 @@
 import MODELS_TXT from "../data/models.txt";
 import { cityFromAddr, cityTidy } from "./modules/city.js";
-import { apiBase } from "./modules/config.js";
+import { apiBase, garagesBase } from "./modules/config.js";
+import { createTable, fieldLabels, mergeTable, toGarage } from "./modules/garages-table.js";
 import { loadScript } from "./modules/load-script.js";
 import { phoneList, phoneParse } from "./modules/phone.js";
 import { createStore, jsonStorage } from "./modules/repair-store.js";
@@ -15,7 +16,7 @@ import { SERVICES } from "./shared/services.js";
     // Avec une API configurée, son relais (cache partagé, serveurs OpenStreetMap interrogés en cascade, copie périmée en
     // cas de panne) passe en premier ; les serveurs publics restent le secours, et partent tout de suite s'il ne répond pas.
     t = ((api) => (api ? [{ url: api + "/v1/overpass", name: "Pixcar" }, ...OVERPASS_MIRRORS] : OVERPASS_MIRRORS))(apiBase()),
-    a = Object.assign({ stagger: 4e3, osmTimeout: 3e4, retry: 2500, sirenePace: 400, cityPause: 6e4 }, window.JG_TUNE || {}),
+    a = Object.assign({ stagger: 4e3, osmTimeout: 3e4, retry: 2500, sirenePace: 400, cityPause: 6e4, tableWait: 5e3 }, window.JG_TUNE || {}),
     n = 864e5,
     r = 40,
     s = (() => {
@@ -1234,7 +1235,7 @@ import { SERVICES } from "./shared/services.js";
   }
   // Appelé à l'ouverture d'une fiche et à la sélection : une seule demande par position, une nouvelle tentative au plus
   function adEnsure(g) {
-    if (!g || "osm" !== g.src || !g.addrGap || g.addrApprox || g.addrBusy || g.addrFin)
+    if (!g || ("osm" !== g.src && "ovt" !== g.src) || !g.addrGap || g.addrApprox || g.addrBusy || g.addrFin)
       return Promise.resolve();
     if (!Number.isFinite(g.lat) || !Number.isFinite(g.lon)) return Promise.resolve();
     const e = adMem[adId(g)];
@@ -1295,7 +1296,7 @@ import { SERVICES } from "./shared/services.js";
   const cityStale = (e) => !adFresh(e) || (!e.a && "string" != typeof e.c),
     cityNeeds = (g) =>
       !!g &&
-      "osm" === g.src &&
+      ("osm" === g.src || "ovt" === g.src) &&
       Number.isFinite(g.lat) &&
       Number.isFinite(g.lon) &&
       (g.cityFail || 0) < 2 &&
@@ -1521,6 +1522,27 @@ import { SERVICES } from "./shared/services.js";
         ),
       { items: [...r.values()], notes: p }
     );
+  }
+  // ----- Table de garages (Overture Maps) : tuiles statiques servies par le site, chargées à côté d'OpenStreetMap -----
+  // Voir modules/garages-table.js. Inactive tant que la page n'est pas construite avec des tuiles (balise pixcar-garages, build --garages) ;
+  // window.JG_GARAGES = false la coupe. Une tuile qui manque ou qui tarde ne retarde jamais la liste de plus de tableWait (5 s) et n'affiche aucune erreur.
+  const GT = createTable({ base: window.JG_GARAGES === !1 ? "" : garagesBase(), maxAgeDays: (window.JG_TUNE || {}).tableMaxAgeDays }),
+    GTH = {
+      chainOf: (r) => je({ name: r.name, brand: r.brand }),
+      dealerOf: (r) => c.test(r.brand || "") || c.test(r.name || ""),
+      tidy: q,
+      cityTidy,
+      web: T,
+      phoneCount: (t) => phoneParse(t).length,
+    };
+  GT.enabled && setTimeout(() => GT.ready(), 1500); // l'index se charge avant la première recherche, pas pendant
+  window.jgGarages = () => ({ ...GT.stats(), ...(me.tableInfo || {}) });
+  // Mention sous les lignes de la fiche : d'où viennent le garage, ou ce qui a été complété
+  function tableNote(e) {
+    if ("ovt" === e.src)
+      return '<p class="fact-note">Garage référencé par la base Overture Maps (Meta, Foursquare…), à titre indicatif : appelez avant de vous déplacer.</p>';
+    const f = fieldLabels(e.tableFields);
+    return f.length ? `<p class="fact-note">Complété par la base Overture Maps, à titre indicatif : ${y(f.join(", "))}.</p>` : "";
   }
   const Qe = (e) =>
       /cyclo|moto|tricycle|quadri|cat[ée]gorie\s*l\b|\bl[1-7]e?\b|2\s*roues|3\s*roues|deux.roues/i.test(e),
@@ -1812,6 +1834,7 @@ import { SERVICES } from "./shared/services.js";
           const r = Math.round(1e3 * c);
           let s = null,
             d = null;
+          const tableLoad = GT.enabled ? GT.load(l.lat, l.lon, c).catch(() => null) : null; // en même temps qu'OpenStreetMap
           try {
             const n = await (function (e, n, r, s, i) {
               const o = i ? null : Ie(e, n, r);
@@ -1938,6 +1961,19 @@ import { SERVICES } from "./shared/services.js";
           if (!s) {
             const e = Ie(l.lat, l.lon, r, 30 * n);
             e && ((s = e.els.map(Be).filter(Boolean)), (me.cachedAt = e.t));
+          }
+          if (tableLoad) {
+            const tb = await Promise.race([tableLoad, new Promise((done) => setTimeout(() => done(null), a.tableWait))]);
+            me.tableInfo = tb ? { built: tb.built, tiles: tb.tiles, failed: tb.failed, recs: tb.recs.length, matched: 0, filled: 0, added: 0, dup: 0 } : null;
+            if (tb && tb.recs.length) {
+              if (s) {
+                const m = mergeTable(s, tb.recs, GTH);
+                ((s = m.list), Object.assign(me.tableInfo, { matched: m.matched, filled: m.filled, added: m.added, dup: m.dup }));
+              } else {
+                ((s = tb.recs.map((r) => toGarage(r, GTH))), (me.tableInfo.added = s.length), (me.cachedAt = 0));
+                me.notes.push("OpenStreetMap n'a pas répondu : cette liste vient de la base Overture Maps, à titre indicatif.");
+              }
+            }
           }
           if (s && pe.sirene.checked) {
             dt("Ajout des ateliers du registre SIRENE…");
@@ -2643,7 +2679,7 @@ import { SERVICES } from "./shared/services.js";
       ]
         .concat(t || [])
         .filter(Boolean);
-    return `${n}${r.length ? `<dl class="facts">${r.map(([e, t]) => `<dt>${e}</dt><dd>${t}</dd>`).join("")}</dl>` : ""}`;
+    return `${n}${r.length ? `<dl class="facts">${r.map(([e, t]) => `<dt>${e}</dt><dd>${t}</dd>`).join("")}</dl>` : ""}${tableNote(e)}`;
   }
   function yt(e, t) {
     const a = e.price,
