@@ -121,6 +121,23 @@ Mise en page : la ville s'abrège avec « … » sur un écran étroit au lieu d
 
 Limite : la commune de l'adresse la plus proche peut différer de celle du garage quand il se trouve à cheval sur une limite communale. Le format réel de la réponse du géocodeur (`city`, `label`) n'a pas pu être vérifié depuis le bac à sable (hôte bloqué) : voir `exploitation.md`.
 
+## Table de garages (Overture Maps)
+
+*Branche `garages-table`, non fusionnée dans `main` et non publiée ; sans tuiles dans le site (`--garages`, voir `exploitation.md`, section 8), rien de ce qui suit n'apparaît.*
+
+OpenStreetMap ne connaît pas tous les garages et beaucoup n'y ont ni téléphone ni site (autour de Cazères : 9 garages, 5 avec un numéro). La page lit donc aussi une **table de garages** tirée d'Overture Maps (tuiles JSON servies par le site, voir `architecture.md`) et la fusionne à la liste d'OpenStreetMap :
+
+- **un garage d'OpenStreetMap complété** : le téléphone, le site ou l'adresse qui lui manquaient viennent de la table ; ce qu'OpenStreetMap donne n'est jamais remplacé. Sa fiche ajoute, sous les lignes Adresse / Téléphone / Horaires / Site, la mention **« Complété par la base Overture Maps, à titre indicatif : téléphone, site, adresse. »** (les seuls champs complétés sont nommés) ;
+- **un garage ajouté** (absent d'OpenStreetMap) : une carte comme les autres (même tri par distance, mêmes filtres, mêmes boutons Appeler, Itinéraire, Avis Google, mêmes repères de prix quand des visiteurs en ont déclaré), type « Indépendant », « Spécialiste pneus » ou le nom de son enseigne, prestations « à vérifier » ou « probable » selon les mêmes règles ; sa fiche porte **« Garage référencé par la base Overture Maps (Meta, Foursquare…), à titre indicatif : appelez avant de vous déplacer. »** ; **horaires toujours « Non renseignés »** (la table n'en a pas) ;
+- **un doublon n'est pas ajouté** : un lieu à moins de 40 m d'un garage de la liste, ou de même nom à moins de 150 m, est le même garage ;
+- **si OpenStreetMap ne répond pas**, la liste est celle de la table, avec la note « OpenStreetMap n'a pas répondu : cette liste vient de la base Overture Maps, à titre indicatif. » (la page n'affiche plus l'erreur « la base des garages ne répond pas » tant que la table a des lieux) ;
+- **si la table ne répond pas** (cases absentes, index périmé de plus de 180 jours, délai de 5 s), la page est celle d'avant, sans rien afficher ;
+- **crédits** : sous la liste « © les contributeurs d'OpenStreetMap (ODbL), Overture Maps Foundation (CDLA-Permissive-2.0, Apache-2.0, CC0) » et, sur la carte, « Garages © les contributeurs d'OpenStreetMap, Overture Maps ».
+
+Ce qui s'applique aux garages ajoutés comme aux autres : l'adresse de rue manquante est cherchée à l'ouverture de la fiche (« ≈ ») ; la ville de la puce distance vient de la commune de la table ou, à défaut, de la demande aux cartes qui entrent à l'écran ; une réparation déclarée chez eux est enregistrée sous leur identifiant `custom:ovt-<32 caractères>` (que l'API accepte déjà). Mise en forme : `.fact-note` (0,78 rem, même gris que « Non renseigné », contraste vérifié par axe en clair et en sombre).
+
+Ce que la page ne fait pas : elle ne garde rien de la table (ni stockage du navigateur, ni cookie : `tests/garages.js` B18 et B19), ne contacte ni Overture, ni Meta, ni Foursquare, et ne remplace jamais une donnée d'OpenStreetMap. Interrupteurs : `window.JG_GARAGES = false` (essai ; la table est éteinte) ; `window.JG_GARAGES_BASE` remplace le dossier des tuiles (essais : un chemin relatif au site, jamais un autre hôte) ; `window.jgGarages()` rend les compteurs de la dernière recherche (cases lues, échecs, lieux lus, complétés, ajoutés, doublons, date de construction).
+
 ## Repères de prix
 
 L'**échelle de prix** (fiche d'un garage chez qui des réparations ont été déclarées) repère deux médianes, écrites en toutes lettres et chiffrées :
