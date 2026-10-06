@@ -166,3 +166,57 @@ def link(a_items, b_items, near_m=NEAR_M, spot_m=SAME_SPOT_M):
     """Pour chaque élément de a_items, l'élément de b_items que la règle de la page retient (ou None)."""
     g = Grid(b_items)
     return [pick_place(a, g.near(a["lat"], a["lon"], near_m), near_m, spot_m) for a in a_items]
+
+
+# ---- Rapprochement par adresse (plafond du recouvrement : le nom du registre est souvent la raison sociale, pas l'enseigne) -------------------
+STREET_STOP = {
+    "rue", "avenue", "chemin", "route", "impasse", "allee", "boulevard", "place", "zone", "lotissement", "rond", "point", "quai", "cours", "lieu",
+    "residence", "centre", "commercial", "parc", "industrielle", "artisanale", "activites", "bis", "ter", "lieudit", "sans", "nom",
+}
+
+
+def addr_parts(freeform, postcode=None):
+    """(numéro, mots de la voie, code postal) d'une adresse libre. Le texte après le code postal (la commune) est ignoré."""
+    t = fold(freeform)
+    pc = None
+    m = re.search(r"\b(\d{5})\b", t)
+    if m:
+        pc = m.group(1)
+        t = t[: m.start()]
+    if not pc and postcode:
+        pc = re.sub(r"\D", "", str(postcode))[:5] or None
+    n = re.match(r"\s*(\d{1,4})\b", t)
+    words = {w for w in re.split(r"[^a-z]+", t) if len(w) >= 4 and w not in STREET_STOP}
+    return (n.group(1) if n else None), words, pc
+
+
+def same_address(a, b):
+    """Même numéro dans la même voie : deux adresses qui donnent un numéro et au moins un mot de voie en commun."""
+    na, wa, _ = a
+    nb, wb, _ = b
+    return bool(na and nb and na == nb and wa & wb)
+
+
+def link_loose(a_items, b_items, near_m=NEAR_M, spot_m=SAME_SPOT_M):
+    """Comme link(), mais deux éléments proches (≤ near_m) qui donnent la même adresse (numéro + voie) sont aussi appariés, même sans nom commun."""
+    g = Grid(b_items)
+    out = []
+    for a in a_items:
+        cand = g.near(a["lat"], a["lon"], near_m)
+        p = pick_place(a, cand, near_m, spot_m)
+        if p is None and a.get("addr") and a["addr"][0]:
+            best = None
+            for c in cand:
+                if c.get("addr") and same_address(a["addr"], c["addr"]):
+                    d = meters(a, c)
+                    if d <= near_m and (best is None or d < best[1]):
+                        best = (c, d)
+            p = best[0] if best else None
+        out.append(p)
+    return out
+
+
+def nearest_within(a_items, b_items, radius_m):
+    """Pour chaque élément de a_items : nombre d'éléments de b_items à moins de radius_m (sans condition de nom)."""
+    g = Grid(b_items)
+    return [sum(1 for c in g.near(a["lat"], a["lon"], radius_m) if meters(a, c) <= radius_m) for a in a_items]

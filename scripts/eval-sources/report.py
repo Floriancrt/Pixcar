@@ -45,7 +45,8 @@ def fill_table(rows):
 
 
 # ---------------------------------------------------------------------------------------------------------------------------- recouvrement
-def overlap_table(sets, near_m, spot_m):
+def overlap_table(sets, near_m, spot_m, linker=None):
+    linker = linker or M.link
     names = list(sets)
     out = ["| Garages de ↓ trouvés dans → | " + " | ".join(LABEL[n] for n in names) + " |", "|---|" + "---:|" * len(names)]
     for a in names:
@@ -54,7 +55,7 @@ def overlap_table(sets, near_m, spot_m):
             if a == b:
                 cells.append("—")
                 continue
-            m = M.link(sets[a], sets[b], near_m, spot_m)
+            m = linker(sets[a], sets[b], near_m, spot_m)
             hit = [p for p in m if p]
             cells.append("%s, dont avec téléphone %d" % (cell(len(hit), len(sets[a])), sum(1 for p in hit if p["phone"])))
         out.append("| %s (%d) | %s |" % (LABEL[a], len(sets[a]), " | ".join(cells)))
@@ -62,8 +63,9 @@ def overlap_table(sets, near_m, spot_m):
 
 
 # ---------------------------------------------------------------------------------------------------------------------------- garages réunis
-def entities(sets, near_m, spot_m):
+def entities(sets, near_m, spot_m, linker=None):
     """Garages réunis : deux éléments de sources différentes sont un même garage quand la règle de la page les apparie dans un sens ou l'autre."""
+    linker = linker or M.link
     nodes = [(s, it) for s, L in sets.items() for it in L]
     index = {id(it): i for i, (_, it) in enumerate(nodes)}
     parent = list(range(len(nodes)))
@@ -78,7 +80,7 @@ def entities(sets, near_m, spot_m):
         for b, B in sets.items():
             if a == b:
                 continue
-            for x, p in zip(A, M.link(A, B, near_m, spot_m)):
+            for x, p in zip(A, linker(A, B, near_m, spot_m)):
                 if p:
                     ra, rb = find(index[id(x)]), find(index[id(p)])
                     if ra != rb:
@@ -100,7 +102,9 @@ def entities(sets, near_m, spot_m):
                 "hours": any(it["hours"] for _, it in c),
                 "phone_by": {s: any(it["phone"] for s2, it in c if s2 == s) for s in srcs},
                 "web_by": {s: any(it["web"] for s2, it in c if s2 == s) for s in srcs},
+                "hours_by": {s: any(it["hours"] for s2, it in c if s2 == s) for s in srcs},
                 "size": len(c),
+                "items": c,
             }
         )
     return ents
@@ -139,7 +143,7 @@ def pixcar_list(ents):
         "phone_ovt": sum(1 for e in L if e["phone_by"].get("osm") or e["phone_by"].get("ovt")),
         "web_today": sum(1 for e in L if e["web_by"].get("osm")),
         "web_ovt": sum(1 for e in L if e["web_by"].get("osm") or e["web_by"].get("ovt")),
-        "hours_today": sum(1 for e in L if e["hours"]),
+        "hours_today": sum(1 for e in L if e["hours_by"].get("osm")),
         "orphans": sum(1 for e in L if set(e["srcs"]) == {"sir"}),
         "ovt_only": sum(1 for e in ents if set(e["srcs"]) == {"ovt"}),
         "ovt_only_phone": sum(1 for e in ents if set(e["srcs"]) == {"ovt"} and e["phone"]),
@@ -195,4 +199,121 @@ def zone_table(sets, ents):
             "| %s | %d | %s | %d | %s | %d | %d | %s | %s | %d |"
             % (z, len(S["osm"]), cell(sum(x["phone"] for x in S["osm"]), len(S["osm"])), len(S["ovt"]), cell(sum(x["phone"] for x in S["ovt"]), len(S["ovt"])), len(S["sir"]), r["n"], cell(r["phone_today"], r["n"]), cell(r["phone_ovt"], r["n"]), r["ovt_only"])
         )
+    return out
+
+
+# ---------------------------------------------------------------------------------------------------------------------------- plafond du recouvrement
+def proximity_table(sets, radii=(25, 50, 100)):
+    """Part des garages de ↓ qui ont au moins un garage de l'autre source à moins de r mètres, sans condition de nom (borne haute du recouvrement)."""
+    names = list(sets)
+    out = ["| Garages de ↓ avec un garage de → à moins de " + " / ".join("%d m" % r for r in radii) + " | " + " | ".join(LABEL[n] for n in names) + " |", "|---|" + "---:|" * len(names)]
+    for a in names:
+        cells = []
+        for b in names:
+            if a == b:
+                cells.append("—")
+                continue
+            per = [M.nearest_within(sets[a], sets[b], r) for r in radii]
+            cells.append(" / ".join(cell(sum(1 for c in p if c), len(sets[a])) for p in per))
+        out.append("| %s (%d) | %s |" % (LABEL[a], len(sets[a]), " | ".join(cells)))
+    return out
+
+
+def yield_lines(sets, near_m, spot_m, linker=None):
+    """Parmi les garages de A qui n'ont pas de téléphone (ou de site), combien en trouvent un dans B ?"""
+    linker = linker or M.link
+    out = []
+    for a, b in (("osm", "ovt"), ("sir", "ovt"), ("sir", "osm"), ("ovt", "osm")):
+        m = linker(sets[a], sets[b], near_m, spot_m)
+        no_tel = [(x, p) for x, p in zip(sets[a], m) if not x["phone"]]
+        no_web = [(x, p) for x, p in zip(sets[a], m) if not x["web"]]
+        no_hrs = [(x, p) for x, p in zip(sets[a], m) if not x["hours"]]
+        out.append(
+            "- %s sans téléphone : %d ; %s trouvent un téléphone dans %s. Sans site : %d ; %s. Sans horaires : %d ; %s."
+            % (
+                LABEL[a], len(no_tel), cell(sum(1 for _, p in no_tel if p and p["phone"]), len(no_tel)), LABEL[b],
+                len(no_web), cell(sum(1 for _, p in no_web if p and p["web"]), len(no_web)),
+                len(no_hrs), cell(sum(1 for _, p in no_hrs if p and p["hours"]), len(no_hrs)),
+            )
+        )
+    return out
+
+
+def agreement_bands(A, B, near_m, spot_m, key):
+    """Concordance des téléphones sur les paires A→B où les deux ont un numéro, par tranche de B (key(lieu) → libellé)."""
+    res = collections.defaultdict(lambda: [0, 0])
+    for a, p in zip(A, M.link(A, B, near_m, spot_m)):
+        if p and a["tels"] and p["tels"]:
+            k = key(p)
+            res[k][0] += 1
+            res[k][1] += bool(set(a["tels"]) & set(p["tels"]))
+    return dict(res)
+
+
+SOCIAL = {"facebook.com", "fb.com", "instagram.com", "linkedin.com", "twitter.com", "x.com", "youtube.com", "tiktok.com", "wa.me", "whatsapp.com"}
+DIRECTORIES = {"frmap.org", "pagesjaunes.fr", "mappy.com", "118712.fr", "118218.fr", "cylex.fr", "hoodspot.fr", "societe.com", "pappers.fr", "infogreffe.fr", "yelp.com", "yelp.fr", "tripadvisor.com", "tripadvisor.fr", "foursquare.com", "mapquest.com", "waze.com", "google.com", "goo.gl", "g.page"}
+
+
+def _under(host, names):
+    return any(host == n or host.endswith("." + n) for n in names)
+
+
+def site_kinds(L):
+    """Nature du premier site de chaque garage : domaine propre, réseau social, annuaire."""
+    c = collections.Counter()
+    for x in L:
+        if not x["hosts"]:
+            continue
+        h = x["hosts"][0]
+        c["réseau social" if _under(h, SOCIAL) else ("annuaire" if _under(h, DIRECTORIES) else "domaine propre")] += 1
+    return c
+
+
+def site_kinds_text(L):
+    c = site_kinds(L)
+    n = sum(c.values())
+    return ", ".join("%s %s" % (k, cell(c[k], n)) for k in ("domaine propre", "réseau social", "annuaire")) + " (sur %d sites)" % n
+
+
+def overture_only_profile(ents):
+    """Qui sont les garages que seul Overture connaît ? (origine, confiance, réseau, téléphone, nature du site)"""
+    L = [it for e in ents if set(e["srcs"]) == {"ovt"} for s, it in e["items"] if s == "ovt"]
+    n = len(L)
+    if not n:
+        return ["- Aucun garage connu d'Overture seul."]
+    conf = lambda lo, hi: sum(1 for x in L if x["conf"] is not None and lo <= x["conf"] < hi)  # noqa: E731
+    return [
+        "- %d lieux Overture sans équivalent ailleurs : téléphone %s, site %s ; avec marque %s ; confiance < 0,5 : %s, 0,5–0,7 : %s, ≥ 0,7 : %s ; origine meta %s, Foursquare %s, AllThePlaces %s ; sites : %s."
+        % (
+            n, cell(sum(x["phone"] for x in L), n), cell(sum(x["web"] for x in L), n), cell(sum(1 for x in L if x.get("brand")), n),
+            cell(conf(0, 0.5), n), cell(conf(0.5, 0.7), n), cell(conf(0.7, 1.01), n),
+            cell(sum(1 for x in L if "meta" in x["ds"]), n), cell(sum(1 for x in L if "Foursquare" in x["ds"]), n), cell(sum(1 for x in L if "AllThePlaces" in x["ds"]), n),
+            site_kinds_text(L),
+        )
+    ]
+
+
+def sirene_class_table(sir, osm, ovt, near_m, spot_m, linker=None):
+    """Taux de rapprochement des établissements SIRENE (à OpenStreetMap ou Overture) selon leur nature : forme juridique, employeur, enseigne."""
+    linker = linker or M.link
+    mo = linker(sir, osm, near_m, spot_m)
+    mv = linker(sir, ovt, near_m, spot_m)
+    classes = [
+        ("tous", lambda x: True),
+        ("entrepreneur individuel (nature 1000)", lambda x: x.get("nj") == "1000"),
+        ("autre forme (société…)", lambda x: x.get("nj") not in ("", "1000")),
+        ("employeur", lambda x: x.get("emp") == "O"),
+        ("non employeur", lambda x: x.get("emp") == "N"),
+        ("enseigne renseignée", lambda x: x.get("ens")),
+        ("sans enseigne", lambda x: not x.get("ens")),
+    ]
+    out = ["| Établissements SIRENE | Nombre | Trouvés dans OSM | dans Overture | dans l'un ou l'autre | avec téléphone d'Overture ou OSM |", "|---|---:|---:|---:|---:|---:|"]
+    for label, f in classes:
+        idx = [i for i, x in enumerate(sir) if f(x)]
+        n = len(idx)
+        o = sum(1 for i in idx if mo[i])
+        v = sum(1 for i in idx if mv[i])
+        either = sum(1 for i in idx if mo[i] or mv[i])
+        tel = sum(1 for i in idx if (mo[i] and mo[i]["phone"]) or (mv[i] and mv[i]["phone"]))
+        out.append("| %s | %d | %s | %s | %s | %s |" % (label, n, cell(o, n), cell(v, n), cell(either, n), cell(tel, n)))
     return out

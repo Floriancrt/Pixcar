@@ -53,6 +53,8 @@ def build(osm, ovt, sir, info):
     add("SIRENE : %s avec enseigne, %s dont l'adresse porte un code postal en 31 (contrôle du filtre département)." % (R.cell(sum(1 for x in sir if x["ens"]), len(sir)), R.cell(sum(1 for x in sir if x["cp"]), len(sir))))
     no_tok = sum(1 for x in sir if not M.tokens(x["name"]))
     add("Noms sans mot distinctif (rapprochement par le nom impossible) : OSM %d/%d, Overture %d/%d, SIRENE %d/%d." % (sum(1 for x in osm if not M.tokens(x["name"])), len(osm), sum(1 for x in ovt_core if not M.tokens(x["name"])), len(ovt_core), no_tok, len(sir)))
+    add("Nature des sites : OpenStreetMap — %s ; Overture — %s." % (R.site_kinds_text(osm), R.site_kinds_text(ovt_core)))
+    add("Téléphones mobiles seulement (06/07) : OpenStreetMap %s, Overture %s." % (R.cell(sum(1 for x in osm if x["tels"] and M.mobile_only(x["tels"])), sum(1 for x in osm if x["tels"])), R.cell(sum(1 for x in ovt_core if x["tels"] and M.mobile_only(x["tels"])), sum(1 for x in ovt_core if x["tels"]))))
     add("")
     add("### Confiance et origine des lieux Overture (cœur)")
     add("")
@@ -68,6 +70,37 @@ def build(osm, ovt, sir, info):
         for line in R.overlap_table(sets, near, spot):
             add(line)
     add("")
+    add("## 2b. Plafond du recouvrement : ce que l'exigence d'un nom commun empêche de voir")
+    add("")
+    add("Adresse exploitable (numéro et voie) : %s." % ", ".join("%s %s" % (R.LABEL[k], R.cell(sum(1 for x in v if x["addr"] and x["addr"][0]), len(v))) for k, v in sets.items()))
+    add("")
+    for line in R.proximity_table(sets):
+        add(line)
+    add("")
+    add("Avec l'adresse en plus du nom (même numéro dans la même voie, ≤ 150 m) :")
+    add("")
+    for line in R.overlap_table(sets, M.NEAR_M, M.SAME_SPOT_M, linker=M.link_loose):
+        add(line)
+    add("")
+    add("### Ce que chaque source apporte aux fiches incomplètes")
+    add("")
+    add("Règle de la page (nom + 150 m) :")
+    for line in R.yield_lines(sets, M.NEAR_M, M.SAME_SPOT_M):
+        add(line)
+    add("")
+    add("Nom ou adresse (150 m) :")
+    for line in R.yield_lines(sets, M.NEAR_M, M.SAME_SPOT_M, linker=M.link_loose):
+        add(line)
+    add("")
+    ents_loose = R.entities(sets, M.NEAR_M, M.SAME_SPOT_M, linker=M.link_loose)
+    add("## 2c. Garages réunis, nom ou adresse (150 m)")
+    add("")
+    for line in R.combo_table(ents_loose):
+        add(line)
+    add("")
+    for line in R.list_lines("Haute-Garonne, nom ou adresse", R.pixcar_list(ents_loose)):
+        add(line)
+    add("")
     for near, spot in ((M.NEAR_M, M.SAME_SPOT_M), (300, M.SAME_SPOT_M)):
         ents = R.entities(sets, near, spot)
         add("## 3. Garages réunis (%d m)" % near)
@@ -80,6 +113,23 @@ def build(osm, ovt, sir, info):
         add("")
         if near == M.NEAR_M:
             ents150 = ents
+    add("### Profil des garages que seul Overture connaît (règle de la page, 150 m)")
+    add("")
+    for line in R.overture_only_profile(ents150):
+        add(line)
+    add("")
+    add("### Les établissements SIRENE trouvent-ils un équivalent ? Selon leur nature")
+    add("")
+    add("Règle de la page (nom + 150 m) :")
+    add("")
+    for line in R.sirene_class_table(sir, osm, ovt_core, M.NEAR_M, M.SAME_SPOT_M):
+        add(line)
+    add("")
+    add("Nom ou adresse (150 m) :")
+    add("")
+    for line in R.sirene_class_table(sir, osm, ovt_core, M.NEAR_M, M.SAME_SPOT_M, linker=M.link_loose):
+        add(line)
+    add("")
     add("## 4. Par zone (150 m)")
     add("")
     for line in R.zone_table(sets, ents150):
@@ -90,6 +140,10 @@ def build(osm, ovt, sir, info):
     for a, b in (("osm", "ovt"), ("ovt", "osm")):
         r = R.agreement(sets[a], sets[b], M.NEAR_M, M.SAME_SPOT_M)
         add("- %s → %s : %d paires ; téléphones comparables %d, identiques %s ; sites comparables %d, même domaine %s." % (R.LABEL[a], R.LABEL[b], r["pairs"], r["tel_both"], R.cell(r["tel_same"], r["tel_both"]), r["web_both"], R.cell(r["web_same"], r["web_both"])))
+    band = lambda q: "confiance < 0,5" if (q["conf"] or 0) < 0.5 else ("confiance 0,5–0,7" if q["conf"] < 0.7 else "confiance ≥ 0,7")  # noqa: E731
+    for label, key in (("selon la confiance d'Overture", band), ("selon l'origine du lieu Overture", lambda q: "meta" if "meta" in q["ds"] else ("Foursquare" if "Foursquare" in q["ds"] else "autre"))):
+        res = R.agreement_bands(sets["osm"], sets["ovt"], M.NEAR_M, M.SAME_SPOT_M, key)
+        add("- Téléphones identiques entre OpenStreetMap et Overture %s : %s." % (label, " ; ".join("%s : %d/%d" % (k, v[1], v[0]) for k, v in sorted(res.items()))))
     for k, L_ in (("OpenStreetMap", osm), ("Overture (cœur)", ovt_core), ("SIRENE", sir)):
         add("- %s : %d éléments recoupent un autre élément de la même source (même nom à 150 m)." % (k, R.duplicates(L_, M.NEAR_M, M.SAME_SPOT_M)))
     add("- Overture : %d lieux dont le numéro est partagé avec au moins deux autres lieux (standard de réseau)." % R.shared_phones(ovt_core))

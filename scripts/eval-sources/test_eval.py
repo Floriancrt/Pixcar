@@ -113,6 +113,28 @@ check(R.shared_phones([mk("ovt", 0, "A1", phone=True), mk("ovt", 0, "B2", phone=
 far = [mk("osm", 4, "Garage Garcia", phone=True, dlat=0.002, cls="car_repair", lvl="core")]
 check(M.link(far, sets["sir"], 150, 40)[0] is None and M.link(far, sets["sir"], 300, 40)[0] is not None, "tolérance de 300 m")
 
+# Rapprochement par adresse et plafond par proximité
+a1 = S.entity("sir", "s-a", "ROUX SARL", 43.5, 1.5, [], [], "", address="5 RUE DE LA PAIX 31000 TOULOUSE", naf="45.20A", ens=False, cp=True)
+b1 = S.entity("ovt", "o-a", "Garage du Centre", 43.5005, 1.5, ["01 99 00 00 77"], [], "", address="5 Rue de la Paix", postcode="31000", cat="automotive_repair", conf=0.9, ds=["meta"], brand=None)
+c1 = S.entity("ovt", "o-b", "Garage du Marché", 43.5, 1.5005, [], [], "", address="9 Avenue des Pins", cat="automotive_repair", conf=0.9, ds=["meta"], brand=None)
+check(M.link([a1], [b1, c1], 150, 40)[0] is None, "sans nom commun, la règle de la page n'apparie pas")
+check(M.link_loose([a1], [b1, c1], 150, 40)[0] is b1, "même numéro dans la même voie : apparié")
+check(M.link_loose([a1], [c1], 150, 40)[0] is None, "adresse différente : pas apparié")
+check(M.nearest_within([a1], [b1, c1], 100) == [2] and M.nearest_within([a1], [b1, c1], 40) == [0], "garages à moins de r mètres, sans condition de nom")
+check(M.nearest_within([a1], [b1, c1], 100) == [2], "proximité")
+yl = "\n".join(R.yield_lines(sets, 150, 40))
+check("OpenStreetMap sans téléphone : 4 ; 3 (75 %) trouvent un téléphone dans Overture" in yl, "apport d'Overture aux fiches OSM sans téléphone : %s" % yl.splitlines()[0])
+bands = R.agreement_bands(sets["osm"], sets["ovt"], 150, 40, lambda q: "meta" if "meta" in q["ds"] else "autre")
+check(bands == {"meta": [1, 1]}, "concordance par origine : %r" % bands)
+sk = R.site_kinds([S.entity("x", "1", "a", 0, 0, [], ["https://www.facebook.com/p"], ""), S.entity("x", "2", "b", 0, 0, [], ["https://garage.example.fr"], ""), S.entity("x", "3", "c", 0, 0, [], ["https://www.pagesjaunes.fr/x"], ""), S.entity("x", "4", "d", 0, 0, [], [], "")])
+check(sk == {"réseau social": 1, "domaine propre": 1, "annuaire": 1}, "nature des sites : %r" % sk)
+prof = "\n".join(R.overture_only_profile(ents))
+check("1 lieux Overture sans équivalent ailleurs : téléphone 1 (100 %)" in prof, "profil des garages d'Overture seul : %s" % prof)
+ct = "\n".join(R.sirene_class_table([dict(x, nj="1000" if i < 4 else "5710", emp="N" if i < 4 else "O") for i, x in enumerate(sir)], osm, sets["ovt"], 150, 40))
+check("| entrepreneur individuel (nature 1000) | 4 |" in ct and "| employeur | 6 |" in ct, "classes SIRENE : %s" % ct)
+pt = "\n".join(R.proximity_table(sets))
+check("SIRENE (10)" in pt and "25 m" in pt, "tableau de proximité")
+
 # ------------------------------------------------------------------------------------------------------------------ OpenStreetMap
 els = [
     {"type": "node", "id": 1, "lat": 43.2, "lon": 1.1, "tags": {"shop": "car_repair", "name": "Garage Un", "phone": "01 99 00 00 01; 06 99 00 00 02", "website": "https://un.example.fr", "opening_hours": "Mo-Fr 08:00-18:00"}},
@@ -155,7 +177,7 @@ check(abs([e for e in pe if e["type"] == "way"][0]["lat"] - 43.3001) < 1e-4, "ce
 
 # ------------------------------------------------------------------------------------------------------------------ SIRENE
 e = {
-    "nom_complet": "GARAGE MARTIN", "nom_raison_sociale": "GARAGE MARTIN", "sigle": None, "activite_principale": "45.20A",
+    "nom_complet": "GARAGE MARTIN", "nom_raison_sociale": "GARAGE MARTIN", "sigle": None, "activite_principale": "45.20A", "nature_juridique": "1000", "caractere_employeur": "N",
     "matching_etablissements": [
         {"siret": "11111111100011", "latitude": "43.2", "longitude": "1.1", "etat_administratif": "A", "activite_principale": "45.20A", "adresse": "1 RUE X 31220 CAZERES", "liste_enseignes": ["MARTIN AUTO"], "nom_commercial": None},
         {"siret": "11111111100011", "latitude": "43.2", "longitude": "1.1", "etat_administratif": "A", "activite_principale": "45.20A", "adresse": "1 RUE X 31220 CAZERES"},  # doublon
@@ -174,11 +196,12 @@ check(st["inactifs"] == 1 and st["sans_position"] == 1 and st["ecartes"] == 2, "
 check(out["11111111100011"]["name"] == "MARTIN AUTO" and out["11111111100011"]["ens"] and out["11111111100011"]["cp"], "enseigne et code postal")
 check(out["11111111100078"]["name"] == "GARAGE MARTIN" and not out["11111111100078"]["cp"], "nom de l'entreprise, hors département")
 check(not out["11111111100011"]["phone"] and not out["11111111100011"]["web"], "SIRENE ne donne ni téléphone ni site")
+check(out["11111111100011"]["nj"] == "1000" and out["11111111100011"]["emp"] == "N", "forme juridique et employeur")
 
 # ------------------------------------------------------------------------------------------------------------------ rapport complet
 lines = RUN.build(osm, ovt, sir, {"name": "Test", "release": "release/test", "osm_how": "essai", "sirene_mode": "essai", "osm_rejected": 0, "sir_discarded": 0, "sir_inactive": 0, "sir_nopos": 0})
 text = "\n".join(lines)
-for needle in ("## 1.", "## 2. Recouvrement (150 m", "## 2. Recouvrement (300 m", "## 3. Garages réunis (150 m)", "## 4. Par zone", "## 5. Qualité", "## 6. Disque de 10 km autour de Cazères", "Total"):
+for needle in ("Profil des garages que seul Overture connaît", "Selon leur nature", "## 1.", "## 2. Recouvrement (150 m", "## 2. Recouvrement (300 m", "## 2b. Plafond", "## 2c. Garages réunis, nom ou adresse", "Ce que chaque source apporte", "## 3. Garages réunis (150 m)", "## 4. Par zone", "## 5. Qualité", "## 6. Disque de 10 km autour de Cazères", "Total"):
     check(needle in text, "le rapport contient « %s »" % needle)
 check("01 99" not in text and "garage0.example" not in text and "+33" not in text, "le rapport ne contient ni numéro ni adresse web")
 print("\n".join(lines[:60]))

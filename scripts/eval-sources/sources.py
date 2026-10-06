@@ -28,11 +28,12 @@ def http(url, data=None, headers=None, timeout=120):
         return r.status, r.read()
 
 
-def entity(src, id_, name, lat, lon, phones, webs, hours, **extra):
-    """Garage normalisé. phones : textes bruts ; webs : adresses brutes ; hours : texte ou ''."""
+def entity(src, id_, name, lat, lon, phones, webs, hours, address=None, postcode=None, **extra):
+    """Garage normalisé. phones : textes bruts ; webs : adresses brutes ; hours : texte ou '' ; address : adresse libre (pour le rapprochement par adresse)."""
     t = M.tels(phones)
     h = sorted({M.host_of(w) for w in webs if w} - {""})
-    return {"src": src, "id": id_, "name": name or "", "lat": lat, "lon": lon, "phone": bool(t), "web": bool(h), "hours": bool(hours), "tels": t, "hosts": h, **extra}
+    addr = M.addr_parts(address, postcode) if address else None
+    return {"src": src, "id": id_, "name": name or "", "lat": lat, "lon": lon, "phone": bool(t), "web": bool(h), "hours": bool(hours), "tels": t, "hosts": h, "addr": addr, **extra}
 
 
 # ---------------------------------------------------------------------------------------------------------------------------- polygone
@@ -97,6 +98,7 @@ def load_overture(poly, release=None, log=print):
                 entity(
                     "ovt", r["id"], (r.get("names") or {}).get("primary"), (b["ymin"] + b["ymax"]) / 2, (b["xmin"] + b["xmax"]) / 2,
                     [p for p in (r.get("phones") or []) if p], [w for w in (r.get("websites") or []) if w], "",
+                    address=((r.get("addresses") or [{}])[0] or {}).get("freeform"), postcode=((r.get("addresses") or [{}])[0] or {}).get("postcode"),
                     cat=t.get("primary"), conf=r.get("confidence"), brand=((r.get("brand") or {}).get("names") or {}).get("primary"),
                     ds=sorted({(s or {}).get("dataset") for s in (r.get("sources") or []) if (s or {}).get("dataset") not in (None, "Overture")}),
                 )
@@ -223,7 +225,8 @@ def osm_entities(elements, poly=None):
             continue
         phones = [t.get(k) for k in ("phone", "contact:phone", "mobile", "contact:mobile", "phone:mobile") if t.get(k)]
         webs = [t.get(k) for k in ("website", "contact:website") if t.get(k)][:1]
-        out.append(entity("osm", "%s/%s" % (e.get("type"), e.get("id")), t.get("name") or t.get("brand") or t.get("operator"), float(lat), float(lon), phones, webs, t.get("opening_hours") or "", cls=cls, lvl=lvl))
+        street = " ".join(x for x in ((t.get("addr:housenumber") or t.get("contact:housenumber")), (t.get("addr:street") or t.get("contact:street") or t.get("addr:place"))) if x)
+        out.append(entity("osm", "%s/%s" % (e.get("type"), e.get("id")), t.get("name") or t.get("brand") or t.get("operator"), float(lat), float(lon), phones, webs, t.get("opening_hours") or "", address=street or t.get("addr:full"), postcode=t.get("addr:postcode") or t.get("contact:postcode"), cls=cls, lvl=lvl))
     return out, rejected
 
 
@@ -287,7 +290,10 @@ def sirene_add(e, out, stats):
         chain = bool(CHAIN.search(" | ".join(ens + [s.get("nom_commercial") or "", e.get("nom_complet") or "", e.get("nom_raison_sociale") or "", e.get("sigle") or ""])))
         stats["naf"][naf] = stats["naf"].get(naf, 0) + 1
         if naf.startswith("45.20") or (naf == "45.32Z" and chain):
-            out[siret] = entity("sir", "siret:" + siret, nom, lat, lon, [], [], "", naf=naf, ens=bool(ens), cp=bool(re.search(r"\b31\d{3}\b", s.get("adresse") or "")))
+            out[siret] = entity(
+                "sir", "siret:" + siret, nom, lat, lon, [], [], "", address=s.get("adresse"), naf=naf, ens=bool(ens), cp=bool(re.search(r"\b31\d{3}\b", s.get("adresse") or "")),
+                nj=str(e.get("nature_juridique") or ""), emp=str(e.get("caractere_employeur") or ""),
+            )
         else:
             stats["ecartes"] += 1
 
