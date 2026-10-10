@@ -39,7 +39,8 @@ M = [
  ("capitals not tidied", '  if (!/[a-zà-ÿ]/.test(s))\n    s = s', '  if (false)\n    s = s', "A", "A1"),
  ("cedex kept", '    .replace(/\\s*\\bcedex\\b.*$/i, "")\n', '', "E", "E2"),
  ("arrondissement kept long", '(m, n) => ` ${n}${+n === 1 ? "er" : "e"}`,', '(m) => m,', "E", "E2"),
- ("long city overflows the chip (track not bounded)", '  grid-template-columns: minmax(0, 1fr);\n  gap: 6px;', '  gap: 6px;', "AF", "A6"),
+ # (la pastille est posée en absolu dans la tuile depuis la refonte : la colonne de la liste ne la borne plus, c'est sa largeur maximale qui le fait)
+ ("long city overflows the large tile's chip (max-width: none)", '    top: 104px;\n    height: 26px;\n    max-width: 114px;', '    top: 104px;\n    height: 26px;\n    max-width: none;', "AF", "A6"),
  ("chip neither bounded nor shrinkable (max-width and min-width: 0 each cover for the other)", '  max-width: 72px;\n  min-width: 0;\n  padding: 0 7px 0 5px;', '  padding: 0 7px 0 5px;', "F", "F2"),
  ("long city cut without an ellipsis", '  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 500;', '  overflow: hidden;\n  white-space: nowrap;\n  font-weight: 500;', "F", "F2"),
 ]

@@ -1704,17 +1704,13 @@ select {
   flex-direction: column;
   overflow: auto; /* filet de sécurité sur un écran très bas : rien n'est coupé */
 }
+/* le formulaire reste une grille (.dlg form) : il prend la hauteur que la fenêtre lui laisse (min-height: 0), et la liste, qui défile,
+   est la seule ligne qui se réduit (jusqu'à 6rem) quand l'écran est bas */
 .svc-dlg form {
   flex: 1 1 auto;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.svc-dlg form > * {
-  flex: none;
 }
 .svc-dlg .svc-list {
-  flex: 1 1 auto;
   min-height: 6rem;
   max-height: 26rem;
 }

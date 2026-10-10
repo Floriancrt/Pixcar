@@ -209,11 +209,14 @@ const axeRun = async (page) => {
       for (const cb of await page.$$("#svcList input:checked")) await cb.uncheck();
       for (const id of ["vidange", "clim", "diag"]) await page.check(`#svcList input[value='${id}']`);
       const geo = await page.evaluate(() => {
+        // cocher fait défiler ce qui défile pour montrer la case : on remet la feuille en haut, sinon un « Valider » sous l'écran y serait ramené
+        const dlg = document.getElementById("svcDlg");
+        dlg.scrollTop = 0;
         const go = document.getElementById("svcGo").getBoundingClientRect(), list = document.getElementById("svcList");
         const at = document.elementFromPoint(go.left + go.width / 2, go.top + go.height / 2);
-        return { goBottom: Math.round(go.bottom), vh: innerHeight, hit: at && at.id, listScrolls: list.scrollHeight > list.clientHeight, overflowX: document.documentElement.scrollWidth > innerWidth + 1, focus: document.activeElement && document.activeElement.type };
+        return { goBottom: Math.round(go.bottom), vh: innerHeight, hit: at && at.id, listScrolls: list.scrollHeight > list.clientHeight, sheetScrolls: dlg.scrollHeight > dlg.clientHeight + 1, overflowX: document.documentElement.scrollWidth > innerWidth + 1, focus: document.activeElement && document.activeElement.type };
       });
-      check(`M1 [${vp.width} px] the sheet keeps « Valider » on screen and clickable, only the list scrolls`, geo.goBottom <= geo.vh && geo.hit === "svcGo" && geo.listScrolls && !geo.overflowX, JSON.stringify(geo));
+      check(`M1 [${vp.width} px] the sheet keeps « Valider » on screen and clickable, only the list scrolls`, geo.goBottom <= geo.vh && geo.hit === "svcGo" && geo.listScrolls && !geo.sheetScrolls && !geo.overflowX, JSON.stringify(geo));
       check(`M2 [${vp.width} px] on a touch screen the keyboard does not pop up: the focus goes to the ticked service, not the search field`, geo.focus === "checkbox", JSON.stringify(geo));
       await page.click("#svcGo");
       await page.waitForSelector("#svcDlg", { state: "hidden" });

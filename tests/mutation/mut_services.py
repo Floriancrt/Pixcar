@@ -15,9 +15,9 @@ M = [
  ("the contrôle technique mixes with other services", 'if (svc.kind === "ct" || max === 1) return [id];', "if (max === 1) return [id];", "", "P5a"),
  ("no cap on the number of services", "export const SVC_MAX = 5;", "export const SVC_MAX = 50;", "", "P6"),
  ("closing the window (Escape) applies the ticks", '  dlg.addEventListener("close", shut);\n  return { open, close', '  dlg.addEventListener("close", () => (shut(), apply(sel.slice())));\n  return { open, close', "", "P7"),
- ("the sheet's list does not give way on a small phone", ".svc-dlg .svc-list {\n  flex: 1 1 auto;", ".svc-dlg .svc-list {\n  flex: none;", "", "M1"),
+ ("the sheet's list does not give way on a small phone", ".svc-dlg form {\n  flex: 1 1 auto;\n  min-height: 0;\n}", ".svc-dlg form {\n  flex: 1 1 auto;\n}", "", "M1"),
  # ---- la page (app.js)
- ("only one service can be picked", "apply: svcApply });", "apply: svcApply, max: 1 });", "", "P3b"),
+ ("only one service can be picked", "apply: svcApply });", "apply: svcApply, max: 1 });", "", "P1"),  # une seule prestation : la zone des pastilles disparaît (P1)
  ("browsing the price page drops the selection", "if (me.svcs.length > 1 && me.svcs.includes(pe.refService.value)) return void refShow(", "if (!1) return void refShow(", "", "R1"),
  ("the landmarks ignore the other services", "if (ss.length > 1) {\n      // plusieurs prestations : fourchette", "if (!1) {\n      // plusieurs prestations : fourchette", "", "P11"),
 ]
