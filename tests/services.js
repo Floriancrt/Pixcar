@@ -3,7 +3,7 @@
 // détail dans la fiche, repères d'accueil, résumé, mémoire, mobile, clavier, accessibilité). Les règles de calcul elles-mêmes sont
 // vérifiées sans navigateur (tests/unit/svc-combo.test.mjs, tests/unit/service-picker.test.mjs).
 // Usage : node tests/services.js [fichier]
-const { serve, launch, open, search, sortBy, filterBy, clearFilters, pickServices, ROOT } = require("./harness");
+const { serve, launch, open, search, sortBy, filterBy, clearFilters, pickServices, injectScript, ROOT } = require("./harness");
 const { buildElements, CENTER } = require("./mocks");
 const fs = require("fs");
 const path = require("path");
@@ -73,7 +73,7 @@ const cardsOf = (page) =>
     })),
   );
 const axeRun = async (page) => {
-  await page.addScriptTag({ content: AXE });
+  await injectScript(page, AXE); // pas de <script> en ligne : la politique de sécurité du site publiable (dist/) le refuse
   return page.evaluate(async (tags) => (await axe.run(document, { runOnly: { type: "tag", values: tags } })).violations.map((x) => ({ id: x.id, n: x.nodes.length, ex: x.nodes.slice(0, 2).map((n) => n.html.slice(0, 140)) })), TAGS);
 };
 
