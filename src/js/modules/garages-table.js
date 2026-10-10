@@ -4,7 +4,8 @@
 // service tiers, aucune donnée de l'utilisateur ne part), puis rapprochées de la liste d'OpenStreetMap avec la règle déjà utilisée pour le registre :
 //   · un lieu qui correspond à un garage d'OpenStreetMap (même nom ET moins de 150 m ; garage sans nom : seul lieu à moins de 40 m) lui apporte ce qui lui
 //     manque (téléphone, site, adresse), jamais l'inverse : les champs d'OpenStreetMap ne sont jamais écrasés ;
-//   · un lieu qui ne correspond à rien (et n'est pas à moins de 40 m d'un garage) s'ajoute à la liste, avec la mention « Overture » ;
+//   · un lieu qui ne correspond à rien (et n'est pas à moins de 40 m d'un garage, sauf commerces distincts : twoShops) s'ajoute à la liste, avec la
+//     mention « Overture » ;
 //   · si OpenStreetMap ne répond pas, la liste est celle de la table.
 // Un mauvais rapprochement vaut pire qu'aucun : un numéro de téléphone qui n'est pas celui du garage fait perdre du temps à un client. Le même
 // rapprochement est écrit en Python dans scripts/garages/matching.py (retrait des doublons à la construction) ; scripts/garages/diff_js.mjs compare les deux.
@@ -263,6 +264,19 @@ export function completeGarage(g, rec, h) {
   return done;
 }
 
+// Deux commerces distincts, même à quelques mètres ? Oui seulement si l'un est un centre d'enseigne intégrée (chain.own : Norauto, Feu Vert, Midas…)
+// et que l'autre est d'une autre enseigne ou d'aucune, avec un nom distinctif : une zone commerciale met des magasins au même point (Muret : le
+// Feu Vert, avec son prix national de géométrie, était écarté à 14 et 20 m de deux garages d'autres noms). Un réseau d'indépendants (Eurorepar, AD,
+// Profil Plus… : pas d'own) n'y suffit pas : son nom est le second nom d'un garage indépendant (« Eurorepar Car Service » à 10 m de « Marin
+// Automobiles ») ; ni un nom générique (« Centre Auto ») ou absent, qui peut être celui du centre lui-même. Symétrique : que le centre soit le garage de
+// la liste ou le lieu de la table, la réponse est la même (sinon le résultat dépendrait de l'ordre des lieux dans la tuile).
+const distinctive = (name) => hasRealName(name) && tokens(name).size > 0;
+function twoShops(a, b) {
+  if (!(a.chain && a.chain.own) && !(b.chain && b.chain.own)) return false;
+  if (a.chain && b.chain && a.chain.id === b.chain.id) return false;
+  return distinctive(a.name) && distinctive(b.name);
+}
+
 // Fusionne les lieux de la table dans la liste (le tableau garages n'est pas modifié ; les garages d'OpenStreetMap complétés le sont).
 // Renvoie { list, matched, filled, added, dup }.
 export function mergeTable(garages, recs, h) {
@@ -284,16 +298,16 @@ export function mergeTable(garages, recs, h) {
   let dup = 0;
   for (const rec of recs) {
     if (taken.has(rec.id)) continue;
-    // déjà dans la liste sous un autre aspect : même nom à 150 m, ou n'importe quel garage à 40 m
-    const clash = garageGrid.near(rec.lat, rec.lon, NEAR_M).some((g) => {
-      const d = meters(g, rec);
-      return d <= SAME_SPOT_M || (d <= NEAR_M && hasRealName(g.name) && sameName(g.name, rec.name));
+    const g = toGarage(rec, h);
+    // déjà dans la liste sous un autre aspect : même nom à 150 m, ou un garage à 40 m qui n'est pas un commerce distinct (twoShops)
+    const clash = garageGrid.near(rec.lat, rec.lon, NEAR_M).some((o) => {
+      const d = meters(o, rec);
+      return (d <= SAME_SPOT_M && !twoShops(o, g)) || (d <= NEAR_M && hasRealName(o.name) && sameName(o.name, rec.name));
     });
     if (clash) {
       dup++;
       continue;
     }
-    const g = toGarage(rec, h);
     list.push(g);
     garageGrid.add(g); // deux lieux de la table qui se recoupent ne s'ajoutent pas deux fois
     added++;

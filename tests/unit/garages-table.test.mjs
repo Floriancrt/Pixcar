@@ -1,17 +1,24 @@
 // Table de garages (Overture) : cases, lecture défensive des tuiles, chargement, rapprochement et fusion avec la liste d'OpenStreetMap.
 // Les lieux, noms et numéros sont fictifs (numéros en +33 1 99 …).
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { afterEach, describe, test } from "node:test";
 import { garagesBase } from "../../src/js/modules/config.js";
-import { MAX_AGE_DAYS, NEAR_M, SAME_SPOT_M, STEP, X0, cleanTile, completeGarage, createTable, fieldLabels, hasRealName, makeGrid, mergeTable, meters, pickRec, sameName, tileKey, tileKeysFor, toGarage } from "../../src/js/modules/garages-table.js";
+import { MAX_AGE_DAYS, NEAR_M, SAME_SPOT_M, STEP, X0, cleanTile, completeGarage, createTable, fieldLabels, fold, hasRealName, makeGrid, mergeTable, meters, pickRec, sameName, tileKey, tileKeysFor, toGarage } from "../../src/js/modules/garages-table.js";
 
 const C = { lat: 43.2174, lon: 1.1014 }; // Cazères
 const at = (dNorthM, dEastM) => ({ lat: C.lat + dNorthM / 111320, lon: C.lon + dEastM / (111320 * Math.cos((C.lat * Math.PI) / 180)) });
 let seq = 0;
 const rec = (name, pos, extra = {}) => ({ id: `0000${String(++seq).padStart(4, "0")}-0000-4000-8000-000000000000`, name, ...pos, kind: "r", phones: [], web: "", addr: "", pc: "", loc: "", brand: "", ...extra });
 const garage = (name, pos, extra = {}) => ({ id: `osm:node/${++seq}`, src: "osm", name, ...pos, tags: {}, shop: "car_repair", phone: "", web: "", hours: "", addr: "", addrGap: true, city: "", ...extra });
+// Enseignes comme dans app.js : own pour un centre d'enseigne intégrée, rien pour un réseau d'indépendants.
+const CHAINS = [
+  { id: "norauto", name: "Norauto", re: /norauto/i, own: true },
+  { id: "feuvert", name: "Feu Vert", re: /feu\s*vert/i, own: true },
+  { id: "eurorepar", name: "Eurorepar", re: /euro\s*repar/i },
+];
 const H = {
-  chainOf: (r) => (/norauto/i.test(r.name) ? { id: "norauto", name: "Norauto" } : null),
+  chainOf: (r) => CHAINS.find((c) => c.re.test([r.brand, r.name].filter(Boolean).join(" | "))) || null,
   dealerOf: (r) => /renault/i.test(r.name),
   tidy: (s) => String(s || "").trim(),
   cityTidy: (s) => String(s || "").trim(),
@@ -372,6 +379,64 @@ describe("mergeTable", () => {
     assert.equal(m.added, 1);
     assert.equal(m.dup, 1);
   });
+  describe("centre d'enseigne intégrée à moins de 40 m d'un autre commerce (zone commerciale)", () => {
+    const chain = (id) => CHAINS.find((c) => c.id === id);
+    const names = (m) => m.list.map((g) => g.name).sort();
+    test("un centre Feu Vert à 14 m d'un garage d'un autre nom est gardé", () => {
+      const m = mergeTable([garage("Muret Automobiles", C)], [rec("Feu Vert", at(14, 0), { brand: "Feu Vert" })], H);
+      assert.deepEqual({ added: m.added, dup: m.dup, matched: m.matched }, { added: 1, dup: 0, matched: 0 });
+      assert.equal(m.list[1].chain.id, "feuvert");
+    });
+    test("dans un sens comme dans l'autre : un lieu ordinaire à 14 m d'un centre d'enseigne déjà dans la liste est gardé", () => {
+      const m = mergeTable([garage("Feu Vert", C, { chain: chain("feuvert") })], [rec("Muret Automobiles", at(14, 0))], H);
+      assert.deepEqual({ added: m.added, dup: m.dup }, { added: 1, dup: 0 });
+    });
+    test("entre lieux de la table, l'ordre ne change pas le résultat (Muret : trois lieux en 20 m)", () => {
+      const duhau = rec("Espace Duhau Automobiles", C);
+      const muret = rec("Muret Automobiles", at(7, 0));
+      const feuVert = rec("Feu Vert", at(14, 0), { brand: "Feu Vert" });
+      for (const order of [[duhau, muret, feuVert], [feuVert, duhau, muret]]) {
+        const m = mergeTable([], order, H);
+        assert.deepEqual(names(m), ["Espace Duhau Automobiles", "Feu Vert"], order.map((r) => r.name).join(", "));
+        assert.equal(m.dup, 1, "les deux garages ordinaires à 7 m restent un doublon");
+      }
+    });
+    test("deux enseignes intégrées différentes au même point : deux magasins (Norauto et Feu Vert à 1 m)", () => {
+      const m = mergeTable([garage("Norauto", C, { chain: chain("norauto") })], [rec("Feu Vert", at(1, 0))], H);
+      assert.equal(m.added, 1);
+    });
+    test("un lieu « Eurorepar » à 10 m d'un indépendant reste écarté : un réseau d'indépendants n'est pas un magasin à part", () => {
+      const m = mergeTable([garage("Marin Automobiles", C)], [rec("Eurorepar Car Service", at(10, 0), { brand: "EUROREPAR Car Service" })], H);
+      assert.deepEqual({ added: m.added, dup: m.dup }, { added: 0, dup: 1 });
+      const t = mergeTable([], [rec("Marin Automobiles", C), rec("Eurorepar Car Service", at(10, 0), { brand: "EUROREPAR Car Service" })], H);
+      assert.deepEqual(names(t), ["Marin Automobiles"], "entre lieux de la table aussi");
+    });
+    test("deux lieux identiques (même nom) restent fusionnés, enseigne intégrée ou non", () => {
+      const t = mergeTable([], [rec("Feu Vert", C, { brand: "Feu Vert" }), rec("Feu Vert Muret", at(5, 0), { brand: "Feu Vert" })], H);
+      assert.deepEqual({ added: t.added, dup: t.dup }, { added: 1, dup: 1 });
+      const g = garage("Feu Vert", C, { chain: chain("feuvert") });
+      const m = mergeTable([g], [rec("Feu Vert", at(20, 0), { phones: ["+33199000001"] }), rec("Feu Vert Muret", at(100, 0))], H);
+      assert.deepEqual({ matched: m.matched, added: m.added, dup: m.dup }, { matched: 1, added: 0, dup: 1 }, "le plus proche complète le garage, l'autre est le même à 100 m");
+      assert.equal(g.phone, "+33199000001");
+    });
+    test("même enseigne sous un autre nom : le même centre", () => {
+      const m = mergeTable([garage("Centre Muret Sud", C, { chain: chain("feuvert") })], [rec("Feu Vert", at(14, 0))], H);
+      assert.deepEqual({ added: m.added, dup: m.dup }, { added: 0, dup: 1 });
+    });
+    test("voisin au nom générique ou absent : peut-être le centre lui-même, écarté comme avant", () => {
+      const generic = mergeTable([garage("Centre Auto", C)], [rec("Feu Vert", at(14, 0))], H);
+      assert.deepEqual({ added: generic.added, dup: generic.dup }, { added: 0, dup: 1 }, "« Centre Auto » n'a aucun mot distinctif");
+      const generic2 = mergeTable([garage("Feu Vert", C, { chain: chain("feuvert") })], [rec("Garage Service", at(14, 0))], H);
+      assert.equal(generic2.added, 0, "dans l'autre sens aussi");
+      // garage sans nom : deux lieux à moins de 40 m, il n'en prend aucun ; et aucun ne s'ajoute, pas même le centre d'enseigne
+      const unnamed = mergeTable([garage("Garage (nom non renseigné)", C)], [rec("Feu Vert", at(14, 0)), rec("Pneus Martin", at(0, 20))], H);
+      assert.deepEqual({ matched: unnamed.matched, added: unnamed.added, dup: unnamed.dup }, { matched: 0, added: 0, dup: 2 });
+    });
+    test("au-delà de 40 m, rien ne change : un autre nom est un autre garage", () => {
+      const m = mergeTable([garage("Marin Automobiles", C)], [rec("Eurorepar Car Service", at(60, 0))], H);
+      assert.equal(m.added, 1);
+    });
+  });
   test("deuxième fusion : rien de plus", () => {
     const recs = [rec("Garage Durand", at(1000, 0)), rec("Pneus Express", at(2000, 0))];
     const first = mergeTable([garage("Garage Dupont", C)], recs, H);
@@ -395,6 +460,30 @@ describe("mergeTable", () => {
   test("constantes", () => {
     assert.equal(NEAR_M, 150);
     assert.equal(SAME_SPOT_M, 40);
+  });
+});
+
+describe("enseignes d'app.js : centre de l'enseigne (own) ou réseau d'indépendants", () => {
+  // La liste « l = [ … ] » d'app.js, lue dans la source (comme tests/logos.js) : c'est elle que la page passe à mergeTable par chainOf.
+  const APP_CHAINS = (() => {
+    const src = fs.readFileSync(new URL("../../src/js/app.js", import.meta.url), "utf8");
+    return new Function("return " + /\n {4}l = (\[[\s\S]*?\n {4}\]),\n {4}c =/.exec(src)[1])();
+  })();
+  const chainOf = (r) => {
+    const a = [r.brand, r.name].filter(Boolean).join(" | ");
+    return APP_CHAINS.find((c) => c.re.test(a) || c.re.test(fold(a))) || null;
+  };
+  test("seuls les magasins qui ne portent que le nom de l'enseigne sont own ; les réseaux et labels d'indépendants ne le sont pas", () => {
+    assert.deepEqual(APP_CHAINS.filter((c) => c.own).map((c) => c.id).sort(), ["cartercash", "eleclerc", "euromaster", "feuvert", "midas", "norauto", "roady", "speedy"]);
+  });
+  test("avec la vraie liste : le Feu Vert de Muret est gardé, Eurorepar (Frouzins) et Vialatte Pneus (Profil Plus) restent écartés", () => {
+    const h = { ...H, chainOf };
+    const muret = mergeTable([], [rec("Espace Duhau Automobiles", C), rec("Muret Automobiles", at(7, 0), { brand: "Kia" }), rec("Feu Vert", at(14, 0), { brand: "Feu Vert" })], h);
+    assert.deepEqual(muret.list.map((g) => g.name), ["Espace Duhau Automobiles", "Feu Vert"]);
+    const frouzins = mergeTable([], [rec("Marin Automobiles", C), rec("Eurorepar Car Service", at(10, 0), { brand: "EUROREPAR Car Service" })], h);
+    assert.deepEqual(frouzins.list.map((g) => g.name), ["Marin Automobiles"]);
+    const profil = mergeTable([], [rec("Profil Plus Muret", C, { brand: "profil plus" }), rec("Vialatte Pneus", at(13, 0))], h);
+    assert.deepEqual(profil.list.map((g) => g.name), ["Profil Plus Muret"]);
   });
 });
 

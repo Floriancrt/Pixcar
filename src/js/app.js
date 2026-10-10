@@ -28,13 +28,16 @@ import { SERVICES } from "./shared/services.js";
       return `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, "0")}-${String(e.getDate()).padStart(2, "0")}`;
     })(),
     o = SERVICES,
+    // Enseignes. own : centre de l'enseigne elle-même (succursale ou franchise), un magasin qui ne porte que ce nom ; sans own : réseau ou label
+    // d'indépendants (Eurorepar, AD, Profil Plus, Point S…), dont le garage garde souvent son propre nom à côté de celui du réseau. La table de
+    // garages s'en sert pour les doublons (modules/garages-table.js, mergeTable). Dans le doute, pas d'own : c'est la lecture prudente.
     l = [
-      { id: "norauto", name: "Norauto", re: /norauto/i, wd: ["Q3317698"] },
-      { id: "feuvert", name: "Feu Vert", re: /feu\s*-?\s*vert/i, wd: ["Q3070922"] },
-      { id: "speedy", name: "Speedy", re: /speedy/i, wd: ["Q3492969"] },
-      { id: "midas", name: "Midas", re: /midas/i, wd: ["Q3312613"] },
-      { id: "roady", name: "Roady", re: /roady/i, wd: ["Q3434112"] },
-      { id: "euromaster", name: "Euromaster", re: /euromaster/i, wd: ["Q3060668"] },
+      { id: "norauto", name: "Norauto", re: /norauto/i, wd: ["Q3317698"], own: !0 },
+      { id: "feuvert", name: "Feu Vert", re: /feu\s*-?\s*vert/i, wd: ["Q3070922"], own: !0 },
+      { id: "speedy", name: "Speedy", re: /speedy/i, wd: ["Q3492969"], own: !0 },
+      { id: "midas", name: "Midas", re: /midas/i, wd: ["Q3312613"], own: !0 },
+      { id: "roady", name: "Roady", re: /roady/i, wd: ["Q3434112"], own: !0 },
+      { id: "euromaster", name: "Euromaster", re: /euromaster/i, wd: ["Q3060668"], own: !0 },
       { id: "points", name: "Point S", re: /\bpoint\s*s\b/i, wd: ["Q3393358"] },
       { id: "firststop", name: "First Stop", re: /first\s*stop/i, wd: ["Q3072965"] },
       { id: "vulco", name: "Vulco", re: /vulco/i, wd: ["Q80184403"] },
@@ -48,12 +51,14 @@ import { SERVICES } from "./shared/services.js";
         name: "E.Leclerc Auto",
         re: /\be\s*\.?\s*leclerc\b|leclerc\s+(l\W?)?auto\b/i,
         wd: ["Q1273376"],
+        own: !0,
       },
       {
         id: "cartercash",
         name: "Carter-Cash",
         re: /carter\s*-?\s*cash/i,
         only: ["montage", "equil", "crevaison"],
+        own: !0,
       },
       { id: "eurorepar", name: "Eurorepar", re: /euro\s*repar/i },
       { id: "motrio", name: "Motrio", re: /motrio/i, wd: ["Q6918585"] },
