@@ -26,8 +26,8 @@ M = [
  ("no delay before the card", 'animation: ld-in 0.3s 0.35s both;', 'animation: none;', "C", "C6"),
  ("pictogram shown on desktop too", '.wait-loader {\n  display: none;\n}', '.wait-loader {\n  display: block;\n}', "E", "E5"),
  ("pictogram never shown on mobile", '  .wait-loader {\n    display: block;', '  .wait-loader {\n    display: none;', "M", "M1"),
- ("red car", '--ld-road: #0a0d0a;\n  --ld-edge: transparent;\n  --ld-line: #f2f2f2;\n  --ld-car: #79fa52;', '--ld-road: #0a0d0a;\n  --ld-edge: transparent;\n  --ld-line: #f2f2f2;\n  --ld-car: #e2231a;', "A", "A1"),
- ("yellow lane markings", '--ld-edge: transparent;\n  --ld-line: #f2f2f2;', '--ld-edge: transparent;\n  --ld-line: #ffd100;', "A", "A2"),
+ ("red car", '--ld-road: #10121F;\n  --ld-edge: transparent;\n  --ld-line: #F4F5FA;\n  --ld-car: #FD5319;', '--ld-road: #10121F;\n  --ld-edge: transparent;\n  --ld-line: #F4F5FA;\n  --ld-car: #e2231a;', "A", "A1"),
+ ("yellow lane markings", '--ld-edge: transparent;\n  --ld-line: #F4F5FA;', '--ld-edge: transparent;\n  --ld-line: #ffd100;', "A", "A2"),
  ("forced colours: car like the asphalt", '  .ld-island,\n  .ld-body,\n  .ld-hub {\n    fill: Canvas;', '  .ld-island,\n  .ld-body,\n  .ld-hub {\n    fill: CanvasText;', "X", "X1"),
  ("reduced motion not honoured", 'animation-duration: 0.001ms !important;', 'animation-duration: 2.4s !important;', "R", "R1"),
 ]

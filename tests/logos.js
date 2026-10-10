@@ -1,12 +1,12 @@
 // Chain avatars: branded monograms + logo tiers (Wikidata logo > official-site icon > monogram).
 // Runs in "real" mode (harness.js): the services answer over a local HTTPS server, official sites included, because
 // Playwright drops every */favicon.ico request while a route is active.
-const { serve, launch, open, search, shot, ROOT } = require("./harness");
+const { serve, launch, open, search, shot, ROOT, sortBy, pickServices, tileClearance } = require("./harness");
 const { logoPNG, buildElements, CENTER } = require("./mocks");
 const fs = require("fs"), path = require("path");
 const results = [];
 const check = (name, cond, detail = "") => { results.push({ name, ok: !!cond }); if (!cond) console.log("  FAIL:", name, "|", String(detail).slice(0, 600)); };
-const FILE = process.env.FILE || "index.html";
+const FILE = process.argv[2] || process.env.FILE || "index.html"; // run.mjs passe la page par l'environnement, les mutations en argument
 // brand tables and chain ids parsed from the application source (single source of truth; the built page is minified)
 const html = fs.readFileSync(path.join(ROOT, "src/js/app.js"), "utf8");
 const table = (name) => { const m = html.match(new RegExp(name + " = \\{([\\s\\S]*?)\\n    \\}")); const o = {}; for (const r of m[1].matchAll(/(\w+): \["(#[0-9a-f]{6})", "([^"]+)"\]/g)) o[r[1]] = [r[2], r[3]]; return o; };
@@ -64,7 +64,7 @@ const chainRowGeometry = (page) => page.evaluate(() => [...document.querySelecto
   const r = document.createRange(); r.selectNodeContents(tn); const x = r.getBoundingClientRect();
   return { name: tn.textContent.trim(), dy: Math.round(a.top + a.height / 2 - (x.top + x.height / 2)), gap: Math.round(x.left - a.right) };
 }));
-const listLyon = async (page, extraOpts = {}) => { await search(page, { service: "vidange", ...extraOpts }); await page.click("[data-sort=dist]"); await page.waitForTimeout(400); await page.click("#moreBtn").catch(() => {}); };
+const listLyon = async (page, extraOpts = {}) => { await search(page, { service: "vidange", ...extraOpts }); await sortBy(page, "dist"); await page.waitForTimeout(400); await page.click("#moreBtn").catch(() => {}); };
 
 (async () => {
   const server = await serve(ROOT);
@@ -99,13 +99,13 @@ const listLyon = async (page, extraOpts = {}) => { await search(page, { service:
   const nw = css.find((x) => x.id === "norauto");
   check("A7 Norauto is red with white text", nw && nw.bg === "rgb(226, 35, 26)" && nw.fg === "rgb(255, 255, 255)", JSON.stringify(nw));
   const geo = await page.evaluate(() => [...document.querySelectorAll("#list .card")].slice(0, 14).map((c) => {
-    // The title block is the name and the distance chip. The type (« Indépendant ») is not part of it: when the city makes the chip
-    // too wide for both on one line, the type drops to a third line and the avatar stays level with the name and the chip.
-    const av = c.querySelector(".avatar"), a = av.getBoundingClientRect(), t = c.querySelector(".g-id").getBoundingClientRect(), d = c.querySelector(".dist").getBoundingClientRect(), m = getComputedStyle(av);
-    return { id: av.dataset.c || "-", rendered: a.height > 0 && t.height > 0, dy: Math.round(a.top + a.height / 2 - (t.top + d.bottom) / 2), margin: [m.marginTop, m.marginRight, m.marginBottom, m.marginLeft].join(" ") };
+    // La tuile (logo, monogramme ou initiale) est en haut à gauche de la carte, alignée sur le haut du nom ; la puce de distance est posée
+    // dans la tuile, en bas.
+    const av = c.querySelector(".avatar"), a = av.getBoundingClientRect(), n = c.querySelector(".g-name").getBoundingClientRect(), d = c.querySelector(".dist").getBoundingClientRect(), m = getComputedStyle(av);
+    return { id: av.dataset.c || "-", rendered: a.height > 0 && n.height > 0, dy: Math.round(a.top - n.top), inTile: d.left >= a.left - 1 && d.right <= a.right + 1 && d.top >= a.top + a.height / 2 && d.bottom <= a.bottom + 1, margin: [m.marginTop, m.marginRight, m.marginBottom, m.marginLeft].join(" ") };
   }));
-  const geoOk = geo.filter((g) => g.rendered), geoBad = geo.filter((g) => g.margin !== "0px 0px 0px 0px" || (g.rendered && Math.abs(g.dy) > 3));
-  check("A9 avatars have no stray margin and sit on the centre line of the title block: name and distance chip (chains and independents)", geo.length >= 10 && geoOk.length >= 4 && geoBad.length === 0, JSON.stringify(geoBad));
+  const geoOk = geo.filter((g) => g.rendered), geoBad = geo.filter((g) => g.margin !== "0px 0px 0px 0px" || (g.rendered && (Math.abs(g.dy) > 1 || !g.inTile)));
+  check("A9 tiles have no stray margin, are level with the top of the name and carry the distance chip in their lower half (chains and independents)", geo.length >= 10 && geoOk.length >= 4 && geoBad.length === 0, JSON.stringify(geoBad));
   await shot(page, "av-01-offline-monograms");
   check("A8 no page error", logs.errors.length === 0, JSON.stringify(logs.errors));
   await ctx.close();
@@ -137,6 +137,8 @@ const listLyon = async (page, extraOpts = {}) => { await search(page, { service:
   check("B14 failures are not cached (no 'work' entry for feuvert, ad, bosch)", st.v2 && !st.v2.w.feuvert && !st.v2.w.ad && !st.v2.w.bosch, JSON.stringify(st.v2 && st.v2.w));
   check("B15 logos are decorative: alt='', no referrer, parent aria-hidden", await page.$eval(".avatar.has-logo img.lg", (i) => i.getAttribute("alt") === "" && i.referrerPolicy === "no-referrer" && i.parentElement.getAttribute("aria-hidden") === "true"));
   check("B16 no page error; the console only has the expected logo misses", logs.errors.length === 0 && logs.console.length === 0, JSON.stringify([logs.errors, logs.console]));
+  const clrW = await tileClearance(page, 80), clrWLogos = clrW.filter((x) => x.logo).length;
+  check("B21 large tiles: the distance chip covers neither a logo nor a letter", clrWLogos >= 6 && clrW.length - clrWLogos >= 6 && clrW.every((x) => x.gap >= 2), JSON.stringify([clrWLogos, clrW.length, clrW.filter((x) => x.gap < 2)]));
   await page.evaluate(() => document.getElementById("panelCol").scrollTo(0, 0));
   await page.waitForTimeout(500);
   await shot(page, "av-02-tiers");
@@ -173,6 +175,19 @@ const listLyon = async (page, extraOpts = {}) => { await search(page, { service:
   const st2 = await page.evaluate(() => JSON.parse(localStorage.getItem("jg.logos.v2") || "null"));
   check("C5 refresh resets the remembered tier-2 icons and stamps a fresh date", st2 && Date.now() - st2.t < 60e3, JSON.stringify(st2 && st2.t));
   await ctx.close();
+
+  // small tiles (phone) — opened once the page above is closed: in « real » mode the local server answers the last context opened.
+  // the logo (or the letter) stays above the distance chip, on one line or two (distance, then city)
+  {
+    const m = await open(browser, server, FILE, { width: 390, height: 844, dpr: 2, touch: true, real: true, mock: MOCK });
+    await listLyon(m.page);
+    await waitIds(m.page, ["norauto", "midas", "points", "speedy", "roady", "euromaster"]);
+    await m.page.waitForTimeout(500);
+    const clr = await tileClearance(m.page, 80), lg = clr.filter((x) => x.logo).length;
+    check("B22 small tiles (390 px): the distance chip covers neither a logo nor a letter", lg >= 6 && clr.length - lg >= 6 && clr.some((x) => !x.city) && clr.every((x) => x.gap >= 2), JSON.stringify([lg, clr.length, clr.filter((x) => x.gap < 2)]));
+    await shot(m.page, "av-04-mobile");
+    await m.ctx.close();
+  }
 
   // ===== D. AD with a usable icon (.ico with 16/32/48 frames), pinned logo, Wikidata down =====
   ({ page, ctx } = await open(browser, server, FILE, { ...W, mock: { ...MOCK, siteIcons: { ...ICONS, "www.ad.fr": { "/favicon.ico": { frames: [16, 32, 48], color: "#D1001C" } } } } }));
@@ -285,7 +300,7 @@ const listLyon = async (page, extraOpts = {}) => { await search(page, { service:
   ({ page, ctx, logs } = await open(browser, server, FILE, { ...W, mock: MOCK }));
   await page.waitForTimeout(1200);
   const before2 = [ctx.__counters.wikidata, ctx.__counters.siteIcons.length];
-  await page.selectOption("#service", "ct");
+  await pickServices(page, "ct");
   await page.fill("#address", "12 rue de la république lyon"); await page.waitForSelector("#addrList li[data-i]", { state: "visible" }); await page.click("#addrList li[data-i='0']");
   await page.click("#go"); await page.waitForSelector("#list > li.card", { timeout: 12000 }); await page.waitForTimeout(700);
   const ct = await page.evaluate(() => [...document.querySelectorAll("#list .card")].map((c) => ({ kind: c.querySelector(".kind").textContent.trim(), brand: c.querySelector(".avatar").classList.contains("mono"), logo: c.querySelector(".avatar").classList.contains("has-logo"), text: c.querySelector(".avatar").textContent.trim(), chain: c.querySelector(".avatar").hasAttribute("data-c") })));

@@ -35,7 +35,7 @@ M = [
  ("an address of the table replaces OpenStreetMap's", 'if (g.addrGap && rec.addr) {', 'if (rec.addr) {', "B", "B9"),
  ("nothing is ever completed", 'if (!h.phoneCount(g.phone) && rec.phones.length) {', 'if (false) {', "B", "B6"),
  ("duplicates are added to the list", '    if (clash) {\n      dup++;\n      continue;\n    }', '    if (false) {\n      dup++;\n      continue;\n    }', "B", "B2"),
- ("a place within 4 m only is the same spot", 'export const SAME_SPOT_M = 40;', 'export const SAME_SPOT_M = 4;', "B", "B2"),
+ ("a place within 4 m only is the same spot", 'export const SAME_SPOT_M = 40; // en deçà : le nom peut manquer ou différer', 'export const SAME_SPOT_M = 4; // en deçà : le nom peut manquer ou différer', "B", "B2"),
  ("a table garage has a made-up identifier", 'id: "custom:ovt-" + rec.id.replace(/-/g, ""),', 'id: "ovt:" + rec.id,', "B", "B4"),
  ("a table garage without a street address is never looked up", 'addrGap: !rec.addr,', 'addrGap: false,', "B", "B14"),
  ("the address lookup keeps to OpenStreetMap's garages", 'if (!g || ("osm" !== g.src && "ovt" !== g.src) || !g.addrGap', 'if (!g || "osm" !== g.src || !g.addrGap', "B", "B14"),

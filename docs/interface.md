@@ -13,39 +13,58 @@ Ce que voit et fait le visiteur, et les choix de présentation. Le fonctionnemen
 - **Encart sous le récapitulatif** : « Les réparations déclarées par les automobilistes sont momentanément indisponibles… » (API en panne et aucune copie), « … la dernière copie enregistrée sur cet appareil est affichée » (API en panne, copie de moins de 7 jours), « N réparations en attente d'envoi… ».
 - **Messages** : réparation déjà déclarée (comptée une fois), refusée par le serveur (elle reste sur l'appareil), abandonnée après une semaine.
 
-## Ce qui a changé dans l'interface (refonte)
+## Mise en page « Orange & Marine » (refonte d'octobre 2026, branche `ux-orange-marine`)
 
-- **Ordinateur (≥ 1024 px)** : rail d'icônes à gauche, panneau (recherche + liste) flottant sur une **carte persistante plein écran**. Cliquer une fiche ou un marqueur la **sélectionne** : contour vert, fiche dépliée avec la frise « Votre adresse → garage », marqueur agrandi avec bulle noire, barre récapitulative sur la carte.
-- **Mobile** : barre du haut + navigation flottante en bas ; bouton **Carte / Liste** ; carte plein écran avec barre récapitulative (« Voir la fiche » ramène à la fiche).
-- **Fiches** : une seule fiche ouverte à la fois (accordéon), avatars (logo ou monogramme de l'enseigne, initiale pastel pour un indépendant), distance en pastille, statuts en pastilles à point, actions teintées, bouton noir « Déclarer une réparation ».
-- **Style** : charte Pixcar (noir, vert menthe, vert vif, blanc cassé : voir ci-dessous), grands rayons, police *Outfit* (remplace Plus Jakarta Sans, elle-même arrivée à la place de Barlow : voir « Typographie »), thème sombre complet (préférence système, ou `data-theme="light|dark"` sur `<html>`).
-- **Accessibilité** : lien d'évitement, titres ordonnés, cibles tactiles de 42 à 44 px (`pointer: coarse`), contrastes calculés y compris au pic des lueurs du fond (texte ≥ 4,5:1, bordures de champs ≥ 3:1), `prefers-reduced-motion`, `prefers-contrast`, `forced-colors`.
+Adaptée de la maquette de référence choisie par l'utilisateur (planches envoyées le 6 octobre 2026), avec les fonctions réelles du site :
 
-## Charte Pixcar
+- **Ordinateur (≥ 1024 px)** : rail d'icônes marine à gauche (Garages, Prix et promos, « + » pour déclarer une réparation) ; **barre de recherche flottante** en haut : *Où* (adresse, effacer, ma position), *Prestation* (ouvre la fenêtre de choix, voir « Plusieurs prestations »), *Rayon* (liste 3 à 50 km), *Énergie* pour le contrôle technique, et le bouton orange de recherche ; **panneau de résultats** à gauche (accueil avant la recherche : plaque « pixcar », phrase d'accroche et les trois étapes validées ; après : « N garages », « à moins de X km autour de … », menu **Trier** prix / distance / note, liste) ; **la carte remplit le reste**, avec au-dessus les menus de filtres **Type** (tous, enseignes, indépendants), **Prix** (tous, avec prix, en promo), **Enseignes** (cases, avec le nombre de centres) et **Plus de filtres** (ateliers du registre SIRENE, qui relancent la recherche), le bouton **Agrandir la carte** (le panneau s'efface) et **Ma position** sur la carte.
+- **Filtres** : les trois dimensions s'additionnent (ET) ; un seul menu ouvert à la fois, Échap le referme. Quand rien n'est trouvé, la barre reste là avec « Plus de filtres » seul, pour pouvoir ajouter le registre SIRENE.
+- **Fiches** : tuile carrée colorée selon le type (enseigne marine, atelier de marque, spécialiste pneus, indépendant et registre neutres), avec le logo ou l'initiale et **la distance posée sur la tuile** (« 1,4 km · Cazères » ; sur une petite tuile, la commune passe sous la distance et se raccourcit « … ») ; la pastille occupe le bas de la tuile, donc **le logo se place dans la partie libre au-dessus** (et la lettre y remonte quand la pastille a deux lignes) : rien n'est caché dessous (`tests/logos.js` B21-B22, `tests/city.js` F5, qui mesurent l'encre réelle de la lettre) ; nom (bouton qui ouvre la fiche, raccourci « … »), note communautaire « ★ 4,6 (3) » ou lien « Avis » Google ; adresse ; pastilles « type » et « disponibilité » ; prix ; bouton rond d'itinéraire puis « Appeler » (« Itinéraire » seul sans numéro). **Pas de favori** (♥ retiré à la demande de l'utilisateur). La fiche ouverte garde la frise « Votre adresse → garage », les lignes Téléphone, Horaires, Site et **Avis** (lien Google Maps), l'échelle de prix, les promotions et l'historique.
+- **Mobile** : barre du haut marine ; la recherche se replie en carte de résumé (« Lyon 2e · Vidange +1 », bouton « Modifier ») ; rangée de filtres ; liste ; bouton flottant **Carte / Liste** ; navigation en bas. La fenêtre des prestations s'ouvre en feuille depuis le bas.
+- **Boutons orange** : texte marine (l'orange `#FD5319` avec du blanc ne fait que 3,3:1 ; avec le marine, 5,7:1).
+- **Accessibilité** : cibles d'au moins 24 px (nom du garage, lien « Avis ») et 44 px au doigt, menus à boutons `aria-pressed` / `aria-expanded`, fenêtres en `showModal()` avec repli (sans `showModal()`, la fenêtre passe quand même devant la barre flottante), focus rendu au bouton qui a ouvert, contrastes AA calculés sur les jetons livrés (80 contrôles en clair, 80 en sombre).
 
-Tirée du logo, couleurs mesurées sur vos images : noir, vert menthe du symbole `#9DFC8C`, vert vif de « car » `#79FA52`, blanc cassé de « pix » `#F2F2F2`.
+Ce qui ne bouge pas avec la mise en page : les données (garages, prix, promotions, tri, filtres, distances, téléphones, liens) sont les mêmes qu'avant ; la suite `func` lancée sur la version d'avant (`ab6108d`) et sur celle-ci donne les mêmes 40 fiches (identifiants, noms, types, prix, étiquettes, promotions, distances, liens d'appel et d'itinéraire, dans le même ordre), les mêmes comptes par filtre et par rayon, les mêmes 8 centres de contrôle technique. Les seules différences relevées sont voulues : « autour de Lyon » dans le résumé, les enseignes de la zone dans le menu « Enseignes » plutôt que dans le résumé, la raison de disponibilité sans le type (déjà dit par la pastille voisine, la phrase complète reste en infobulle), « Avis » en haut de la fiche.
+
+## Plusieurs prestations
+
+La fenêtre « **Quelles prestations souhaitez-vous réaliser ?** » (bouton *Prestation* de la barre ; `src/js/modules/service-picker.js`) :
+
+- champ « Rechercher une prestation… » (sans accents ni casse, tous les mots doivent y être : libellé, groupe ou aide), liste par groupes à cases, **pastilles « Prestations sélectionnées »** retirables (×), bouton « **Valider cette prestation** » / « **Valider ces N prestations** » ;
+- rien n'est appliqué avant « Valider » : Échap, × ou un clic sur le voile referment sans rien changer ;
+- **le contrôle technique se cherche seul** (autres lieux, prix officiels) : le cocher retire les autres, en cocher une autre le retire ; **5 prestations au plus** (les autres cases se grisent, la fenêtre le dit) ;
+- sur téléphone, seule la liste défile : le titre, la recherche, les pastilles (sur une ligne qui défile de côté) et « Valider » restent à l'écran, même sur 320 × 640 ; au doigt, le clavier ne s'ouvre pas tout seul.
+
+Les résultats (`src/js/modules/svc-combo.js`, fonctions pures testées sans navigateur) :
+
+- la **première prestation** est la principale : elle pilote le contrôle technique, la page « Prix et promos », l'échelle de prix et la prestation proposée dans « Déclarer une réparation » ; la barre affiche son nom et « +N » ;
+- **total** : somme des prix connus de chaque prestation pour le garage (prix déclarés par les automobilistes, sinon prix national de l'enseigne), étiqueté « **Total N prestations** » ; **total partiel** dès qu'une prestation est sans prix, non faite ou « pièces en plus » : étiquette « Total partiel », mention « + 1 sur devis », jamais pris pour complet (le tri le met après les totaux complets, le filtre « Avec prix » l'écarte) ;
+- **disponibilité** : un garage qui ne fait aucune des prestations est écarté ; s'il n'en fait qu'une partie il reste, avec « **1 prestation sur 2** : ne propose pas … » ; sinon le niveau le plus faible l'emporte (une seule « à vérifier » suffit), en disant pour quelle prestation ;
+- **promotions** des enseignes sur chacune des prestations réunies sans doublon ; la fiche ouverte détaille **le prix de chaque prestation** (et d'où il vient, avec le lien de la source) puis le total, avec « Les promotions ne sont pas déduites » ;
+- **accueil** (avant la recherche) : « N prestations : les repères », fourchette des grandes enseignes qui publient le prix de **chacune** (« l'ensemble coûte de … à … »), puis une ligne par prestation ;
+- **résumé** : « N avec un prix pour les K prestations », le moins cher « au total » ; s'il n'y a que des totaux partiels, la phrase le dit ;
+- **mémoire** : la sélection est gardée avec la dernière recherche (`jg.last.v1`, champ `svcs`) ; une mémoire incohérente (contrôle technique avec une autre prestation, identifiant inconnu, plus de 5) est corrigée au chargement ;
+- **page « Prix et promos »** : choisir l'une des prestations sélectionnées n'y défait pas la sélection (on regarde ses prix) ; en choisir une autre remplace la sélection, comme avant.
+
+Une prestation seule s'affiche exactement comme avant (même prix, mêmes étiquettes, mêmes textes).
+
+## Charte Pixcar : Orange & Marine
+
+Choisie par l'utilisateur le 6 octobre 2026 parmi quatre propositions (planche comparative rendue dans le vrai site) ; elle remplace le noir et vert.
 
 | Élément | Clair | Sombre |
 | --- | --- | --- |
-| Rail, barre du haut (mobile), navigation flottante | noir (le « pix » est blanc : le logo a besoin d'un fond noir) | noir |
-| Onglet actif, bouton « Réparation » | vert vif, texte noir | idem |
-| Accent (liens, sélection, focus, marqueur choisi, rayon de recherche) | vert forêt `#0A7427` | vert vif `#79FA52` |
-| Bouton principal (pilule) | noir, texte blanc | vert vif, texte noir |
-| Pastille « Promo » | noir, texte vert vif | vert vif, texte noir |
-| Fond | blanc verdi `#EDF1EC`, lueurs menthe | noir `#040604`, lueurs vertes |
-| Fond de carte | Plan IGN désaturé (`--map-filter`) pour que marqueurs et accents ressortent ; **Mapbox (style `light-v11`) à sa place quand la page a un jeton**, même filtre | idem, inversé |
-| Initiales des garages indépendants | pastel dans les verts | idem, sombre |
+| Rail, barre du haut (mobile), plaque du mot-symbole | marine `#10121F` | marine profond `#07080f` |
+| Orange de marque (bouton de recherche, onglet actif, « + », boutons principaux) | `#FD5319`, **texte marine** | idem |
+| Orange clair du symbole (`--px-mint`) | `#FF9A72` | idem |
+| Accent (liens, sélection, focus, rayon de recherche) | `#b13506` (6,2:1 sur blanc) | `#ff7c49` |
+| Fond de page | gris bleuté `#EEF0F6` (`--canvas`) avec des lueurs pêche et bleues | `#07080f` avec lueurs orange et bleues |
+| Marqueurs | marine `#10121F` (avec prix), gris `#8e94aa` (sans prix), orange `#E5440B` (choisi) | clair `#f4f5fa`, gris, orange `#ff7c49` |
+| Tuiles des fiches | enseigne marine, atelier de marque et pneus en teintes douces, indépendants neutres (`--card-2`) | idem, sombre |
 
-Pourquoi un vert plus sombre en clair : le vert vif sur blanc ne fait que 1,35:1 ; `#0A7427` fait 5,9:1 sur blanc et au moins 4,5:1 sur tous les fonds clairs, y compris au pic des lueurs. Le jaune ne subsiste que dans les étoiles et l'ambre des avertissements ; les monogrammes d'enseignes gardent leurs propres couleurs.
+Logos : le mot-symbole « pixcar » est l'image d'origine dont seule la palette (bloc PLTE) a été réécrite (5 433 octets, comme avant : un nouveau codage en couleurs vraies faisait 19 Ko et crevait le budget) ; favicon SVG (symbole orange clair sur marine) et `apple-touch-icon` (PNG à palette de 2 Ko) ; `theme-color` `#10121F`.
 
-Logos :
-
-- **Symbole** (anneau de 16 secteurs) : retracé en vectoriel à partir de votre image (superposé à l'original : même surface à 0,2 % près, bords à moins d'un pixel à 840 px). Il est dans le sprite SVG (`<symbol id="px-mark">`) et sert au rail, à la barre du haut et au favicon.
-- **Mot-symbole « pixcar »** : votre PNG, recadré et réduit à 32 couleurs (572 × 193, ≈ 5 Ko), en image de fond de `.px-word`. Sur ordinateur il remplace le titre « Garages » dans une plaque noire (le texte reste pour les lecteurs d'écran) ; sur mobile il est dans la barre du haut. C'est un raster : net même sur un écran 3× à cette taille ; si vous avez le SVG, remplacez l'image.
-- Favicon SVG et icône d'écran d'accueil (`apple-touch-icon`) en `data:`, `theme-color` noir, `<title>` « Pixcar ».
-- Changer de logo : remplacer le `<path>` de `#px-mark` et l'image de `.px-word` (mettre à jour `aspect-ratio` si les proportions changent).
-
-Jetons (section 1 du CSS) : `--px-mint`, `--px-lime`, `--px-ice` (marque, fixes), `--accent*`, `--promo-*`, `--chrome-*` (rail), `--mk-*` (marqueurs, lus par le JS). Les anciens jetons `--indigo*` et `--pink*` n'existent plus.
+Jetons (section 1 du CSS, et `src/css/tokens.dark.css` pour le sombre) : `--px-mint`, `--px-lime`, `--px-ice`, `--rail-bg`, `--accent*`, `--btn`, `--on-btn`, `--on-lime`, `--plate`, `--mk-*` (marqueurs, lus par le JS). L'audit `tests/contrast/contrast_css.py` lit tout le bloc `:root` livré.
 
 ## Ce qui ne change pas
 

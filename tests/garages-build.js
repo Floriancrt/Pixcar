@@ -7,7 +7,7 @@ delete process.env.PIXCAR_ROOT; // la suite construit et sert ses propres sites,
 const { execFileSync, spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const { launch, open, search, ROOT } = require("./harness");
+const { launch, open, search, ROOT, sortBy } = require("./harness");
 const { serveDir } = require("./static-server");
 const { OSM, FOUR, TILES, ovtId, dayStr, indexOf } = require("./fixtures/garages-data");
 
@@ -122,7 +122,7 @@ const cspOf = (headers) => { const m = /Content-Security-Policy: (.*)/.exec(head
     const server = await serveDir(dir);
     const { page, ctx, logs } = await open(browser, server, "index.html", { ...W, mock: { elements: OSM, reverse: { delayMs: 50 } }, initScript: "window.JG_CITY_LOOKUP=false;" });
     await search(page, { service: "vidange", km: 10 });
-    await page.click("[data-sort=dist]"); await page.waitForTimeout(500);
+    await sortBy(page, "dist"); await page.waitForTimeout(500);
     const reqs = server.stats.requests.filter((r) => /\/garages\//.test(r));
     const tiles = reqs.filter((r) => /\/garages\/t\//.test(r)).map((r) => /t\/(.*)\.json/.exec(r)[1]).sort();
     check(`E1 ${label}: the page reads the index once and exactly the four tiles of the disc, from its own origin`, reqs.filter((r) => /index\.json/.test(r)).length === 1 && tiles.join() === FOUR.join(), JSON.stringify(reqs));

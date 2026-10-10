@@ -6,6 +6,8 @@ import { loadScript } from "./modules/load-script.js";
 import { MAPBOX_OPTIONS, mapboxConfig, mapboxTileUrl } from "./modules/mapbox.js";
 import { createEnricher, missingOf } from "./modules/mapbox-fiches.js";
 import { phoneList, phoneParse } from "./modules/phone.js";
+import { SVC_MAX, initServicePicker } from "./modules/service-picker.js";
+import { comboOffer, comboPrice, comboPromos, comboRange, comboTag } from "./modules/svc-combo.js";
 import { createStore, jsonStorage } from "./modules/repair-store.js";
 import { KEEP_TAG, OVERPASS_MIRRORS, inMetroFrance, overpassQuery } from "./shared/overpass.js";
 import { PLATE_RE, PRICE_MAX, PRICE_MIN, YEAR_MIN } from "./shared/rules.js";
@@ -815,7 +817,6 @@ import { SERVICES } from "./shared/services.js";
       addrList: w("#addrList"),
       locate: w("#locateBtn"),
       radius: w("#radius"),
-      chips: w("#radiusChips"),
       energyField: w("#energyField"),
       energy: w("#energy"),
       more: w("#moreOpts"),
@@ -844,6 +845,25 @@ import { SERVICES } from "./shared/services.js";
       refService: w("#refService"),
       panelCol: w("#panelCol"),
       mapInfo: w("#mapInfo"),
+      stage: w("#stage"),
+      svcBtn: w("#svcBtn"),
+      svcVal: w("#svcVal"),
+      svcN: w("#svcN"),
+      sumSvc: w("#sumSvc"),
+      addrClear: w("#addrClear"),
+      resTop: w("#resTop"),
+      sortBox: w("#sortBox"),
+      sortBtn: w("#sortBtn"),
+      sortVal: w("#sortVal"),
+      sortMenu: w("#sortMenu"),
+      ddType: w("#ddType"),
+      ddPrice: w("#ddPrice"),
+      ddChain: w("#ddChain"),
+      chainWrap: w("#chainWrap"),
+      menuChain: w("#menuChain"),
+      moreBtnF: w("#moreBtnF"),
+      mapExpand: w("#mapExpand"),
+      mapLocate: w("#mapLocate"),
     },
     me = {
       mode: "unknown",
@@ -855,8 +875,10 @@ import { SERVICES } from "./shared/services.js";
       fetchedKm: 0,
       view: [],
       shown: r,
+      svcs: [],
       sort: "price",
-      filter: "all",
+      flt: { type: "all", price: "all", chains: [] },
+      searched: !1,
       notes: [],
       busy: !1,
       screen: "garages",
@@ -887,15 +909,46 @@ import { SERVICES } from "./shared/services.js";
     return ((e = pe.service.value), o.find((t) => t.id === e) || o[0]);
     var e;
   };
+  // Prestations choisies (me.svcs) : la première est la principale (pe.service, qui pilote les prix) ; le bouton « Prestation » de la barre
+  // de recherche et le résumé repliable les nomment. Le choix se fait dans la fenêtre de modules/service-picker.js.
+  const selSvcs = () => {
+      const l = (me.svcs.length ? me.svcs : [fe().id]).map((id) => o.find((t) => t.id === id)).filter(Boolean);
+      return l.length ? l : [fe()];
+    },
+    svcLabels = () => selSvcs().map((t) => t.label),
+    svcSummary = () => {
+      const l = svcLabels();
+      return l.length > 1 ? `${l[0]} +${l.length - 1}` : l[0];
+    },
+    placeNear = () => {
+      const p = me.place,
+        n = p ? ("Ma position" === p.label ? "ma position" : p.city || p.label || "") : "";
+      return n ? ` autour de ${y(n)}` : "";
+    };
+  function svcShow() {
+    (me.svcs[0] !== fe().id && (me.svcs = [fe().id]),
+      (me.svcs = [...new Set(me.svcs)].filter((id) => o.some((t) => t.id === id)).slice(0, SVC_MAX)),
+      "ct" === fe().kind && (me.svcs = [fe().id])); // le contrôle technique se cherche seul
+    const l = svcLabels();
+    ((pe.svcVal.textContent = l[0]), (pe.svcN.hidden = l.length < 2), (pe.svcN.textContent = l.length > 1 ? `+${l.length - 1}` : ""), Fe());
+  }
+  function svcApply(ids) {
+    ((me.svcs = ids.slice()), (pe.service.value = ids[0]), pe.service.dispatchEvent(new Event("change")));
+  }
   function ve() {
     const e = fe();
     ((pe.hint.textContent = e.hint || ""),
       (pe.energyField.hidden = "ct" !== e.kind),
-      (pe.more.hidden = "ct" === e.kind),
+      (pe.moreBtnF.hidden = "ct" === e.kind),
       (pe.goLabel.textContent = "ct" === e.kind ? "Rechercher les centres" : "Rechercher les garages"),
       (pe.refService.value = pe.service.value),
-      (function () {
-        const e = fe();
+      refShow(fe()),
+      svcShow(),
+      be());
+  }
+  // Page « Prix et promos » : prix nationaux et promotions des enseignes pour une prestation
+  function refShow(e) {
+    (function () {
         if ("ct" === e.kind)
           return void (pe.refList.innerHTML =
             '<li class="ref-empty">Chaque centre déclare ses propres tarifs. La recherche affiche le prix officiel de chaque centre autour de votre adresse. Données publiques : <a href="https://prix.conso.gouv.fr/controle-technique" target="_blank" rel="noopener">prix.conso.gouv.fr</a>.</li>');
@@ -925,12 +978,36 @@ import { SERVICES } from "./shared/services.js";
             )
             .join(""))),
           (pe.refList.innerHTML = n));
-      })(),
-      be());
+      })();
   }
   function be() {
     const e = fe();
     if (((pe.teaser.hidden = me.raw.length > 0), pe.teaser.hidden)) return;
+    const ss = selSvcs();
+    if (ss.length > 1) {
+      // plusieurs prestations : fourchette des enseignes qui publient le prix de chacune, puis les repères de chaque prestation
+      const rg = comboRange(
+          ss.map((x) => x.id),
+          u,
+        ),
+        pn = new Set(v.filter((t) => ss.some((x) => t.svc.includes(x.id)) && "active" === ie(t)).map((e) => e.c)).size,
+        li = ss
+          .map((x) => {
+            const a = (u[x.id] || []).filter((e) => !e.partial).map((e) => e.p),
+              lo = Math.min(...a),
+              hi = Math.max(...a);
+            return `<li><span>${y(x.label)}</span><b>${a.length ? (lo === hi ? C(lo) : `${C(lo)} à ${C(hi)}`) : "sur devis"}</b></li>`;
+          })
+          .join("");
+      let t = rg
+        ? rg.n > 1
+          ? `Dans les grandes enseignes qui publient le prix de chacune, l'ensemble coûte de <b>${C(rg.min.p)}</b> chez ${y(D(rg.min.c).name)} à <b>${C(rg.max.p)}</b> chez ${y(D(rg.max.c).name)} (prix «\u00a0à\u00a0partir\u00a0de\u00a0»).`
+          : `Seule enseigne à publier le prix de chacune : ${y(D(rg.min.c).name)}, <b>${C(rg.min.p)}</b> pour l'ensemble (prix «\u00a0à\u00a0partir\u00a0de\u00a0»).`
+        : "Aucune grande enseigne ne publie le prix de chacune de ces prestations : demandez des devis, puis déclarez le prix payé.";
+      pn && (t += ` ${pn > 1 ? `${pn} enseignes ont une promotion en cours` : "Une enseigne a une promotion en cours"} sur l'une d'elles.`);
+      pe.teaser.innerHTML = `<h2>${ss.length} prestations : les repères</h2><p>${t}</p><ul class="teaser-svcs">${li}</ul><p><a href="#prix">Voir les prix et promotions des enseignes</a></p>`;
+      return;
+    }
     let t;
     if ("ct" === e.kind)
       t =
@@ -958,7 +1035,7 @@ import { SERVICES } from "./shared/services.js";
       (await t.json(),
         (me.mode = "live"),
         (pe.banner.hidden = !0),
-        me.raw.length && ((pe.mapPane.hidden = pe.mapFab.hidden = !me.place), Et()));
+        me.raw.length && ((pe.mapPane.hidden = pe.mapFab.hidden = pe.mapExpand.hidden = !me.place), Et()));
     } catch (e) {
       ((me.mode = "preview"), (pe.banner.hidden = !1));
     }
@@ -994,7 +1071,10 @@ import { SERVICES } from "./shared/services.js";
       })
       .filter((e) => isFinite(e.lat) && isFinite(e.lon));
   }
+  const svcPicker = initServicePicker({ services: o, get: () => (me.svcs.length ? me.svcs : [fe().id]), apply: svcApply });
   pe.refService.addEventListener("change", () => {
+    // une des prestations choisies (il y en a plusieurs) : la page des prix l'affiche, la sélection de la recherche ne change pas
+    if (me.svcs.length > 1 && me.svcs.includes(pe.refService.value)) return void refShow(o.find((t) => t.id === pe.refService.value));
     ((pe.service.value = pe.refService.value), pe.service.dispatchEvent(new Event("change")));
   });
   const ke = { housenumber: "Adresse", street: "Voie", municipality: "Commune", locality: "Lieu-dit" };
@@ -1025,13 +1105,32 @@ import { SERVICES } from "./shared/services.js";
     t && ((me.place = t), (pe.address.value = t.label), Ce(), na());
   }
   function _e() {
-    for (const e of pe.chips.querySelectorAll(".chip"))
-      e.setAttribute("aria-pressed", String(e.dataset.km === pe.radius.value));
     Fe();
   }
   function Fe() {
     const e = me.place ? me.place.label : pe.address.value.trim() || "Adresse à préciser";
     pe.sumWhere.textContent = `${e}\u00a0· ${pe.radius.value}\u00a0km`; // insécables : la ligne ne commence jamais par « · »
+    pe.sumSvc.textContent = svcSummary();
+  }
+  // Position de l'appareil : depuis le champ elle remplit l'adresse (« Ma position ») ; depuis la carte elle lance aussi la recherche.
+  function locateMe(run) {
+    "geolocation" in navigator
+      ? (dt("Localisation en cours…"),
+        navigator.geolocation.getCurrentPosition(
+          (e) => {
+            ((me.place = {
+              label: "Ma position",
+              lat: e.coords.latitude,
+              lon: e.coords.longitude,
+              dep: "",
+            }),
+              (pe.address.value = "Ma position"),
+              run ? lt() : dt("Position trouvée. Lancez la recherche."));
+          },
+          () => dt("Position refusée ou indisponible : saisissez une adresse.", "err"),
+          { timeout: 9e3, maximumAge: 3e5 },
+        ))
+      : dt("La localisation n'est pas disponible ici : saisissez une adresse.", "err");
   }
   function Pe(e) {
     (pe.form.classList.toggle("is-collapsed", e),
@@ -1072,38 +1171,21 @@ import { SERVICES } from "./shared/services.js";
       t && Ee(+t.dataset.i);
     }),
     pe.address.addEventListener("blur", () => setTimeout(Ce, 120)),
-    pe.locate.addEventListener("click", () => {
-      "geolocation" in navigator
-        ? (dt("Localisation en cours…"),
-          navigator.geolocation.getCurrentPosition(
-            (e) => {
-              ((me.place = {
-                label: "Ma position",
-                lat: e.coords.latitude,
-                lon: e.coords.longitude,
-                dep: "",
-              }),
-                (pe.address.value = "Ma position"),
-                dt("Position trouvée. Lancez la recherche."));
-            },
-            () => dt("Position refusée ou indisponible : saisissez une adresse.", "err"),
-            { timeout: 9e3, maximumAge: 3e5 },
-          ))
-        : dt("La localisation n'est pas disponible ici : saisissez une adresse.", "err");
-    }),
+    pe.locate.addEventListener("click", () => locateMe(!1)),
+    pe.mapLocate.addEventListener("click", () => locateMe(!0)),
     pe.editSearch.addEventListener("click", () => {
-      (Pe(!1), pe.address.focus(), pe.address.select());
+      ("map" === me.viewMode && St("list"), Pe(!1), pe.address.focus(), pe.address.select());
     }),
-    pe.chips.addEventListener("click", (e) => {
-      const t = e.target.closest(".chip");
-      t &&
-        ((pe.radius.value = t.dataset.km),
-        _e(),
+    pe.radius.addEventListener("change", () => {
+      (_e(),
         na(),
         me.raw.length &&
           (+pe.radius.value <= me.fetchedKm
             ? ht()
             : dt(`Relancez la recherche pour élargir la zone à ${pe.radius.value} km.`)));
+    }),
+    pe.addrClear.addEventListener("click", () => {
+      ((pe.address.value = ""), (me.place = null), Ce(), Fe(), pe.address.focus());
     }));
   const Re = "jg.osm.v3";
   try {
@@ -1194,8 +1276,8 @@ import { SERVICES } from "./shared/services.js";
       g.addrApprox ? n.setAttribute("title", adTitle(g)) : n.removeAttribute("title");
     }
     me.sel === g.id && Mk.has(g.id) && bindTip(Mk.get(g.id), g, !0);
-    const c = pe.list.querySelector(`[data-id="${CSS.escape(g.id)}"] .act-reviews`);
-    (c && (c.href = adGoogle(g)), cityRepaint(g));
+    for (const c of pe.list.querySelectorAll(`[data-id="${CSS.escape(g.id)}"] .act-reviews`)) c.href = adGoogle(g);
+    cityRepaint(g);
   }
   function adFetch(g) {
     const k = adId(g);
@@ -2134,9 +2216,15 @@ import { SERVICES } from "./shared/services.js";
       me.openIds.clear(),
       sl(null),
       (pe.summary.hidden = !0),
+      (pe.resTop.hidden = !0),
       (pe.toolbar.hidden = !0),
+      (me.searched = !1),
+      document.body.classList.remove("has-results", "map-wide"),
+      pe.mapExpand.setAttribute("aria-pressed", "false"),
+      menuClose(),
       (pe.mapPane.hidden = !0),
       (pe.mapFab.hidden = !0),
+      (pe.mapExpand.hidden = !0),
       (pe.moreBtn.hidden = !0),
       (pe.osmNote.hidden = !0),
       "map" === me.viewMode && St("list"),
@@ -2163,29 +2251,82 @@ import { SERVICES } from "./shared/services.js";
     pe.repairNote.hidden = !parts.length;
   }
   const mt = (e) => e.price && isFinite(e.price.amount) && !e.price.partial;
-  function gt(e) {
-    me.filter = e;
-    const t = e.startsWith("chain:") ? "chains" : e;
-    for (const e of pe.toolbar.querySelectorAll("[data-filter]"))
-      e.setAttribute("aria-pressed", String(e.dataset.filter === t));
+  // ----- Filtres, tri et menus déroulants -----
+  // Trois filtres qui s'ajoutent (ET) : type (tous, enseignes, indépendants), prix (tous, avec prix, en promo) et enseignes choisies (aucune = toutes).
+  // Chaque menu est un bouton qui ouvre une liste de boutons à bascule (aria-pressed) ; un seul menu est ouvert à la fois.
+  const fltLabel = { chains: "Enseignes", indep: "Indépendants", priced: "Avec prix", promo: "En promo" },
+    sortLabel = { price: "prix", dist: "distance", note: "note" };
+  function ddSet(btn, base, text, n) {
+    btn.querySelector(".dd-lbl").textContent = text || base;
+    const c = btn.querySelector(".dd-n");
+    ((c.hidden = !(n > 0)), (c.textContent = n > 0 ? String(n) : ""), btn.classList.toggle("is-on", !!text || n > 0));
+  }
+  function fltSync() {
+    const f = me.flt;
+    for (const b of pe.toolbar.querySelectorAll("[data-ftype]")) b.setAttribute("aria-pressed", String(b.dataset.ftype === f.type));
+    for (const b of pe.toolbar.querySelectorAll("[data-fprice]")) b.setAttribute("aria-pressed", String(b.dataset.fprice === f.price));
+    ddSet(pe.ddType, "Type", fltLabel[f.type] || "", 0);
+    ddSet(pe.ddPrice, "Prix", fltLabel[f.price] || "", 0);
+    ddSet(pe.ddChain, "Enseignes", "", f.chains.length);
+  }
+  function sortSync() {
+    for (const b of pe.sortMenu.querySelectorAll("[data-sort]")) b.setAttribute("aria-pressed", String(b.dataset.sort === me.sort));
+    pe.sortVal.textContent = sortLabel[me.sort] || "prix";
+  }
+  const applyFilters = (list) =>
+    list.filter((x) => {
+      const f = me.flt;
+      if ("chains" === f.type && !(x.chain || x.network)) return !1;
+      if ("indep" === f.type && (x.chain || x.network)) return !1;
+      if ("priced" === f.price && !mt(x)) return !1;
+      if ("promo" === f.price && !le(x.promos)) return !1;
+      return !f.chains.length || !!(x.chain && f.chains.includes(x.chain.id));
+    });
+  // Liste des enseignes présentes dans les résultats (avec leur nombre de centres) : menu « Enseignes »
+  function renderChainMenu(list) {
+    const o = new Map();
+    for (const t of list)
+      if (t.chain) {
+        const e = o.get(t.chain.id) || { c: t.chain, n: 0 };
+        (e.n++, o.set(t.chain.id, e));
+      }
+    const items = [...o.values()].sort((e, t) => t.n - e.n || e.c.name.localeCompare(t.c.name, "fr")),
+      sel = me.flt.chains,
+      total = items.reduce((a, e) => a + e.n, 0);
+    pe.chainWrap.hidden = !items.length;
+    pe.menuChain.innerHTML = items.length
+      ? `<h4 class="menu-h" id="chainLbl">Enseignes dans la zone</h4>${items
+          .map(
+            (e) =>
+              `<button type="button" class="mopt" data-chain="${e.c.id}" aria-pressed="${sel.includes(e.c.id)}"><span class="cb" aria-hidden="true"></span>${y(e.c.name)}<span class="n">${e.n}<span class="sr-only"> ${e.n > 1 ? "centres" : "centre"}</span></span></button>`,
+          )
+          .join(
+            "",
+          )}<button type="button" class="mopt" data-chain-all aria-pressed="${!sel.length}"><span class="cb" aria-hidden="true"></span>Toutes les enseignes<span class="n">${total}</span></button>`
+      : "";
+  }
+  let menuOpen = null;
+  function menuClose(focusBtn) {
+    if (!menuOpen) return;
+    const { btn, menu } = menuOpen;
+    ((menu.hidden = !0), btn.setAttribute("aria-expanded", "false"), (menuOpen = null), focusBtn && btn.focus());
+  }
+  function menuToggle(btn) {
+    const menu = document.getElementById(btn.getAttribute("aria-controls"));
+    if (menuOpen && menuOpen.btn === btn) return menuClose(!0);
+    (menuClose(), (menu.hidden = !1), btn.setAttribute("aria-expanded", "true"), (menuOpen = { btn, menu }));
   }
   function ht() {
     const e = fe(),
       t = "ct" === me.kind,
-      a = pe.toolbar.querySelector('[data-filter="promo"]'),
-      n = pe.toolbar.querySelector('[data-sort="note"]');
-    if (
-      ((a.hidden = t),
-      (n.hidden = t),
-      t && ("promo" === me.filter || me.filter.startsWith("chain:")) && gt("all"),
-      t && "note" === me.sort)
-    ) {
-      me.sort = "price";
-      for (const e of pe.toolbar.querySelectorAll("[data-sort]"))
-        e.setAttribute("aria-pressed", String("price" === e.dataset.sort));
-    }
+      a = pe.toolbar.querySelector('[data-fprice="promo"]'),
+      n = pe.sortMenu.querySelector('[data-sort="note"]');
+    ((a.hidden = t), (n.hidden = t));
+    // pas de promotions ni d'enseignes choisies pour le contrôle technique ; pas de note non plus
+    (t && ("promo" === me.flt.price && (me.flt.price = "all"), (me.flt.chains = [])), t && "note" === me.sort && (me.sort = "price"));
     const r = (function () {
       const e = fe(),
+        ss = selSvcs(),
         t = +pe.radius.value,
         a = me.place,
         n = [];
@@ -2201,15 +2342,17 @@ import { SERVICES } from "./shared/services.js";
               price: e ? { kind: "official", amount: e.price } : { kind: "none" },
             });
           } else {
-            const t = Xe(r, e);
+            // plusieurs prestations : disponibilité, total et promotions de l'ensemble (modules/svc-combo.js) ; une seule : inchangé
+            const offers = ss.map((x) => ({ label: x.label, ...Xe(r, x) })),
+              t = comboOffer(offers);
             if ("no" === t.lvl) continue;
             const a = rt(r, null);
             n.push({
               ...r,
               dist: s,
               offer: t,
-              price: st(r, e, a),
-              promos: r.chain ? oe(r.chain.id, e.id) : [],
+              price: comboPrice(ss.map((x, i) => ({ id: x.id, label: x.label, unit: x.unit, price: st(r, x, a), no: "no" === offers[i].lvl }))),
+              promos: r.chain ? comboPromos(ss.map((x) => oe(r.chain.id, x.id))) : [],
               rating: ae(a),
               mine: a,
             });
@@ -2217,9 +2360,7 @@ import { SERVICES } from "./shared/services.js";
       }
       return n;
     })();
-    (me.filter.startsWith("chain:") &&
-      !r.some((e) => e.chain && "chain:" + e.chain.id === me.filter) &&
-      gt("all"),
+    ((me.flt.chains = me.flt.chains.filter((id) => r.some((e) => e.chain && e.chain.id === id))),
       (me.view = (function (e) {
         const t = e.slice();
         if ("dist" === me.sort) return t.sort((e, t) => e.dist - t.dist);
@@ -2235,31 +2376,18 @@ import { SERVICES } from "./shared/services.js";
           (e, t) => a(e) - a(t) || (a(e) < 2 ? e.price.amount - t.price.amount : 0) || e.dist - t.dist,
         );
       })(
-        (function (e) {
-          switch (me.filter) {
-            case "priced":
-              return e.filter(mt);
-            case "chains":
-              return e.filter((e) => e.chain || e.network);
-            case "indep":
-              return e.filter((e) => !e.chain && !e.network);
-            case "promo":
-              return e.filter((e) => le(e.promos));
-            default:
-              return me.filter.startsWith("chain:")
-                ? e.filter((e) => e.chain && "chain:" + e.chain.id === me.filter)
-                : e;
-          }
-        })(r),
+        applyFilters(r),
       )),
       (pe.teaser.hidden = !0),
       (function (e, t) {
         const a = +pe.radius.value,
-          n = e.filter(mt);
+          n = e.filter(mt),
+          k = selSvcs().length,
+          near = placeNear();
         let r = "";
         if ("ct" === me.kind) {
           if (
-            ((r += `<p class="big">${e.length} centre${e.length > 1 ? "s" : ""} de contrôle technique à moins de ${a} km</p>`),
+            ((r += `<p class="big"><b>${e.length} centre${e.length > 1 ? "s" : ""}</b> <span>de contrôle technique à moins de ${a} km${near}</span></p>`),
             n.length)
           ) {
             const e = n.map((e) => e.price.amount),
@@ -2268,36 +2396,24 @@ import { SERVICES } from "./shared/services.js";
           }
         } else {
           if (
-            ((r += `<p class="big">${e.length} garage${e.length > 1 ? "s" : ""} à moins de ${a} km</p>`),
+            ((r += `<p class="big"><b>${e.length} garage${e.length > 1 ? "s" : ""}</b> <span>à moins de ${a} km${near}</span></p>`),
             n.length)
           ) {
             const e = n.reduce((e, t) => (t.price.amount < e.price.amount ? t : e)),
-              t = n.filter((e) => "declared" === e.price.kind).length;
-            r += `<p class="best">${n.length} avec un prix${t ? ` (dont ${t} déclaré${t > 1 ? "s" : ""} par ${"remote" === RS.mode ? "des automobilistes" : "vous"})` : " affiché"}. Le moins cher : <b>${y(e.name)}</b>, à ${E(e.dist)}, <b>${C(e.price.amount)}</b>.</p>`;
+              t = n.filter((e) => "declared" === e.price.kind || e.price.declared > 0).length,
+              who = "remote" === RS.mode ? "des automobilistes" : "vous";
+            r +=
+              k > 1
+                ? `<p class="best">${n.length} avec un prix pour les ${k} prestations${t ? ` (dont ${t} avec un prix déclaré par ${who})` : ""}. Le moins cher : <b>${y(e.name)}</b>, à ${E(e.dist)}, <b>${C(e.price.amount)}</b> au total.</p>`
+                : `<p class="best">${n.length} avec un prix${t ? ` (dont ${t} déclaré${t > 1 ? "s" : ""} par ${who})` : " affiché"}. Le moins cher : <b>${y(e.name)}</b>, à ${E(e.dist)}, <b>${C(e.price.amount)}</b>.</p>`;
           } else
             e.length
-              ? (r += `<p class="best">${(u[t.id] || []).length ? "Aucun centre d'enseigne à prix public dans cette zone." : "Aucun prix public pour cette prestation."} Demandez des devis, puis déclarez le prix payé avec « Ajouter une réparation » pour construire l'échelle de prix de chaque garage.</p>`)
+              ? (r += `<p class="best">${k > 1 ? (e.some((x) => "combo" === x.price.kind) ? `Aucun garage n'affiche un prix pour chacune des ${k} prestations : les totaux sont partiels.` : "Aucun prix public pour ces prestations.") : (u[t.id] || []).length ? "Aucun centre d'enseigne à prix public dans cette zone." : "Aucun prix public pour cette prestation."} Demandez des devis, puis déclarez le prix payé avec « Ajouter une réparation » pour construire l'échelle de prix de chaque garage.</p>`)
               : (r +=
-                  '<p class="best">Aucun garage référencé dans cette zone. Élargissez le rayon ou cochez le registre SIRENE dans les options.</p>');
+                  '<p class="best">Aucun garage référencé dans cette zone. Élargissez le rayon ou ajoutez les ateliers du registre SIRENE (« Plus de filtres »).</p>');
           const i = [...new Set(e.filter((e) => le(e.promos)).map((e) => e.chain.name))];
           i.length &&
             (r += `<p class="best"><span class="tag promo">${se}Promo</span> ${i.length > 1 ? "Promotions en cours" : "Promotion en cours"} chez ${y(((s = i), s.length < 2 ? s.join("") : s.slice(0, -1).join(", ") + " et " + s[s.length - 1]))}.</p>`);
-          const o = new Map();
-          for (const t of e)
-            if (t.chain) {
-              const e = o.get(t.chain.id) || { c: t.chain, n: 0 };
-              (e.n++, o.set(t.chain.id, e));
-            }
-          o.size &&
-            (r += `<div class="chain-line"><span class="lbl-s" id="chainLbl">Enseignes dans la zone</span><div class="chips" role="group" aria-labelledby="chainLbl">${[
-              ...o.values(),
-            ]
-              .sort((e, t) => t.n - e.n || e.c.name.localeCompare(t.c.name, "fr"))
-              .map(
-                (e) =>
-                  `<button type="button" class="chip sm" data-chain="${e.c.id}" aria-pressed="${me.filter === "chain:" + e.c.id}">${y(e.c.name)} <span class="n">${e.n}</span><span class="sr-only"> ${e.n > 1 ? "centres" : "centre"}</span></button>`,
-              )
-              .join("")}</div></div>`);
         }
         var s;
         for (const e of me.notes) r += `<p class="hint">${y(e)}</p>`;
@@ -2309,10 +2425,18 @@ import { SERVICES } from "./shared/services.js";
         const i = w("#refreshBtn");
         i && i.addEventListener("click", () => lt(!0));
       })(r, e),
-      (pe.toolbar.hidden = 0 === r.length),
+      (pe.toolbar.hidden = !1),
+      pe.toolbar.classList.toggle("is-empty", 0 === r.length),
+      renderChainMenu(r),
+      fltSync(),
+      sortSync(),
+      (me.searched = !0),
+      document.body.classList.add("has-results"),
+      (pe.resTop.hidden = !1),
+      (pe.sortBox.hidden = 0 === r.length),
       (pe.osmNote.hidden = t || !me.view.length),
       (pe.mapPane.hidden = "preview" === me.mode || !me.place || !r.length),
-      (pe.mapFab.hidden = pe.mapPane.hidden),
+      (pe.mapFab.hidden = pe.mapExpand.hidden = pe.mapPane.hidden),
       me.sel && !me.view.some((e) => e.id === me.sel) && sl(null),
       Et(),
       ft(),
@@ -2329,7 +2453,7 @@ import { SERVICES } from "./shared/services.js";
                 n = a
                   ? `<span class="amount"><span class="num">${C(a.price)}</span></span><span class="tag ok">Prix officiel</span>`
                   : '<span class="no-price">Prix non déclaré</span>';
-              return bt(e, t, e.network || "Contrôle technique", "", n, { details: () => $t(e) });
+              return bt(e, t, e.network || "Contrôle technique", reviewsLink(e), n, { details: () => $t(e) });
             })(t, a)
           : (function (e, t, a) {
               const n = e.price,
@@ -2342,19 +2466,21 @@ import { SERVICES } from "./shared/services.js";
                   ? `<span class="amount"><span class="num">${C(n.amount)}</span>${i}</span><span class="tag info">Prix déclaré</span>`
                   : "chain" === n.kind
                     ? `<span class="amount">${n.approx ? '<span class="from">env.</span>' : ""}<span class="num">${C(n.amount)}</span>${i}</span><span class="tag ${n.partial ? "warn" : "ok"}">${n.partial ? "Pièces en plus" : "Prix enseigne"}</span>`
-                    : "center" === n.kind
-                      ? '<span class="no-price">Tarif fixé par le centre</span>'
-                      : '<span class="no-price">Prix non publié</span>';
+                    : "combo" === n.kind
+                      ? `<span class="amount">${n.approx ? '<span class="from">env.</span>' : ""}<span class="num">${C(n.amount)}</span>${n.missing ? `<span class="unit">+ ${n.missing} sur devis</span>` : ""}</span><span class="tag ${n.partial ? "warn" : n.declared ? "info" : "ok"}">${y(comboTag(n))}</span>`
+                      : "center" === n.kind
+                        ? '<span class="no-price">Tarif fixé par le centre</span>'
+                        : '<span class="no-price">Prix non publié</span>';
               const l = e.rating,
                 c = l
-                  ? `<span class="rating">${re(l.avg)}<span><b>${te(l.avg)}</b>/5 · ${V(l.n, "note", "notes")}</span></span>`
-                  : "",
+                  ? `<span class="rating" title="${y(`${te(l.avg)} sur 5 · ${V(l.n, "note", "notes")}`)}">${he("star")}<b>${te(l.avg)}</b><span class="n" aria-hidden="true">(${l.n})</span><span class="sr-only">/5 · ${V(l.n, "note", "notes")}</span></span>`
+                  : reviewsLink(e),
                 d = r.filter((e) => "active" === e.st),
                 u = d.length
                   ? `<p class="g-promo"><span class="tag promo">${se}Promo</span><b>${y(d[0].label)}</b><span>${y(de(d[0]))}${d.length > 1 ? ` · ${V(d.length - 1, "autre offre", "autres offres")} dans les détails` : ""}</span></p>`
                   : "";
               return bt(e, t, s, c, o, {
-                avail: `<p class="svc lvl-${e.offer.lvl}"><span class="dot" aria-hidden="true"></span><span>${y(e.offer.why)}</span></p>`,
+                avail: `<p class="svc lvl-${e.offer.lvl}" title="${y(e.offer.why)}"><span class="dot" aria-hidden="true"></span><span class="svc-long">${y(whyShort(e.offer.why))}</span><span class="svc-tiny" aria-hidden="true">${y(whyTiny(e.offer.why))}</span></p>`,
                 strip: u,
                 details: () => yt(e, a),
               });
@@ -2637,18 +2763,15 @@ import { SERVICES } from "./shared/services.js";
         },
       ]),
     );
-  // Pastille « avatar » : monogramme de l'enseigne (ou initiale pastel d'un indépendant), remplacé par son logo s'il est connu
-  const AVH = [100, 125, 145, 160, 175, 88];
+  // Pastille « avatar » : monogramme de l'enseigne (ou initiale d'un indépendant, sur la teinte de son type), remplacé par son logo s'il est connu
   function av(name, c, net) {
     const s = String(name || "").trim(),
       m = s.match(/[0-9A-Za-zÀ-ÿ]/),
       b = (c && logoBrand[c.id]) || (net && ctBrand[k(net).replace(/[^a-z]/g, "")]),
       g = c ? logoUrl(c.id) : "",
       t = b ? b[1] : (m ? m[0] : "?").toUpperCase();
-    let h = 0;
-    for (const ch of s) h = (31 * h + ch.charCodeAt(0)) | 0;
     c && (logoWant.add(c.id), logoReady ? logoApply() : logoLoad());
-    return `<span class="avatar${b ? " mono" : ""}${t.length > 1 ? " m2" : ""}${g ? " has-logo" : ""}${g && logoWide.has(g) ? " lg-wide" : ""}" style="--h:${AVH[Math.abs(h) % AVH.length]}${b ? `;--bg:${b[0]};--fg:${logoFg(b[0])}` : ""}"${c ? ` data-c="${c.id}"` : ""} aria-hidden="true">${y(t)}${g ? `<img class="lg" alt="" referrerpolicy="no-referrer" src="${y(g)}">` : ""}</span>`;
+    return `<span class="avatar${b ? " mono" : ""}${t.length > 1 ? " m2" : ""}${g ? " has-logo" : ""}${g && logoWide.has(g) ? " lg-wide" : ""}"${b ? ` style="--bg:${b[0]};--fg:${logoFg(b[0])}"` : ""}${c ? ` data-c="${c.id}"` : ""} aria-hidden="true">${y(t)}${g ? `<img class="lg" alt="" referrerpolicy="no-referrer" src="${y(g)}">` : ""}</span>`;
   }
   // Type de garage (enseigne, indépendant…) : partagé par la liste et la barre de la carte
   function kd(e) {
@@ -2666,24 +2789,42 @@ import { SERVICES } from "./shared/services.js";
               ? "Spécialiste pneus"
               : "Indépendant";
   }
-  // Boutons de la carte : appeler (si on a un numéro), itinéraire, avis Google
+  // Boutons de la carte : « Appeler » (si on a un numéro) précédé d'un bouton rond d'itinéraire ; sans numéro, « Itinéraire » seul.
+  // Le lien « Avis » (Google) est en haut à droite de la carte quand le garage n'a pas de note, et dans ses détails.
   function gActions(e) {
     const t = vt(e),
-      a = (phoneList(e)[0] || {}).tel || "";
-    return `\n      ${t ? `<a class="mini act-call" href="tel:${y(a)}" aria-label="Appeler le ${y(t)}">Appeler</a>` : ""}\n      <a class="mini act-route" href="https://www.google.com/maps/dir/?api=1&amp;destination=${e.lat},${e.lon}" target="_blank" rel="noopener">Itinéraire</a>\n      <a class="mini google act-reviews" href="${y(adGoogle(e))}" target="_blank" rel="noopener">Avis Google</a>\n    `;
+      a = (phoneList(e)[0] || {}).tel || "",
+      route = `https://www.google.com/maps/dir/?api=1&amp;destination=${e.lat},${e.lon}`;
+    return t
+      ? `<a class="mini act-route round" href="${route}" target="_blank" rel="noopener" aria-label="Itinéraire vers ${y(e.name)}" title="Itinéraire"></a><a class="mini act-call" href="tel:${y(a)}" aria-label="Appeler le ${y(t)}">Appeler</a>`
+      : `<a class="mini act-route" href="${route}" target="_blank" rel="noopener" aria-label="Itinéraire vers ${y(e.name)}">Itinéraire</a>`;
   }
+  const reviewsLink = (e) =>
+      `<a class="rating none act-reviews" href="${y(adGoogle(e))}" target="_blank" rel="noopener" aria-label="Avis Google : ${y(e.name)}">${he("star")}Avis</a>`,
+    // « Atelier de marque : prestation probable » → « Prestation probable » (le type du garage est déjà dit à côté)
+    whyShort = (w) => {
+      const t = String(w)
+        .replace(/^(Atelier de marque|Spécialiste pneus|Registre SIRENE) : /, "")
+        .replace("Banc de géométrie non renseigné : à vérifier", "Banc de géométrie à vérifier");
+      return t.charAt(0).toUpperCase() + t.slice(1);
+    },
+    // sur la petite carte : « Probable », « À vérifier », « Au catalogue »
+    whyTiny = (w) => (/probable/i.test(w) ? "Probable" : /vérifier/i.test(w) ? "À vérifier" : /catalogue/i.test(w) ? "Au catalogue" : /non renseign/i.test(w) ? "Non renseigné" : "Confirmé"),
+    // couleur de la tuile : enseigne, registre SIRENE, atelier de marque, spécialiste pneus, indépendant
+    tileKind = (e) =>
+      e.chain || e.network ? "k-chain" : "sirene" === e.src ? "k-sirene" : e.dealer ? "k-brand" : "tyres" === e.shop ? "k-tyres" : "k-indep";
   function bt(e, t, a, n, r, s) {
     const i = me.openIds.has(e.id);
-    return `<li class="card${i ? " is-open" : ""}${me.sel === e.id ? " is-selected" : ""}" id="c-${t}" data-id="${y(e.id)}">
+    return `<li class="card ${tileKind(e)}${i ? " is-open" : ""}${me.sel === e.id ? " is-selected" : ""}" id="c-${t}" data-id="${y(e.id)}">
     <div class="g-main" data-act="more">
       ${av(e.name, e.chain, e.network)}
       <div class="g-id">
-        <h3><button type="button" class="g-name linkless" data-act="more" aria-expanded="${i}" aria-controls="m-${t}">${y(e.name)}</button></h3>
-        <p class="g-meta"><span class="dist" data-dist="${y(e.id)}">${distHtml(e)}</span><span class="kind">${y(a)}</span>${n}</p>
+        <div class="g-top"><h3><button type="button" class="g-name linkless" data-act="more" aria-expanded="${i}" aria-controls="m-${t}">${y(e.name)}</button></h3>${n}</div>
+        <div class="g-sub"><p class="g-addr${e.addr ? "" : " is-none"}" data-ad="${y(e.id)}"${adTitleAttr(e)}>${adHtml(e)}</p><span class="chev" aria-hidden="true">${i ? "Masquer" : "Détails"}</span></div>
+        <div class="g-meta"><span class="kind">${y(a)}</span>${s.avail || ""}</div>
       </div>
+      <span class="dist" data-dist="${y(e.id)}">${distHtml(e)}</span>
       <div class="g-price">${r}</div>
-      ${s.avail || ""}
-      <span class="chev" aria-hidden="true">${i ? "Masquer" : "Détails"}</span>
     </div>
     ${s.strip || ""}
     <div class="g-actions">${gActions(e)}</div>
@@ -2736,26 +2877,54 @@ import { SERVICES } from "./shared/services.js";
             ? `<a href="${y(e.web)}" target="_blank" rel="noopener">${y(R(e.web))}</a>${src("web")}`
             : none(wait ? "Recherche…" : "Non renseigné"),
         ],
+        ["Avis", `<a class="act-reviews" href="${y(adGoogle(e))}" target="_blank" rel="noopener">Voir les avis sur Google Maps</a>`],
       ]
         .concat(t || [])
         .filter(Boolean);
     return `${n}${r.length ? `<dl class="facts" data-facts="${y(e.id)}">${r.map(([e, t]) => `<dt>${e}</dt><dd${/^(Téléphone|Horaires|Site)$/.test(e) ? ' aria-live="polite"' : ""}>${t}</dd>`).join("")}</dl>` : ""}${tableNote(e)}`;
   }
+  // Détail d'un prix combiné (plusieurs prestations) : une ligne par prestation, son prix et d'où il vient, puis le total
+  function comboHtml(a) {
+    const src = (p) =>
+        p.no
+          ? "ne la propose pas"
+          : "declared" === p.price.kind
+            ? y(p.price.n > 1 ? `médiane de ${p.price.n} réparations déclarées` : "1 réparation déclarée")
+            : "chain" === p.price.kind
+              ? `prix enseigne${p.price.partial ? ", pièces en plus" : ""} · <a href="${y(p.price.ref.src)}" target="_blank" rel="noopener">source</a>`
+              : "center" === p.price.kind
+                ? "tarif du centre : sur devis"
+                : "sur devis",
+      rows = a.parts
+        .map((p) => {
+          const ok = !p.no && Number.isFinite(p.price.amount);
+          return `<li${ok ? "" : ' class="is-none"'}><span class="c-svc">${y(p.label)}</span><span class="c-val">${ok ? `<b>${p.price.approx ? "env. " : ""}${C(p.price.amount)}</b>${p.unit ? ` <small>${y(p.unit)}</small>` : ""}` : "—"}</span><span class="c-src">${src(p)}</span></li>`;
+        })
+        .join(""),
+      tot = Number.isFinite(a.amount)
+        ? `<li class="c-tot"><span class="c-svc">${a.partial ? "Total partiel" : "Total"}</span><span class="c-val"><b>${C(a.amount)}</b></span><span class="c-src">${a.missing ? `+ ${V(a.missing, "prestation", "prestations")} sur devis` : a.partial ? "pièces en plus" : `${a.parts.length} prestations`}</span></li>`
+        : "";
+    return `<ul class="combo" aria-label="Prix par prestation">${rows}${tot}</ul>`;
+  }
   function yt(e, t) {
     const a = e.price,
-      n = e.promos || [];
+      n = e.promos || [],
+      multi = !!a.parts;
     let r;
     var s;
     return (
-      (r =
-        "chain" === a.kind
+      (r = multi
+        ? Number.isFinite(a.amount)
+          ? "Total des prix connus pour chaque prestation : prix des enseignes relevés le 1er octobre 2026 et prix déclarés. Les promotions ne sont pas déduites."
+          : "Aucun prix connu pour ces prestations : demandez un devis, puis déclarez le prix payé."
+        : "chain" === a.kind
           ? `${y(a.ref.label)}${a.ref.note ? " · " + y(a.ref.note) : ""} · relevé le 1er octobre 2026 · <a href="${y(a.ref.src)}" target="_blank" rel="noopener">source</a>`
           : "declared" === a.kind
             ? `${a.n > 1 ? `Prix médian de ${a.n} réparations déclarées` : `1 réparation déclarée, en ${y(G(a.last))}`}${a.ref ? " · " + y(((s = a.ref), `prix enseigne ${C(s.p)}${s.partial ? " hors pièces" : ""}`)) : ""}`
             : "center" === a.kind
               ? "L'enseigne ne publie pas de prix national pour cette prestation : demandez un devis au centre."
               : "Ce garage ne publie pas ses prix : demandez un devis, puis déclarez le prix payé."),
-      `${wt(e)}\n      <p class="price-note">${r}</p>\n      ${n.length ? ue(n, t.id) : ""}\n      ${"declared" === a.kind ? it(a.mine, t.id, !1) : ""}\n      ${(function (
+      `${wt(e)}\n      ${multi ? comboHtml(a) : ""}<p class="price-note">${r}</p>\n      ${n.length ? ue(n, t.id) : ""}\n      ${multi ? a.parts.filter((p) => !p.no && "declared" === p.price.kind).map((p) => it(p.price.mine, p.id, !0)).join("") : "declared" === a.kind ? it(a.mine, t.id, !1) : ""}\n      ${(function (
         e,
         t,
       ) {
@@ -2861,27 +3030,34 @@ import { SERVICES } from "./shared/services.js";
       color: Ct("--mk-ring") || "#fff",
       weight: t ? 3.5 : 2.5,
       fillColor: t
-        ? Ct("--mk-sel") || "#0a7427"
+        ? Ct("--mk-sel") || "#E5440B"
         : mt(e)
           ? Ct("--mk-priced") || "#0a0d0a"
           : Ct("--mk-none") || "#8f998c",
       fillOpacity: 1,
     }),
     // Cadrage de la carte : on tient compte du panneau (ordinateur) ou des barres (mobile)
+    // Ordinateur : la zone libre de la carte est à droite du panneau (ou du rail si la carte est agrandie) et sous la barre de recherche et les filtres.
+    free = () => {
+      const e = pe.panelCol.getBoundingClientRect(),
+        f = pe.form.getBoundingClientRect(),
+        b = (pe.toolbar.hidden ? pe.form : pe.toolbar).getBoundingClientRect();
+      return { left: Math.round(e.width ? e.right : f.left), top: Math.round(b.bottom) };
+    },
     fo = () => {
-      const e = pe.panelCol.getBoundingClientRect();
-      return ge()
-        ? { paddingTopLeft: [Math.round(e.right) + 24, 24], paddingBottomRight: [24, 24] }
-        : { paddingTopLeft: [10, 72], paddingBottomRight: [10, 96] };
+      if (!ge()) return { paddingTopLeft: [10, 72], paddingBottomRight: [10, 96] };
+      const r = free();
+      return { paddingTopLeft: [r.left + 24, r.top + 24], paddingBottomRight: [90, 24] };
     },
     po = () => {
-      const e = pe.panelCol.getBoundingClientRect();
-      return ge()
-        ? { paddingTopLeft: [Math.round(e.right) + 40, 90], paddingBottomRight: [70, 170], animate: !0 }
-        : { paddingTopLeft: [40, 120], paddingBottomRight: [40, 400], animate: !0 };
+      if (!ge()) return { paddingTopLeft: [40, 120], paddingBottomRight: [40, 400], animate: !0 };
+      const r = free();
+      return { paddingTopLeft: [r.left + 40, r.top + 90], paddingBottomRight: [90, 170], animate: !0 };
     },
     mp = (e) =>
-      mt(e)
+      e.price && "combo" === e.price.kind
+        ? `${e.price.partial ? "total partiel" : "total"} ${C(e.price.amount)}`
+        : mt(e)
         ? `${"declared" === e.price.kind ? "prix déclaré " : ""}${C(e.price.amount)}`
         : "ct" === me.kind
           ? "Prix non déclaré"
@@ -2915,7 +3091,7 @@ import { SERVICES } from "./shared/services.js";
       ((Hl = L.circleMarker(s.getLatLng(), {
         radius: 22,
         stroke: !1,
-        fillColor: Ct("--mk-sel") || "#0a7427",
+        fillColor: Ct("--mk-sel") || "#E5440B",
         fillOpacity: 0.2,
         interactive: !1,
       }).addTo(xt)),
@@ -2933,14 +3109,16 @@ import { SERVICES } from "./shared/services.js";
             ? `<span class="tag ${t.partial ? "warn" : "ok"}">${t.partial ? "Pièces en plus" : "Prix enseigne"}</span>`
             : "official" === t.kind
               ? '<span class="tag ok">Prix officiel</span>'
-              : "";
+              : "combo" === t.kind
+                ? `<span class="tag ${t.partial ? "warn" : t.declared ? "info" : "ok"}">${y(comboTag(t))}</span>`
+                : "";
     return `<div class="mi-top">
       <h2 class="mi-title">${y(e.name)}</h2>
       <div class="mi-tags">${r}${ce(e.promos)}</div>
       <button type="button" class="mi-x" data-mi="close" aria-label="Fermer la fiche rapide">${he("close")}</button>
     </div>
     <div class="mi-row">
-      <div class="mi-who">${av(e.name, e.chain, e.network)}<span><small>Type</small><b>${y(kd(e))}</b></span></div>
+      <div class="mi-who ${tileKind(e)}">${av(e.name, e.chain, e.network)}<span><small>Type</small><b>${y(kd(e))}</b></span></div>
       <dl class="mi-facts">
         <div><dt>Prix</dt><dd>${y(mp(e))}</dd></div>
         <div><dt>Distance</dt><dd>${y(E(e.dist))}</dd></div>
@@ -2979,23 +3157,44 @@ import { SERVICES } from "./shared/services.js";
     ((me.shown += r), ft());
   }),
     pe.toolbar.addEventListener("click", (e) => {
-      const t = e.target.closest("[data-sort]"),
-        a = e.target.closest("[data-filter]");
-      if (t) {
-        me.sort = t.dataset.sort;
-        for (const e of pe.toolbar.querySelectorAll("[data-sort]"))
-          e.setAttribute("aria-pressed", String(e === t));
+      const t = e.target.closest("[data-ftype]"),
+        a = e.target.closest("[data-fprice]"),
+        c = e.target.closest("[data-chain]"),
+        all = e.target.closest("[data-chain-all]");
+      if (!(t || a || c || all)) return;
+      if (t) me.flt.type = t.dataset.ftype;
+      else if (a) me.flt.price = a.dataset.fprice;
+      else if (all) me.flt.chains = [];
+      else {
+        const i = me.flt.chains.indexOf(c.dataset.chain);
+        i < 0 ? me.flt.chains.push(c.dataset.chain) : me.flt.chains.splice(i, 1);
       }
-      (a && gt(a.dataset.filter), (t || a) && ((me.shown = r), ht()));
+      ((me.shown = r), ht());
+      if (c || all) {
+        // le menu des enseignes reste ouvert (choix multiple) : le focus revient sur la case touchée
+        const f = pe.menuChain.querySelector(c ? `[data-chain="${CSS.escape(c.dataset.chain)}"]` : "[data-chain-all]");
+        f && f.focus();
+      } else menuClose(!0);
     }),
-    pe.summary.addEventListener("click", (e) => {
-      const t = e.target.closest("[data-chain]");
-      if (!t) return;
-      const a = t.dataset.chain,
-        n = "chain:" + a;
-      (gt(me.filter === n ? "all" : n), (me.shown = r), ht());
-      const s = pe.summary.querySelector(`[data-chain="${a}"]`);
-      s && s.focus();
+    pe.sortMenu.addEventListener("click", (e) => {
+      const t = e.target.closest("[data-sort]");
+      t && ((me.sort = t.dataset.sort), (me.shown = r), ht(), menuClose(!0));
+    }),
+    document.addEventListener("click", (e) => {
+      const b = e.target.closest('[aria-haspopup="true"][aria-controls]');
+      if (b && (pe.toolbar.contains(b) || pe.sortBox.contains(b))) return menuToggle(b);
+      menuOpen && !menuOpen.menu.contains(e.target) && menuClose();
+    }),
+    document.addEventListener("keydown", (e) => {
+      "Escape" === e.key && menuOpen && (e.preventDefault(), menuClose(!0));
+    }),
+    pe.mapExpand.addEventListener("click", () => {
+      const on = !document.body.classList.contains("map-wide");
+      (document.body.classList.toggle("map-wide", on),
+        pe.mapExpand.setAttribute("aria-pressed", String(on)),
+        pe.mapExpand.setAttribute("aria-label", on ? "Réduire la carte" : "Agrandir la carte"),
+        pe.mapExpand.setAttribute("title", on ? "Réduire la carte" : "Agrandir la carte"),
+        mapRefit());
     }),
     pe.mapFab.addEventListener("click", () => St("map" === me.viewMode ? "list" : "map")),
     pe.list.addEventListener("click", async (e) => {
@@ -3076,7 +3275,7 @@ import { SERVICES } from "./shared/services.js";
                   a = L.latLng(me.place.lat, me.place.lon).toBounds(2e3 * t);
                 if (!Mt) {
                   ((Mt = L.map(pe.map, { preferCanvas: !0, scrollWheelZoom: ge(), zoomSnap: 0.5 })),
-                    Mt.zoomControl.setPosition("topright"),
+                    Mt.zoomControl.setPosition(ge() ? "bottomright" : "topright"),
                     Mt.fitBounds(a, fo()));
                   // Fonds de carte, du préféré au dernier recours : Mapbox (seulement si la page en a le jeton, voir modules/mapbox.js), le Plan IGN, puis
                   // CARTO. Un seul est affiché : s'il n'a chargé aucune tuile et en a refusé deux (jeton refusé, service en panne), on passe au suivant.
@@ -3139,7 +3338,7 @@ import { SERVICES } from "./shared/services.js";
                   return;
                 ((me.mapKey = n), xt.clearLayers(), Mk.clear(), (Hl = null));
                 const s = Ct("--mk-ring") || "#fff",
-                  i = Ct("--mk-sel") || "#0a7427";
+                  i = Ct("--mk-sel") || "#E5440B";
                 (L.circle([me.place.lat, me.place.lon], {
                   radius: 1e3 * t,
                   color: i,
@@ -3156,7 +3355,7 @@ import { SERVICES } from "./shared/services.js";
                     .sort((e, t) => mt(e) - mt(t))
                     .forEach((e) => {
                       const t = L.circleMarker([e.lat, e.lon], { ...mkS(e, !1), radius: mkR(e, !1) })
-                        .on("click", () => (ge() ? _t(e.id, !0) : sl(e.id)))
+                        .on("click", () => (ge() && !document.body.classList.contains("map-wide") ? _t(e.id, !0) : sl(e.id)))
                         .addTo(xt);
                       ((t.jg = e), Mk.set(e.id, t), bindTip(t, e, !1));
                     }),
@@ -3200,8 +3399,19 @@ import { SERVICES } from "./shared/services.js";
       e.classList.add("flash"),
       setTimeout(() => e.classList.remove("flash"), 1800));
   }
+  // Agrandir la carte (ordinateur) : le panneau s'efface, la carte est recadrée sur la zone libre
+  function mapRefit() {
+    Mt &&
+      window.L &&
+      me.place &&
+      requestAnimationFrame(() => {
+        (Mt.invalidateSize(), Mt.fitBounds(L.latLng(me.place.lat, me.place.lon).toBounds(2e3 * +pe.radius.value), fo()));
+      });
+  }
   (matchMedia("(min-width:1024px)").addEventListener("change", () => {
-    (Mt && Mt.scrollWheelZoom[ge() ? "enable" : "disable"](), me.mapDirty ? Et() : Mt && Mt.invalidateSize());
+    (Mt && (Mt.scrollWheelZoom[ge() ? "enable" : "disable"](), Mt.zoomControl.setPosition(ge() ? "bottomright" : "topright")),
+      ge() || (document.body.classList.remove("map-wide"), pe.mapExpand.setAttribute("aria-pressed", "false")),
+      me.mapDirty ? Et() : Mt && Mt.invalidateSize());
   }),
     pe.map.addEventListener("click", (e) => {
       const t = e.target.closest("[data-focus]");
@@ -3934,12 +4144,16 @@ import { SERVICES } from "./shared/services.js";
   function na() {
     P.set("jg.last.v1", {
       svc: pe.service.value,
+      svcs: me.svcs,
       km: pe.radius.value,
       place: me.place,
       sirene: pe.sirene.checked,
     });
   }
-  (pe.sirene.addEventListener("change", na),
+  // « Plus de filtres » > registre SIRENE : change la liste elle-même, donc relance la recherche quand il y a déjà des résultats
+  (pe.sirene.addEventListener("change", () => {
+    (na(), me.raw.length && "osm" === me.kind && lt());
+  }),
     pe.service.addEventListener("change", () => {
       if ((ve(), na(), !me.raw.length)) return;
       const e = "ct" === fe().kind;
@@ -3957,6 +4171,7 @@ import { SERVICES } from "./shared/services.js";
       const e = P.get("jg.last.v1", null);
       (e
         ? (e.svc && o.some((t) => t.id === e.svc) && (pe.service.value = e.svc),
+          Array.isArray(e.svcs) && e.svcs[0] === pe.service.value && (me.svcs = e.svcs.filter((id) => o.some((t) => t.id === id))),
           e.km && (pe.radius.value = e.km),
           e.place &&
             isFinite(e.place.lat) &&
@@ -3965,6 +4180,8 @@ import { SERVICES } from "./shared/services.js";
         : (pe.service.value = "geo_av"),
         _e(),
         ve(),
+        fltSync(),
+        sortSync(),
         Zt(location.hash.slice(1) || "garages"),
         (function () {
           if (!me.place || "ct" === fe().kind) return;

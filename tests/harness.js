@@ -152,17 +152,65 @@ async function open(browser, server, file, o = {}) {
   return { page, ctx, logs };
 }
 
+/** Open a menu of the filter bar or the sort menu through its button (no-op when it is already open). */
+async function openMenu(page, button) {
+  if ((await page.getAttribute(button, "aria-expanded")) !== "true") await page.click(button);
+}
+/** Sort the list through the « Trier » menu (key: price | dist | note). */
+async function sortBy(page, key) {
+  await openMenu(page, "#sortBtn");
+  await page.click(`#sortMenu [data-sort=${key}]`);
+}
+/** Choose the service(s) through the picker dialog, as a visitor does (ids: "vidange" or ["geo_av", "disq_av"]). */
+async function pickServices(page, ids) {
+  ids = [].concat(ids);
+  await page.click("#svcBtn");
+  await page.waitForSelector("#svcDlg[open]");
+  for (const cb of await page.$$("#svcList input:checked")) if (!ids.includes(await cb.getAttribute("value"))) await cb.uncheck();
+  for (const id of ids) await page.check(`#svcList input[value='${id}']`);
+  await page.click("#svcGo");
+  await page.waitForSelector("#svcDlg", { state: "hidden" });
+}
+/** Filter the results through the bars above the map: dim = "type" (all | chains | indep), "price" (all | priced | promo) or "chain" (a chain id, toggled). */
+async function filterBy(page, dim, value) {
+  const btn = { type: "#ddType", price: "#ddPrice", chain: "#ddChain" }[dim];
+  const item = { type: `[data-ftype=${value}]`, price: `[data-fprice=${value}]`, chain: `[data-chain=${value}]` }[dim];
+  await openMenu(page, btn);
+  await page.click(`#toolbar ${item}`);
+  if ((await page.getAttribute(btn, "aria-expanded")) === "true") await page.click(btn); // le menu des enseignes reste ouvert (choix multiple)
+}
+/** « Plus de filtres » : (dé)coche le registre SIRENE ; avec des résultats affichés, la recherche repart. */
+async function toggleSirene(page, on = true) {
+  await openMenu(page, "#moreBtnF");
+  await page.setChecked("#sirene", on);
+  await page.click("#moreBtnF");
+}
+
+/** « Modifier » : déplie le résumé de recherche (mobile) ; sur ordinateur la barre de recherche reste ouverte, rien à faire. */
+async function editSearch(page) {
+  if (await page.isVisible("#editSearch")) await page.click("#editSearch");
+}
+/** Remet les filtres de la barre au-dessus de la carte à « Tous » (type et prix). */
+async function clearFilters(page) {
+  await filterBy(page, "type", "all");
+  await filterBy(page, "price", "all");
+}
+
 /** Type an address, pick the first suggestion, optionally set radius, submit, wait for results. */
 async function search(page, { service, address = "12 rue de la république lyon", km, sirene = false } = {}) {
-  if (service) await page.selectOption("#service", service);
+  if (service) await pickServices(page, service);
   await page.fill("#address", address);
   await page.waitForSelector("#addrList li[data-i]", { state: "visible", timeout: 5000 });
   await page.click("#addrList li[data-i='0']");
-  if (km) await page.click(`#radiusChips .chip[data-km='${km}']`);
-  if (sirene) await page.check("#sirene");
+  if (km) await page.selectOption("#radius", String(km));
   await page.click("#go");
   await page.waitForSelector("#list > li", { timeout: 12000 });
   await page.waitForTimeout(400);
+  if (sirene) {
+    await toggleSirene(page); // le registre se règle après les premiers résultats (« Plus de filtres ») et relance la recherche
+    await page.waitForSelector("#list > li", { timeout: 12000 });
+    await page.waitForTimeout(400);
+  }
 }
 
 const shot = async (page, name, opt = {}) => {
@@ -196,6 +244,26 @@ async function markerPoint(page, which = 0) {
   }, which);
 }
 
+/** Pour les n premières cartes : espace (px) entre le bas de ce que montre la tuile et le haut de la pastille de distance posée dessus.
+ *  Négatif = la pastille cache le bas de la lettre ou du logo. Lettre : son encre réelle (la boîte de ligne d'Outfit descend bien plus
+ *  bas que les capitales), mesurée par measureText ; logo : la boîte de l'image moins sa marge intérieure. */
+async function tileClearance(page, n = 12) {
+  return page.evaluate((n) => [...document.querySelectorAll("#list > li.card")].slice(0, n).map((c) => {
+    const av = c.querySelector(".g-main > .avatar"), d = c.querySelector(".dist"), img = av.querySelector("img.lg");
+    let bottom;
+    if (img && av.classList.contains("has-logo")) bottom = img.getBoundingClientRect().bottom - parseFloat(getComputedStyle(img).paddingBottom);
+    else {
+      const t = [...av.childNodes].find((x) => x.nodeType === 3 && x.textContent.trim()), r = document.createRange(), cs = getComputedStyle(av);
+      r.selectNodeContents(t);
+      const cx = document.createElement("canvas").getContext("2d");
+      cx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      const m = cx.measureText(t.textContent.trim());
+      bottom = r.getBoundingClientRect().top + m.fontBoundingBoxAscent + m.actualBoundingBoxDescent;
+    }
+    return { id: c.dataset.id, city: !!d.querySelector(".d-city"), logo: av.classList.contains("has-logo"), gap: Math.round(d.getBoundingClientRect().top - bottom) };
+  }), n);
+}
+
 // page.addScriptTag / addStyleTag posent des éléments « inline » : la politique de sécurité du contenu du site publiable les
 // refuse. Ces aides passent par le protocole de débogage (évaluation directe) et par une feuille de style construite, que la
 // politique n'interdit pas : le site reste testé avec sa politique, sans exception pour les tests.
@@ -209,4 +277,4 @@ async function injectStyle(page, css) {
   }, css);
   return () => page.evaluate(() => { const s = window.__testSheets.pop(); document.adoptedStyleSheets = document.adoptedStyleSheets.filter((x) => x !== s); });
 }
-module.exports = { serve, launch, open, search, shot, sheet, markerPoint, injectScript, injectStyle, SHOTS, ROOT };
+module.exports = { serve, launch, open, search, sortBy, filterBy, clearFilters, editSearch, pickServices, toggleSirene, openMenu, shot, sheet, markerPoint, tileClearance, injectScript, injectStyle, SHOTS, ROOT };

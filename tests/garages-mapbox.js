@@ -7,7 +7,7 @@ delete process.env.PIXCAR_ROOT; // la suite construit et sert ses propres pages
 const { execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const { serve, launch, open, search, ROOT, injectScript } = require("./harness");
+const { serve, launch, open, search, ROOT, injectScript, sortBy } = require("./harness");
 const { OSM, oid, ovtId, R, TILES, FOUR, dayStr, indexOf } = require("./fixtures/garages-data");
 
 const results = [];
@@ -116,7 +116,7 @@ const NOTE_FILLED = "Complété par la base Overture Maps, à titre indicatif : 
     const r = await open(browser, srv, "index.html", { width: 1440, height: 900, mock, ...o, initScript: 'window.JG_CITY_LOOKUP=false;window.JG_GARAGES_BASE="garages/";' + init });
     r.hits = await tileServer(r.ctx, spec);
     await search(r.page, { service: "vidange", km: 10 });
-    await r.page.click("[data-sort=dist]", { timeout: 1500 }).catch(() => {});
+    await sortBy(r.page, "dist").catch(() => {});
     await r.page.waitForTimeout(400);
     if (map) await tilesIn(r.page);
     return r;

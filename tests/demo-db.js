@@ -2,7 +2,7 @@
 //   TEST_DATABASE_URL=postgres://… node tests/demo-db.js        ATTENTION : le schéma de cette base est VIDÉ au départ.
 // Parcours : page (mode distant) → réseau → API réelle → PostgreSQL. Les services publics (adresses, OpenStreetMap…) sont simulés.
 // À chaque étape on interroge la table `repairs` et on affiche ce qu'elle contient.
-const { serve, launch, open, search, ROOT } = require("./harness");
+const { serve, launch, open, search, ROOT, sortBy } = require("./harness");
 const { startApi } = require("./api-harness");
 const { buildElements } = require("./mocks");
 
@@ -98,14 +98,14 @@ const verdict = (ok, text) => {
     api.clock.skew += 60_000; // l'API garde une zone lue 10 s en mémoire : on laisse cette copie expirer, comme en production
     const other = await open1();
     await search(other.page, { service: "vidange" });
-    await other.page.click("[data-sort=dist]");
+    await other.sortBy(page, "dist");
     await other.page.waitForTimeout(500);
     const tag = await other.page.$eval(CARD, (c) => { const t = c.querySelector(".g-price .tag.info"); const a = c.querySelector(".g-price .amount .num"); return t ? t.textContent.trim() + " " + a.textContent.replace(/\s+/g, " ").trim() : null; });
     verdict(/Prix déclaré/.test(tag || ""), `dans un autre navigateur, la fiche du garage affiche le prix déclaré par le premier visiteur : « ${tag} »`);
     await other.ctx.close();
 
     // ---- 5. l'auteur supprime sa réparation : -1 (dans le même navigateur : c'est lui qui garde le jeton secret)
-    await page.click("[data-sort=dist]");
+    await sortBy(page, "dist");
     await page.locator(`${CARD} .g-main`).scrollIntoViewIfNeeded();
     if (!(await page.$(`${CARD}.is-open`))) await page.click(`${CARD} .g-main`);
     await page.waitForTimeout(300);

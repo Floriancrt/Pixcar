@@ -1,6 +1,6 @@
 // UX round: wording, no "dès", price scale with both medians, OpenStreetMap notices, phones, scrollbar corners.
 // Usage: node ux.js [file] [only-section-letters]   (file defaults to index.html; run it on an older build to see the mutations fail)
-const { serve, launch, open, search, SHOTS, ROOT, injectScript, injectStyle } = require("./harness");
+const { serve, launch, open, search, SHOTS, ROOT, injectScript, injectStyle, sortBy, pickServices } = require("./harness");
 const { buildElements, CENTER } = require("./mocks");
 const fs = require("fs");
 const path = require("path");
@@ -36,7 +36,7 @@ const EXTRA = [
   { type: "node", id: 9205, ...T(0.008, 0), tags: { name: "Garage Belge", shop: "car_repair", "addr:housenumber": "13", "addr:street": "rue Neuve", "addr:postcode": "69002", "addr:city": "Lyon", "contact:phone": "+32 2 123 45 67" } },
 ];
 const sel = (id) => `#list [data-id="osm:node/${id}"]`;
-const sortDist = async (page) => { await page.click("[data-sort=dist]"); await page.waitForTimeout(250); };
+const sortDist = async (page) => { await sortBy(page, "dist"); await page.waitForTimeout(250); };
 async function openCard(page, id) {
   await page.locator(`${sel(id)} .g-main`).scrollIntoViewIfNeeded();
   await page.click(`${sel(id)} .g-main`);
@@ -181,7 +181,7 @@ async function cornerDiff(browser, page, selector, radius, inset) {
     await page.click("#list > li:nth-child(1) .g-main");
     await page.waitForTimeout(400);
     const rows = await page.$$eval("#list .is-open .facts dt", (l) => l.map((e) => e.textContent));
-    check("N8 registry sheet keeps its three rows with « Non renseigné »", JSON.stringify(rows) === JSON.stringify(["Téléphone", "Horaires", "Site"]), JSON.stringify(rows));
+    check("N8 registry sheet keeps its rows (Téléphone, Horaires, Site with « Non renseigné », and the Google reviews link)", JSON.stringify(rows) === JSON.stringify(["Téléphone", "Horaires", "Site", "Avis"]), JSON.stringify(rows));
     await ctx.close();
 
     // N9: everything down: the error names no technical service
@@ -199,7 +199,6 @@ async function cornerDiff(browser, page, selector, radius, inset) {
 
     // N10: the optional registry failing says so in plain words
     ({ page, ctx } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { sireneFail: true } }));
-    await page.click("#moreOpts > summary").catch(() => {});
     await search(page, { service: "vidange", sirene: true });
     const sum3 = norm(await page.textContent("#summary"));
     check("N10 optional registry failure: plain sentence without OpenStreetMap", /Le registre SIRENE n'a pas répondu : aucun atelier n'est ajouté à cette liste\./.test(sum3) && !/OpenStreetMap/.test(sum3), sum3);
@@ -256,7 +255,7 @@ async function cornerDiff(browser, page, selector, radius, inset) {
       const vid = blocks.find((g) => /idange/.test(g.name)), rev = blocks.find((g) => /évision/i.test(g.name));
       check(`S9 [${scheme}] fiche history: one block per declared service, with its median and a Supprimer per row`, vid && vid.rows === 3 && vid.del === 3 && norm(vid.med) === euro(median(declared)) && rev && rev.rows === 1 && rev.del === 1 && norm(rev.med) === euro(130), JSON.stringify(blocks));
       // « revision » has no chain price: the same scale component shows only the garage median
-      await page.selectOption("#service", "revision");
+      await pickServices(page, "revision");
       await page.waitForTimeout(350);
       if (!(await page.$(`${sel(1022)} .scale`))) await openCard(page, 1022);
       const rv = await page.$eval(`${sel(1022)} .scale`, (el) => ({ noRef: el.classList.contains("no-ref"), tiles: el.querySelectorAll(".cmp").length, delta: !!el.querySelector(".delta"), ref: !!el.querySelector(".scale-ref"), med: !!el.querySelector(".scale-med"), me: (el.querySelector(".cmp.is-me .cmp-v") || {}).textContent }));
@@ -331,7 +330,7 @@ async function cornerDiff(browser, page, selector, radius, inset) {
     check("P9 the Google link names the garage and its address", decodeURIComponent(none.href).includes("Garage Sans Numéro") && decodeURIComponent(none.href).includes("rue Neuve"), none.href);
     const rows = await page.$$eval(`${sel(9201)} .facts dt`, (l) => l.map((e) => e.textContent));
     const vals = await page.$$eval(`${sel(9201)} .facts dd`, (l) => l.map((e) => e.textContent.replace(/\s+/g, " ").trim()));
-    check("P10 every sheet shows Téléphone, Horaires, Site; missing ones read « Non renseigné(s) »", JSON.stringify(rows) === JSON.stringify(["Téléphone", "Horaires", "Site"]) && vals[1] === "Non renseignés" && vals[2] === "Non renseigné", JSON.stringify([rows, vals]));
+    check("P10 every sheet shows Téléphone, Horaires, Site (missing ones read « Non renseigné(s) ») and Avis", JSON.stringify(rows) === JSON.stringify(["Téléphone", "Horaires", "Site", "Avis"]) && vals[1] === "Non renseignés" && vals[2] === "Non renseigné" && vals[3] === "Voir les avis sur Google Maps", JSON.stringify([rows, vals]));
     // foreign number kept as written
     await openCard(page, 9205);
     check("P11 foreign number kept in international form", JSON.stringify(await phones(9205)) === JSON.stringify([{ t: "+32 2 123 45 67", h: "tel:+3221234567" }]), JSON.stringify(await phones(9205)));
@@ -349,7 +348,7 @@ async function cornerDiff(browser, page, selector, radius, inset) {
     await ctx.close();
     // CT centres: official data field cct_tel, same formatting
     ({ page, ctx } = await open(browser, server, FILE, { width: 1440, height: 900 }));
-    await page.selectOption("#service", "ct");
+    await pickServices(page, "ct");
     await page.fill("#address", "lyon");
     await page.waitForSelector("#addrList li[data-i]");
     await page.click("#addrList li[data-i='0']");

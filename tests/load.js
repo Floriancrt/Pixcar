@@ -1,6 +1,6 @@
 // Loading state: ring road + car on the map, waiting sentence in the status card.
 // Usage: node load.js [file] [sections]   (default index.html; run it on an older build to see what the old build lacks)
-const { serve, launch, open, SHOTS, ROOT, injectScript } = require("./harness");
+const { serve, launch, open, SHOTS, ROOT, injectScript, pickServices, editSearch } = require("./harness");
 const { buildElements, CENTER } = require("./mocks");
 const fs = require("fs");
 const path = require("path");
@@ -28,7 +28,7 @@ const bez = (p) => {
 const expectAngle = (t) => (360 - 360 * bez(Math.min((t % 2400) / 1800, 1))) % 360; // counter-clockwise from the top, in clockwise degrees
 
 async function begin(page, { service = "vidange", address = "12 rue de la république lyon" } = {}) {
-  await page.selectOption("#service", service);
+  await pickServices(page, service);
   await page.fill("#address", address);
   await page.waitForSelector("#addrList li[data-i]", { state: "visible", timeout: 5000 });
   await page.click("#addrList li[data-i='0']");
@@ -149,8 +149,8 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
     check("C1 the loading state is on during the search and gone when results arrive", mid && !end.searching && end.status === "" && end.statusDisplay === "none" && end.ld.every((d) => d === "none") && end.laps === 0, JSON.stringify([mid, end]));
     check("C2 the real map replaces the decor", end.mapShown && end.empty === "none");
     // C3: an information message outside a search keeps its plain look
-    await page.click("#editSearch");
-    await page.click("#radiusChips .chip[data-km='20']");
+    await editSearch(page);
+    await page.selectOption("#radius", "20");
     await page.waitForTimeout(200);
     const info = await page.evaluate(() => ({ cls: document.getElementById("status").className, text: document.getElementById("status").textContent.trim() }));
     check("C3 messages outside a search are unchanged (no sentence)", /^Relancez la recherche pour élargir la zone à 20 km\.$/.test(info.text) && info.cls === "status", JSON.stringify(info));
@@ -186,7 +186,7 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
 
     // C7: contrôle technique goes through the same states
     ({ page, ctx } = await open(browser, server, FILE, { width: 1440, height: 900 }));
-    await page.selectOption("#service", "ct");
+    await pickServices(page, "ct");
     await page.fill("#address", "lyon");
     await page.waitForSelector("#addrList li[data-i]");
     await page.click("#addrList li[data-i='0']");
@@ -223,10 +223,10 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
         return { road: g(".ld-asphalt", "stroke"), dash: g(".ld-dash", "stroke"), car: g(".ld-body", "fill"), edge: g(".ld-edge", "stroke"), island: g(".ld-island", "fill"), all: [...all] };
       });
       const want = scheme === "light"
-        ? { road: "rgb(10, 13, 10)", dash: "rgb(242, 242, 242)", car: "rgb(121, 250, 82)", island: "rgb(255, 255, 255)" }
-        : { road: "rgb(43, 51, 43)", dash: "rgb(242, 242, 242)", car: "rgb(121, 250, 82)", island: "rgb(16, 20, 16)" };
-      check(`A1 [${scheme}] charte colours: black / grey asphalt, off-white markings (#F2F2F2), lime car (#79FA52)`, col.road === want.road && col.dash === want.dash && col.car === want.car && col.island === want.island, JSON.stringify(col));
-      const allowed = new Set(["rgb(10, 13, 10)", "rgb(43, 51, 43)", "rgb(61, 70, 61)", "rgb(242, 242, 242)", "rgb(121, 250, 82)", "rgb(255, 255, 255)", "rgb(16, 20, 16)", "rgba(0, 0, 0, 0)"]);
+        ? { road: "rgb(16, 18, 31)", dash: "rgb(244, 245, 250)", car: "rgb(253, 83, 25)", island: "rgb(255, 255, 255)" }
+        : { road: "rgb(38, 43, 69)", dash: "rgb(244, 245, 250)", car: "rgb(253, 83, 25)", island: "rgb(21, 24, 41)" };
+      check(`A1 [${scheme}] charte colours: navy / grey-blue asphalt, off-white markings (#F4F5FA), orange car (#FD5319)`, col.road === want.road && col.dash === want.dash && col.car === want.car && col.island === want.island, JSON.stringify(col));
+      const allowed = new Set(["rgb(16, 18, 31)", "rgb(38, 43, 69)", "rgb(58, 64, 95)", "rgb(244, 245, 250)", "rgb(253, 83, 25)", "rgb(255, 255, 255)", "rgb(21, 24, 41)", "rgba(0, 0, 0, 0)"]);
       check(`A2 [${scheme}] nothing outside the charte (no red, blue or yellow anywhere in the pictogram)`, col.all.every((c) => allowed.has(c)), JSON.stringify(col.all));
       await injectScript(page, AXE);
       const ax = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } })).violations.map((v) => ({ id: v.id, n: v.nodes.length })));

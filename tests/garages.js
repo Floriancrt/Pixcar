@@ -6,7 +6,7 @@
 // enregistrée sous un identifiant que l'API accepte ; rien de la table n'est gardé dans le navigateur ; un dossier de tuiles venu d'un autre hôte est refusé.
 // Les tuiles sont simulées ici (tests/garages-build.js construit un vrai site avec de vraies tuiles).
 //   node tests/garages.js
-const { serve, launch, open, search, shot, ROOT, injectScript, markerPoint } = require("./harness");
+const { serve, launch, open, search, shot, ROOT, injectScript, markerPoint, sortBy, editSearch } = require("./harness");
 const { OSM, oid, ovtId, R, TILES, FOUR, dayStr, indexOf } = require("./fixtures/garages-data");
 const fs = require("fs"), path = require("path");
 const FILE = process.argv[2] || process.env.FILE || "index.html";
@@ -82,7 +82,7 @@ const storageDump = (page) => page.evaluate(() => {
   for (const s of [localStorage, sessionStorage]) for (let i = 0; i < s.length; i++) out[s === localStorage ? "L:" + s.key(i) : "S:" + s.key(i)] = s.getItem(s.key(i));
   return out;
 });
-const again = async (page) => { await page.click("#editSearch"); await page.click("#go"); await page.waitForSelector("#list > li", { timeout: 12000 }).catch(() => {}); await page.waitForTimeout(500); };
+const again = async (page) => { await editSearch(page); await page.click("#go"); await page.waitForSelector("#list > li", { timeout: 12000 }).catch(() => {}); await page.waitForTimeout(500); };
 // Chromium écrit lui-même « Failed to load resource » pour toute réponse HTTP en échec (503, 404) : la page n'y peut rien. Ce qu'on exige : aucune exception.
 const onlyLoadNotices = (logs) => logs.errors.length === 0 && logs.console.every((m) => /^\[error\] Failed to load resource: the server responded with a status of (404|503)/.test(m));
 
@@ -95,7 +95,7 @@ const onlyLoadNotices = (logs) => logs.errors.length === 0 && logs.console.every
     r.hits = await tileServer(r.ctx, spec || SPEC());
     // une liste qui n'arrive pas ne fait pas planter la suite : le contrôle suivant l'écrit (et un contrôle nommé échoue, pas une attente)
     await search(r.page, { service: "vidange", km: 10, ...s }).catch((e) => { r.searchError = String(e).slice(0, 160); });
-    await r.page.click("[data-sort=dist]", { timeout: 1500 }).catch(() => {});
+    await sortBy(r.page, "dist").catch(() => {});
     await r.page.waitForTimeout(400);
     return r;
   };

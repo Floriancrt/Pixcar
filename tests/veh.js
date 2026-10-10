@@ -1,7 +1,7 @@
 // Vehicle block of the repair form: plate (AB-123-CD), model with suggestions, model year.
 // Usage: node veh.js [file] [only-section-letters]   (file defaults to index.html; run it on an older build / mutants to see checks fail)
 //   P plate mask · V validation · Y year · M model suggestions · C catalogue · S storage, prefill, display, privacy · L layout, a11y
-const { serve, launch, open, search, SHOTS, ROOT, injectScript } = require("./harness");
+const { serve, launch, open, search, SHOTS, ROOT, injectScript, sortBy } = require("./harness");
 const { buildElements } = require("./mocks");
 const fs = require("fs");
 const path = require("path");
@@ -464,7 +464,7 @@ const TODAY_YEAR = 2026;
     check("S5b the sources paragraph says the history shows model and year, never the comment nor the plate", /affiche le modèle et l'année du véhicule, le mois, la note et le prix, jamais le commentaire ni l'immatriculation/.test(notes.src), "");
     // garage sheet: model + year, never the plate
     await search(page, { service: "vidange" });
-    await page.click("[data-sort=dist]");
+    await sortBy(page, "dist");
     await page.waitForTimeout(250);
     const id = "osm:node/1022";
     check("S6a the garage with declarations is in the results", (await page.$$(`#list [data-id="${id}"]`)).length === 1, id);
@@ -491,7 +491,7 @@ const TODAY_YEAR = 2026;
     ];
     ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { elements: els }, storage: { "jg.repairs.v1": BAD } }));
     await search(page, { service: "vidange" });
-    await page.click("[data-sort=dist]");
+    await sortBy(page, "dist");
     await page.waitForTimeout(250);
     await page.locator(`#list [data-id="${id}"] .g-main`).scrollIntoViewIfNeeded();
     await page.click(`#list [data-id="${id}"] .g-main`);
