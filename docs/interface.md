@@ -142,7 +142,7 @@ Limite : la commune de l'adresse la plus proche peut différer de celle du garag
 
 ## Table de garages (Overture Maps)
 
-*Branche `garages-table`, non fusionnée dans `main` et non publiée ; sans tuiles dans le site (`--garages`, voir `exploitation.md`, section 8), rien de ce qui suit n'apparaît.*
+*Dans `main`, en ligne pour la Haute-Garonne seulement ; sans tuiles dans le site (`--garages`, voir `exploitation.md`, section 8), rien de ce qui suit n'apparaît.*
 
 OpenStreetMap ne connaît pas tous les garages et beaucoup n'y ont ni téléphone ni site (autour de Cazères : 9 garages, 5 avec un numéro). La page lit donc aussi une **table de garages** tirée d'Overture Maps (tuiles JSON servies par le site, voir `architecture.md`) et la fusionne à la liste d'OpenStreetMap :
 
