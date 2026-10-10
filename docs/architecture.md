@@ -39,7 +39,7 @@ Le schéma ci-dessus est celui d'un déploiement classique (instances derrière 
 | Chemin | Contenu |
 | --- | --- |
 | `src/index.html`, `src/partials/` | Gabarit et morceaux de HTML (corps, fenêtre de déclaration, sprite SVG, pictogramme de chargement). Les listes de prestations sont insérées **à la construction** (pas d'attente de script, pas de décalage de mise en page). |
-| `src/css/` | `app.css`, thème sombre (`tokens.dark.css`), Leaflet. |
+| `src/css/` | `app.css` (un seul thème, clair), Leaflet. |
 | `src/js/app.js` | Script d'origine (noms minifiés, modifié à la main). |
 | `src/js/modules/` | `repair-store.js` (réparations), `api-client.js` (HTTP), `phone.js`, `city.js` (ville des cartes), `config.js`, `load-script.js`, `sw-register.js`. |
 | `src/js/shared/` | `rules.js` (formats, bornes), `services.js` (prestations), `overpass.js` (requête et miroirs). **Importé aussi par le serveur** : la page et l'API ne peuvent pas diverger sur ce qu'est une plaque, un prix valide ou une requête Overpass autorisée. |

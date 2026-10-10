@@ -327,7 +327,7 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
 
     // ---- mobile: map mode ----
     ({ page, ctx, logs } = await open(browser, server, FILE, { width: 390, height: 844, dpr: 2, touch: true }));
-    check("D12 mobile: bottom nav fixed at the bottom", await page.$eval("#tabs", (e) => { const r = e.getBoundingClientRect(); return Math.abs(r.bottom - (innerHeight - 12)) < 3; }));
+    check("D12 mobile: no bar at the bottom: the link to the other section sits in the header", await page.$eval("#tabs", (e) => { const r = e.getBoundingClientRect(), t = document.querySelector(".topbar").getBoundingClientRect(); return getComputedStyle(e).position === "static" && r.top >= t.top && r.bottom <= t.bottom; }));
     check("D12b mobile: stage hidden in list mode", !(await page.isVisible("#stage")));
     await search(page, { service: "vidange" });
     check("D13 mobile: FAB visible after search", await page.isVisible("#mapFab"));
@@ -341,8 +341,8 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
     s = await page.evaluate(() => ({ bar: !document.getElementById("mapInfo").hidden, cta: !!document.querySelector("#mapInfo [data-mi=card]") }));
     check("D15 mobile: marker tap shows info bar with 'Voir la fiche'", s.bar && s.cta, JSON.stringify(s));
     check("D15b still in map mode (no jump to list)", await page.evaluate(() => document.body.classList.contains("is-map")));
-    const attr = await page.evaluate(() => { const a = document.querySelector(".leaflet-control-attribution").getBoundingClientRect(), b = document.getElementById("mapInfo").getBoundingClientRect(), n = document.getElementById("tabs").getBoundingClientRect(); return { aTop: a.top, aBottom: a.bottom, barBottom: b.bottom, navTop: n.top }; });
-    check("D15c attribution not covered by info bar", attr.aTop >= attr.barBottom - 1 && attr.aBottom <= attr.navTop + 1, JSON.stringify(attr));
+    const attr = await page.evaluate(() => { const a = document.querySelector(".leaflet-control-attribution").getBoundingClientRect(), b = document.getElementById("mapInfo").getBoundingClientRect(); return { aTop: a.top, aBottom: a.bottom, barBottom: b.bottom, vh: innerHeight }; });
+    check("D15c attribution not covered by the info bar, and on screen (no bar at the bottom any more)", attr.aTop >= attr.barBottom - 1 && attr.aBottom <= attr.vh, JSON.stringify(attr));
     await page.click("#mapInfo [data-mi=card]");
     await page.waitForTimeout(900);
     s = await page.evaluate(() => ({ map: document.body.classList.contains("is-map"), open: document.querySelectorAll(".card.is-open").length, sel: document.querySelectorAll(".card.is-selected").length, panel: !document.getElementById("panelCol").hidden && getComputedStyle(document.getElementById("panelCol")).display !== "none" }));
@@ -361,10 +361,10 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
     check("D22 rotate tablet from map mode to desktop width: panel back, map resized to its column, FAB hidden", rz.panelVisible && rz.fab === "none" && Math.abs(rz.col - 0.283 * rz.vw) <= 2 && rz.mapW === rz.col && rz.mapSize === rz.mapW, JSON.stringify(rz));
     await ctx.close();
 
-    // ---- dark theme tokens + reduced motion ----
+    // ---- un seul thème (clair), même quand le système est réglé en sombre + reduced motion ----
     ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, colorScheme: "dark" }));
-    const dk = await page.evaluate(() => ({ card: getComputedStyle(document.documentElement).getPropertyValue("--card").trim(), scheme: getComputedStyle(document.documentElement).colorScheme }));
-    check("D18 dark tokens applied", dk.card === "#18191e" && /dark/.test(dk.scheme), JSON.stringify(dk));
+    const dk = await page.evaluate(() => ({ card: getComputedStyle(document.documentElement).getPropertyValue("--card").trim(), scheme: getComputedStyle(document.documentElement).colorScheme, bg: getComputedStyle(document.body).backgroundColor, sysDark: matchMedia("(prefers-color-scheme: dark)").matches }));
+    check("D18 system set to dark: the page stays light (light tokens, color-scheme light)", dk.sysDark && dk.card.toLowerCase() === "#ffffff" && dk.scheme === "light" && dk.bg === "rgb(246, 244, 240)", JSON.stringify(dk));
     await ctx.close();
     ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, reducedMotion: "reduce" }));
     await search(page, { service: "vidange" });
@@ -373,11 +373,11 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
     check("D19 reduced motion: reveal animation neutralised", parseFloat(dur) < 0.01, dur);
     await ctx.close();
 
-    // ---- theme override attribute ----
-    ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, colorScheme: "dark" }));
-    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+    // ---- plus de thème sombre à forcer : data-theme="dark" ne change rien ----
+    ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 }));
+    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
     const lt = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--card").trim());
-    check("D20 data-theme=light overrides system dark", lt === "#ffffff", lt);
+    check("D20 data-theme=dark is ignored (no dark theme left in the stylesheet)", lt.toLowerCase() === "#ffffff", lt);
     await ctx.close();
   }
 

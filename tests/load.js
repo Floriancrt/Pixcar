@@ -124,7 +124,7 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
     await page.waitForTimeout(900);
     const m = await page.evaluate(() => { const s = document.getElementById("status"), l = s.querySelector(".wait-loader"), r = s.getBoundingClientRect(), nav = document.getElementById("tabs").getBoundingClientRect(); return { cls: s.className, top: r.top, bottom: r.bottom, vh: innerHeight, navTop: nav.top, loader: l && { d: getComputedStyle(l).display, w: l.getBoundingClientRect().width, h: l.getBoundingClientRect().height, left: l.getBoundingClientRect().left }, cardLeft: r.left, quote: (s.querySelector(".wait-quote") || {}).textContent, stage: getComputedStyle(document.getElementById("stage")).display, laps: document.getAnimations().filter((a) => a.animationName === "ld-lap").length }; });
     check("M1 mobile: the card shows the sentence and a 72 px pictogram on its left", m.quote === QUOTE && m.loader && m.loader.d === "block" && Math.round(m.loader.w) === 72 && m.loader.left < m.cardLeft + 20, JSON.stringify(m));
-    check("M2 mobile: the card is on screen, above the floating navigation, without scrolling", m.top >= 0 && m.bottom <= m.navTop && /\bis-wait\b/.test(m.cls), JSON.stringify([m.top, m.bottom, m.navTop]));
+    check("M2 mobile: the card is on screen, below the header (which holds the link to the other section), without scrolling", m.top >= 0 && m.top >= m.navTop && m.bottom <= m.vh && /\bis-wait\b/.test(m.cls), JSON.stringify([m.top, m.bottom, m.navTop, m.vh]));
     check("M3 mobile: the map is hidden, so exactly one animation runs (the card's)", m.stage === "none" && m.laps === 1, JSON.stringify([m.stage, m.laps]));
     // the pictogram's car turns too, around its own ring
     await seek(page, 0);
@@ -222,10 +222,9 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
         document.querySelectorAll(".map-empty .ld circle, .map-empty .ld path").forEach((e) => { const c = getComputedStyle(e); [c.fill, c.stroke].forEach((v) => v && v !== "none" && all.add(v)); });
         return { road: g(".ld-asphalt", "stroke"), dash: g(".ld-dash", "stroke"), car: g(".ld-body", "fill"), edge: g(".ld-edge", "stroke"), island: g(".ld-island", "fill"), all: [...all] };
       });
-      const want = scheme === "light"
-        ? { road: "rgb(17, 18, 22)", dash: "rgb(244, 245, 250)", car: "rgb(253, 83, 25)", island: "rgb(255, 255, 255)" }
-        : { road: "rgb(42, 44, 51)", dash: "rgb(244, 245, 250)", car: "rgb(253, 83, 25)", island: "rgb(24, 25, 30)" };
-      check(`A1 [${scheme}] charte colours: black / dark grey asphalt (the header's black), off-white markings (#F4F5FA), orange car (#FD5319)`, col.road === want.road && col.dash === want.dash && col.car === want.car && col.island === want.island, JSON.stringify(col));
+      // un seul thème : le système réglé en sombre ne change rien au pictogramme
+      const want = { road: "rgb(17, 18, 22)", dash: "rgb(244, 245, 250)", car: "rgb(253, 83, 25)", island: "rgb(255, 255, 255)" };
+      check(`A1 [${scheme}] charte colours${scheme === "dark" ? " (system set to dark: unchanged)" : ""}: black asphalt (the header's black), off-white markings (#F4F5FA), orange car (#FD5319)`, col.road === want.road && col.dash === want.dash && col.car === want.car && col.island === want.island, JSON.stringify(col));
       const allowed = new Set(["rgb(17, 18, 22)", "rgb(42, 44, 51)", "rgb(61, 63, 71)", "rgb(244, 245, 250)", "rgb(253, 83, 25)", "rgb(255, 255, 255)", "rgb(24, 25, 30)", "rgba(0, 0, 0, 0)"]);
       check(`A2 [${scheme}] nothing outside the charte (no red, blue or yellow anywhere in the pictogram)`, col.all.every((c) => allowed.has(c)), JSON.stringify(col.all));
       await injectScript(page, AXE);

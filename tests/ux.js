@@ -195,6 +195,31 @@ async function cornerDiff(browser, page, selector, radius, inset) {
       }
       await ctx.close();
     }
+    // mobile : filtres et tri sur une seule ligne, menus dans l'écran, bouton « Carte » en lévitation, pas de barre en bas
+    for (const w of [390, 320]) {
+      ({ page, ctx } = await open(browser, server, FILE, { width: w, height: 844, dpr: 2, touch: true }));
+      await search(page, { service: "vidange" });
+      const row = await page.evaluate(() => {
+        const ids = ["ddType", "ddPrice", "ddChain", "moreBtnF", "sortBtn"], rr = ids.map((id) => { const b = document.getElementById(id).getBoundingClientRect(); return { id, l: Math.round(b.left), r: Math.round(b.right), c: Math.round((b.top + b.bottom) / 2) }; });
+        const dr = document.querySelector(".dd-row");
+        return { rr, chevrons: [...document.querySelectorAll("#toolbar .dd .ic, #toolbar .sort-btn .ic")].filter((i) => getComputedStyle(i).display !== "none").length, scrolls: dr.scrollWidth > dr.clientWidth + 1, rowRight: Math.round(dr.getBoundingClientRect().right), vw: innerWidth, sw: document.documentElement.scrollWidth };
+      });
+      const one = row.rr.every((b) => Math.abs(b.c - row.rr[0].c) <= 1), sort = row.rr[4], inScreen = (b) => b.l >= 0 && b.r <= row.vw;
+      if (w === 390) check("H13 mobile (390 px): Type, Prix, Enseignes, Plus de filtres and Trier on one line, all on screen, no arrows, nothing scrolled away", one && row.rr.every(inScreen) && !row.chevrons && !row.scrolls && row.sw === row.vw && row.rr.every((b, i) => !i || b.l >= row.rr[i - 1].r), JSON.stringify(row));
+      else check("H13b mobile (320 px): still one line; the filters scroll sideways while « Trier » stays whole on the right; no page overflow", one && inScreen(sort) && row.scrolls && row.rowRight <= sort.l && row.sw === row.vw, JSON.stringify(row));
+      if (w === 390) {
+        const menus = [];
+        for (const [btn, menu] of [["#ddType", "#menuType"], ["#ddChain", "#menuChain"], ["#moreBtnF", "#moreOpts"], ["#sortBtn", "#sortMenu"]]) {
+          await page.click(btn); await page.waitForTimeout(150);
+          menus.push(await page.evaluate(([b, m]) => { const mr = document.querySelector(m).getBoundingClientRect(), br = document.querySelector(b).getBoundingClientRect(); return { m, l: Math.round(mr.left), r: Math.round(mr.right), below: mr.top >= br.bottom, shown: !document.querySelector(m).hidden }; }, [btn, menu]));
+          await page.click(btn); await page.waitForTimeout(100);
+        }
+        check("H14 mobile: each menu opens under the line and stays on screen", menus.every((m) => m.shown && m.below && m.l >= 0 && m.r <= 390), JSON.stringify(menus));
+        const fab = await page.evaluate(() => { const f = document.getElementById("mapFab"), c = getComputedStyle(f), r = f.getBoundingClientRect(); return { text: f.innerText.trim(), icons: [...f.querySelectorAll(".ic")].filter((i) => getComputedStyle(i).display !== "none").length, pos: c.position, gap: Math.round(innerHeight - r.bottom), radius: c.borderTopLeftRadius, shadow: c.boxShadow, centered: Math.abs((r.left + r.right) / 2 - innerWidth / 2) < 1, tabs: getComputedStyle(document.getElementById("tabs")).position }; });
+        check("H15 mobile: « Carte » floats at the bottom (22 px up, centred, rounded, drop shadow, text only); no bar under it", fab.text === "Carte" && !fab.icons && fab.pos === "fixed" && fab.gap === 22 && fab.radius === "16px" && fab.shadow !== "none" && fab.centered && fab.tabs === "static", JSON.stringify(fab));
+      }
+      await ctx.close();
+    }
   } catch (e) {
     check("H section crashed", false, e && e.message);
   }

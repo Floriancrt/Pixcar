@@ -17,15 +17,15 @@ Ce que voit et fait le visiteur, et les choix de présentation. Le fonctionnemen
 
 Reprise des deux maquettes envoyées par l'utilisateur (accueil et résultats), police **Manrope**, avec les fonctions réelles du site. Elle remplace la mise en page « Orange & Marine » (rail, carte plein écran derrière un panneau flottant).
 
-- **En-tête noir** (`#111216`, collé en haut) : le logo sur sa plaque marine (lien vers l'accueil), le lien vers l'autre section (« Prix et promos » depuis Garages, « Garages » depuis Prix et promos) et le bouton orange **« + Ajouter une réparation »** (« + Réparation » sur mobile). Sur mobile, les deux sections sont dans la barre flottante du bas.
+- **En-tête noir** (`#111216`, collé en haut) : le logo sur sa plaque marine (lien vers l'accueil), le lien vers l'autre section (« Prix et promos » depuis Garages, « Garages » depuis Prix et promos) et le bouton orange **« + Ajouter une réparation »** (« + Réparation » sur mobile). **Sur mobile, pas de barre en bas** (demande de l'utilisateur, 10 octobre 2026) : le lien vers l'autre section est un bouton noir cerclé d'orange dans l'en-tête, **« Promos »** (ou « Garages » depuis la page des prix), entre le logo et « + Réparation » ; sous 380 px de large le logo garde le symbole sans le mot « pixcar », sous 340 px « Réparation » perd son « + ».
 - **Accueil** (avant toute recherche) : pastille « 1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto », titre « Le bon prix pour votre voiture, près de chez vous. », phrase « Parce que votre titine est comme vous, elle aime pas qu'on lui cache des choses » (mots de la maquette) ; **carte de recherche** *Prestation* (« Choisir une prestation » : rien n'est choisi d'office), *Où* (« Ex. Cazères, 31220 », effacer, ma position), *Rayon*, *Énergie* pour le contrôle technique, bouton **Comparer** ; **Populaires** (Vidange, Plaquettes de frein, Parallélisme, Pneus, Climatisation : un clic choisit la prestation et lance la recherche si l'adresse est là, sinon met le curseur dans *Où*) ; **deux chiffres calculés par la page** (jamais inventés) : le nombre de prestations comparées (18) et l'écart moyen entre l'enseigne la moins chère et la plus chère (−26 % : moyenne de 1 − min/max sur les prestations où au moins deux enseignes publient un prix complet, prix nationaux relevés le 1er octobre 2026 ; la méthode est dans l'infobulle) ; les **trois étapes** ; le lien « Confidentialité et mentions légales » en pied de page. Les chiffres de la maquette (« 2 480 garages référencés », « −23 % d'écart moyen constaté ») ne correspondaient à aucune donnée du site : remplacés, avec l'accord de l'utilisateur.
 - **« Comparer »** sans prestation ouvre la fenêtre de choix, et la recherche part dès qu'on valide (pas si on la ferme sans choisir) ; sans adresse, le champ *Où* le dit lui-même (« Indiquez une adresse, une ville ou un code postal. », bulle du navigateur lue par les lecteurs d'écran) et l'accueil reste affiché.
 - **Pendant et après la recherche** (`body.in-search`, posé dès qu'une recherche part et gardé ensuite) : l'accueil laisse la place à la page des résultats ; sur ordinateur la recherche monte dans l'en-tête, en barre compacte (adresse, prestation, rayon, loupe) ; pendant l'attente, l'encart d'état (phrase « Votre titine… » et l'étape) en haut et le rond-point sur la carte ; une erreur reste à l'écran avec « Réessayer » (titre de page pour les lecteurs d'écran : « Recherche de garages »).
 - **Résultats** : petite ligne orange « VIDANGE · LYON » (prestation · commune), titre « **N garages comparés** », trois chiffres « **Le moins cher** » (carte orange), « **Prix médian** », « **Prix publiés** » ; filtres **Type**, **Prix**, **Enseignes** et **Plus de filtres** (registre SIRENE) en puces au-dessus du tableau, et **Trier** à droite ; puis le **tableau** : *Garage* (tuile, nom, note, adresse : sur ordinateur la rue seule, « code postal commune » étant masqué puisque la commune est sous la distance ; le texte complet reste pour les lecteurs d'écran), *Type* (« Centre d'enseigne », « Indépendant », « Atelier de marque », « Spécialiste pneus », avec un point de couleur pour la disponibilité de la prestation, détaillée au survol, pour les lecteurs d'écran et dans la fiche), *Distance* (la commune dessous, abrégée par « … » si elle est longue, nom entier au survol), *Échelle de prix* (le prix, puis une barre du moins cher au plus cher des garages listés ; pastille « Promo » quand une promotion court), et le bouton **Appeler** (garage avec un prix), **Demander** (un devis : sans prix publié) ou **Itinéraire** (sans numéro). La ligne la moins chère est teintée et son bouton est orange. Sous le tableau, la **note** de la maquette (« Peu de prix publics ici : déclarez le prix payé pour construire l'échelle de chaque garage. », quand moins d'un garage sur trois a un prix) et les autres informations (promotions en cours, prix déclarés, liste enregistrée avec « Actualiser »…).
 - **La carte** occupe une colonne à droite (28,3 % de la largeur), collée sous l'en-tête pendant que la page défile ; « Agrandir la carte » et « Ma position » y restent. Le garage le moins cher a un **marqueur orange**, comme sa ligne (dessiné au-dessus des autres) ; le garage choisi est orange aussi, agrandi et entouré d'un halo. Cliquer une ligne (n'importe où) ouvre sa **fiche sous la ligne** (la ligne garde sa hauteur de 82 px, rien ne bouge) : frise du trajet, Téléphone, Horaires, Site, Avis, disponibilité, prix et promotions, historique, **Itinéraire** et **Déclarer une réparation** ; une seule fiche ouverte, et la ligne cliquée reste sous le pointeur quand une fiche ouverte au-dessus se referme.
 - **Survol** (nom souligné, ligne teintée) : à la souris seulement (`@media (hover: hover)`) ; sur un écran tactile il resterait collé à la ligne touchée.
-- **Mobile** : les lignes deviennent des cartes (tuile et nom, type et distance, prix et bouton) ; la recherche se replie en résumé avec « Modifier » ; bouton flottant **Carte / Liste**.
-- **Ce qui n'est pas dans la maquette et reste** (accord de l'utilisateur) : la page « Prix et promos », plusieurs prestations, notes et logos des enseignes, promotions, disponibilité des prestations, itinéraire, fiche dépliable, mode sombre ; ajoutés là où ils gênent le moins (lien de l'en-tête, puces, fiche).
+- **Mobile** : les lignes deviennent des cartes (tuile et nom, type et distance, prix et bouton) ; la recherche se replie en résumé avec « Modifier » ; **filtres et tri sur une seule ligne** (Type, Prix, Enseignes, Plus de filtres, puis « Trier : prix » à droite ; pastilles blanches sans flèche, menus ouverts sous la ligne ; sur un écran trop étroit, 320 px, les filtres défilent de côté et le tri reste en place) ; bouton **Carte / Liste** **en lévitation** (texte seul, coins arrondis, ombre portée, 22 px au-dessus du bas de l'écran ; en haut de la carte en mode carte).
+- **Ce qui n'est pas dans la maquette et reste** (accord de l'utilisateur) : la page « Prix et promos », plusieurs prestations, notes et logos des enseignes, promotions, disponibilité des prestations, itinéraire, fiche dépliable ; ajoutés là où ils gênent le moins (lien de l'en-tête, puces, fiche).
 - **Écarts voulus avec la maquette** : texte blanc sur orange en grand gras seulement (19 px, 700 : boutons « Ajouter une réparation », « Appeler » de la ligne la moins chère, chiffre « Le moins cher »), libellé « Le moins cher » en noir ; gris et orange des petits textes un peu plus foncés (4,5:1) ; tuiles teintées de la couleur de l'enseigne ; vrais chiffres à l'accueil ; un garage qui ne fait qu'une partie de plusieurs prestations l'écrit sous son type (« 1 prestation sur 2 »).
 
 ## Plusieurs prestations
@@ -53,23 +53,23 @@ Une prestation seule s'affiche exactement comme avant (même prix, mêmes étiqu
 
 Relevée sur les maquettes de l'utilisateur (octobre 2026) ; elle remplace « Orange & Marine » (choisie le 6 octobre 2026), dont elle garde le logo et l'orange.
 
-| Élément | Clair | Sombre |
-| --- | --- | --- |
-| En-tête, barre du bas (mobile), carte « écart » de l'accueil | noir `#111216` | `#08090B` |
-| Plaque du logo | marine `#0E1220` | marine `#10121F` |
-| Fond de page | crème `#F6F4F0` | `#0E0F12` |
-| Tableau, cartes | blanc ; en-tête du tableau `#F8FAFB` ; ligne la moins chère `#FEF6F2` | `#18191E` |
-| Orange des actions (`--btn`) | `#FF5A1E` : **texte blanc en grand gras seulement** (19 px, 700 : 3,12:1, admis pour le grand texte), sinon texte noir (5,98:1) | idem |
-| Boutons Appeler / Demander, barre de l'échelle | noir `#111216`, texte blanc | clair |
-| Petite ligne orange des résultats (« VIDANGE · LYON ») | `#C2400D` (4,7:1 sur le crème) | `#FF8A5E` |
-| Accent (liens, sélection, focus, rayon de recherche) | `#B13506` | `#FF7C49` |
-| Marqueurs | noir `#111216` (avec prix), gris `#8E94AA` (sans prix), orange `#E5440B` (choisi) | clair, gris, orange `#FF7C49` |
-| Tuiles des lignes | teinte claire de la couleur de l'enseigne (15 %) et lettre foncée (45 % de la couleur sur le noir) ; sans enseigne : bleu pâle (marque), orange pâle (pneus), gris (`--tile-gray`, indépendants et registre) | idem, sombre |
-| Rond-point d'attente | bitume noir `#111216`, pointillés `#F4F5FA`, voiture `#FD5319` | bitume `#2A2C33` |
+| Élément | Couleur |
+| --- | --- |
+| En-tête, carte « écart » de l'accueil | noir `#111216` |
+| Plaque du logo | marine `#0E1220` |
+| Fond de page | crème `#F6F4F0` |
+| Tableau, cartes | blanc ; en-tête du tableau `#F8FAFB` ; ligne la moins chère `#FEF6F2` |
+| Orange des actions (`--btn`) | `#FF5A1E` : **texte blanc en grand gras seulement** (19 px, 700 : 3,12:1, admis pour le grand texte), sinon texte noir (5,98:1) |
+| Boutons Appeler / Demander, barre de l'échelle | noir `#111216`, texte blanc |
+| Petite ligne orange des résultats (« VIDANGE · LYON ») | `#C2400D` (4,7:1 sur le crème) |
+| Accent (liens, sélection, focus, rayon de recherche) | `#B13506` |
+| Marqueurs | noir `#111216` (avec prix), gris `#8E94AA` (sans prix), orange `#E5440B` (choisi, et le moins cher) |
+| Tuiles des lignes | teinte claire de la couleur de l'enseigne (15 %) et lettre foncée (45 % de la couleur sur le noir) ; sans enseigne : bleu pâle (marque), orange pâle (pneus), gris (`--tile-gray`, indépendants et registre) |
+| Rond-point d'attente | bitume noir `#111216`, pointillés `#F4F5FA`, voiture `#FD5319` |
 
 Logos inchangés (mot-symbole « pixcar » sur sa plaque marine, favicon, `apple-touch-icon`) ; `theme-color` `#111216`, le noir de l'en-tête. En couleurs forcées, la plaque du logo garde son marine (le « pix » est blanc) et l'échelle de prix est redessinée en `CanvasText`.
 
-Jetons : section 1 du CSS et `src/css/tokens.dark.css` (`--canvas`, `--topbar-bg`, `--btn`, `--on-btn`, `--on-btn-2`, `--thead-bg`, `--best-bg`, `--track`, `--bar`, `--act-*`, `--note-*`, `--stat-dark*`, `--step-*`, `--tile-*`, `--mk-*`, `--ld-*`…). L'audit `tests/contrast/contrast_css.py` vérifie 88 paires en clair et 88 en sombre (texte 4,5:1, grand texte et éléments graphiques 3:1) ; la suite `a11y` vérifie en plus, dans la page, que **tout** texte blanc sur l'orange est en grand gras.
+Jetons : section 1 du CSS, **un seul thème, clair** (le mode sombre a été retiré le 10 octobre 2026 à la demande de l'utilisateur ; `color-scheme: light`, la page reste claire quand le système est réglé en sombre) (`--canvas`, `--topbar-bg`, `--btn`, `--on-btn`, `--on-btn-2`, `--thead-bg`, `--best-bg`, `--track`, `--bar`, `--act-*`, `--note-*`, `--stat-dark*`, `--step-*`, `--tile-*`, `--mk-*`, `--ld-*`…). L'audit `tests/contrast/contrast_css.py` vérifie 88 paires (texte 4,5:1, grand texte et éléments graphiques 3:1) ; la suite `a11y` vérifie en plus, dans la page, que **tout** texte blanc sur l'orange est en grand gras.
 
 ## Ce qui ne change pas
 
@@ -203,7 +203,7 @@ Pendant une recherche (`body.is-searching`, posé par `ct()` du début à la fin
 - **Encart d'état** : la phrase « Votre titine est comme vous, elle n'aime pas qu'on lui cache des choses » en titre, l'étape en cours (« Recherche des garages dans un rayon de 10 km… ») en dessous, plus petite. Seuls les messages d'avancement d'une recherche sont concernés ; erreurs et informations gardent leur aspect. La phrase est décorative et cachée aux lecteurs d'écran (la zone vivante `#results` la relirait à chaque étape), l'étape ne l'est pas. Sur mobile, où la carte est cachée, le même rond-point (72 px) apparaît à gauche de l'encart.
 - **Recherche rapide** : le rond-point et l'encart n'apparaissent qu'après 0,35 s, en fondu ; une recherche servie par la liste enregistrée ne les montre jamais.
 - **Aucun coût hors recherche** : les animations n'existent que sous `body.is-searching` (Chromium en crée même sous un `<g>` en `display:none`, d'où cette précaution) ; 60 images/s mesurées avec et sans (Chromium sans GPU). `prefers-reduced-motion` : la voiture reste en haut de l'anneau ; couleurs forcées : couleurs du système, voiture (`Canvas`) sur bitume (`CanvasText`).
-- Couleurs : jetons `--ld-*` (section 1 du CSS, thème clair et sombre). Dessins : classes `ld-*`, section « Chargement » du CSS.
+- Couleurs : jetons `--ld-*` (section 1 du CSS). Dessins : classes `ld-*`, section « Chargement » du CSS.
 
 ## Véhicule : immatriculation, modèle, année
 
@@ -302,6 +302,6 @@ Décision de l'utilisateur (5 octobre 2026), après un banc d'essai sur Cazères
 
 - Le point de bascule **1024 px** doit rester identique dans le CSS (`@media (min-width: 1024px)`) et dans le JS (`ge()`).
 - Couleurs des marqueurs lues par le JS : `--mk-priced`, `--mk-none`, `--mk-sel` (garage choisi, et garage le moins cher : `scale.best`), `--mk-user`, `--mk-user-ring`, `--mk-ring`.
-- Le fond de carte : Mapbox si la page a un jeton (version publiée, voir « Fond de carte (Mapbox) »), sinon le Plan IGN, puis CARTO en dernier recours ; adouci par `--map-filter` dans tous les cas (inversé en sombre).
+- Le fond de carte : Mapbox si la page a un jeton (version publiée, voir « Fond de carte (Mapbox) »), sinon le Plan IGN, puis CARTO en dernier recours ; adouci par `--map-filter` dans tous les cas.
 - L'ambre (jaune doux) est réservé aux avertissements et à « Avis Google » ; les étoiles gardent leur jaune.
 - La page est servie avec une politique de sécurité du contenu **sans script ni style en ligne** (hors la feuille de style signée par empreinte) : ne pas ajouter de `<script>` en ligne ni d'`eval`. `tests/budget.js` le vérifie.

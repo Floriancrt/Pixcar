@@ -196,12 +196,12 @@ const viewOf = async (browser, srv, { mock, dpr = 1, colorScheme = "light", widt
       await ctx.close();
     }
 
-    // ---- thème sombre : même fond, le filtre de la page l'assombrit (pas de second jeu de tuiles à payer)
+    // ---- système réglé en sombre : un seul thème (clair), même fond, même filtre adouci qu'en clair (pas d'inversion)
     {
       const { page, ctx } = await viewOf(browser, mapped, { mock: MOCK({ mapbox: {} }), colorScheme: "dark" });
       await tilesIn(page);
       const filter = await page.evaluate(() => getComputedStyle(document.querySelector(".leaflet-tile-pane")).filter);
-      check("M33 dark theme: the same style is requested (one set of tiles, darkened by the page's filter)", ctx.__counters.mapbox.length > 0 && ctx.__counters.mapbox.every((u) => MB_PATH.test(u)) && /invert/.test(filter), filter);
+      check("M33 system set to dark: the same style is requested and the map is not inverted (one light theme)", ctx.__counters.mapbox.length > 0 && ctx.__counters.mapbox.every((u) => MB_PATH.test(u)) && !/invert/.test(filter), filter);
       await ctx.close();
     }
 

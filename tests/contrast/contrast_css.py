@@ -1,4 +1,4 @@
-"""Contrast audit computed from the SHIPPED tokens (src/css/app.css light block + src/css/tokens.dark.css).
+"""Contrast audit computed from the SHIPPED tokens (src/css/app.css : un seul thème, clair, depuis le 10 octobre 2026).
 WCAG AA : 4.5:1 for text, 3:1 for large text (>= 24 px, or >= 18.67 px bold) and for non-text (borders, focus ring,
 markers, symbol, price bar). Design « tableau » : en-tête noir, fond crème, tableau blanc, actions orange.
 Le blanc sur orange (3.12:1) n'est permis qu'en grand texte gras : la suite a11y vérifie dans la page que chaque texte
@@ -14,8 +14,7 @@ def parse(block):
     return t
 css = open(ROOT / 'src/css/app.css', encoding='utf8').read()
 m = re.search(r':root \{\n  color-scheme: light;\n(.*?)\n\}', css, re.S)
-LIGHT = parse(m.group(1)); DARK = parse(open(ROOT / 'src/css/tokens.dark.css', encoding='utf8').read())
-# la marque (--px-*, plaque du logo) n'est définie que dans le bloc clair : le thème sombre l'hérite
+LIGHT = parse(m.group(1))
 BRAND = {k: LIGHT[k] for k in ('--px-mint', '--px-lime', '--px-ice', '--plate')}
 
 def hexof(v):
@@ -94,5 +93,5 @@ def audit(name, T):
     if '--all' in sys.argv:
         for ok, label, fg, bg, r, need in rows: print(f'  {"OK " if ok else "LOW"} {label:50s} {fg} on {bg} {r:5.2f} (need {need})')
     return len(bad)
-n = audit('LIGHT (shipped tokens)', LIGHT) + audit('DARK (shipped tokens)', DARK)
+n = audit('LIGHT (shipped tokens)', LIGHT)
 sys.exit(1 if n else 0)

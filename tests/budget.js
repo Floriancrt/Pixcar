@@ -24,7 +24,8 @@ const KB = 1024;
 // +1,5, de la page +2, du chemin critique +5 et de la page tout-en-un +5. Pour les rabaisser : charger la fenêtre des prestations à la demande.
 // Design « tableau » et police Manrope (branche ux-tableau-manrope, 10 octobre 2026) : Manrope (24,3 Ko, fichier Google non modifié) remplace
 // Outfit (31,5 Ko) ; accueil, tableau, faces de repli aux mesures de Manrope (mesuré : page 34,5 dont feuille de style 23,0 · js 59,3 · police
-// 24,3 · première visite 118,0 · tout-en-un 120,5, soit 6,8 et 7,4 Ko de moins qu'avant) : aucun budget ne bouge.
+// 24,3 · première visite 118,0 · tout-en-un 120,5, soit 6,8 et 7,4 Ko de moins qu'avant) : aucun budget ne bouge. Retrait du mode sombre (même jour) :
+// page 34,0 dont feuille de style 22,5 · première visite 117,6 · tout-en-un 120,0.
 const BUDGET = { page: 32, html: 10, js: 61, css: 23.5, font: 34, critical: 123, sw: 3, single: 127, icon: 20 };
 
 const results = [];

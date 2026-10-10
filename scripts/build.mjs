@@ -135,23 +135,9 @@ async function buildJs(extraDefine = {}) {
 }
 
 // ------------------------------------------------------------------------------------------------ CSS
-// Les jetons du thème sombre vivent dans un seul fichier, inséré aux deux endroits où le CSS les utilise
-// (préférence système, et attribut data-theme="dark").
-async function appCss() {
-  const css = await read(SRC, "css/app.css");
-  const tokens = (await read(SRC, "css/tokens.dark.css")).trim().split("\n");
-  const indent = (n) => tokens.map((l) => (l.trim() ? " ".repeat(n) + l : l)).join("\n");
-  const marks = ["    /*DARK_TOKENS*/", "  /*DARK_TOKENS*/"];
-  let out = css;
-  for (const [i, m] of marks.entries()) {
-    const parts = out.split(m);
-    if (parts.length !== 2) throw new Error(`marqueur ${m.trim()} : ${parts.length - 1} occurrence(s), 1 attendue`);
-    out = parts[0] + indent(i === 0 ? 4 : 2).trimStart() + parts[1];
-  }
-  return out;
-}
+// Un seul thème (clair) : le thème sombre et son fichier de jetons ont été retirés le 10 octobre 2026.
 async function buildCss(fontCss) {
-  const css = fontCss + (await read(SRC, "css/vendor/leaflet.css")) + "\n" + (await appCss());
+  const css = fontCss + (await read(SRC, "css/vendor/leaflet.css")) + "\n" + (await read(SRC, "css/app.css"));
   if (dev) return css;
   return (await transform(css, { loader: "css", minify: true })).code;
 }

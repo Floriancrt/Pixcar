@@ -3,7 +3,7 @@ const { serve, launch, open, search, shot, ROOT } = require("./harness");
 const { installMocks } = require("./mocks");
 const { execSync } = require("child_process");
 const fs = require("fs"), path = require("path");
-const FILE = process.env.FILE || "index.html";
+const FILE = process.argv[2] || process.env.FILE || "index.html"; // argument : la page à tester (variantes cassées : .mut/mut.html)
 const results = [];
 const check = (name, cond, detail = "") => { results.push({ name, ok: !!cond }); if (!cond) console.log("  FAIL:", name, "|", String(detail).slice(0, 500)); };
 const rgb = (s) => (String(s).match(/[\d.]+/g) || []).slice(0, 4).map(Number);
@@ -15,7 +15,8 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
 
   for (const scheme of ["light", "dark"]) {
     const T = scheme.toUpperCase().slice(0, 1);
-    const TOP = scheme === "light" ? [17, 18, 22] : [8, 9, 11]; // l'en-tête est noir : #111216 en clair, #08090B en sombre
+    // un seul thème depuis le 10 octobre 2026 : avec le système réglé en sombre (passage « D »), la page reste exactement la même
+    const TOP = [17, 18, 22]; // l'en-tête est noir : #111216
     // ===================== desktop =====================
     let { page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, colorScheme: scheme });
     const head = await page.evaluate(() => ({
@@ -62,13 +63,13 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
     }
     check(`${T}7 plate pixels: navy background, near-white "pix" (#F4F5FA) and orange "car" (#FD5319) all present`, nNavy > 3000 && nOrange > 80 && nIce > 80, JSON.stringify({ nNavy, nOrange, nIce }));
     const chrome = await page.evaluate(() => {
-      const top = getComputedStyle(document.querySelector(".topbar")), tabs = [...document.querySelectorAll("#tabs .tab")].map((t) => ({ cur: t.getAttribute("aria-current") === "page", shown: getComputedStyle(t).display !== "none", fg: getComputedStyle(t).color, text: t.textContent.trim() })), add = document.getElementById("addRepairBtn"), ac = getComputedStyle(add);
+      const top = getComputedStyle(document.querySelector(".topbar")), tabs = [...document.querySelectorAll("#tabs .tab")].map((t) => ({ cur: t.getAttribute("aria-current") === "page", shown: getComputedStyle(t).display !== "none", fg: getComputedStyle(t).color, text: t.innerText.trim() })), add = document.getElementById("addRepairBtn"), ac = getComputedStyle(add);
       return { top: [top.backgroundColor, top.color, top.position, Math.round(document.querySelector(".topbar").getBoundingClientRect().top)], tabs, add: [ac.backgroundColor, ac.color, ac.fontSize, ac.fontWeight], addName: add.getAttribute("aria-label") };
     });
     const other = chrome.tabs.find((t) => !t.cur), cur = chrome.tabs.find((t) => t.cur);
     check(`${T}8 header: black (${scheme}), sticky at the top, pale ink; the nav shows the other section only (« Prix et promos »); the add button is orange with white text, large and bold (19 px, 700: 3:1 is enough)`, eq(chrome.top[0], ...TOP) && eq(chrome.top[1], 244, 245, 250) && chrome.top[2] === "sticky" && chrome.top[3] === 0 && cur && !cur.shown && other && other.shown && other.text === "Prix et promos" && eq(other.fg, 185, 189, 207) && eq(chrome.add[0], 255, 90, 30) && eq(chrome.add[1], 255, 255, 255) && parseFloat(chrome.add[2]) >= 18.66 && +chrome.add[3] >= 700 && chrome.addName === "Ajouter une réparation", JSON.stringify(chrome));
     const tok = await page.evaluate(() => { const s = getComputedStyle(document.documentElement); const g = (k) => s.getPropertyValue(k).trim(); return { accent: g("--accent"), btn: g("--btn"), indigo: g("--indigo"), pink: g("--pink"), canvas: g("--canvas") }; });
-    check(`${T}9 tokens: accent ${scheme === "light" ? "#b13506 (burnt orange, 4.5:1 on tinted backgrounds)" : "#ff7c49 (light orange)"}, old indigo/pink tokens gone`, tok.accent === (scheme === "light" ? "#b13506" : "#ff7c49") && tok.indigo === "" && tok.pink === "", JSON.stringify(tok));
+    check(`${T}9 tokens: accent #b13506 (burnt orange, 4.5:1 on tinted backgrounds)${scheme === "dark" ? ", even with the system in dark mode (one light theme)" : ""}, old indigo/pink tokens gone`, tok.accent === "#b13506" && tok.indigo === "" && tok.pink === "" && tok.canvas.toLowerCase() === "#f6f4f0", JSON.stringify(tok));
     // markers read the tokens
     await search(page, { service: "vidange" });
     await page.click("#list > li:nth-child(2) .g-main"); await page.waitForTimeout(800);
@@ -86,7 +87,7 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
       });
       return out;
     });
-    const exp = scheme === "light" ? { user: ["#ffffff", "#111216"], selected: ["#E5440B", "#ffffff"], priced: ["#111216", "#ffffff"], radius: ["#E5440B", "#E5440B"] } : { user: ["#07080f", "#ff7c49"], selected: ["#ff7c49", "#07080f"], priced: ["#f4f5fa", "#07080f"], radius: ["#ff7c49", "#ff7c49"] };
+    const exp = { user: ["#ffffff", "#111216"], selected: ["#E5440B", "#ffffff"], priced: ["#111216", "#ffffff"], radius: ["#E5440B", "#E5440B"] };
     check(`${T}10 markers use the Pixcar tokens (user ring, selected, priced, search radius)`, JSON.stringify(mk.user) === JSON.stringify(exp.user) && JSON.stringify(mk.selected) === JSON.stringify(exp.selected) && JSON.stringify(mk.priced) === JSON.stringify(exp.priced) && JSON.stringify(mk.radius) === JSON.stringify(exp.radius), JSON.stringify(mk));
     // la ligne la moins chère (la 1re, tri par prix) n'est pas la ligne choisie (la 2e) : son marqueur reste à 8 px, en orange ; les autres prix restent noirs
     const best8 = mk.fills8.filter((f) => f === exp.selected[0]).length, rest8 = mk.fills8.filter((f) => f === exp.priced[0]).length;
@@ -108,12 +109,14 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
     // ===================== mobile =====================
     ({ page, ctx, logs } = await open(browser, server, FILE, { width: 390, height: 844, dpr: 2, touch: true, colorScheme: scheme }));
     const mob = await page.evaluate(() => {
-      const a = document.querySelector(".topbar .brand"), w = a.querySelector(".brand-word").getBoundingClientRect(), sv = a.querySelector("svg").getBoundingClientRect(), top = document.querySelector(".topbar");
-      const add = document.getElementById("addRepairBtn"), ac = getComputedStyle(add), cur = getComputedStyle(document.querySelector('.tab[aria-current="page"]')), tabs = document.getElementById("tabs"), tr = tabs.getBoundingClientRect();
-      return { word: [Math.round(w.width), Math.round(w.height)], symbol: Math.round(sv.width), top: [getComputedStyle(top).backgroundColor, getComputedStyle(top).position, Math.round(top.getBoundingClientRect().height)], add: [ac.backgroundColor, ac.color, ac.fontSize, ac.fontWeight, add.textContent.replace(/\s+/g, " ").trim(), [...add.querySelectorAll("span")].filter((x) => getComputedStyle(x).display !== "none" && x.getBoundingClientRect().width > 1).map((x) => x.textContent.trim()).join("")], cur: [cur.backgroundColor, cur.color], tabs: [getComputedStyle(tabs).backgroundColor, getComputedStyle(tabs).position, Math.round(innerHeight - tr.bottom)], h1: getComputedStyle(document.getElementById("garagesTitle")).fontSize };
+      const a = document.querySelector(".topbar .brand"), w = a.querySelector(".brand-word").getBoundingClientRect(), sv = a.querySelector("svg").getBoundingClientRect(), top = document.querySelector(".topbar"), tr = top.getBoundingClientRect();
+      const add = document.getElementById("addRepairBtn"), ac = getComputedStyle(add), ar = add.getBoundingClientRect(), tabs = document.getElementById("tabs");
+      const other = document.querySelector('.tab:not([aria-current="page"])'), oc = getComputedStyle(other), orr = other.getBoundingClientRect(), cur = document.querySelector('.tab[aria-current="page"]');
+      return { word: [Math.round(w.width), Math.round(w.height)], symbol: Math.round(sv.width), top: [getComputedStyle(top).backgroundColor, getComputedStyle(top).position, Math.round(tr.height)], add: [ac.backgroundColor, ac.color, ac.fontSize, ac.fontWeight, add.textContent.replace(/\s+/g, " ").trim(), [...add.querySelectorAll("span")].filter((x) => getComputedStyle(x).display !== "none" && x.getBoundingClientRect().width > 1).map((x) => x.textContent.trim()).join("")],
+        other: { text: other.innerText.trim(), name: other.textContent.includes("Promos"), bg: oc.backgroundColor, fg: oc.color, border: [oc.borderTopColor, oc.borderTopWidth], weight: oc.fontWeight, inTop: !!other.closest(".topbar"), pos: getComputedStyle(tabs).position, row: Math.abs((orr.top + orr.bottom) / 2 - (ar.top + ar.bottom) / 2) < 1.5, before: orr.right <= ar.left, inside: orr.left >= 0 && ar.right <= innerWidth && orr.bottom <= tr.bottom }, curShown: getComputedStyle(cur).display !== "none", sw: document.documentElement.scrollWidth, h1: getComputedStyle(document.getElementById("garagesTitle")).fontSize };
     });
-    check(`${T}13 mobile: black sticky top bar (66 px) with the symbol (32 px) and the wordmark (65 × 22 px); the hero title shrinks to 37.6 px`, eq(mob.top[0], ...TOP) && mob.top[1] === "sticky" && mob.top[2] === 66 && mob.symbol === 32 && mob.word[0] === 65 && mob.word[1] === 22 && mob.h1 === "37.6px", JSON.stringify(mob));
-    check(`${T}14 mobile: orange « Réparation » button (white, 19 px bold) and a floating black bottom nav, its current tab orange with black text`, eq(mob.add[0], 255, 90, 30) && eq(mob.add[1], 255, 255, 255) && parseFloat(mob.add[2]) >= 18.66 && +mob.add[3] >= 700 && mob.add[5] === "Réparation" && eq(mob.cur[0], 255, 90, 30) && eq(mob.cur[1], 17, 18, 22) && mob.tabs[0] === `rgba(${TOP.join(", ")}, 0.94)` && mob.tabs[1] === "fixed" && mob.tabs[2] === 12, JSON.stringify(mob));
+    check(`${T}13 mobile: black sticky top bar (64 px) with the symbol (28 px) and the wordmark (56 × 19 px); the hero title shrinks to 37.6 px`, eq(mob.top[0], ...TOP) && mob.top[1] === "sticky" && mob.top[2] === 64 && mob.symbol === 28 && mob.word[0] === 56 && mob.word[1] === 19 && mob.h1 === "37.6px", JSON.stringify(mob));
+    check(`${T}14 mobile: orange « Réparation » button (white, 19 px bold) and, before it in the header, « Promos » (black, orange border, white bold text); no bar at the bottom, nothing wider than the screen`, eq(mob.add[0], 255, 90, 30) && eq(mob.add[1], 255, 255, 255) && parseFloat(mob.add[2]) >= 18.66 && +mob.add[3] >= 700 && mob.add[5] === "Réparation" && mob.other.text === "Promos" && eq(mob.other.bg, ...TOP) && eq(mob.other.fg, 244, 245, 250) && eq(mob.other.border[0], 255, 90, 30) && mob.other.border[1] === "2px" && +mob.other.weight >= 700 && mob.other.inTop && mob.other.pos === "static" && mob.other.row && mob.other.before && mob.other.inside && !mob.curShown && mob.sw === 390, JSON.stringify(mob));
     check(`${T}15 mobile: no page error`, logs.errors.length === 0 && logs.console.length === 0, JSON.stringify([logs.errors, logs.console]));
     await ctx.close();
   }

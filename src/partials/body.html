@@ -18,7 +18,7 @@
           >
           <a class="tab" href="#prix" data-view="prix"
             ><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg
-            ><span class="tab-label">Prix et promos</span></a
+            ><span class="tab-label"><span class="lbl-long">Prix et promos</span><span class="lbl-short">Promos</span></span></a
           >
         </nav>
         <button
@@ -159,6 +159,8 @@
               </div>
               <!-- Filtres et tri, au-dessus du tableau -->
               <div class="mapbar" id="toolbar" hidden>
+              <!-- filtres (sur mobile, une seule ligne avec le tri : elle défile de côté si l'écran est trop étroit) -->
+              <div class="dd-row">
               <div class="dd-wrap">
                 <button type="button" class="dd" id="ddType" aria-haspopup="true" aria-expanded="false" aria-controls="menuType">
                   <span class="dd-lbl">Type</span><span class="dd-n" hidden></span><svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg>
@@ -199,6 +201,7 @@
                     sans prix, et parfois des adresses de domicile.
                   </p>
                 </div>
+              </div>
               </div>
 
                 <div class="sortbox" id="sortBox">
