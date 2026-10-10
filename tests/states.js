@@ -22,8 +22,8 @@ const FILE = process.argv[2] || "index.html";
   await page.click("#mapInfo [data-mi=close]");
   await page.waitForTimeout(300);
   await shot(page, "d-11-after-close");
-  // scroll panel to top & expand the search form
-  await page.evaluate(() => document.getElementById("panelCol").scrollTo(0, 0));
+  // back to the top of the page & expand the search form
+  await page.evaluate(() => window.scrollTo(0, 0));
   await editSearch(page);
   await page.waitForTimeout(300);
   await shot(page, "d-12-form-expanded");
@@ -77,6 +77,7 @@ const FILE = process.argv[2] || "index.html";
   await shot(page, "d-30-preview");
   await ctx.close();
   ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { overpassFail: true, sireneFail: true } }));
+  await pickServices(page, "vidange");
   await page.fill("#address", "12 rue de la république lyon");
   await page.waitForSelector("#addrList li[data-i]");
   await page.click("#addrList li[data-i='0']");
@@ -85,6 +86,7 @@ const FILE = process.argv[2] || "index.html";
   await shot(page, "d-31-overpass-fail");
   await ctx.close();
   ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { elements: [] } }));
+  await pickServices(page, "vidange");
   await page.fill("#address", "12 rue de la république lyon");
   await page.waitForSelector("#addrList li[data-i]");
   await page.click("#addrList li[data-i='0']");

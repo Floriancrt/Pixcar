@@ -19,7 +19,13 @@ M = [
  # ---- la page (app.js)
  ("only one service can be picked", "apply: svcApply });", "apply: svcApply, max: 1 });", "", "P1"),  # une seule prestation : la zone des pastilles disparaît (P1)
  ("browsing the price page drops the selection", "if (me.svcs.length > 1 && me.svcs.includes(pe.refService.value)) return void refShow(", "if (!1) return void refShow(", "", "R1"),
- ("the landmarks ignore the other services", "if (ss.length > 1) {\n      // plusieurs prestations : fourchette", "if (!1) {\n      // plusieurs prestations : fourchette", "", "P11"),
+ # rien n'est choisi d'office ; « Comparer » sans prestation ouvre la fenêtre ; les « Populaires » de l'accueil
+ ("nothing chosen yet, but the window ticks the default service", "get: () => (me.svcChosen ? (me.svcs.length ? me.svcs : [fe().id]) : [])", "get: () => (me.svcs.length ? me.svcs : [fe().id])", "", "P1"),
+ ("« Comparer » searches with no service chosen", "if (!me.svcChosen) return void ((me.pendingGo = !0), svcPicker.open());", "", "", "Q1"),
+ ("closing the window keeps « Comparer » pending (a later choice searches)", 'w("#svcDlg").addEventListener("close", () => (me.pendingGo = !1));', "", "", "Q3"),
+ ("the window's choice does not launch the pending search", "me.pendingGo && ((me.pendingGo = !1), lt());", "me.pendingGo && (me.pendingGo = !1);", "", "Q5"),
+ ("a popular chip searches even without an address", "pe.address.value.trim() || me.place ? lt() : pe.address.focus()", "lt()", "", "Q7"),
+ ("a partial garage no longer says « 1 prestation sur 2 »", 'part: "part" === e.offer.lvl ? String(e.offer.why).split(" : ")[0] : "",', 'part: "",', "", "R4"),
 ]
 
 if __name__ == "__main__":

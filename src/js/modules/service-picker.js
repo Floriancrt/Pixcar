@@ -123,10 +123,11 @@ export function initServicePicker({ doc = document, services, get, apply, max = 
     paint();
     root.classList.add("dlg-open");
     "function" == typeof dlg.showModal ? dlg.showModal() : dlg.setAttribute("open", "");
-    // au doigt, le clavier ne s'ouvre pas tout seul : on pose le focus sur la première prestation cochée (ou la barre de recherche à la souris)
+    // au doigt, le clavier ne s'ouvre pas tout seul : on pose le focus sur la première prestation cochée, ou la première de la liste
+    // quand rien n'est encore choisi (à la souris, sur la barre de recherche)
     const coarse = doc.defaultView && doc.defaultView.matchMedia && doc.defaultView.matchMedia("(pointer: coarse)").matches;
     const first = list.querySelector("input:checked");
-    (coarse && first ? first : search).focus({ preventScroll: true });
+    (coarse ? first || list.querySelector("input:not(:disabled)") || search : search).focus({ preventScroll: true });
     if (first && first.scrollIntoView) first.scrollIntoView({ block: "nearest" });
   };
 

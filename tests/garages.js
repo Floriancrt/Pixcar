@@ -158,8 +158,8 @@ const onlyLoadNotices = (logs) => logs.errors.length === 0 && logs.console.every
   const b12 = await read(page, ovtId(5));
   check("B12 Carrosserie du Soleil (table only): phone, site and street address of the table, hours unknown, marked as coming from Overture", b12 && b12.phones.join() === "tel:+33472000005" && b12.webHref === "https://carrosserie-soleil.example/" && /3 rue du Soleil/i.test(b12.addr) && /Non renseignés/.test(b12.hours) && b12.note === NOTE_ADDED, JSON.stringify(b12));
   check("B13 a body shop of the table is a body shop here too: labelled « Indépendant » like OpenStreetMap's, its services « à vérifier »", b12 && /Indépendant/.test(b12.kind), b12 && b12.kind);
-  const b13b = await page.evaluate((id) => { const c = document.querySelector(`#list [data-id="${CSS.escape(id)}"]`); return (c.querySelector(".svc") || {}).textContent || ""; }, ovtId(5));
-  check("B13b …its service line says the service must be checked", /vérifier/i.test(b13b), b13b);
+  const b13b = await page.evaluate((id) => { const k = document.querySelector(`#list [data-id="${CSS.escape(id)}"] .kind`); return k ? [k.getAttribute("title") || "", (k.querySelector(".sr-only") || {}).textContent || "", (k.querySelector(".dot") || {}).className || ""] : []; }, ovtId(5));
+  check("B13b …its type pill says the service must be checked (on hover and for screen readers), with the « to check » dot", /vérifier/i.test(b13b[0]) && /vérifier/i.test(b13b[1]) && /lvl-check/.test(b13b[2]), JSON.stringify(b13b));
   await closeCard(page, ovtId(5));
 
   // une adresse de rue manquante est cherchée comme pour OpenStreetMap, une seule fois
@@ -211,8 +211,8 @@ const onlyLoadNotices = (logs) => logs.errors.length === 0 && logs.console.every
   check("C1 OpenStreetMap down: the list is the table's eight places in the disc", cn.length === 8 && cn.includes("Garage Martin") && cn.includes("Garage Dubois SARL") && !cn.includes("Garage Lointain"), JSON.stringify(cn));
   const cids = await listIds(page);
   check("C2 all of them carry the table's identifiers", cids.every((i) => /^custom:ovt-[0-9a-f]{32}$/.test(i)), JSON.stringify(cids));
-  const hint = await page.evaluate(() => [...document.querySelectorAll(".hint")].map((e) => e.textContent.replace(/\s+/g, " ").trim()).filter((t) => /Overture/.test(t)));
-  check("C3 a note on the results says OpenStreetMap did not answer and the list comes from Overture Maps, indicatively", hint.some((t) => /OpenStreetMap n'a pas répondu/.test(t) && /Overture Maps, à titre indicatif/.test(t)), JSON.stringify(hint));
+  const hint = await page.evaluate(() => [...document.querySelectorAll("#resNote p")].map((e) => e.textContent.replace(/\s+/g, " ").trim()).filter((t) => /Overture/.test(t)));
+  check("C3 the note under the table says OpenStreetMap did not answer and the list comes from Overture Maps, indicatively", hint.some((t) => /OpenStreetMap n'a pas répondu/.test(t) && /Overture Maps, à titre indicatif/.test(t)), JSON.stringify(hint));
   const cNoError = await page.evaluate(() => !document.querySelector("#list + .error, .err-box, [data-error]") && document.querySelectorAll("#list > li.card").length > 0);
   check("C4 no error state is shown in that case", cNoError);
   await ctx.close();

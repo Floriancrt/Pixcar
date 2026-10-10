@@ -15,6 +15,22 @@ async function audit(page, label, out) {
     const f = (x) => ({ id: x.id, impact: x.impact, help: x.help, nodes: x.nodes.length, ex: x.nodes.slice(0, 3).map((n) => ({ t: n.target.join(" "), s: (n.any[0] || n.all[0] || n.none[0] || {}).message })) });
     return { violations: res.violations.map(f), incompleteContrast: (res.incomplete.find((i) => i.id === "color-contrast") || { nodes: [] }).nodes.length, passes: res.passes.length };
   });
+  // Blanc sur l'orange des boutons (#FF5A1E) : 3,12:1, admis seulement en grand texte (24 px, ou 18,66 px en gras). Vérifié sur tout texte
+  // affiché, quel que soit l'avis d'axe (qui classe parfois un fond en « incomplet »).
+  const small = await page.evaluate(() => {
+    const bgOf = (e) => { for (let n = e; n && n.nodeType === 1; n = n.parentElement) { const b = getComputedStyle(n).backgroundColor; if (b && b !== "rgba(0, 0, 0, 0)" && b !== "transparent") return b; } return ""; };
+    const out = [], w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let t; (t = w.nextNode()); ) {
+      const e = t.parentElement;
+      if (!t.textContent.trim() || !e || !e.getClientRects().length) continue;
+      const cs = getComputedStyle(e);
+      if (cs.visibility === "hidden" || cs.color !== "rgb(255, 255, 255)" || bgOf(e) !== "rgb(255, 90, 30)") continue;
+      const px = parseFloat(cs.fontSize), wt = +cs.fontWeight;
+      if (!(px >= 24 || (px >= 18.66 && wt >= 700))) out.push(`${e.tagName.toLowerCase()}.${e.className} ${px}px/${wt} « ${t.textContent.trim().slice(0, 30)} »`);
+    }
+    return out;
+  });
+  if (small.length) r.violations.push({ id: "white-on-orange-small-text", impact: "serious", help: "white on #FF5A1E only as large bold text", nodes: small.length, ex: small.slice(0, 3) });
   out.push({ label, ...r });
   console.log(`${label.padEnd(34)} violations=${r.violations.length} (${r.violations.map((v) => v.id + "×" + v.nodes).join(", ") || "none"}) | contrast-incomplete=${r.incompleteContrast}`);
   return r;

@@ -157,18 +157,25 @@ async function buildCss(fontCss) {
 }
 
 // ------------------------------------------------------------------------------------------------ polices
-// Outfit (SIL OFL 1.1, The Outfit Project Authors : texte de la licence dans src/assets/fonts/OFL-Outfit.txt), variable 100–900, fichiers officiels de
-// Google Fonts, non modifiés. « latin » couvre le français (Latin-1 et œ), « latin-ext » le reste. Une police libre (OFL) peut être versionnée,
-// allégée et redistribuée avec le site ; ce n'était pas le cas de Clash Grotesk (licence ITF FFL : ni sous-ensemble ni dépôt public).
-// size-adjust : Outfit a des lettres plus petites que Plus Jakarta Sans (hauteur d'x 0,46 em contre 0,54) et un texte plus étroit de 6 % ;
-// ce descripteur la grossit de 8 % sans toucher aux tailles du CSS (hauteur d'x 0,50 em, largeur des textes de l'interface +0,7 % en moyenne,
-// ce qui garde les retours à la ligne d'origine). Il ne vaut que pour Outfit : les polices de repli gardent leur taille.
-const SIZE_ADJUST = "108%";
+// Manrope (SIL OFL 1.1, The Manrope Project Authors : texte de la licence dans src/assets/fonts/OFL-Manrope.txt), variable 200–800, fichiers
+// officiels de Google Fonts (v20), non modifiés. « latin » couvre le français (Latin-1 et œ), « latin-ext » le reste. Une police libre (OFL) peut
+// être versionnée et redistribuée avec le site. Pas de size-adjust : les tailles du CSS sont celles de la maquette, dessinée en Manrope.
 const FONTS = [
-  { file: "outfit-latin.woff2", range: "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD" },
-  { file: "outfit-latin-ext.woff2", range: "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF" },
+  { file: "manrope-latin.woff2", range: "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD" },
+  { file: "manrope-latin-ext.woff2", range: "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF" },
 ];
-const fontFace = (url, range) => `@font-face{font-family:'Outfit';font-style:normal;font-weight:100 900;font-display:swap;size-adjust:${SIZE_ADJUST};src:url(${url}) format('woff2');unicode-range:${range}}\n`;
+const fontFace = (url, range) => `@font-face{font-family:'Manrope';font-style:normal;font-weight:200 800;font-display:swap;src:url(${url}) format('woff2');unicode-range:${range}}\n`;
+// Repli aux mesures de Manrope, le temps que la police arrive : Arial (Windows, macOS) ou ses jumelles métriques Liberation Sans (Linux) et
+// Arimo (ChromeOS), agrandies pour occuper la même largeur que Manrope (largeur moyenne mesurée sur les textes de la page : +4 % en regular
+// à la graisse 500, +2 % en gras à la graisse 800) et ramenées à ses hauteurs (ascendante 1,066 em, descendante 0,3 em, sans interligne
+// ajouté). Sans lui, le titre de l'accueil change de nombre de lignes quand Manrope remplace la police système, et tout ce qui suit
+// bouge (test « prerender »). Une police locale ne se télécharge pas : la politique de sécurité (font-src) ne la concerne pas.
+const FALLBACK = [
+  { weight: "200 599", adjust: 104, src: ["Arial", "ArialMT", "Liberation Sans", "LiberationSans", "Arimo", "Helvetica"] },
+  { weight: "600 800", adjust: 102, src: ["Arial Bold", "Arial-BoldMT", "Liberation Sans Bold", "LiberationSans-Bold", "Arimo Bold", "Helvetica Bold"] },
+];
+const pct = (v) => `${+(v * 100).toFixed(2)}%`;
+const fallbackFaces = FALLBACK.map((f) => `@font-face{font-family:'Manrope Fallback';font-style:normal;font-weight:${f.weight};src:${f.src.map((n) => `local('${n}')`).join(",")};size-adjust:${f.adjust}%;ascent-override:${pct(1.066 / (f.adjust / 100))};descent-override:${pct(0.3 / (f.adjust / 100))};line-gap-override:0%}\n`).join("");
 
 // ------------------------------------------------------------------------------------------------ HTML
 const oneLine = (s) => s.trim().split("\n").map((l) => l.trim()).join(" ");
@@ -274,8 +281,8 @@ async function render(parts, { headAssets, scripts, garagesBase = "" }) {
 
 // ------------------------------------------------------------------------------------------------ page tout-en-un
 async function buildSingle(parts) {
-  const latin = await readFile(join(SRC, "assets/fonts/outfit-latin.woff2"));
-  const fontCss = fontFace(`data:font/woff2;base64,${latin.toString("base64")}`, FONTS[0].range);
+  const latin = await readFile(join(SRC, "assets/fonts/manrope-latin.woff2"));
+  const fontCss = fontFace(`data:font/woff2;base64,${latin.toString("base64")}`, FONTS[0].range) + fallbackFaces;
   const css = await buildCss(fontCss);
   const js = await buildJs();
   const svg = (await read(SRC, "assets/favicon.svg")).trim();
@@ -364,7 +371,7 @@ async function buildDist(parts) {
   await rm(DIST, { recursive: true, force: true });
   await mkdir(join(DIST, "assets/fonts"), { recursive: true });
   const fontUrls = [];
-  let fontCss = "";
+  let fontCss = fallbackFaces;
   for (const f of FONTS) {
     const buf = await readFile(join(SRC, "assets/fonts", f.file));
     const name = f.file.replace(".woff2", `.${hash(buf)}.woff2`);

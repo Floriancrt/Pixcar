@@ -1,8 +1,9 @@
 /* ==========================================================================
-   Pixcar — interface rafraîchie, charte Orange & Marine (logo : #FF9A72, #FD5319, #F4F5FA ; marine #10121F)
-   Langage visuel : rail et barres marine, panneaux « verre » très clair, actions orange à texte marine,
-   pastilles de statut, carte persistante (barre de recherche flottante, résultats à gauche, carte plein
-   écran à droite) sur ordinateur.
+   Pixcar — design « tableau » (maquettes d'octobre 2026), police Manrope ; logo : #FF9A72, #FD5319, #F4F5FA
+   sur sa plaque marine #10121F.
+   Langage visuel : en-tête noir, fond crème, accueil centré (titre, carte de recherche, populaires, chiffres,
+   étapes), résultats en tableau blanc (garage, type, distance, échelle de prix, Appeler / Demander) avec la carte
+   collée dans une colonne à droite sur ordinateur ; actions orange (texte blanc en grand gras seulement).
    Sections : 1 jetons · 2 base · 3 navigation · 4 mise en page · 5 formulaires
    · 6 composants · 7 liste & fiches · 8 vues · 9 carte · 10 dialogue & toast
    · 11 mouvement & accessibilité
@@ -12,28 +13,28 @@
 :root {
   color-scheme: light;
   --px-mint: #FF9A72;
-  --px-lime: #FD5319;
+  --px-lime: #FF5A1E;
   --px-ice: #F4F5FA;
-  --canvas: #EEF0F6;
-  --glass: linear-gradient(155deg, rgba(255, 255, 255, 0.97) 0%, rgba(247, 249, 253, 0.95) 42%, rgba(237, 242, 251, 0.96) 100%);
+  --canvas: #F6F4F0;
+  --glass: linear-gradient(155deg, rgba(255, 255, 255, 0.97) 0%, rgba(250, 250, 249, 0.96) 100%);
   --glass-flat: rgba(255, 255, 255, 0.92);
-  --rail-bg: #10121F;
-  --nav-bg: rgba(16, 18, 31, 0.93);
-  --topbar-bg: rgba(16, 18, 31, 0.95);
+  --rail-bg: #111216;
+  --nav-bg: rgba(17, 18, 22, 0.94);
+  --topbar-bg: #111216;
   --chrome-ink: #f4f5fa;
   --chrome-ink-2: #b9bdcf;
   --chrome-hover: rgba(255, 255, 255, 0.1);
-  --chrome-tint: rgba(253, 83, 25, 0.18);
   --card: #ffffff;
-  --card-2: #f0f2f8;
-  --hair: rgba(16, 18, 31, 0.07);
-  --line: rgba(16, 18, 31, 0.13);
+  --card-2: #f2f4f5;
+  --hair: rgba(17, 18, 22, 0.07);
+  --line: rgba(17, 18, 22, 0.13);
   --line-strong: #5f667e;
-  --ink: #10121F;
-  --ink-2: #383d54;
-  --ink-3: #464c64;
+  --ink: #111216;
+  --ink-2: #45474f;
+  --ink-3: #686a72;
   --accent: #b13506;
-  --accent-soft: #ffe6dc;
+  --accent-soft: #fbe3da;
+  --accent-strong: #c2400d;
   --accent-ink: #862803;
   --promo-bg: #0a7d1a;
   --promo-fg: #ffffff;
@@ -47,53 +48,62 @@
   --star: #f5b800;
   --star-off: #dbdee4;
   --star-edge: #7e8186;
-  --btn: #FD5319;
-  --on-btn: #10121F;
+  --btn: #FF5A1E;
+  --on-btn: #ffffff;
+  --on-btn-2: #111216;
   --focus: #0659E5;
   --scrim: rgba(16, 18, 31, 0.46);
-  --glow-a: rgba(255, 194, 168, 0.5);
-  --glow-b: rgba(183, 203, 255, 0.26);
-  --glow-c: rgba(201, 211, 236, 0.45);
-  --teaser-bg: linear-gradient(135deg, rgba(255, 230, 220, 0.95), rgba(247, 249, 253, 0.9));
-  --sel-glow: rgba(229, 68, 11, 0.45);
   --flash-ring: rgba(229, 68, 11, 0.3);
-  --av-bg: 70% 91%;
-  --av-fg: 62% 24%;
   --map-bg: #e7eaf0;
   --map-park: #d7e6d3;
   --map-water: #cbddea;
   --map-road: #ffffff;
   --map-filter: grayscale(0.75) brightness(1.03) contrast(0.93);
-  --mk-priced: #10121F;
+  --mk-priced: #111216;
   --mk-none: #8e94aa;
   --mk-sel: #E5440B;
   --mk-user: #ffffff;
-  --mk-user-ring: #10121F;
+  --mk-user-ring: #111216;
   --mk-ring: #ffffff;
-  --tip-bg: #10121F;
+  --tip-bg: #111216;
   --tip-fg: #ffffff;
-  --ld-road: #10121F;
+  --ld-road: #111216;
   --ld-edge: transparent;
   --ld-line: #F4F5FA;
   --ld-car: #FD5319;
-  --ld-deep: #10121F;
+  --ld-deep: #111216;
   --shadow-sm: 0 1px 2px rgba(16, 18, 31, 0.05), 0 6px 18px -10px rgba(16, 18, 31, 0.16);
   --shadow-md: 0 12px 30px -14px rgba(16, 18, 31, 0.3);
   --shadow-lg: 0 24px 60px -22px rgba(16, 18, 31, 0.42);
-  --plate: #10121F;
-  --on-lime: #10121F;
+  --plate: #0e1220;
   --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2310121F' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --r-xl: 28px;
   --r-lg: 22px;
   --r-md: 16px;
   --r-sm: 12px;
-  --rail-w: 76px;
-  --gap: 16px;
-  --panel-w: clamp(420px, 36vw, 540px);
-  --bar-h: 104px;
-  --panel-x: calc(var(--gap) * 2 + var(--rail-w));
-  --panel-top: calc(var(--gap) * 2 + var(--bar-h));
-  --font: "Outfit", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --seg-bg: #f4f4f4;
+  --pill-bg: #f2f4f5;
+  --thead-bg: #f8fafb;
+  --row-line: #eef0f2;
+  --row-hover: #fafbfc;
+  --best-bg: #fef6f2;
+  --track: #eceef0;
+  --bar: #111216;
+  --act-bg: #111216;
+  --act-ink: #ffffff;
+  --note-bg: #f3f5f7;
+  --note-ink: #48494d;
+  --stat-dark: #111216;
+  --stat-dark-ink: #c9cad0;
+  --step-bg: #fce4dc;
+  --step-ink: #672817;
+  --tile-blue: #e2edfb;
+  --tile-blue-ink: #214185;
+  --tile-orange: #fee5d9;
+  --tile-orange-ink: #7c2704;
+  --tile-gray: #eaebe6;
+  --tile-gray-ink: #252621;
+  --font: "Manrope", "Manrope Fallback", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -140,11 +150,7 @@ body {
   font: 400 1rem/1.5 var(--font);
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
-  background:
-    radial-gradient(900px 520px at 6% -8%, var(--glow-a), transparent 62%),
-    radial-gradient(760px 520px at 100% 2%, var(--glow-b), transparent 62%),
-    radial-gradient(720px 520px at 55% 112%, var(--glow-c), transparent 62%), var(--canvas);
-  background-attachment: fixed;
+  background: var(--canvas);
 }
 a {
   color: var(--accent);
@@ -201,7 +207,7 @@ h3 {
   padding: 12px 20px;
   border-radius: 999px;
   background: var(--btn);
-  color: var(--on-btn);
+  color: var(--on-btn-2);
   font-weight: 700;
   text-decoration: none;
   transition: top 0.15s;
@@ -210,59 +216,48 @@ h3 {
   top: 12px;
 }
 
-/* ---------- 3. Navigation ---------- */
+/* ---------- 3. En-tête ---------- */
+/* Bandeau noir pleine largeur : le logo sur sa plaque marine, (résultats, ordinateur) la recherche compacte au centre, le lien vers l'autre
+   vue et « Ajouter une réparation ». Sur mobile, il reste en haut de l'écran ; « Prix et promos » passe dans une barre flottante en bas. */
 .app {
   position: relative;
 }
-.dock {
-  display: none;
-}
-/* Mobile : barre du haut + navigation flottante en bas */
-.rail {
+.topbar {
   position: sticky;
   top: 0;
   z-index: 60;
   padding-top: env(safe-area-inset-top, 0px);
+  background: var(--topbar-bg);
   color: var(--chrome-ink);
 }
-.rail :focus-visible {
+.topbar :focus-visible {
   outline-color: var(--px-lime);
 }
-.rail::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: var(--topbar-bg);
-  -webkit-backdrop-filter: blur(14px) saturate(1.3);
-  backdrop-filter: blur(14px) saturate(1.3);
-}
-.rail-in {
+.topbar-in {
   display: flex;
   align-items: center;
-  gap: 12px;
-  max-width: 48rem;
-  margin: 0 auto;
+  gap: 14px;
   min-height: 64px;
-  padding: 10px 16px;
+  padding: 10px 12px;
 }
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   margin-right: auto;
+  padding: 7px 12px 7px 8px;
+  border-radius: 10px;
+  background: var(--plate);
   color: inherit;
   text-decoration: none;
-  font: 800 1.12rem/1 var(--font);
-  letter-spacing: -0.02em;
   white-space: nowrap;
 }
 .brand-mark {
   flex: none;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
 }
 .brand-mark svg {
   display: block;
@@ -270,7 +265,7 @@ h3 {
   height: 100%;
   fill: var(--px-mint);
 }
-/* Mot-symbole « pixcar » : « pix » blanc cassé + « car » orange, conçu pour un fond marine */
+/* Mot-symbole « pixcar » : « pix » blanc cassé + « car » orange, dessiné pour un fond marine */
 .px-word {
   display: block;
   flex: none;
@@ -278,42 +273,33 @@ h3 {
   background: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAjwAAADBCAMAAAD8QppGAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAA2UExURfT1+vT1+vT1+vT1+vT1+vt6T/T1+vqKZfmghPqGYPxoNvmTcvt0Rv1TGf1bJPtuP/twQfT1+qVqZY0AAAABdFJOUwBA5thmAAAAAWJLR0QAiAUdSAAAAAd0SU1FB+oKARU4CIquuNIAABRlSURBVHja7Z2NuqsqDoYXVKtExM793+wI9ketQBKwq+vsZObZs8+ZVlt5+yVAEn5+xMT+C6a8yWMQI4OjL01zma1ptAAkRkFnAedpWh6JGNL0Fh3BR4zgsd6tEXrEmOz42EcejVg23Lkcm2iPWDbeuVyEHrHK7Mwmc3YxNjwS9oilIp5LEh6RHrGotU0SHlntEeMKj/gtsQJ4JGQW44XL4rfEBB4xgUfsu0KeRuAROw2eqzwkMVEeMYFH7GvsKvCIsaUnx44sEoqx4ZFHJBaFJ73QI+lgYmzpEa8lxpYeER4x7mxdEjLE0qYbySMUq02PRMtiiLCnEd0RY2uPTLTEas25mstV0BEj4PPkp7lKhycxmrXqYfIsxMTExMTExMTExMTExMTExMTE/oIppYM1+m7/+uJeF0zAwIDTHDW//QcJmoHpe2MMzGaCDWdA5K85zNbP9tuUtlsWEvb+VnVNJf/pf2g7fB5DY6313Izzf735v8//yvRDvfGd8TT+PuFGDzOm/zxBXfgo4RcyLDfXTRyGt07aSmeLPGkHj8wXnD/A4gH3dtU7wPXeXv+GIJv36zwuub+wwl1rfox2GVE3bu0xvLNGVBivflE1CHTC6voLQG+/ba9PwxT+HPop/K0fpmn+Y+jeX9gf2tAdfRD/SR53t3YIApSuftmN9AVlhCTATQ5zE02A1xlo8fRk4cek3c9DukjM+G7uOcCjNWX8dIOB8c7Nmy2DaIbdWwLOMMLzbY+/zLCtP8xk12K2QhJ2L3x+3we84WLW0ODJV5YzBhPZSlc1mZtjEw91BXbmMbV+eNz4pjoeHjf6/4T/fwQzsPGZfeIxNvf7HI70MANxZ+aNNtttXvhk5cXEuFBnd595MHuA59uS4NEXmuHwUch+ltnuhZfy2+Gu4+Xg/rwTQ/tQIe++Op7oRDVnpXGLvnVrJlzkczm7YaKHyOX9vx62ED9l5/VbIcGT/ekzxQALT50mYm3+SyiEHGSh2Y6GMWR8wm8dRpe/uB/slbzNyvMeg92FZwOPF88I/QD97rcCB1+qQ8OjyOggQ5/khRtKsIJhVRcCHxwWlR0gq09nANC3cWDhJT6DhTe8Hh9jC0/i8it4Yj8WgvJoDjuoNHa08iD4reC00rhPZuSanfDsTAQ6HzJj7tcfEtTtlcfFlO3ltqZb5I545eGyg5ADPDxZ2cgKXZsXnjb1dnOzI58erO/qDIx4ep66YvsnPCMGnh4Dj0n4Yhw8bcNmZ55861puC0GPOtNpdWYEPjtHE+DjaMdaYF1/mbT3WHgwypNwbSi31WKCzAJPoAhvzS8zlTmtJDvDrQCdhZ7bhJAdy0PUL/mY+QK3BHpoeOzwiqlLlEe1+nI5kR7SkUnZsEcXOK2kSHpf4saxEJ/blBGf7jYCcNm084C2AK4cniVgHlLLTCh4muZSbKmwWVHgKXJcJXP9zsBYw25p19WV+cXFKPDErjXd51ljGTxV7FoLnuyH1Wyn1STAq8XO/MxvXTKqKoFnhMwE/z1gTsFjkhf7HDyJeZCmxTDqyqWnYHWwu9Vi5/nQEYgCkyAkPNOxrjh3h6c3SRA/B09iTKnHROaC5ph+FDiterqTpIc2RX8tMBNWCxDw3PWxnTIq5j4IT3RsiMqTziAJN2pZTiveWqEzUBWeCD3zbWZH4oi6sx/h1NvcDh6Xd4OJl3wSnhg95ANqW07Yo/h7G3V1Z9k5OkqX8bsA7kUCBZ4Vc2M1eMLVvwWeSEyhqPDkQDgMfDU74JnZca9goBI9B+s9finAOZv8sUcnWbj3OLTbQgiZwywSVoyaFd2fHItVRkb+11YMeJ7z1ZrwvDuuMJQOgOwhA3MjD57s+1wWnuuH4DkeIbryZFl4m9spPjvTMw6p47zcCEf0dGE9zpF1h3ZvstsavweeQ9/AgUcRNa7IaVWUnNeW9G6X1G9KHGf/0WdfVWMeiCrux+E5GiQOPNn4V1dyWt0AUDdcXhyBzx8/zh0td4l4eFIf070nfTA2Rs92XJRddZ7jKtgQK0nBOI6THn5p47g6EqFzjDO7N44e4uFJfIPnTksJPI3f9qLufKlK8LSEdPjs1D7utNDJEdvSAsSjBxhaVFLf0ewq1D38Njxc5WlCbahq2zZUPBEI0nXcFiLsaSvspRqwaHasXZe75N+xinrQjD64CTUzS93M2fDESeLA4+vz9o9ba2yq4ftIMeFB75AWzLQGZGrNQwzgWT3qvGtJpx2/4EGtYLslZccu1ZrejD1gFSjwOBY392IdRswzK04bqftseNKjmfBk8+EVLoknuaWVH9T5MVq416d3S926BftSBcinFQ5Z4QkBji8Q7bp2W4Vs7/y48+FZoqxn4oelwpMqJF41UiZJDxsehQp7+CkciEG9VxXvasa7bljoSa0S9t26xDM/ctaTc1Q87vl5YAAUeG40eJY4feU3Bxo8mSL0fBl7czBabHhQ83XFrzN9rL2knI8XkAMlbgM+Bwt+8Ah3us0S9jLokPJy0RTEBZ/HQuZJ8Cy/kts0eWldFPb+FbDwIMpoGrr08OHJfnCVT79OCo/NB72xMW19+4xIB4Tdm8wiUgnV8Ih2mVoyd2bAvHzojle9jWQHR089ePKrPfyAx0+1MkspkCym6d6rIEKguecgeK2lz0DEXRzvwu9EEiUjLHgAbiaeeq15kW7EdVEvVAKP4q9vNrnfw2DTC3GQbWHQbaXr3pSge9t4XXbP4tPude1vbNlrMhh6dm4LuYmbTNrXnDiXP567S5XAwyuCxn0pAy4Nz763SYaeEGxOR6+5+5wYPDdUtdciPq4yPG7MFZvparqDo4cAT7aAuGhrRScHPpnrgKvge63++Rn9Yb369JiWxZTnhq4ztbktC0eDBzCVZhoxzSIU6RO3ksrgKSiETv8ghvTEBezQokZ0vMczMfW/PdK/IvDg+2t02S0LGjw+MS1/92tVdqjT40J4+I4r7RJNcoU4H8P+rNoOAEQ7hK36Nx3AM7PQ45/7QIQHcgsRmOp6XS3gQapBTXj49KS/VDJFAlt27nsj2AQ6m/30zUrx8lcHN0JnljbdSIwIj99BQZCr6woPMdumFB5uNbRGRSuAT0KOhiKp1k4G1vN4t02jce5G6+pjSYuEOeVBtfW4Fuk7A8eq8GAaxdFnAEPSAwCh01efnNCb1Ebkrrsb4l6Zdc0tPC6T7Yj6krqu00LUN6iyBPgaM67MlwrLJrHfMUCtBsidTW2jA7UbXTtQ4XEJeIYKD79hPJRM1KPQoP2cRE/uB7HEnjF4zM/p8ATlMRVhJMBDmefpIoEvhqdYeRgxs84OgnXxXcZqwvOTUAr33tAWYcbVggfpMjPwsJ7KR+EhS0+TH9REzAOmGjzJjXuOwA0OP9vKwNNVePTNCfDoWtsTzBmXKoJnnH4qwpPKcmb4wdQiMwkeU+N3q1lPJe23NPaVWHJpjksjBjX1C64KT6TuaoaAJXC3xB4FAR4HVeDhnWGj0PCoKj5TVWXnJ71WW+84m8R93MgKyydbBR70hFLXD3kyDVTXXVAqzLZoYQ9i6aGzyf30mvAkAmbDuyRAhYAZHdedAc/PpUGOXyV40I4Ls2yVrIUBaD8BzzgOzEvaKvD8/Al4KkXrWHpU8aDCT014djEKMLZAdh437gqRK8y4BLQz4bl8GJ6aCZELPO7sJcKwnRB1kEzvaBMulwDPUOOpN8zn0nwcHlVNeNK57xXhCcoz1oYHasDT/Ql49FfCAynl6T4Cz413m9Qqw6fhOT3mqQUP8pCDBhfzpPrRmmoB80HR5muu9B+ApzkDHn0CuujqsxYDj0ss09pT4Sl1WwYobiu2q25+flV5Prk9QVol1Ch3Em1iCbae2+qjkPra3p51zVcaPCAWCYvjui+GB7/CTNifwCwSPrtYHqVnnr9I6M+4LYanwG3Vgoen0QrtOqrAQ9oZzYc9qWVa+Aw8DrgrzDVinlrw8Pa29GeVh7arnnVcbbrFxX8IHncuPLxd9eaj8FCzwbLfKZnOUxMeiDbDYcIzfRU8zffDQy9Zz8mpSXWdgIopGZBSHlZKRqo9A9ZtuVrwsPyWunwQnpbeCzg3X3/CAwV5Ulx43LOtCUPLbi5Rsf7xmIcFD+GS5VN1TvUEtvIGPp+Gep8tAWsfJGQSuq9xWyy/RZjuFMPDKxlVOXgSZwbUC3p6OO4vcP8f+n2GOtUT1WIehvSoD8LD7NGTnq93aXjMWXVbQTdgOYZihN8rvcGnT+vSuQn1iviK0eYcp5X/ViaZSkhZ6emSHeHscadDxn3uivlt8JClR32w0QG/QY9mT7dI0uP7Jidr1feYrv4ZbpXWjc6D53qpTE9z+Rg8Ja3BNCboOZ5IW/Rs3fius/F+lOa9d936n2mrAr47GLEz2PnKQ3RctH79RfCUtZVT9OW7h2PBSk9nIdKL8BExg9uL3BoeUl5Gn2vB+SvwkOhRtEWWopin7MCeVNCc6oXqHNZxdcPy6ig+3XLKYzwXtcfT02X76WLhcVXhITiuvBhoPGvNmewkLz/ERzT0IMAlZjwD2HBsxBE+tzs9x8rjy0Y7tNNiwAMfUJ6a3VB3IBbAoy6lplP+JvFwQ881zAIyrLO8bgdtCYd7G+b4CZFI7cEcwozPJKwKD6qFN46dphY8+c6Zin9cUujRBon09DGvPfvDK+YLTv1BkAsuAc/8Hgw9U+giD98JD057MAGsJrylKZnUaUzwnhh5m1rph6znOmgBH7Ycd37o8ap49qhFdHweUEd2/Ro8mNaEmjHHYSsPqumqYq+A5lryhxXgITNvPspi3b2ruzdijoVYfqk522ve4I57+z14cofeINP5mp868CAb9iq2oA7LSUSQSiq8xcSn6y1Eynf8zGvVxPnZwzQGT/BG6VMuDPJg21+EJyM+ihejcuFpkB+VHfbcc/J28GxXZeZRPYpn5+FMH30Fpm9XkRGM6Q5vqYMuwpk3yNMi8bXqJ8CTeNSKe04kE55swNNiQ/hobo85WmXehyb+/L0tP/NomuxhoystQfkcL1czP/uP2vYGCAeN4uHpz4Dn0hzNuwg72/qnCjwa32WefTJ2OH4iB8+4nLfprQ9/Wos6pnbVQx53Pm3oI+/vshDUtv5EynBzLDqE0puT4LnPgVtmTkTTVoGHdEKB5p72N0sP7kwqB1vDvAfyB9TCPs0nf5v0rc0vK89eh4pX5TjbE7QD/NirPdmNxvFImbDxx6tqOSY9u2ttgIm9A8drTnncJ+CpsB/AgSd7gJ+ixWNNy0txyCsNoAZySFb6jJSzQOsojxu+EB5FvXu500J9Q81LrgJH8lQbL9dvJS66M+ooZxB/3m1dP8aO/qkBjyKfd5CXnqjjGpO9aR2dnIWd3ep0vCGQG+vZNq3181P1+pvYdHiu9MUoxZWe7raeXh2tAgN5DN17bnuLXCIutC08CVX9QrelqsCTXbdRnO8Yo2dad9oCV2OI3c5pJWdcJZRm4EnFPObb4FH0uzcVAh7comJ0vn6zD2TCKdU14HEH/aEQGRXl9950FkrOtr4MntjWBlF5uDud/LBnsM/d8QrsBAKPeouFHrhutCX3AEh/0C088SYL3wZPdFuMpjwte5c877ja+JY1PPcoK9ATSWEdrN83AygJkZ/wRJQHG/PAd8HDG9SmLLl+67jY2xR+y6HetCea/uzDHlt9irXZnkDD800Bc2I7ngSP4t8nP+OK768vWYVMoXnfUI8nktrXuSXEBZ7HzVwqONrCAx/oknEuOyR42HucZWHPPVfUsRZgdk0r4uw8W/+7x3SeBOeqMwPgZlvwN9xWqqMJAZ624TstzA5pfBM/0AMVVu9S7Ky3QxjwwKO6HpBu62/A07Dv3tA+aC7NumFHZiEhuTRahmyxYPcQOEeH06dn3KYulYWGhqdWK11VVpU52/WnDjwlAQ82Y02lSiEOVoGhKjs+uys4SEa8Ey7fhkKwsdhtVYKnwcxT+HEIAZ7s6mCVlhrpLPO3gQHS2GLmMIOvbmfBs+yXDWh4PpAMFl7B92zZih30MZHZWTqm6W9T4GK73rwn2BDgQVfv+eRpKj3PRmJDFeWZqimPp6c5RXYIdVu5T4CrSlRNySeex/UekEJY7SPAM3ssbEfrw4Kv3GQObH9caRjddJgSh7NUgufy2BXg0IMZUGQaqmpKA57ysOcuC5aQbwrunrbRU9pddEsGPSBiH7d0Tn210xgeO7nOZVIy7BjPN6l8fABdfHDjiYOnbIWHFva0aVkIHXfsW3uCZLJhT27xFQKs3ZGP7jilyG7Sg4bnkhSk4ZnCKYPucZlTpurrPcmGhA6yuh0DT6svNZxWuePy+EyGBE+qt1NG41ApIP4Gq6Kup/JADh54ZbMtKhdOvAh5r9DXhoeCj0aPph/M6HSueQY84VUNOyxH0hNukb1Yt6wZ4nTH9Mzul23X4yKf7R2GMFlzDrLw+PYcKxfsHh4W3CnwoPBpvA4Q+vnovV2v+qr9f2d7CE/GSH3vdje7vl8OoQuTQU2np6K+qe1029aLHURZZnprnBDogRfdd+/kbpsw2BdE26cL3hq+IRkto0bl+KGQ84et6+apu/Urh9uH/xwLX5/Xld+lX2Kshzl4Vhousta9LSgMQxdsmrq9bV84Df3dpuW185/9wSvrwTP/HtTxus8s+c0/Qs5q6cfb7nfrW1iarlav5nb2kuYZpS9hMNw8nFP3+0+AUfzSqlmANgrUzL5D/VvkvCRo1oepfxrlh0u6R9+blUx0X/Ht+f1I1cp+xP5FO+WYSDGBR+ARE3jEBB6xL7OrwCMmyiMm8IgJPGICj5iYwCMm8IgJPGICj5jAI/CICTxiAo/YHzHZ2xIT5RETeMQEHjGBR56PmMAjJvCICTxiAo+YwCPwiPFMVpjFRHnEBB4xcVtiAo88HzFxW2ICj5i4LTGBR0zclsAjJvCIfRqe5tU83/fPb4gnoIn9w6YSpqVFrpiYWH37P/LEg9oruWJiAAAAAElFTkSuQmCC") center / contain no-repeat;
 }
 .brand-word {
-  height: 24px;
+  height: 22px;
 }
 .add-btn {
-  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   min-height: 44px;
-  padding: 0 18px 0 14px;
+  padding: 0 16px 0 13px;
   border: 0;
-  border-radius: 999px;
-  background: var(--px-lime);
-  color: var(--on-lime);
-  font: 700 0.9rem/1 var(--font);
+  border-radius: 12px;
+  background: var(--btn);
+  color: var(--on-btn);
+  font: 700 1.19rem/1 var(--font); /* blanc sur orange : grand texte gras (≥ 18,7 px), seuil 3:1 */
   white-space: nowrap;
-  transition: transform 0.15s;
 }
 .add-btn:hover {
-  transform: translateY(-1px);
+  filter: brightness(1.06);
 }
 .add-btn .ic {
-  width: 18px;
-  height: 18px;
-  stroke-width: 2.6;
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.4;
 }
 .add-btn .lbl-long {
   display: none;
 }
-@media (min-width: 560px) {
-  .add-btn .lbl-long {
-    display: inline;
-  }
-  .add-btn .lbl-short {
-    display: none;
-  }
-}
+/* « Garages » / « Prix et promos » : on montre le lien vers l'autre vue (le logo ramène aussi aux garages) */
 .tabs {
   position: fixed;
   left: 0;
@@ -328,40 +314,87 @@ h3 {
   padding: 6px;
   border-radius: 999px;
   background: var(--nav-bg);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  backdrop-filter: blur(18px) saturate(1.4);
-  box-shadow:
-    0 0 0 1px var(--hair),
-    var(--shadow-lg);
+  box-shadow: var(--shadow-lg);
 }
 .tab {
-  position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  min-height: 56px;
-  padding: 6px 4px;
+  gap: 7px;
+  min-height: 48px;
+  padding: 6px 10px;
   border-radius: 999px;
   color: var(--chrome-ink-2);
   text-decoration: none;
-  font: 600 0.72rem/1.1 var(--font);
-  text-align: center;
-  transition:
-    background 0.18s,
-    color 0.18s;
+  font: 600 0.88rem/1.1 var(--font);
 }
 .tab .ic {
-  width: 21px;
-  height: 21px;
+  width: 19px;
+  height: 19px;
 }
 .tab:hover {
   color: var(--chrome-ink);
 }
 .tab[aria-current="page"] {
-  background: var(--px-lime);
-  color: var(--on-lime);
+  background: var(--btn);
+  color: var(--on-btn-2);
+}
+@media (min-width: 560px) {
+  .add-btn .lbl-long {
+    display: inline;
+  }
+  .add-btn .lbl-short {
+    display: none;
+  }
+}
+@media (min-width: 1024px) {
+  .topbar-in {
+    position: relative;
+    min-height: 84px;
+    padding: 0 38px 0 22px;
+    gap: 22px;
+  }
+  body:is(.has-results, .in-search)[data-screen="garages"] .topbar-in {
+    min-height: 96px;
+  }
+  .brand {
+    gap: 10px;
+    padding: 9px 16px 9px 11px;
+  }
+  .brand-mark {
+    width: 40px;
+    height: 40px;
+  }
+  .brand-word {
+    height: 27px;
+  }
+  .add-btn {
+    min-height: 43px;
+    padding: 0 20px 0 17px;
+  }
+  .tabs {
+    position: static;
+    width: auto;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    background: none;
+    box-shadow: none;
+  }
+  .tab {
+    min-height: 43px;
+    padding: 0 14px;
+    font-size: 0.98rem;
+  }
+  .tab .ic {
+    display: none;
+  }
+  .tab[aria-current="page"] {
+    display: none;
+  }
+  .tab:hover {
+    background: var(--chrome-hover);
+  }
 }
 
 /* ---------- 4. Mise en page ---------- */
@@ -386,8 +419,8 @@ main {
 }
 .view-head h1 {
   margin: 0;
-  font: 600 clamp(1.7rem, 5vw, 2.15rem) / 1.08 var(--font);
-  letter-spacing: -0.028em;
+  font: 800 clamp(1.7rem, 5vw, 2.4rem) / 1.08 var(--font);
+  letter-spacing: -0.035em;
 }
 .view-head p {
   margin: 0.5rem 0 0;
@@ -413,7 +446,143 @@ main {
   margin-bottom: 2px;
 }
 
-/* Garages : panneau + carte */
+/* Accueil : bandeau d'accroche, titre, phrase, recherche, prestations populaires, deux chiffres, trois étapes */
+.hero {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  padding-top: 22px;
+}
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  margin: 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: 600 0.86rem/1.3 var(--font);
+}
+.hero-tag .ic {
+  width: 17px;
+  height: 17px;
+}
+.hero-title {
+  margin: 22px 0 0;
+  max-width: 8.76em; /* 13 chiffres de Manrope ExtraBold ; en em et non en ch : la largeur ne change pas quand la police arrive */
+  font: 800 2.35rem/1.06 var(--font);
+  letter-spacing: -0.045em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.hero-sub {
+  margin: 14px 0 0;
+  color: var(--ink-2);
+  font: 400 1.05rem/1.3 var(--font);
+}
+.home-more {
+  display: grid;
+  gap: 22px;
+}
+.popular {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 10px;
+}
+.pop-lbl {
+  color: var(--ink-3);
+  font-size: 0.95rem;
+}
+.pop {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font: 500 1rem/1 var(--font);
+}
+.pop:hover {
+  border-color: var(--ink);
+}
+.home-stats {
+  display: grid;
+  gap: 14px;
+}
+.hs-card {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 22px 24px;
+  border-radius: 18px;
+  background: var(--card);
+}
+.hs-card b {
+  font: 800 2.05rem/1 var(--font);
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+}
+.hs-card span {
+  color: var(--ink-3);
+  font-size: 1rem;
+}
+.hs-card.hs-dark {
+  background: var(--stat-dark);
+}
+.hs-dark b {
+  color: var(--px-lime);
+}
+.hs-dark span {
+  color: var(--stat-dark-ink);
+}
+.steps {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+  max-width: 31rem;
+}
+.steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  font-size: 1.04rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.steps b {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--step-bg);
+  color: var(--step-ink);
+  font: 700 0.98rem/1 var(--font);
+}
+/* dès la première recherche (body.in-search, posé par le script) : plus d'accueil, la page des résultats prend sa place (état,
+   rond-point d'attente, erreurs, puis le tableau) */
+body:is(.has-results, .in-search) .hero,
+body:is(.has-results, .in-search) .home-more {
+  display: none;
+}
+
+/* Résultats : tableau, puis carte (mobile : la carte s'ouvre en plein écran) */
+.res-layout {
+  display: none;
+}
+body.has-results .search-h1 {
+  display: none;
+}
+body:is(.has-results, .in-search) .res-layout {
+  display: block;
+}
 .panel-col {
   container: panel / inline-size;
   display: grid;
@@ -421,36 +590,6 @@ main {
   align-content: start;
   gap: 16px;
   min-width: 0;
-}
-.panel-head h1 {
-  margin: 4px 0 0;
-  font: 600 1.75rem/1.08 var(--font);
-  letter-spacing: -0.03em;
-}
-.t-brand {
-  display: none;
-}
-.home-intro {
-  display: none; /* ni slogan ni étapes sur mobile */
-}
-.panel-sub {
-  margin: 0.5rem 0 0;
-  color: var(--ink-3);
-  font-size: 0.9rem;
-  line-height: 1.45;
-}
-/* Après une recherche, le panneau n'a plus d'en-tête : seul le titre reste, pour les lecteurs d'écran */
-body.has-results .panel-head {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-body.has-results .home-intro {
-  display: none;
 }
 .stage {
   display: none;
@@ -472,8 +611,13 @@ body.has-results .home-intro {
 .map-empty {
   display: none;
 }
+/* aucun garage trouvé : seul « Plus de filtres » reste (le registre SIRENE peut en ajouter) */
+.mapbar.is-empty .dd-wrap:not(.dd-more),
+.mapbar.is-empty .sortbox {
+  display: none;
+}
 
-/* Mobile : carte plein écran via le bouton « Carte » (sur ordinateur la carte est toujours visible) */
+/* Mobile : carte plein écran via le bouton « Carte » */
 @media (max-width: 1023px) {
   body[data-screen="garages"].is-map .stage {
     display: block;
@@ -484,33 +628,20 @@ body.has-results .home-intro {
   body[data-screen="garages"].is-map .panel-col {
     display: none;
   }
-  /* carte plein écran : le résumé de la recherche et les filtres restent au-dessus d'elle */
-  body[data-screen="garages"].is-map .search,
-  body[data-screen="garages"].is-map .mapbar {
+  body[data-screen="garages"].is-map .search {
     position: fixed;
     left: 12px;
     right: 12px;
     z-index: 30;
-  }
-/* aucun garage trouvé : seul « Plus de filtres » reste (le registre SIRENE peut en ajouter) */
-.mapbar.is-empty .dd-wrap:not(.dd-more) {
-  display: none;
-}
-  body[data-screen="garages"].is-map .search {
     top: calc(env(safe-area-inset-top, 0px) + 74px);
-  }
-  body[data-screen="garages"].is-map .mapbar {
-    top: calc(env(safe-area-inset-top, 0px) + 74px + 72px + 8px);
   }
   body[data-screen="garages"].is-map main {
     padding-bottom: 0;
   }
   body.is-map .fab {
     bottom: auto;
-    top: calc(env(safe-area-inset-top, 0px) + 74px + 72px + 8px + 46px + 12px);
+    top: calc(env(safe-area-inset-top, 0px) + 74px + 72px + 12px);
   }
-}
-@media (max-width: 1023px) {
   body[data-screen="garages"]:not(.is-map)::after {
     content: "";
     position: fixed;
@@ -526,275 +657,115 @@ body.has-results .home-intro {
 .fab {
   position: fixed;
   left: 50%;
-  bottom: calc(12px + 64px + 14px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(12px + 60px + 14px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   z-index: 65;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 48px;
-  padding: 0 22px;
+  min-height: 50px;
+  padding: 0 24px;
   border: 0;
   border-radius: 999px;
   background: var(--btn);
   color: var(--on-btn);
-  font: 700 0.95rem/1 var(--font);
+  font: 700 1.19rem/1 var(--font);
   box-shadow: var(--shadow-lg);
 }
 
-/* Ordinateur : rail + panneau flottants sur la carte */
+/* Ordinateur : accueil centré ; résultats en deux colonnes, le tableau à gauche, la carte à droite sur toute la hauteur */
 @media (min-width: 1024px) {
   main {
-    margin-left: calc(var(--gap) + var(--rail-w));
     padding-bottom: 0;
   }
-  .dock {
-    display: block;
-    position: fixed;
-    z-index: 40;
-    left: var(--gap);
-    top: var(--gap);
-    bottom: var(--gap);
-    width: var(--rail-w);
-    border-radius: var(--r-xl);
-    background: linear-gradient(90deg, var(--rail-bg) 0 var(--rail-w), transparent var(--rail-w));
-    box-shadow:
-      0 0 0 1px var(--hair),
-      var(--shadow-lg);
-  }
-  .rail {
-    position: fixed;
-    left: var(--gap);
-    top: var(--gap);
-    bottom: var(--gap);
-    width: var(--rail-w);
-    padding: 0;
-  }
-  .rail::before {
-    display: none;
-  }
-  .rail-in {
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 0;
-    height: 100%;
-    max-width: none;
-    margin: 0;
-    padding: 18px 0;
-    min-height: 0;
-  }
-  .brand {
-    margin: 0 0 26px;
-  }
-  .brand-word {
-    display: none;
-  }
-  .brand-mark {
-    width: 48px;
-    height: 48px;
-  }
-  .tabs {
-    position: static;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    width: auto;
-    padding: 0;
-    margin: 0;
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-  .tab {
-    width: 48px;
-    height: 48px;
-    min-height: 0;
-    padding: 0;
-    border-radius: 50%;
-  }
-  .tab:hover {
-    background: var(--chrome-hover);
-  }
-  .tab[aria-current="page"]:hover {
-    background: var(--px-lime);
-  }
-  .tab .ic {
-    width: 22px;
-    height: 22px;
-  }
-  /* Libellés : infobulles à droite des icônes */
-  .tab-label,
-  .add-btn .lbl-long {
-    position: absolute;
-    left: calc(100% + 14px);
-    top: 50%;
-    z-index: 5;
-    display: block;
-    transform: translate(-4px, -50%);
-    opacity: 0;
-    pointer-events: none;
-    padding: 8px 13px;
-    border-radius: 999px;
-    background: var(--tip-bg);
-    color: var(--tip-fg);
-    font: 600 0.8rem/1 var(--font);
-    white-space: nowrap;
-    box-shadow: var(--shadow-md);
-    transition:
-      opacity 0.15s,
-      transform 0.15s;
-  }
-  .tab:hover .tab-label,
-  .tab:focus-visible .tab-label,
-  .add-btn:hover .lbl-long,
-  .add-btn:focus-visible .lbl-long {
-    opacity: 1;
-    transform: translate(0, -50%);
-  }
-  .add-btn {
-    margin-top: auto;
-    width: 48px;
-    height: 48px;
-    min-height: 0;
-    padding: 0;
-    justify-content: center;
-    border-radius: 50%;
-    background: var(--chrome-tint);
-    color: var(--px-mint);
-  }
-  .add-btn:hover {
-    background: var(--px-lime);
-    color: var(--on-lime);
-  }
-  .add-btn .lbl-short {
-    display: none;
-  }
-  .add-btn .ic {
-    width: 20px;
-    height: 20px;
-  }
-
-  .stage {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-  }
-  .map-empty {
-    display: grid;
-    place-items: center;
-    overflow: hidden;
-    padding: var(--panel-top) 0 var(--gap) calc(var(--panel-x) + var(--panel-w));
-    background: var(--map-bg);
-  }
   .view:not(#view-garages) {
-    max-width: 58rem;
-    padding: 40px 36px 72px;
-  }
-  .view-head h1 {
-    font-size: 2.3rem;
+    max-width: 62rem;
+    padding: 44px 38px 72px;
   }
   #view-garages {
     max-width: none;
     padding: 0;
     display: block;
   }
-  /* Panneau : accueil (logo, slogan, trois étapes) puis résultats ; il suit son contenu avant la recherche, toute la hauteur après */
+  .hero {
+    padding-top: 50px;
+  }
+  .hero-tag {
+    padding: 7px 16px;
+    font-size: 0.9rem;
+  }
+  .hero-title {
+    margin-top: 26px;
+    max-width: 690px;
+    font-size: 3.4rem;
+    line-height: 1.07;
+    letter-spacing: -0.045em;
+    text-wrap: wrap; /* « Le bon prix pour votre / voiture, près de chez vous. » comme la maquette */
+  }
+  .hero-sub {
+    margin-top: 20px;
+    font-size: 1.25rem;
+  }
+  .home-more {
+    width: min(72rem, calc(100% - 76px));
+    margin: 0 auto;
+    padding-bottom: 60px;
+  }
+  .popular {
+    gap: 10px;
+  }
+  .pop-lbl {
+    margin-right: 6px;
+  }
+  .home-more {
+    gap: 27px;
+  }
+  .home-stats {
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+  }
+  .hs-card {
+    gap: 7px;
+    padding: 18px 25px 19px;
+    border-radius: 16px;
+  }
+  .hs-card span {
+    font-size: 1.05rem;
+  }
+  .steps {
+    max-width: 32rem;
+    margin-top: 12px;
+  }
+  body:is(.has-results, .in-search) .res-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28.3%;
+    min-height: calc(100dvh - 96px);
+  }
   .panel-col {
-    position: fixed;
-    z-index: 50;
-    left: var(--panel-x);
-    top: var(--panel-top);
-    width: var(--panel-w);
-    max-height: calc(100dvh - var(--panel-top) - var(--gap));
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: 24px 14px 24px;
-    gap: 14px;
-    border-radius: var(--r-xl);
-    background: var(--glass);
-    box-shadow:
-      0 0 0 1px var(--hair),
-      var(--shadow-lg);
+    padding: 40px 38px 56px;
   }
-  body.has-results .panel-col {
-    bottom: var(--gap);
+  .stage {
+    display: block;
+    position: sticky;
+    top: 96px;
+    height: calc(100dvh - 96px);
+    overflow: hidden;
+    background: var(--map-bg);
   }
-  .panel-head,
-  .teaser {
-    margin-inline: 10px;
+  .map-empty {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: var(--map-bg);
+  }
+  body.map-wide .res-layout {
+    grid-template-columns: 0 minmax(0, 1fr);
   }
   body.map-wide .panel-col {
     display: none;
   }
-  body.map-wide .map-info {
-    left: calc(var(--panel-x) + 70px);
-  }
-  .home-intro {
-    display: block;
-  }
-  .steps {
-    list-style: none;
-    margin: 20px 0 0;
-    padding: 0;
-    display: grid;
-    gap: 12px;
-  }
-  .steps li {
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-    font-size: 1rem;
-    line-height: 1.4;
-    color: var(--ink-2);
-  }
-  .steps b {
-    flex: none;
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background: var(--accent-soft);
-    color: var(--accent-ink);
-    font: 600 0.95rem/1 var(--font);
-  }
-  body.is-searching .steps {
-    display: none;
-  }
-  .panel-head h1 {
-    font-size: 2rem;
-    margin-top: 0;
-  }
-  /* Ordinateur : le mot-symbole Pixcar tient lieu de titre (le texte reste pour les lecteurs d'écran) */
-  .panel-head h1 .t-text {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-  .t-brand {
-    display: inline-flex;
-    align-items: center;
-    padding: 14px 22px;
-    border-radius: 20px;
-    background: var(--plate);
-    box-shadow: 0 0 0 1px var(--line);
-  }
-  .t-brand .px-word {
-    height: 30px;
-  }
-  .panel-sub {
-    display: block;
-  }
   .card {
-    scroll-margin-top: 16px;
+    scroll-margin-top: 112px;
   }
   .fab {
     display: none !important;
@@ -803,45 +774,18 @@ body.has-results .home-intro {
     top: auto !important;
     bottom: 28px !important;
   }
-}
-@media (min-width: 1024px) {
   body[data-screen="garages"] .banner {
     position: fixed;
     z-index: 55;
-    top: var(--panel-top);
-    left: calc(var(--panel-x) + var(--panel-w) + var(--gap));
-    right: var(--gap);
+    top: 110px;
+    right: 16px;
     width: auto;
-    max-width: 44rem;
+    max-width: 30rem;
     margin: 0;
-    box-shadow:
-      0 0 0 1px rgba(122, 74, 0, 0.18),
-      var(--shadow-md);
-  }
-}
-@media (prefers-reduced-motion: no-preference) {
-  @media (min-width: 1024px) {
-    .dock {
-      transition: width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
-    }
   }
 }
 
 /* ---------- 5. Formulaires ---------- */
-/* Barre de recherche : carte de formulaire sur mobile (« Modifier » la déplie) ; sur ordinateur, barre flottante en haut (voir 4) */
-.search {
-  position: relative;
-  z-index: 5; /* au-dessus des filtres et du panneau : les adresses proposées passent par-dessus */
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
-  padding: 16px;
-  background: var(--glass);
-  border-radius: var(--r-xl);
-  box-shadow:
-    0 0 0 1px var(--hair),
-    var(--shadow-md);
-}
 .field {
   position: relative;
   display: grid;
@@ -915,27 +859,156 @@ select {
   font-weight: 700;
   min-height: 54px;
 }
-/* « Prestation » : un bouton qui ouvre la fenêtre de choix (le <select> caché garde la prestation principale) */
+.check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  line-height: 1.4;
+  font-size: 0.92rem;
+}
+.check input {
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--ink);
+  flex: none;
+}
+/* Boutons */
+.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 0 26px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--btn);
+  color: var(--on-btn);
+  font: 700 1.19rem/1 var(--font); /* blanc sur orange : grand texte gras, seuil 3:1 */
+  box-shadow: 0 12px 24px -14px rgba(11, 12, 18, 0.6);
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
+}
+.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 28px -14px rgba(11, 12, 18, 0.65);
+}
+.primary[disabled] {
+  opacity: 0.7;
+  cursor: progress;
+  transform: none;
+}
+.btn,
+.ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  font: 600 0.9rem/1 var(--font);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    transform 0.15s;
+}
+.btn:hover,
+.ghost:hover {
+  border-color: var(--ink);
+}
+.btn .ic {
+  width: 18px;
+  height: 18px;
+}
+.btn.dark {
+  background: var(--btn);
+  border-color: var(--btn);
+  color: var(--on-btn);
+  font-size: 1.19rem;
+  font-weight: 700;
+}
+.btn.dark:hover {
+  transform: translateY(-1px);
+}
+.linkish {
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  min-height: 32px;
+  color: var(--accent);
+  font: 600 0.9rem/1.2 var(--font);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------- Recherche : carte à l'accueil, barre compacte dans l'en-tête (ordinateur, résultats), résumé repliable (mobile) ---------- */
+.search {
+  position: relative;
+  z-index: 5; /* au-dessus des filtres et du tableau : les adresses proposées passent par-dessus */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+.search .field {
+  gap: 2px;
+  padding: 11px 16px 12px;
+  border-radius: 14px;
+  background: var(--seg-bg);
+}
+.search .field > label {
+  font: 600 0.72rem/1.2 var(--font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.search .f-ic {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  color: var(--ink-3);
+  stroke-width: 1.9;
+}
+/* les commandes se fondent dans leur segment : ni cadre ni fond, l'icône à gauche */
+.search select,
+.search input[type="text"],
+.search .svc-btn {
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  color: var(--ink);
+  font: 500 1.19rem/1.2 var(--font);
+}
+.search :is(select, input, .svc-btn):focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 6px;
+  border-radius: 6px;
+}
+.search ::placeholder,
+.search .svc-btn.is-empty .svc-val {
+  color: var(--ink-3); /* texte d'invite : 4,5:1 comme le reste du texte (la maquette, plus pâle, n'y arrive pas) */
+}
 .svc-btn {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 50px;
-  padding: 0.62rem 0.8rem 0.62rem 0.95rem;
-  border: 1.5px solid var(--line-strong);
-  border-radius: var(--r-md);
-  background: var(--card);
-  color: var(--ink);
-  font: 700 1rem/1.25 var(--font);
   text-align: left;
-}
-.svc-btn:hover {
-  border-color: var(--ink-2);
-}
-.svc-btn:focus-visible {
-  border-color: var(--accent);
-  outline-offset: 1px;
+  cursor: pointer;
 }
 .svc-val {
   flex: 1;
@@ -955,44 +1028,53 @@ select {
   font: 700 0.8rem/24px var(--font);
   text-align: center;
 }
-.svc-btn .ic {
-  width: 20px;
-  height: 20px;
-  color: var(--ink-3);
-}
 .svc-hint {
-  font-size: 0.8rem;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
-.addr {
+.addr,
+.sel-wrap {
   position: relative;
   display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .addr input {
   flex: 1;
-  padding-right: 52px;
+  padding-right: 40px !important;
+}
+.sel-wrap select {
+  flex: 1;
+  background-image: none;
+  cursor: pointer;
 }
 /* Effacer (quand le champ a du texte) ou « Ma position » (quand il est vide) : :placeholder-shown suit la valeur, même écrite par le script */
 .addr-btn {
   position: absolute;
-  right: 6px;
+  right: -8px;
   top: 50%;
   transform: translateY(-50%);
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border: 0;
   border-radius: 50%;
   background: transparent;
   color: var(--ink-3);
 }
 .addr-btn:hover {
-  background: var(--card-2);
+  background: var(--card);
   color: var(--ink);
 }
 .addr-btn .ic {
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
 }
 #addrClear {
   display: none;
@@ -1010,8 +1092,9 @@ select {
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(100% + 6px);
+  top: calc(100% + 8px);
   z-index: 1200;
+  min-width: 300px;
   background: var(--card);
   border-radius: var(--r-md);
   box-shadow:
@@ -1019,6 +1102,7 @@ select {
     var(--shadow-lg);
   max-height: 18rem;
   overflow: auto;
+  text-align: left;
 }
 .suggest li {
   padding: 0.6rem 0.75rem;
@@ -1026,6 +1110,7 @@ select {
   cursor: pointer;
   display: grid;
   gap: 2px;
+  color: var(--ink);
 }
 .suggest li[aria-selected="true"],
 .suggest li:hover {
@@ -1051,27 +1136,16 @@ select {
 .addr-field {
   position: relative;
 }
-.check {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  line-height: 1.4;
-  font-size: 0.92rem;
-}
-.check input {
-  width: 20px;
-  height: 20px;
-  margin: 2px 0 0;
-  accent-color: var(--ink);
-  flex: none;
-}
 .go-row {
   display: flex;
 }
 .go-row .primary {
   flex: 1;
+  min-height: 60px;
+  border-radius: 14px;
+  box-shadow: none;
 }
-/* État replié (mobile, après une recherche) : le résumé « Cazères · 10 km » et la prestation, avec un bouton pour tout rouvrir */
+/* Mobile après une recherche : le résumé « Cazères · 10 km » et la prestation, avec un bouton pour tout rouvrir */
 .sum-line {
   display: none;
 }
@@ -1109,7 +1183,7 @@ select {
   gap: 1px;
 }
 .sum-txt b {
-  font: 600 1.12rem/1.25 var(--font);
+  font: 700 1.1rem/1.25 var(--font);
   letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1125,11 +1199,11 @@ select {
 }
 .sum-line .btn {
   flex: none;
-  width: 48px;
-  min-height: 48px;
-  height: 48px;
+  width: 46px;
+  min-height: 46px;
+  height: 46px;
   padding: 0;
-  border-radius: var(--r-md);
+  border-radius: 12px;
 }
 .sum-line .btn .lbl-edit {
   position: absolute;
@@ -1139,82 +1213,156 @@ select {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-
-/* Boutons */
-.primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 54px;
-  padding: 0 26px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--btn);
-  color: var(--on-btn);
-  font: 700 1rem/1 var(--font);
-  box-shadow: 0 12px 24px -14px rgba(11, 12, 18, 0.6);
-  transition:
-    transform 0.15s,
-    box-shadow 0.15s;
-}
-.primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 16px 28px -14px rgba(11, 12, 18, 0.65);
-}
-.primary[disabled] {
-  opacity: 0.7;
-  cursor: progress;
-  transform: none;
-}
-.btn,
-.ghost,
-.mini {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 18px;
-  border: 1.5px solid var(--line-strong);
-  border-radius: 999px;
-  background: var(--card);
-  color: var(--ink);
-  font: 600 0.9rem/1 var(--font);
-  text-decoration: none;
-  white-space: nowrap;
-  transition:
-    border-color 0.15s,
-    background 0.15s,
-    transform 0.15s;
-}
-.btn:hover,
-.ghost:hover,
-.mini:hover {
-  border-color: var(--ink);
-}
-.btn .ic,
-.mini .ic {
-  width: 18px;
-  height: 18px;
-}
-.btn.dark {
-  background: var(--btn);
-  border-color: var(--btn);
-  color: var(--on-btn);
-}
-.btn.dark:hover {
-  transform: translateY(-1px);
-}
-.linkish {
-  background: none;
-  border: 0;
-  padding: 4px 0;
-  min-height: 32px;
-  color: var(--accent);
-  font: 600 0.9rem/1.2 var(--font);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+@media (min-width: 1024px) {
+  /* Accueil : une rangée Prestation · Où · Rayon · « Comparer » */
+  .search {
+    width: min(72rem, calc(100% - 76px));
+    margin: 34px auto 27px;
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+    box-shadow: none;
+  }
+  .search .full-only,
+  .search.is-collapsed .full-only,
+  .search.is-collapsed .svc-field {
+    display: grid !important;
+  }
+  .search #energyField[hidden] {
+    display: none !important;
+  }
+  .search .sum-line,
+  .search.is-collapsed .sum-line {
+    display: none;
+  }
+  .search .field {
+    align-content: center;
+    padding: 11px 18px 12px;
+    min-height: 67px;
+  }
+  .svc-field {
+    flex: 2.57 1 0;
+  }
+  .addr-field {
+    flex: 1.79 1 0;
+  }
+  .radius-field,
+  #energyField {
+    flex: 1 1 0;
+  }
+  .search .go-row {
+    flex: 0 0 176px;
+  }
+  .search .go-row .primary {
+    min-height: 67px;
+    padding: 0 18px;
+    font-size: 1.25rem;
+  }
+  .search .go-row .ic {
+    width: 22px;
+    height: 22px;
+    stroke-width: 2.3;
+  }
+  /* Résultats : la même recherche en barre compacte au centre de l'en-tête (Où · Prestation · Rayon · loupe) */
+  body:is(.has-results, .in-search)[data-screen="garages"] .search {
+    position: fixed;
+    z-index: 61;
+    top: 20px;
+    left: calc(50% - 386px);
+    width: 581px;
+    margin: 0;
+    padding: 5px;
+    gap: 5px;
+    border-radius: 16px;
+    background: var(--pill-bg);
+    box-shadow: none;
+  }
+  body:is(.has-results, .in-search) .search .field {
+    display: flex !important;
+    align-items: center;
+    min-height: 0;
+    height: 38px;
+    margin-block: auto;
+    padding: 0 12px;
+    border-radius: 12px;
+    background: var(--card);
+  }
+  body:is(.has-results, .in-search) .search .field > label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  body:is(.has-results, .in-search) .search .addr-field {
+    order: 1;
+    flex: 122 1 0;
+  }
+  body:is(.has-results, .in-search) .search .svc-field {
+    order: 2;
+    flex: 286 1 0;
+  }
+  body:is(.has-results, .in-search) .search .radius-field,
+  body:is(.has-results, .in-search) .search #energyField {
+    order: 3;
+    flex: 103 1 0;
+  }
+  body:is(.has-results, .in-search) .search .go-row {
+    order: 4;
+    flex: 0 0 46px;
+  }
+  body:is(.has-results, .in-search) .search :is(select, input[type="text"], .svc-btn) {
+    height: 38px;
+    min-height: 38px;
+    font-size: 1.05rem;
+    font-weight: 500;
+  }
+  body:is(.has-results, .in-search) .search .f-ic {
+    width: 17px;
+    height: 17px;
+  }
+  body:is(.has-results, .in-search) .search .addr,
+  body:is(.has-results, .in-search) .search .sel-wrap,
+  body:is(.has-results, .in-search) .search .svc-btn {
+    gap: 9px;
+    width: 100%;
+  }
+  body:is(.has-results, .in-search) .search .addr-btn {
+    width: 30px;
+    height: 30px;
+    right: -6px;
+  }
+  body:is(.has-results, .in-search) .search .addr-field:not(:focus-within) .addr-btn {
+    display: none !important;
+  }
+  body:is(.has-results, .in-search) .search .addr-field:not(:focus-within) .addr input {
+    padding-right: 0 !important;
+    text-overflow: ellipsis;
+  }
+  body:is(.has-results, .in-search) .search .go-row .primary {
+    width: 46px;
+    min-height: 46px;
+    height: 46px;
+    padding: 0;
+    border-radius: 11px;
+  }
+  body:is(.has-results, .in-search) .search .go-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  body:is(.has-results, .in-search) .search .svc-n {
+    height: 22px;
+    font-size: 0.76rem;
+    line-height: 22px;
+  }
 }
 
 /* ---------- 6. Composants ---------- */
@@ -1366,52 +1514,6 @@ select {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
-.teaser {
-  display: grid;
-  gap: 8px;
-  padding: 18px 20px;
-  border-radius: var(--r-lg);
-  background: var(--teaser-bg);
-  box-shadow: 0 0 0 1px var(--hair);
-}
-.teaser h2 {
-  margin: 0;
-  font: 700 1rem/1.3 var(--font);
-}
-.teaser p {
-  margin: 0;
-  color: var(--ink-2);
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-.teaser b {
-  color: var(--ink);
-}
-.teaser a {
-  color: var(--accent-ink);
-  font-weight: 600;
-}
-/* plusieurs prestations : une ligne par prestation, avec la fourchette des enseignes */
-.teaser-svcs {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 4px;
-  font-size: 0.86rem;
-}
-.teaser-svcs li {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 0;
-  border-top: 1px solid var(--hair);
-  color: var(--ink-2);
-}
-.teaser-svcs b {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-}
 .status {
   font-size: 0.9rem;
   color: var(--ink);
@@ -1472,40 +1574,103 @@ select {
 .summary .hint {
   margin-top: 2px;
 }
-/* ---------- Filtres, menus déroulants, tri ---------- */
+/* ---------- Résultats : sur-titre, titre, trois chiffres ---------- */
+.res-top {
+  position: relative;
+}
+.summary {
+  display: grid;
+  gap: 16px;
+}
+.res-head {
+  min-width: 0;
+}
+.eyebrow {
+  margin: 0;
+  color: var(--accent-strong);
+  font: 700 0.86rem/1.2 var(--font);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.res-title {
+  margin: 6px 0 0;
+  font: 800 1.85rem/1.08 var(--font);
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.stat {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 11px 13px;
+  border-radius: 12px;
+  background: var(--card);
+}
+.stat b {
+  font: 800 1.35rem/1 var(--font);
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.stat span {
+  color: var(--ink-3);
+  font: 500 0.86rem/1.2 var(--font);
+}
+.stat.st-best {
+  background: var(--btn);
+  color: var(--on-btn);
+}
+.stat.st-best span {
+  color: var(--on-btn-2);
+}
+
+/* ---------- Filtres et tri : pastilles au-dessus du tableau ---------- */
 .mapbar {
   position: relative;
   z-index: 4;
   display: flex;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   min-width: 0;
 }
 .dd-wrap {
-  position: static; /* mobile : le menu s'aligne sur toute la rangée (voir plus bas pour l'ordinateur) */
+  position: relative;
   min-width: 0;
 }
-.dd {
+.dd,
+.fbtn,
+.sort-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  height: 46px;
-  max-width: 100%;
-  padding: 0 10px 0 14px;
-  border: 0;
-  border-radius: var(--r-md);
+  justify-content: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 12px 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
   background: var(--card);
   color: var(--ink);
   font: 500 0.98rem/1 var(--font);
   white-space: nowrap;
-  box-shadow:
-    0 0 0 1px var(--hair),
-    var(--shadow-sm);
 }
-.dd .ic {
-  width: 18px;
-  height: 18px;
+.dd:hover,
+.fbtn:hover,
+.sort-btn:hover {
+  border-color: var(--ink);
+}
+.dd .ic,
+.sort-btn .ic {
+  width: 17px;
+  height: 17px;
   color: var(--ink-3);
   transition: transform 0.15s;
 }
@@ -1513,9 +1678,8 @@ select {
   transform: rotate(180deg);
 }
 .dd.is-on {
-  box-shadow:
-    inset 0 0 0 2px var(--accent),
-    var(--shadow-sm);
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
 }
 .dd-n {
   min-width: 22px;
@@ -1529,32 +1693,37 @@ select {
   font-variant-numeric: tabular-nums;
 }
 .fbtn {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 46px;
-  height: 46px;
-  border: 0;
-  border-radius: var(--r-md);
-  background: var(--rail-bg);
-  color: var(--chrome-ink);
-  box-shadow: var(--shadow-sm);
+  width: 40px;
+  padding: 0;
+}
+.fbtn .ic {
+  width: 18px;
+  height: 18px;
 }
 .fbtn[aria-expanded="true"] {
-  box-shadow:
-    0 0 0 2px var(--px-lime),
-    var(--shadow-sm);
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+.sort-btn {
+  padding: 0 14px 0 16px;
+}
+.sort-btn b {
+  font-weight: 700;
+}
+.sortbox {
+  position: relative;
+  margin-left: auto;
 }
 .menu {
   position: absolute;
   z-index: 30;
   left: 0;
-  right: 0;
   top: calc(100% + 8px);
   display: grid;
   gap: 2px;
+  min-width: 260px;
   padding: 8px;
-  border-radius: var(--r-lg);
+  border-radius: 16px;
   background: var(--card);
   box-shadow:
     0 0 0 1px var(--hair),
@@ -1568,11 +1737,20 @@ select {
   color: var(--ink-3);
 }
 .menu-more {
+  width: min(330px, calc(100vw - 32px));
   gap: 10px;
   padding: 14px 16px;
 }
 .menu-more .hint {
   margin-left: 30px;
+}
+.dd-more .menu,
+.sortbox .menu {
+  left: auto;
+  right: 0;
+}
+.sortbox .menu {
+  min-width: 210px;
 }
 .mopt {
   display: flex;
@@ -1581,7 +1759,7 @@ select {
   min-height: 46px;
   padding: 0 10px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 10px;
   background: none;
   color: var(--ink);
   font: 500 1rem/1.2 var(--font);
@@ -1603,7 +1781,7 @@ select {
   box-shadow: inset 0 0 0 2px var(--line-strong);
 }
 .mopt[aria-pressed="true"] .cb {
-  background: var(--btn);
+  background: var(--ink);
   box-shadow: none;
 }
 .mopt[aria-pressed="true"] .cb::after {
@@ -1611,7 +1789,7 @@ select {
   width: 5px;
   height: 10px;
   margin-top: -2px;
-  border: solid var(--on-btn);
+  border: solid var(--card);
   border-width: 0 2.5px 2.5px 0;
   transform: rotate(45deg);
 }
@@ -1629,7 +1807,7 @@ select {
   margin: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--on-btn);
+  background: var(--card);
   transform: none;
 }
 .mopt .n {
@@ -1638,60 +1816,639 @@ select {
   font-size: 0.88rem;
   font-variant-numeric: tabular-nums;
 }
-.res-top {
+
+/* ---------- 7. Tableau des garages (lignes) & fiches ---------- */
+.res-body,
+.list-pane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+.thead {
+  display: none;
+}
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+.list > .status {
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--card);
+  text-align: center;
+}
+/* Mobile : une carte par garage — tuile, nom et adresse ; type et distance ; prix et son échelle, bouton */
+.card {
   position: relative;
-  margin-inline: 10px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "tile id id"
+    "meta meta meta"
+    "price price act"
+    "more more more";
+  column-gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--card);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 170px;
+  scroll-margin-top: 80px;
+  transition: background 0.15s;
 }
-.sortbox {
-  position: absolute;
-  z-index: 3;
-  top: 0;
-  right: 0;
+.card.is-best {
+  background: var(--best-bg);
 }
-.sort-btn {
+.card.is-selected {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.card.flash {
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    0 0 0 5px var(--flash-ring);
+}
+/* la ligne entière ouvre la fiche (le bouton du nom porte l'état pour les lecteurs d'écran). Sous-grille : la zone a sa propre boîte
+   (un clic entre deux cellules ouvre aussi la fiche) et ses cellules suivent les colonnes de la ligne ; le bouton d'action, posé
+   par-dessus dans la même grille, reste au premier plan */
+.g-main {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-row: 1 / 4;
+  grid-template-columns: subgrid;
+  grid-template-rows: subgrid;
+  align-items: center;
+  min-width: 0;
+  cursor: pointer;
+}
+@supports not (grid-template-columns: subgrid) {
+  .g-main {
+    display: contents;
+  }
+}
+.g-main > .avatar {
+  grid-area: tile;
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  font: 700 1.25rem/1 var(--font);
+  letter-spacing: -0.02em;
+  box-shadow: none;
+  cursor: pointer;
+}
+/* tuiles : teinte claire et lettre foncée, selon le type (et la couleur de l'enseigne) */
+.g-main > .avatar.mono {
+  background: color-mix(in srgb, var(--bg) 15%, var(--card));
+  color: color-mix(in srgb, var(--bg) 45%, var(--ink));
+  box-shadow: none;
+  font-size: 1.12rem;
+}
+.g-main > .avatar.mono.m2 {
+  font-size: 0.95rem;
+}
+.g-main > .avatar.has-logo {
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.g-main > .avatar .lg {
+  padding: 12%;
+}
+.k-chain .avatar:not(.mono):not(.has-logo),
+.k-brand .avatar:not(.mono):not(.has-logo) {
+  background: var(--tile-blue);
+  color: var(--tile-blue-ink);
+}
+.k-tyres .avatar:not(.mono):not(.has-logo) {
+  background: var(--tile-orange);
+  color: var(--tile-orange-ink);
+}
+.k-indep .avatar:not(.mono):not(.has-logo),
+.k-sirene .avatar:not(.mono):not(.has-logo) {
+  background: var(--tile-gray);
+  color: var(--tile-gray-ink);
+}
+.g-id {
+  grid-area: id;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.g-id h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font: 700 1.1rem/1.25 var(--font);
+  letter-spacing: -0.015em;
+}
+.g-name {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* survol : souris seulement (sur un écran tactile, il resterait collé à la ligne touchée) */
+@media (hover: hover) {
+  .card:hover .g-name {
+    text-decoration: underline;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 3px;
+  }
+}
+.rating {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--card);
-  color: var(--ink);
-  font: 500 0.92rem/1 var(--font);
+  gap: 3px;
+  color: var(--ink-2);
+  font: 600 0.88rem/1 var(--font);
   white-space: nowrap;
-  box-shadow: inset 0 0 0 1.5px var(--line-strong);
 }
-.sort-btn b {
-  font-weight: 600;
+.rating .ic {
+  width: 14px;
+  height: 14px;
+  fill: var(--star);
+  stroke: none;
 }
-.sort-btn .ic {
+.rating .n {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.g-addr {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font: 400 0.95rem/1.3 var(--font);
+}
+.g-addr.is-busy {
+  opacity: 0.6;
+}
+.g-type {
+  grid-area: meta;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-top: 10px;
+}
+.kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  color: var(--ink);
+  font: 500 0.9rem/1 var(--font);
+  white-space: nowrap;
+}
+.kind .k-txt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+/* plusieurs prestations : « 1 prestation sur 2 » sous le type (le détail est au survol, dans la fiche et pour les lecteurs d'écran) */
+.k-part {
+  padding-left: 12px;
+  color: var(--amber-ink);
+  font: 600 0.8rem/1.2 var(--font);
+  white-space: nowrap;
+}
+/* disponibilité de la prestation : un point dans la pastille du type (détail au survol, dans la fiche et pour les lecteurs d'écran) */
+.kind .dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.kind .dot.lvl-yes {
+  background: var(--promo-bg);
+}
+.kind .dot.lvl-likely {
+  background: var(--focus);
+}
+.kind .dot.lvl-check,
+.kind .dot.lvl-part {
+  background: var(--amber-ink);
+}
+.dist {
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--ink);
+  font: 500 1rem/1.25 var(--font);
+  font-variant-numeric: tabular-nums;
+}
+.dist .ic,
+.dist .d-sep {
+  display: none;
+}
+.dist .d-km {
+  white-space: nowrap;
+}
+.dist .d-city {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font: 400 0.82rem/1.25 var(--font);
+}
+.g-type .dist {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
+.g-price {
+  grid-area: price;
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  margin-top: 12px;
+}
+.amount {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font: 800 1.12rem/1 var(--font);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.amount .from,
+.amount .unit {
+  color: var(--ink-3);
+  font: 500 0.82rem/1 var(--font);
+  letter-spacing: 0;
+}
+.p-tag {
+  color: var(--ink-3);
+  font: 500 0.8rem/1.2 var(--font);
+}
+.p-tag.warn {
+  color: var(--amber-ink);
+}
+.no-price {
+  color: var(--ink-3);
+  font: 400 0.98rem/1.2 var(--font);
+}
+.p-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+}
+.g-price .tag {
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--ink-3);
+  font: 500 0.8rem/1.2 var(--font);
+}
+.g-price .tag.warn {
+  color: var(--amber-ink);
+}
+.g-price .tag.promo {
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--promo-bg);
+  color: var(--promo-fg);
+  font: 700 0.72rem/1 var(--font);
+}
+/* fiche : la disponibilité de la prestation, puis « Itinéraire » et « Déclarer une réparation » */
+.svc-why {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+.svc-why .dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.svc-why .dot.lvl-yes {
+  background: var(--promo-bg);
+}
+.svc-why .dot.lvl-likely {
+  background: var(--focus);
+}
+.svc-why .dot.lvl-check,
+.svc-why .dot.lvl-part {
+  background: var(--amber-ink);
+}
+.g-more-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+/* échelle de prix : la barre va du moins cher (courte, orange) au plus cher (pleine) parmi les garages listés */
+.bar {
+  display: block;
+  width: 100%;
+  max-width: 204px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--track);
+  overflow: hidden;
+}
+.bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--bar);
+}
+.is-best .bar i {
+  background: var(--btn);
+}
+.g-actions {
+  grid-area: act;
+  align-self: end;
+  display: flex;
+  justify-content: flex-end;
+}
+.act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 144px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 10px;
+  background: var(--act-bg);
+  color: var(--act-ink);
+  font: 700 1.19rem/1 var(--font); /* blanc sur orange (ligne la moins chère) : grand texte gras, seuil 3:1 */
+  text-decoration: none;
+  white-space: nowrap;
+}
+.act .ic {
   width: 18px;
   height: 18px;
-  color: var(--ink-3);
 }
-.sortbox .menu {
-  left: auto;
-  right: 0;
-  width: 210px;
+.act:hover {
+  filter: brightness(1.18);
 }
-.summary .big {
+.is-best .act {
+  background: var(--btn);
+  color: var(--on-btn);
+}
+.is-best .act:hover {
+  filter: brightness(1.06);
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font: 700 0.75rem/1 var(--font);
+  white-space: nowrap;
+}
+.tag.promo {
+  background: var(--promo-bg);
+  color: var(--promo-fg);
+}
+.tag .ic {
+  width: 12px;
+  height: 12px;
+}
+.card > .g-more {
+  grid-area: more;
+}
+.more-btn {
+  justify-self: center;
+  margin-top: 14px;
+}
+.res-note {
   display: grid;
-  gap: 3px;
-  padding-right: 150px;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--note-bg);
+  color: var(--note-ink);
+  font-size: 0.97rem;
+  line-height: 1.45;
 }
-.summary .big b {
-  font: 700 1.55rem/1.1 var(--font);
-  letter-spacing: -0.025em;
+.res-note p {
+  margin: 0;
 }
-.summary .big span {
-  font: 400 0.92rem/1.35 var(--font);
-  color: var(--ink-3);
+.res-note .n-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 }
-.summary p.best {
-  padding: 11px 14px;
-  border-radius: var(--r-md);
-  background: var(--card-2);
+.res-note .n-main .ic {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  margin-top: 2px;
+  color: var(--px-lime);
+}
+@media (min-width: 1024px) {
+  .panel-col {
+    gap: 0;
+  }
+  .summary {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .eyebrow {
+    font-size: 0.95rem;
+  }
+  .res-title {
+    margin-top: 4px;
+    font-size: 2.5rem;
+  }
+  .stats {
+    display: flex;
+    gap: 11px;
+  }
+  .stat {
+    min-width: 104px;
+    min-height: 63px;
+    padding: 9px 17px 10px;
+  }
+  .stat.st-best {
+    min-width: 118px;
+  }
+  .stat b {
+    font-size: 1.7rem;
+  }
+  .stat span {
+    font-size: 0.89rem;
+  }
+  .mapbar {
+    margin-top: 24px;
+  }
+  .list-pane {
+    margin-top: 16px;
+  }
+  /* Le tableau : une boîte blanche, l'en-tête gris clair, une ligne par garage */
+  .thead,
+  .card {
+    display: grid;
+    grid-template-columns: 62px minmax(0, 205fr) minmax(0, 175fr) minmax(0, 103fr) minmax(0, 224fr) 146px;
+    grid-template-areas: none;
+    align-items: center;
+    column-gap: 0;
+    padding: 0 21px;
+  }
+  /* la ligne du garage garde sa hauteur quand la fiche s'ouvre dessous (elle ne bouge pas, rien ne colle au cadre) */
+  .card {
+    grid-template-rows: minmax(82px, auto);
+  }
+  .thead {
+    min-height: 41px;
+    border-radius: 16px 16px 0 0;
+    background: var(--thead-bg);
+    color: var(--ink-3);
+    font: 500 0.98rem/1 var(--font);
+  }
+  .thead span:first-child {
+    grid-column: 1 / 3;
+  }
+  /* pas de ligne (recherche en cours, erreur, filtre qui ne laisse rien) : pas d'en-tête de tableau vide */
+  .list-pane:not(:has(#list > li.card)) .thead {
+    display: none;
+  }
+  .list {
+    gap: 0;
+    border-radius: 0 0 16px 16px;
+    background: var(--card);
+    overflow: hidden;
+  }
+  .card {
+    min-height: 82px;
+    border-radius: 0;
+    background: none;
+    border-top: 1px solid var(--row-line);
+    contain-intrinsic-size: auto 82px;
+    scroll-margin-top: 112px; /* sous l'en-tête collé (96 px) */
+  }
+  .card.is-best {
+    background: var(--best-bg);
+  }
+  .g-main {
+    grid-column: 1 / 6;
+    grid-row: 1;
+  }
+  .g-main > .avatar {
+    grid-area: auto;
+    grid-column: 1;
+    grid-row: 1;
+    width: 47px;
+    height: 47px;
+    font-size: 1.32rem;
+  }
+  .g-id {
+    grid-area: auto;
+    grid-column: 2;
+    grid-row: 1;
+    padding-right: 14px;
+  }
+  .g-id h3 {
+    font-size: 1.12rem;
+  }
+  .g-type {
+    display: contents;
+  }
+  .k-cell {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: start;
+    margin-right: 10px;
+  }
+  .kind {
+    height: 25px;
+  }
+  .dist {
+    grid-column: 4;
+    grid-row: 1;
+    padding-right: 8px;
+  }
+  /* la commune sous la distance (la colonne est étroite), et l'adresse de la ligne sans « code postal commune » */
+  .g-type .dist {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .g-addr .a-pc {
+    display: none;
+  }
+  .g-price {
+    grid-area: auto;
+    grid-column: 5;
+    grid-row: 1;
+    margin: 0;
+    padding-right: 20px;
+  }
+  .g-actions {
+    grid-area: auto;
+    grid-column: 6;
+    grid-row: 1;
+    align-self: center;
+  }
+  .card > .g-more {
+    grid-area: auto;
+    grid-column: 1 / -1;
+  }
+  .res-note {
+    margin-top: 23px;
+    padding: 14px 21px;
+  }
+}
+
+@media (min-width: 1024px) and (hover: hover) {
+  .card:hover {
+    background: var(--row-hover);
+  }
+  .card.is-best:hover {
+    background: var(--best-bg);
+  }
 }
 
 /* ---------- Fenêtre « Quelles prestations souhaitez-vous réaliser ? » ---------- */
@@ -1838,6 +2595,9 @@ select {
   line-height: 1.4;
   color: var(--ink-3);
 }
+.svc-opt.is-on .svc-h {
+  color: var(--ink-2); /* l'encre 3 n'atteint pas 4,5:1 sur l'orange pâle d'une prestation cochée */
+}
 .svc-none {
   margin: 14px 8px;
   color: var(--ink-3);
@@ -1853,725 +2613,7 @@ select {
   cursor: not-allowed;
 }
 
-/* ---------- Ordinateur : barre de recherche flottante et filtres sur la carte (après les composants, qui les définissent pour mobile) ---------- */
-@media (min-width: 1024px) {
-  /* Barre de recherche flottante : Où · Prestation · Rayon (· Énergie) et le bouton orange */
-  .search {
-    position: fixed;
-    z-index: 52;
-    left: var(--panel-x);
-    right: var(--gap);
-    top: var(--gap);
-    min-height: var(--bar-h);
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 14px 18px 16px 20px;
-    box-shadow:
-      0 0 0 1px var(--hair),
-      var(--shadow-lg);
-  }
-  .search .full-only,
-  .search.is-collapsed .full-only,
-  .search.is-collapsed .svc-field {
-    display: grid !important;
-  }
-  .search #energyField[hidden] {
-    display: none !important;
-  }
-  .search .sum-line,
-  .search.is-collapsed .sum-line {
-    display: none;
-  }
-  .search .field {
-    gap: 8px;
-  }
-  .search .field > label {
-    margin-left: 6px;
-    font: 500 0.88rem/1 var(--font);
-    color: var(--ink-3);
-  }
-  .addr-field {
-    flex: 1.55 1 0;
-  }
-  .svc-field {
-    flex: 1.7 1 0;
-  }
-  .radius-field,
-  #energyField {
-    flex: 0.75 1 0;
-  }
-  .search select,
-  .search input[type="text"],
-  .search .svc-btn {
-    height: 54px;
-    min-height: 54px;
-    font-size: 1.06rem;
-    font-weight: 500;
-  }
-  .search .svc-hint {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-  .search .go-row {
-    flex: none;
-    width: 54px;
-    margin-top: 22px;
-  }
-  .search .go-row .primary {
-    width: 54px;
-    height: 54px;
-    min-height: 54px;
-    padding: 0;
-    border-radius: var(--r-md);
-    box-shadow: var(--shadow-sm);
-  }
-  .search .go-row .ic {
-    width: 24px;
-    height: 24px;
-    stroke-width: 2.2;
-  }
-  .search .go-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-  /* Filtres : sur la carte, à droite du panneau (ou du rail quand la carte est agrandie) */
-  .mapbar {
-    position: fixed;
-    z-index: 45;
-    left: calc(var(--panel-x) + var(--panel-w) + var(--gap));
-    top: var(--panel-top);
-  }
-  body.map-wide .mapbar {
-    left: var(--panel-x);
-  }
-  .dd-wrap {
-    position: relative;
-  }
-  .dd {
-    height: 54px;
-    min-width: 150px;
-    padding: 0 14px 0 18px;
-    font-size: 1.05rem;
-  }
-  .fbtn {
-    width: 54px;
-    height: 54px;
-  }
-  .menu {
-    right: auto;
-    min-width: 270px;
-  }
-  .menu-more {
-    width: 330px;
-    right: auto;
-    left: auto;
-  }
-  .dd-more .menu {
-    left: auto;
-    right: 0;
-  }
-  .res-top {
-    margin-top: 2px;
-  }
-  .summary .big b {
-    font-size: 1.9rem;
-  }
-}
-
-/* ---------- 7. Liste & fiches ---------- */
-.res-body,
-.list-pane {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
-  min-width: 0;
-}
-.list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-}
-.list > .status {
-  text-align: center;
-}
-/* Cartes : à plat sur le panneau, une tuile à gauche (logo ou lettre, couleur selon le type), la distance sur la tuile ;
-   la sélection la cerne d'orange. Deux dispositions selon la largeur du panneau (requête de conteneur « panel »). */
-.card {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  min-width: 0;
-  scroll-margin-top: 16px;
-  border-radius: 28px;
-  content-visibility: auto;
-  /* hauteur supposée d'une fiche pas encore rendue : proche de la vraie (médiane mesurée), sinon le défilement vers une fiche lointaine s'arrête trop tôt */
-  contain-intrinsic-size: auto 150px;
-  transition:
-    background 0.2s,
-    box-shadow 0.2s;
-}
-.card:hover {
-  background: color-mix(in srgb, var(--card) 55%, transparent);
-}
-.card.is-selected {
-  background: color-mix(in srgb, var(--card) 72%, transparent);
-  box-shadow: 0 0 0 2px var(--accent);
-}
-.card.flash {
-  box-shadow:
-    0 0 0 2px var(--accent),
-    0 0 0 7px var(--flash-ring);
-}
-.g-main {
-  grid-area: 1 / 1;
-  position: relative;
-  display: grid;
-  grid-template-columns: 84px minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  column-gap: 12px;
-  align-items: start;
-  padding: 8px;
-  border-radius: 28px;
-  cursor: pointer;
-}
-.g-main > .avatar {
-  grid-column: 1;
-  grid-row: 1;
-  width: 84px;
-  height: 84px;
-  border-radius: 18px;
-  font: 600 2.1rem/1 var(--font);
-  letter-spacing: -0.02em;
-  box-shadow: none;
-}
-.g-main > .avatar.mono {
-  font-size: 1.9rem;
-}
-.g-main > .avatar.mono.m2 {
-  font-size: 1.55rem;
-}
-.g-main > .avatar.has-logo {
-  box-shadow: inset 0 0 0 1px var(--line);
-}
-.k-chain .avatar:not(.mono):not(.has-logo) {
-  background: var(--rail-bg);
-  color: var(--px-lime);
-}
-.k-brand .avatar:not(.mono):not(.has-logo) {
-  background: var(--mint-soft);
-  color: var(--mint-ink);
-}
-.k-tyres .avatar:not(.mono):not(.has-logo) {
-  background: var(--accent-soft);
-  color: var(--accent-ink);
-}
-.k-indep .avatar:not(.mono):not(.has-logo),
-.k-sirene .avatar:not(.mono):not(.has-logo) {
-  background: var(--card-2);
-  color: var(--ink-2);
-}
-.g-id {
-  grid-column: 2;
-  grid-row: 1;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
-}
-.g-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-.g-id h3 {
-  min-width: 0;
-  margin: 0;
-  font: 600 1.12rem/1.2 var(--font);
-  letter-spacing: -0.01em;
-}
-.g-main:hover .g-name {
-  text-decoration: underline;
-  text-decoration-thickness: 1.5px;
-  text-underline-offset: 3px;
-}
-/* Le nom est un bouton qui se raccourcit lui-même (« … ») : sa zone cliquable s'arrête là où le texte s'arrête, sans passer sous le lien
-   « Avis » voisin, et fait 24 px de haut au moins (WCAG 2.5.8) ; son contour de focus n'est plus rogné par le titre. */
-.g-name {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 2px 0;
-  margin: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  border-radius: 4px;
-}
-.rating {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font: 500 0.86rem/1 var(--font);
-  color: var(--ink);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.rating .ic {
-  width: 14px;
-  height: 14px;
-  fill: var(--star);
-  stroke: var(--star);
-}
-.rating b {
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-.rating .n {
-  color: var(--ink-3);
-  font-size: 0.8rem;
-}
-.rating.none {
-  color: var(--ink-3);
-}
-/* lien « Avis » : zone cliquable de 24 px de haut au moins (WCAG 2.5.8), sans changer la ligne du nom */
-a.rating {
-  min-height: 24px;
-  margin-block: -3px;
-  padding-inline: 2px;
-}
-a.rating.none:hover {
-  color: var(--ink);
-  text-decoration: underline;
-}
-.g-sub {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.g-addr {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font-size: 0.8rem;
-  line-height: 1.35;
-  color: var(--ink-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.g-addr.is-none,
-.g-addr.is-busy {
-  color: var(--ink-3);
-}
-.g-meta {
-  margin: 4px 0 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 6px;
-  min-width: 0;
-}
-.kind,
-.svc {
-  margin: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  max-width: 100%;
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: var(--card);
-  box-shadow: inset 0 0 0 1px var(--line);
-  color: var(--ink);
-  font: 500 0.75rem/1 var(--font);
-  white-space: nowrap;
-}
-.svc span:last-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.5; /* sans cela, l'accent d'une majuscule (« À vérifier ») est rogné par overflow */
-}
-.svc-tiny {
-  display: none;
-}
-.svc .dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ink-3);
-}
-.svc.lvl-yes .dot {
-  background: var(--promo-bg);
-}
-.svc.lvl-likely .dot {
-  background: var(--focus);
-}
-.svc.lvl-check .dot,
-.svc.lvl-part .dot {
-  background: var(--amber-ink);
-}
-/* Flèche d'ouverture de la fiche : le texte (« Détails » / « Masquer ») ne sert qu'aux tests, le bouton du nom porte l'état pour les lecteurs d'écran */
-.chev {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  font-size: 0;
-  color: var(--ink-3);
-}
-.chev::after {
-  content: "";
-  width: 7px;
-  height: 7px;
-  margin-top: -3px;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: rotate(45deg);
-  transition: transform 0.2s;
-}
-.g-main:hover .chev {
-  background: var(--card-2);
-  color: var(--ink);
-}
-.card.is-open .chev::after {
-  margin-top: 3px;
-  transform: rotate(-135deg);
-}
-.dist {
-  position: absolute;
-  z-index: 1;
-  left: 14px;
-  top: 66px;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  height: 22px;
-  max-width: 72px;
-  min-width: 0;
-  padding: 0 7px 0 5px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.94);
-  color: #10121f;
-  font: 600 0.68rem/1 var(--font);
-}
-.dist .ic {
-  width: 11px;
-  height: 11px;
-  flex: none;
-  color: #b13506;
-}
-.dist .d-km,
-.dist .d-sep {
-  flex: none;
-  white-space: nowrap;
-}
-.dist .d-sep {
-  /* le point médian d'Outfit n'a aucune marge propre (chasse de 0,08 em) : on lui rend l'air que lui donnait la police précédente */
-  margin: 0 0.03rem;
-  opacity: 0.6;
-}
-.dist .d-city {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
-}
-/* petite tuile : la distance en haut, la commune dessous, raccourcie (« … ») si elle est longue */
-.dist:has(.d-city) {
-  top: 54px;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  height: auto;
-  padding: 4px 7px;
-  border-radius: 10px;
-}
-.dist:has(.d-city) .ic,
-.dist .d-sep {
-  display: none;
-}
-.dist .d-city {
-  max-width: 100%;
-  font-size: 0.62rem;
-}
-/* la pastille de distance occupe le bas de la tuile : le logo se tient dans la partie libre au-dessus, et la lettre y remonte
-   quand la pastille a deux lignes (petite tuile) */
-.g-main > .avatar .lg {
-  height: calc(100% - 34px);
-}
-.g-main > .avatar:not(.lg-wide) .lg {
-  padding: 10%;
-}
-.g-main:has(.d-city) > .avatar {
-  padding-bottom: 32px;
-}
-.g-price {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  align-self: center;
-  justify-self: start;
-  max-width: calc(100% - 175px);
-  min-height: 38px;
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 6px;
-}
-.amount {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  font: 600 1.35rem/1.1 var(--font);
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.amount .from,
-.amount .unit {
-  font: 400 0.76rem/1 var(--font);
-  letter-spacing: 0;
-  color: var(--ink-3);
-}
-.g-price .tag {
-  padding: 0;
-  background: none;
-  color: var(--ink-3);
-  font: 400 0.78rem/1.2 var(--font);
-  box-shadow: none;
-}
-.g-price .tag::before {
-  display: none;
-}
-.no-price {
-  font: 500 0.86rem/1.3 var(--font);
-  color: var(--ink-3);
-}
-.g-promo {
-  margin: 0 8px 8px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  background: var(--promo-soft);
-  color: var(--ink);
-  font-size: 0.82rem;
-  line-height: 1.4;
-}
-.g-promo b {
-  color: var(--promo-ink);
-  font-weight: 700;
-}
-/* Boutons : posés sur le bas à droite de la carte (même case de la grille que .g-main), à la hauteur du prix */
-.g-actions {
-  grid-area: 1 / 1;
-  z-index: 2;
-  align-self: end;
-  justify-self: end;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 8px 8px 0;
-  pointer-events: none;
-}
-.g-actions .mini {
-  pointer-events: auto;
-  min-height: 38px;
-  height: 38px;
-  padding: 0 14px 0 12px;
-  border: 0;
-  font: 600 0.88rem/1 var(--font);
-}
-.g-actions .mini::before {
-  content: "";
-  flex: none;
-  width: 17px;
-  height: 17px;
-  background: currentColor;
-  -webkit-mask: var(--i) center/contain no-repeat;
-  mask: var(--i) center/contain no-repeat;
-}
-.act-call {
-  --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 3.5h3.5l1.7 4.3-2.3 1.5a11 11 0 0 0 6.8 6.8l1.5-2.3 4.3 1.7V19a2 2 0 0 1-2 2A17 17 0 0 1 3 5.5a2 2 0 0 1 2-2z'/%3E%3C/svg%3E");
-  background: var(--btn);
-  color: var(--on-btn);
-}
-.act-route {
-  --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 21V11a4 4 0 0 1 4-4h9'/%3E%3Cpath d='m15 3 4 4-4 4'/%3E%3C/svg%3E");
-  background: var(--btn);
-  color: var(--on-btn);
-}
-.act-route.round {
-  width: 38px;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--card);
-  color: var(--ink);
-  box-shadow: inset 0 0 0 1.5px var(--line-strong);
-}
-.g-actions .mini:hover {
-  filter: brightness(0.96);
-}
-/* petite carte : l'état de la prestation en un mot ; le texte complet reste pour les lecteurs d'écran */
-@container panel (max-width: 469px) {
-  .svc-tiny {
-    display: inline;
-  }
-  .svc-long {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-}
-@container panel (min-width: 470px) {
-  .card {
-    contain-intrinsic-size: auto 200px;
-  }
-  .g-main {
-    grid-template-columns: 128px minmax(0, 1fr);
-    grid-template-rows: auto 1fr;
-    column-gap: 16px;
-    padding: 10px;
-  }
-  .g-main > .avatar {
-    grid-row: 1 / 3;
-    width: 128px;
-    height: 128px;
-    border-radius: 22px;
-    font-size: 3.4rem;
-  }
-  .g-main > .avatar.mono {
-    font-size: 2.9rem;
-  }
-  .g-main > .avatar.mono.m2 {
-    font-size: 2.3rem;
-  }
-  .g-id {
-    gap: 3px;
-  }
-  .g-id h3 {
-    font-size: 1.38rem;
-  }
-  .rating {
-    font-size: 0.92rem;
-  }
-  .g-addr {
-    font-size: 0.94rem;
-  }
-  .g-meta {
-    margin-top: 7px;
-    gap: 6px;
-  }
-  .kind,
-  .svc {
-    height: 30px;
-    padding: 0 12px;
-    font-size: 0.84rem;
-  }
-  .dist {
-    left: 14px;
-    top: 104px;
-    height: 26px;
-    max-width: 114px;
-    padding: 0 8px 0 6px;
-    font-size: 0.7rem;
-  }
-  .dist .d-sep,
-  .dist .d-city {
-    display: inline;
-  }
-  .dist .d-city {
-    font-size: inherit;
-  }
-  .dist:has(.d-city) {
-    top: 104px;
-    flex-direction: row;
-    align-items: center;
-    gap: 3px;
-    height: 26px;
-    padding: 0 8px 0 6px;
-    border-radius: 999px;
-  }
-  .dist:has(.d-city) .ic {
-    display: none; /* « 1,4 km · Cazères » tient dans la tuile sans l'épingle */
-  }
-  .g-main:has(.d-city) > .avatar {
-    padding-bottom: 0;
-  }
-  .g-main > .avatar .lg {
-    height: calc(100% - 38px);
-  }
-  .dist .ic {
-    width: 13px;
-    height: 13px;
-  }
-  .g-price {
-    grid-column: 2;
-    max-width: calc(100% - 178px);
-    min-height: 44px;
-    margin-top: 6px;
-    align-self: end;
-  }
-  .amount {
-    font-size: 1.65rem;
-  }
-  .g-promo {
-    margin: 0 10px 10px;
-  }
-  .g-actions {
-    padding: 0 10px 10px 0;
-  }
-  .g-actions .mini {
-    min-height: 44px;
-    height: 44px;
-    padding: 0 20px 0 16px;
-    font-size: 1rem;
-  }
-  .g-actions .mini::before {
-    width: 18px;
-    height: 18px;
-  }
-  .act-route.round {
-    width: 44px;
-    padding: 0;
-  }
-}
+/* ---------- Fiche dépliée sous la ligne ---------- */
 .g-more {
   display: grid;
   gap: 14px;
@@ -2593,12 +2635,12 @@ a.rating.none:hover {
   }
 }
 .g-more > div > .btn[data-act="declare"] {
-  width: 100%;
+  flex: 1 1 auto;
   min-height: 52px;
   border-color: var(--btn);
   background: var(--btn);
   color: var(--on-btn);
-  font-size: 0.95rem;
+  font: 700 1.19rem/1 var(--font);
 }
 .facts {
   margin: 0;
@@ -3240,28 +3282,6 @@ body[data-store="local"] [data-store-only="remote"] {
 .ma-pin {
   fill: var(--mk-user);
 }
-.map-hint {
-  position: relative;
-  display: grid;
-  gap: 6px;
-  max-width: 21rem;
-  padding: 18px 22px;
-  border-radius: var(--r-lg);
-  background: var(--glass-flat);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-  box-shadow:
-    0 0 0 1px var(--hair),
-    var(--shadow-md);
-  text-align: center;
-  font-size: 0.88rem;
-  line-height: 1.45;
-  color: var(--ink-2);
-}
-.map-hint b {
-  color: var(--ink);
-  font: 700 1rem/1.3 var(--font);
-}
 .leaflet-container {
   font: inherit;
   background: var(--map-bg);
@@ -3483,7 +3503,7 @@ body[data-store="local"] [data-store-only="remote"] {
   border-radius: 999px;
   background: var(--btn);
   color: var(--on-btn);
-  font: 700 0.9rem/1 var(--font);
+  font: 700 1.19rem/1 var(--font);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -3503,38 +3523,51 @@ body[data-store="local"] [data-store-only="remote"] {
   .map-btn[hidden] {
     display: none;
   }
+  /* la carte occupe sa colonne : boutons et barre d'information se placent dans ses coins ; carte agrandie : barre large */
   .map-expand {
-    left: calc(var(--panel-x) + var(--panel-w) + var(--gap));
-    bottom: 40px;
-  }
-  body.map-wide .map-expand {
-    left: var(--panel-x);
+    left: 16px;
+    bottom: 64px;
   }
   .map-locate {
-    right: var(--gap);
-    bottom: 40px;
+    right: 16px;
+    bottom: 64px;
   }
   .leaflet-bottom.leaflet-right .leaflet-control-zoom {
-    margin-bottom: 70px;
+    margin-bottom: 76px;
   }
   .map-info {
-    left: calc(var(--panel-x) + var(--panel-w) + var(--gap) + 62px);
-    right: 78px;
-    bottom: 36px;
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    padding: 16px 18px;
+  }
+  body.map-wide .map-info {
+    left: 84px;
+    right: 84px;
+    bottom: 28px;
     max-width: 46rem;
     margin-inline: auto;
     padding: 18px 24px 20px;
   }
-  .mi-row {
+  body.map-wide .mi-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 14px 28px;
   }
-  .mi-cta {
+  body.map-wide .mi-cta {
     flex: none;
   }
   .mi-cta .alt {
-    display: none;
+    display: none; /* la fiche est déjà ouverte dans le tableau */
+  }
+  /* colonne étroite : les pastilles passent sous le nom */
+  body:not(.map-wide) .mi-top {
+    flex-wrap: wrap;
+  }
+  body:not(.map-wide) .mi-tags {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
   }
   .cta {
     padding: 0 26px;
@@ -3555,7 +3588,7 @@ body[data-store="local"] [data-store-only="remote"] {
 /* ---------- Chargement : un rond-point autour de l'adresse, une voiture y tourne ----------
    Visible seulement pendant une recherche (body.is-searching, posé par ct()) : en dehors, display:none, donc aucune
    animation. Ordinateur : sur la carte, au centre du rayon de recherche. Mobile (carte cachée) : en petit dans
-   l'encart d'état. Couleurs de la charte : bitume marine (--ld-road), pointillés blanc cassé, voiture orange ; en
+   l'encart d'état. Couleurs de la charte : bitume noir (--ld-road), pointillés blanc cassé, voiture orange ; en
    thème sombre le bitume est éclairci pour se détacher du fond. Sens inverse des aiguilles d'une montre (giratoire
    français), un tour en 1,8 s qui accélère puis ralentit, 0,6 s de pause ; prefers-reduced-motion : voiture à l'arrêt. */
 .ld {
@@ -3567,10 +3600,6 @@ body.is-searching .map-empty .ld,
 }
 body.is-searching .map-empty .ld {
   animation: ld-in 0.4s 0.35s both;
-}
-body.is-searching .map-hint,
-body.is-searching .teaser {
-  display: none;
 }
 .ld-asphalt {
   stroke: var(--ld-road);
@@ -3945,7 +3974,7 @@ html.dlg-open {
 @media (min-width: 1024px) {
   .consent {
     left: auto;
-    right: var(--gap);
+    right: 16px;
     bottom: 44px;
     width: 400px;
     margin-inline: 0;
@@ -4038,12 +4067,11 @@ html.dlg-open {
 }
 
 /* ---------- Barres de défilement ----------
-   Panneau, dialogue et suggestions ont des coins arrondis : la barre native (flèches haut/bas comprises) en
+   Dialogue et suggestions ont des coins arrondis : la barre native (flèches haut/bas comprises) en
    dépassait. Souris et pavé tactile (pointeur fin avec survol) sous Chromium et Safari : barre fine sans flèches, rentrée
    de --sb-inset en haut et en bas pour rester dans la courbe. Écrans tactiles : barres natives en surimpression, sans
    changement. Firefox : propriétés standard (fines, sans flèches). Les poser aussi dans Chromium désactiverait le style
    WebKit ci-dessous, d'où le @supports. */
-.panel-col,
 .dlg {
   --sb-inset: 18px;
 }
@@ -4051,26 +4079,22 @@ html.dlg-open {
   --sb-inset: 8px;
 }
 @media (hover: hover) and (pointer: fine) {
-  .panel-col::-webkit-scrollbar,
   .dlg::-webkit-scrollbar,
   .suggest::-webkit-scrollbar {
     width: 12px;
     height: 12px;
   }
-  .panel-col::-webkit-scrollbar-button,
   .dlg::-webkit-scrollbar-button,
   .suggest::-webkit-scrollbar-button {
     display: none;
     width: 0;
     height: 0;
   }
-  .panel-col::-webkit-scrollbar-track,
   .dlg::-webkit-scrollbar-track,
   .suggest::-webkit-scrollbar-track {
     margin: var(--sb-inset) 0;
     background: transparent;
   }
-  .panel-col::-webkit-scrollbar-thumb,
   .dlg::-webkit-scrollbar-thumb,
   .suggest::-webkit-scrollbar-thumb {
     min-height: 44px;
@@ -4078,14 +4102,12 @@ html.dlg-open {
     border-radius: 999px;
     background: var(--line-strong) padding-box;
   }
-  .panel-col::-webkit-scrollbar-thumb:hover,
   .dlg::-webkit-scrollbar-thumb:hover,
   .suggest::-webkit-scrollbar-thumb:hover {
     background: var(--ink-3) padding-box;
   }
 }
 @supports not selector(::-webkit-scrollbar) {
-  .panel-col,
   .dlg,
   .suggest {
     scrollbar-width: thin;
@@ -4122,27 +4144,30 @@ html.dlg-open {
   }
 }
 @media (forced-colors: active) {
-  /* le mot-symbole « pix » est blanc : il garde son fond noir (rail, barre du haut, plaque du titre) */
-  .rail,
-  .dock,
-  .t-brand {
+  /* le mot-symbole « pix » est blanc : le logo garde sa plaque marine */
+  .brand {
     forced-color-adjust: none;
   }
   .card,
   .search,
   .ref-list > li,
-  .teaser,
   .status,
   .map-info,
-  .map-hint,
   .sources,
   .tabs,
-  .dock {
+  .stat,
+  .hs-card,
+  .res-note {
     border: 1px solid CanvasText;
   }
+  /* l'échelle de prix : la piste et la barre, sinon effacées avec les fonds */
+  .bar {
+    border: 1px solid CanvasText;
+  }
+  .bar i {
+    background: CanvasText;
+  }
   .tag,
-  .svc,
-  .dist,
   .kind,
   .dd,
   .fbtn,
@@ -4151,7 +4176,6 @@ html.dlg-open {
   .addr-btn,
   .map-btn,
   .menu,
-  .mini,
   .btn,
   .primary,
   .cta,
@@ -4197,7 +4221,6 @@ html.dlg-open {
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
-  .panel-col::-webkit-scrollbar-thumb,
   .dlg::-webkit-scrollbar-thumb,
   .suggest::-webkit-scrollbar-thumb {
     background: CanvasText padding-box;

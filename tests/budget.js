@@ -22,6 +22,9 @@ const KB = 1024;
 // en bas d'écran (mesuré : js 59,4 · feuille de style 22,8 · page 33,9 · première visite 124,8 · tout-en-un 127,9, contre js 54,2 · feuille de style
 // 20,4 · page 30,5 · première visite 116,2 · tout-en-un 119,2 avant, soit +8,6 Ko à la première visite) : budgets du script +3, de la feuille de style
 // +1,5, de la page +2, du chemin critique +5 et de la page tout-en-un +5. Pour les rabaisser : charger la fenêtre des prestations à la demande.
+// Design « tableau » et police Manrope (branche ux-tableau-manrope, 10 octobre 2026) : Manrope (24,3 Ko, fichier Google non modifié) remplace
+// Outfit (31,5 Ko) ; accueil, tableau, faces de repli aux mesures de Manrope (mesuré : page 34,5 dont feuille de style 23,0 · js 59,3 · police
+// 24,3 · première visite 118,0 · tout-en-un 120,5, soit 6,8 et 7,4 Ko de moins qu'avant) : aucun budget ne bouge.
 const BUDGET = { page: 32, html: 10, js: 61, css: 23.5, font: 34, critical: 123, sw: 3, single: 127, icon: 20 };
 
 const results = [];
@@ -49,7 +52,7 @@ const jsFile = find(/^app\.[0-9a-f]{10}\.js$/), leafletFile = find(/^leaflet\.[0
 const style = (/<style>([\s\S]*?)<\/style>/.exec(html) || [])[1] || ""; // la feuille de style est dans la page (un aller-retour de moins)
 const htmlOnly = html.replace(/<style>[\s\S]*?<\/style>/, "");
 const fontFiles = fs.readdirSync(path.join(DIST, "assets/fonts"));
-const latin = fontFiles.find((f) => /^outfit-latin\.[0-9a-f]{10}\.woff2$/.test(f));
+const latin = fontFiles.find((f) => /^manrope-latin\.[0-9a-f]{10}\.woff2$/.test(f));
 
 // ---- poids
 check("B1 the page (with its stylesheet), its script and its font are all there", html && style && jsFile && latin);

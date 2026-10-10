@@ -2,9 +2,9 @@
   <div class="app">
     <div class="dock" aria-hidden="true"></div>
 
-    <!-- Navigation : rail d'icônes (ordinateur) / barre du haut + navigation flottante (mobile) -->
-    <header class="rail">
-      <div class="rail-in">
+    <!-- En-tête : logo, (résultats) la recherche compacte, lien vers l'autre vue, « Ajouter une réparation » -->
+    <header class="topbar">
+      <div class="topbar-in">
         <a class="brand" href="#garages" aria-label="Pixcar, accueil">
           <span class="brand-mark">
             <svg viewBox="0 0 100 100" aria-hidden="true"><use href="#px-mark" /></svg>
@@ -42,9 +42,15 @@
         restent consultables.
       </div>
 
-      <!-- ===== Garages : barre de recherche, filtres, résultats (panneau) et carte ===== -->
+      <!-- ===== Garages : accueil (héros, recherche, populaires, chiffres, étapes) puis résultats (tableau à gauche, carte à droite) ===== -->
       <section class="view" id="view-garages" data-view="garages" aria-labelledby="garagesTitle">
-        <!-- Barre de recherche : flottante en haut sur ordinateur ; sur mobile, carte de résumé que « Modifier » déplie -->
+        <div class="hero">
+          <p class="hero-tag"><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg>1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto</p>
+          <h1 id="garagesTitle" class="hero-title">Le bon prix pour votre voiture, près de chez vous.</h1>
+          <p class="hero-sub">Parce que votre titine est comme vous,<br />elle aime pas qu'on lui cache des choses</p>
+        </div>
+
+        <!-- Recherche : carte sous le titre à l'accueil ; dans l'en-tête sur ordinateur une fois les résultats affichés ; résumé que « Modifier » déplie sur mobile -->
         <form id="searchForm" class="search" novalidate>
           <div class="sum-line" id="searchSum">
             <p class="sum-where">
@@ -55,15 +61,26 @@
               <svg class="ic" aria-hidden="true"><use href="#i-edit" /></svg><span class="lbl-edit">Modifier</span>
             </button>
           </div>
+          <div class="field svc-field">
+            <label for="svcBtn">Prestation</label>
+            <button type="button" id="svcBtn" class="svc-btn" aria-haspopup="dialog" aria-describedby="serviceHint">
+              <svg class="ic f-ic" aria-hidden="true"><use href="#i-wrench" /></svg>
+              <span class="svc-val" id="svcVal"><!--SERVICE_LABEL--></span>
+              <span class="svc-n" id="svcN" hidden></span>
+            </button>
+            <select id="service" class="svc-select" tabindex="-1" aria-hidden="true" hidden><!--SERVICE_OPTIONS--></select>
+            <p class="hint svc-hint" id="serviceHint"><!--SERVICE_HINT--></p>
+          </div>
           <div class="field addr-field full-only" id="addrField">
             <label for="address">Où</label>
             <div class="addr">
+              <svg class="ic f-ic" aria-hidden="true"><use href="#i-pin" /></svg>
               <input
                 id="address"
                 type="text"
                 autocomplete="off"
                 spellcheck="false"
-                placeholder="Adresse, ville ou code postal"
+                placeholder="Ex. Cazères, 31220"
                 role="combobox"
                 aria-autocomplete="list"
                 aria-expanded="false"
@@ -78,26 +95,19 @@
             </div>
             <ul id="addrList" class="suggest" role="listbox" aria-label="Adresses proposées" hidden></ul>
           </div>
-          <div class="field svc-field">
-            <label for="svcBtn">Prestation</label>
-            <button type="button" id="svcBtn" class="svc-btn" aria-haspopup="dialog" aria-describedby="serviceHint">
-              <span class="svc-val" id="svcVal"><!--SERVICE_LABEL--></span>
-              <span class="svc-n" id="svcN" hidden></span>
-              <svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg>
-            </button>
-            <select id="service" class="svc-select" tabindex="-1" aria-hidden="true" hidden><!--SERVICE_OPTIONS--></select>
-            <p class="hint svc-hint" id="serviceHint"><!--SERVICE_HINT--></p>
-          </div>
           <div class="field full-only radius-field">
             <label for="radius">Rayon</label>
-            <select id="radius">
-              <option value="3">3 km</option>
-              <option value="5">5 km</option>
-              <option value="10" selected>10 km</option>
-              <option value="20">20 km</option>
-              <option value="30">30 km</option>
-              <option value="50">50 km</option>
-            </select>
+            <div class="sel-wrap">
+              <svg class="ic f-ic" aria-hidden="true"><use href="#i-locate" /></svg>
+              <select id="radius">
+                <option value="3">3 km</option>
+                <option value="5">5 km</option>
+                <option value="10" selected>10 km</option>
+                <option value="20">20 km</option>
+                <option value="30">30 km</option>
+                <option value="50">50 km</option>
+              </select>
+            </div>
           </div>
           <div class="field full-only" id="energyField" hidden>
             <label for="energy">Énergie</label>
@@ -110,145 +120,157 @@
             </select>
           </div>
           <div class="go-row full-only">
-            <button type="submit" id="go" class="primary">
+            <button type="submit" id="go" class="primary" aria-label="Comparer les garages">
               <svg class="ic" aria-hidden="true"><use href="#i-search" /></svg
-              ><span id="goLabel" class="go-label">Rechercher les garages</span>
+              ><span id="goLabel" class="go-label">Comparer</span>
             </button>
           </div>
         </form>
 
-        <!-- Filtres : au-dessus de la carte sur ordinateur, sous la barre de recherche sur mobile (visibles quand il y a des résultats) -->
-        <div class="mapbar" id="toolbar" hidden>
-          <div class="dd-wrap">
-            <button type="button" class="dd" id="ddType" aria-haspopup="true" aria-expanded="false" aria-controls="menuType">
-              <span class="dd-lbl">Type</span><span class="dd-n" hidden></span><svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg>
-            </button>
-            <div class="menu" id="menuType" role="group" aria-label="Type de garage" hidden>
-              <button type="button" class="mopt" data-ftype="all" aria-pressed="true"><span class="cb" aria-hidden="true"></span>Tous</button>
-              <button type="button" class="mopt" data-ftype="chains" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Enseignes</button>
-              <button type="button" class="mopt" data-ftype="indep" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Indépendants</button>
-            </div>
+        <div class="home-more">
+          <div class="popular" role="group" aria-label="Prestations populaires">
+            <span class="pop-lbl">Populaires :</span>
+            <button type="button" class="pop" data-pop="vidange">Vidange</button>
+            <button type="button" class="pop" data-pop="plaq_av">Plaquettes de frein</button>
+            <button type="button" class="pop" data-pop="geo_av">Parallélisme</button>
+            <button type="button" class="pop" data-pop="montage">Pneus</button>
+            <button type="button" class="pop" data-pop="clim">Climatisation</button>
           </div>
-          <div class="dd-wrap">
-            <button type="button" class="dd" id="ddPrice" aria-haspopup="true" aria-expanded="false" aria-controls="menuPrice">
-              <span class="dd-lbl">Prix</span><span class="dd-n" hidden></span><svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg>
-            </button>
-            <div class="menu" id="menuPrice" role="group" aria-label="Prix" hidden>
-              <button type="button" class="mopt" data-fprice="all" aria-pressed="true"><span class="cb" aria-hidden="true"></span>Tous</button>
-              <button type="button" class="mopt" data-fprice="priced" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Avec prix</button>
-              <button type="button" class="mopt" data-fprice="promo" aria-pressed="false"><span class="cb" aria-hidden="true"></span>En promo</button>
-            </div>
+          <!-- Chiffres calculés dans la page à partir des prestations et des prix publiés des enseignes (jamais inventés) -->
+          <div class="home-stats">
+            <p class="hs-card"><b id="hsSvc"></b><span>prestations comparées</span></p>
+            <p class="hs-card hs-dark" id="hsGapCard"><b id="hsGap"></b><span id="hsGapLbl">d'écart moyen entre l'enseigne la moins chère et la plus chère</span></p>
           </div>
-          <div class="dd-wrap" id="chainWrap" hidden>
-            <button type="button" class="dd" id="ddChain" aria-haspopup="true" aria-expanded="false" aria-controls="menuChain">
-              <span class="dd-lbl">Enseignes</span><span class="dd-n" hidden></span><svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg>
-            </button>
-            <div class="menu" id="menuChain" role="group" aria-label="Enseignes dans la zone" hidden></div>
-          </div>
-          <div class="dd-wrap dd-more">
-            <button type="button" class="fbtn" id="moreBtnF" aria-haspopup="true" aria-expanded="false" aria-controls="moreOpts" aria-label="Plus de filtres" title="Plus de filtres">
-              <svg class="ic" aria-hidden="true"><use href="#i-filter" /></svg>
-            </button>
-            <div class="menu menu-more" id="moreOpts" role="group" aria-label="Plus de filtres" hidden>
-              <label class="check"
-                ><input type="checkbox" id="sirene" />
-                <span>Ajouter les ateliers du registre des entreprises (SIRENE)</span></label
-              >
-              <p class="hint">
-                Ajoute les ateliers déclarés à l'INSEE (code NAF 45.20A) absents d'OpenStreetMap. Liste plus complète,
-                sans prix, et parfois des adresses de domicile.
-              </p>
-            </div>
-          </div>
+          <ol class="steps">
+            <li><b aria-hidden="true">1</b><span>Choisissez une prestation et votre adresse.</span></li>
+            <li><b aria-hidden="true">2</b><span>Comparez les garages autour de vous et demandez des devis.</span></li>
+            <li><b aria-hidden="true">3</b><span>Déclarez le prix payé : il nourrit les repères de tout le monde.</span></li>
+          </ol>
         </div>
 
-        <div class="panel-col" id="panelCol">
-          <header class="panel-head">
-            <h1 id="garagesTitle"><span class="t-brand"><span class="px-word" role="img" aria-label="Pixcar"></span></span><span class="t-text">Garages</span><span class="sr-only"> autour de votre adresse</span></h1>
-            <div class="home-intro">
-              <p class="panel-sub">1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto</p>
-              <ol class="steps">
-                <li><b aria-hidden="true">1</b><span>Choisissez une prestation et votre adresse.</span></li>
-                <li><b aria-hidden="true">2</b><span>Comparez les garages autour de vous et demandez des devis.</span></li>
-                <li><b aria-hidden="true">3</b><span>Déclarez le prix payé : il nourrit les repères de tout le monde.</span></li>
-              </ol>
-            </div>
-          </header>
-          <section class="teaser" id="teaser" aria-live="polite"></section>
-          <section class="results" id="results" aria-live="polite" aria-label="Résultats">
-            <h2 class="sr-only">Résultats</h2>
-            <div id="status" class="status"></div>
-            <div class="res-top" id="resTop" hidden>
-              <div id="summary" class="summary" hidden></div>
-              <div class="sortbox" id="sortBox">
-                <button type="button" class="sort-btn" id="sortBtn" aria-haspopup="true" aria-expanded="false" aria-controls="sortMenu">
-                  <span>Trier : <b id="sortVal">prix</b></span><svg class="ic" aria-hidden="true"><use href="#i-sort" /></svg>
+        <div class="res-layout">
+          <div class="panel-col" id="panelCol">
+            <section class="results" id="results" aria-live="polite" aria-label="Résultats">
+              <!-- titre de la page pendant la recherche (ou après un échec) : le tableau apporte ensuite le sien, « N garages comparés » -->
+              <h1 class="sr-only search-h1">Recherche de garages</h1>
+              <div id="status" class="status"></div>
+              <div class="res-top" id="resTop" hidden>
+                <div id="summary" class="summary" hidden></div>
+              </div>
+              <!-- Filtres et tri, au-dessus du tableau -->
+              <div class="mapbar" id="toolbar" hidden>
+              <div class="dd-wrap">
+                <button type="button" class="dd" id="ddType" aria-haspopup="true" aria-expanded="false" aria-controls="menuType">
+                  <span class="dd-lbl">Type</span><span class="dd-n" hidden></span><svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg>
                 </button>
-                <div class="menu" id="sortMenu" role="group" aria-label="Trier par" hidden>
-                  <button type="button" class="mopt" data-sort="price" aria-pressed="true"><span class="cb" aria-hidden="true"></span>Prix</button>
-                  <button type="button" class="mopt" data-sort="dist" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Distance</button>
-                  <button type="button" class="mopt" data-sort="note" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Note</button>
+                <div class="menu" id="menuType" role="group" aria-label="Type de garage" hidden>
+                  <button type="button" class="mopt" data-ftype="all" aria-pressed="true"><span class="cb" aria-hidden="true"></span>Tous</button>
+                  <button type="button" class="mopt" data-ftype="chains" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Enseignes</button>
+                  <button type="button" class="mopt" data-ftype="indep" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Indépendants</button>
                 </div>
               </div>
-            </div>
-            <p id="repairNote" class="hint repair-note" hidden></p>
-            <div class="res-body" id="resBody">
-              <div class="list-pane" id="listPane">
-                <ol id="list" class="list"></ol>
-                <button type="button" id="moreBtn" class="btn more-btn" hidden>Afficher plus</button>
-                <p class="osm-note" id="osmNote" hidden>
-                  Garages : © les contributeurs d'<a
-                    href="https://www.openstreetmap.org/copyright"
-                    target="_blank"
-                    rel="noopener"
-                    >OpenStreetMap</a
-                  >
-                  (ODbL)<!--GT:on-->, <a href="https://overturemaps.org" target="_blank" rel="noopener">Overture Maps Foundation</a> (CDLA-Permissive-2.0, Apache-2.0, CC0)<!--/GT:on-->.
-                </p>
+              <div class="dd-wrap">
+                <button type="button" class="dd" id="ddPrice" aria-haspopup="true" aria-expanded="false" aria-controls="menuPrice">
+                  <span class="dd-lbl">Prix</span><span class="dd-n" hidden></span><svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg>
+                </button>
+                <div class="menu" id="menuPrice" role="group" aria-label="Prix" hidden>
+                  <button type="button" class="mopt" data-fprice="all" aria-pressed="true"><span class="cb" aria-hidden="true"></span>Tous</button>
+                  <button type="button" class="mopt" data-fprice="priced" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Avec prix</button>
+                  <button type="button" class="mopt" data-fprice="promo" aria-pressed="false"><span class="cb" aria-hidden="true"></span>En promo</button>
+                </div>
               </div>
-            </div>
-          </section>
-          <!--LEGAL_LINK_PANEL-->
-        </div>
+              <div class="dd-wrap" id="chainWrap" hidden>
+                <button type="button" class="dd" id="ddChain" aria-haspopup="true" aria-expanded="false" aria-controls="menuChain">
+                  <span class="dd-lbl">Enseignes</span><span class="dd-n" hidden></span><svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg>
+                </button>
+                <div class="menu" id="menuChain" role="group" aria-label="Enseignes dans la zone" hidden></div>
+              </div>
+              <div class="dd-wrap dd-more">
+                <button type="button" class="fbtn" id="moreBtnF" aria-haspopup="true" aria-expanded="false" aria-controls="moreOpts" aria-label="Plus de filtres" title="Plus de filtres">
+                  <svg class="ic" aria-hidden="true"><use href="#i-filter" /></svg>
+                </button>
+                <div class="menu menu-more" id="moreOpts" role="group" aria-label="Plus de filtres" hidden>
+                  <label class="check"
+                    ><input type="checkbox" id="sirene" />
+                    <span>Ajouter les ateliers du registre des entreprises (SIRENE)</span></label
+                  >
+                  <p class="hint">
+                    Ajoute les ateliers déclarés à l'INSEE (code NAF 45.20A) absents d'OpenStreetMap. Liste plus complète,
+                    sans prix, et parfois des adresses de domicile.
+                  </p>
+                </div>
+              </div>
 
-        <!-- Carte : toujours en arrière-plan sur ordinateur, plein écran via le bouton « Carte » sur mobile -->
-        <div class="stage" id="stage">
-          <div class="map-pane" id="mapPane" hidden>
-            <div id="map" class="map" role="region" aria-label="Carte des garages"></div>
+                <div class="sortbox" id="sortBox">
+                  <button type="button" class="sort-btn" id="sortBtn" aria-haspopup="true" aria-expanded="false" aria-controls="sortMenu">
+                    <span>Trier : <b id="sortVal">prix</b></span><svg class="ic" aria-hidden="true"><use href="#i-sort" /></svg>
+                  </button>
+                  <div class="menu" id="sortMenu" role="group" aria-label="Trier par" hidden>
+                    <button type="button" class="mopt" data-sort="price" aria-pressed="true"><span class="cb" aria-hidden="true"></span>Prix</button>
+                    <button type="button" class="mopt" data-sort="dist" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Distance</button>
+                    <button type="button" class="mopt" data-sort="note" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Note</button>
+                  </div>
+                </div>
+              </div>
+              <p id="repairNote" class="hint repair-note" hidden></p>
+              <div class="res-body" id="resBody">
+                <div class="list-pane" id="listPane">
+                  <h2 class="sr-only">Liste des garages</h2>
+                  <div class="thead" aria-hidden="true"><span>Garage</span><span>Type</span><span>Distance</span><span>Échelle de prix</span><span></span></div>
+                  <ol id="list" class="list"></ol>
+                  <button type="button" id="moreBtn" class="btn more-btn" hidden>Afficher plus</button>
+                  <div class="res-note" id="resNote" hidden></div>
+                  <p class="osm-note" id="osmNote" hidden>
+                    Garages : © les contributeurs d'<a
+                      href="https://www.openstreetmap.org/copyright"
+                      target="_blank"
+                      rel="noopener"
+                      >OpenStreetMap</a
+                    >
+                    (ODbL)<!--GT:on-->, <a href="https://overturemaps.org" target="_blank" rel="noopener">Overture Maps Foundation</a> (CDLA-Permissive-2.0, Apache-2.0, CC0)<!--/GT:on-->.
+                  </p>
+                </div>
+              </div>
+            </section>
           </div>
-          <div class="map-empty" aria-hidden="true">
-            <svg class="map-art" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" focusable="false">
-              <rect class="ma-bg" width="1600" height="1000" />
-              <path class="ma-park" d="M120 90c110-50 260-40 330 40s30 190-80 220-290 0-330-90 10-130 80-170z" />
-              <path class="ma-park" d="M1180 700c90-40 230-20 290 50s10 170-90 200-230-10-260-90 10-120 60-160z" />
-              <path class="ma-park" d="M760 40c70-30 170-10 200 40s-20 110-90 120-150-20-160-70 20-70 50-90z" />
-              <path class="ma-water" fill="none" stroke-width="64" stroke-linecap="round" d="M-60 800C240 700 420 860 720 780S1180 540 1700 620" />
-              <g class="ma-roads" fill="none" stroke-linecap="round" transform="rotate(-14 800 500)">
-                <path d="M-200 130H1800M-200 250H1800M-200 370H1800M-200 490H1800M-200 610H1800M-200 730H1800M-200 850H1800M-200 970H1800M-200 1090H1800" stroke-width="9" />
-                <path d="M60 -200V1200M200 -200V1200M340 -200V1200M480 -200V1200M620 -200V1200M760 -200V1200M900 -200V1200M1040 -200V1200M1180 -200V1200M1320 -200V1200M1460 -200V1200M1600 -200V1200" stroke-width="9" />
-                <path d="M-200 430H1800M480 -200V1200M1180 -200V1200" stroke-width="17" />
-                <path d="M-200 1100L1800 -120" stroke-width="13" />
-              </g>
-              <circle class="ma-radius" cx="1000" cy="500" r="230" fill="none" stroke-width="2" stroke-dasharray="7 9" />
-              <!-- Recherche en cours : un rond-point autour de l'adresse, une voiture y tourne (voir « Chargement » du CSS) -->
-              <g class="ld" transform="translate(1000 500) scale(1.35)"><!--LD_ROAD--></g>
-              <circle class="ma-pin-ring" cx="1000" cy="500" r="21" />
-              <circle class="ma-pin" cx="1000" cy="500" r="13" />
-              <g class="ld" transform="translate(1000 500) scale(1.35)"><!--LD_CAR--></g>
-            </svg>
-            <div class="map-hint">
-              <b>La carte s'affiche après votre recherche</b>
-              <span>Votre titine est comme vous, elle n'aime pas qu'on lui cache des choses</span>
+
+          <!-- Carte : à droite des résultats sur ordinateur, plein écran via le bouton « Carte » sur mobile -->
+          <div class="stage" id="stage">
+            <div class="map-pane" id="mapPane" hidden>
+              <div id="map" class="map" role="region" aria-label="Carte des garages"></div>
             </div>
+            <div class="map-empty" aria-hidden="true">
+              <svg class="map-art" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" focusable="false">
+                <rect class="ma-bg" width="1600" height="1000" />
+                <path class="ma-park" d="M120 90c110-50 260-40 330 40s30 190-80 220-290 0-330-90 10-130 80-170z" />
+                <path class="ma-park" d="M1180 700c90-40 230-20 290 50s10 170-90 200-230-10-260-90 10-120 60-160z" />
+                <path class="ma-park" d="M760 40c70-30 170-10 200 40s-20 110-90 120-150-20-160-70 20-70 50-90z" />
+                <path class="ma-water" fill="none" stroke-width="64" stroke-linecap="round" d="M-60 800C240 700 420 860 720 780S1180 540 1700 620" />
+                <g class="ma-roads" fill="none" stroke-linecap="round" transform="rotate(-14 800 500)">
+                  <path d="M-200 130H1800M-200 250H1800M-200 370H1800M-200 490H1800M-200 610H1800M-200 730H1800M-200 850H1800M-200 970H1800M-200 1090H1800" stroke-width="9" />
+                  <path d="M60 -200V1200M200 -200V1200M340 -200V1200M480 -200V1200M620 -200V1200M760 -200V1200M900 -200V1200M1040 -200V1200M1180 -200V1200M1320 -200V1200M1460 -200V1200M1600 -200V1200" stroke-width="9" />
+                  <path d="M-200 430H1800M480 -200V1200M1180 -200V1200" stroke-width="17" />
+                  <path d="M-200 1100L1800 -120" stroke-width="13" />
+                </g>
+                <circle class="ma-radius" cx="800" cy="500" r="230" fill="none" stroke-width="2" stroke-dasharray="7 9" />
+                <!-- Recherche en cours : un rond-point autour de l'adresse (au centre de l'image : la colonne de la carte est étroite), une voiture y tourne (voir « Chargement » du CSS) -->
+                <g class="ld" transform="translate(800 500) scale(1.35)"><!--LD_ROAD--></g>
+                <circle class="ma-pin-ring" cx="800" cy="500" r="21" />
+                <circle class="ma-pin" cx="800" cy="500" r="13" />
+                <g class="ld" transform="translate(800 500) scale(1.35)"><!--LD_CAR--></g>
+              </svg>
+            </div>
+            <aside class="map-info" id="mapInfo" aria-label="Garage sélectionné" hidden></aside>
+            <button type="button" class="map-btn map-expand" id="mapExpand" aria-pressed="false" aria-label="Agrandir la carte" title="Agrandir la carte" hidden>
+              <svg class="ic" aria-hidden="true"><use href="#i-expand" /></svg>
+            </button>
+            <button type="button" class="map-btn map-locate" id="mapLocate" aria-label="Rechercher autour de ma position" title="Rechercher autour de ma position">
+              <svg class="ic" aria-hidden="true"><use href="#i-locate" /></svg>
+            </button>
           </div>
-          <aside class="map-info" id="mapInfo" aria-label="Garage sélectionné" hidden></aside>
-          <button type="button" class="map-btn map-expand" id="mapExpand" aria-pressed="false" aria-label="Agrandir la carte" title="Agrandir la carte" hidden>
-            <svg class="ic" aria-hidden="true"><use href="#i-expand" /></svg>
-          </button>
-          <button type="button" class="map-btn map-locate" id="mapLocate" aria-label="Rechercher autour de ma position" title="Rechercher autour de ma position">
-            <svg class="ic" aria-hidden="true"><use href="#i-locate" /></svg>
-          </button>
         </div>
+        <!-- pied de page de l'accueil comme des résultats -->
+        <!--LEGAL_LINK_PANEL-->
         <button type="button" class="fab" id="mapFab" aria-controls="stage" hidden>
           <svg class="ic" aria-hidden="true"><use href="#i-map" /></svg><span>Carte</span>
         </button>

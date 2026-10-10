@@ -1,4 +1,5 @@
-// UX round: wording, no "dès", price scale with both medians, OpenStreetMap notices, phones, scrollbar corners.
+// UX round: wording, home (figures, steps, address check, search mode), no "dès", price scale with both medians, OpenStreetMap
+// notices, phones, scrolling.
 // Usage: node ux.js [file] [only-section-letters]   (file defaults to index.html; run it on an older build to see the mutations fail)
 const { serve, launch, open, search, SHOTS, ROOT, injectScript, injectStyle, sortBy, pickServices } = require("./harness");
 const { buildElements, CENTER } = require("./mocks");
@@ -6,7 +7,7 @@ const fs = require("fs");
 const path = require("path");
 
 const FILE = process.argv[2] || "index.html";
-const ONLY = (process.argv[3] || "TDNSPBF").toUpperCase();
+const ONLY = (process.argv[3] || "THDNSPBF").toUpperCase();
 const AXE = fs.readFileSync(path.join(__dirname, "..", "node_modules/axe-core/axe.min.js"), "utf8");
 const results = [];
 const check = (name, cond, detail = "") => {
@@ -93,20 +94,109 @@ async function cornerDiff(browser, page, selector, radius, inset) {
   // =============== T. Wording ===============
   if (has("T")) try {
     let { page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 });
-    check("T1 tagline under the logo (exact wording)", norm(await page.textContent(".panel-sub")) === "1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto", await page.textContent(".panel-sub"));
-    check("T2 tagline is visible on desktop, under the wordmark", await page.evaluate(() => { const s = document.querySelector(".panel-sub").getBoundingClientRect(), b = document.querySelector(".t-brand").getBoundingClientRect(); return s.height > 0 && s.top >= b.bottom - 1; }));
-    check("T3 empty-map sentence (exact wording)", norm(await page.textContent(".map-empty span")) === "Votre titine est comme vous, elle n'aime pas qu'on lui cache des choses", await page.textContent(".map-empty span"));
-    check("T4 empty-map sentence is on screen", await page.evaluate(() => { const r = document.querySelector(".map-empty span").getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.right <= innerWidth && r.bottom <= innerHeight; }));
+    const TAG = "1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto", SUB = "Parce que votre titine est comme vous, elle aime pas qu'on lui cache des choses";
+    check("T1 tagline in the pill above the home title (exact wording)", norm(await page.textContent(".hero-tag")) === TAG, await page.textContent(".hero-tag"));
+    check("T2 tagline is visible on desktop, above the title", await page.evaluate(() => { const s = document.querySelector(".hero-tag").getBoundingClientRect(), h = document.getElementById("garagesTitle").getBoundingClientRect(); return s.height > 0 && s.bottom <= h.top + 1; }));
+    check("T3 the « titine » sentence under the title, worded as in the mockup (two lines)", norm(await page.innerText(".hero-sub")) === SUB && (await page.innerText(".hero-sub")).includes("\n"), await page.innerText(".hero-sub"));
+    check("T4 the sentence is on screen, between the title and the search card", await page.evaluate(() => { const r = document.querySelector(".hero-sub").getBoundingClientRect(), h = document.getElementById("garagesTitle").getBoundingClientRect(), f = document.getElementById("searchForm").getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.right <= innerWidth && r.bottom <= innerHeight && r.top >= h.bottom - 1 && r.bottom <= f.top + 1; }));
     const html = await page.content();
     check("T5 old sentences are gone", !html.includes("Choisissez une prestation et une adresse") && !html.includes("Comparez le prix d'une prestation autour de votre adresse"));
     check("T6 page title and meta description unchanged", (await page.title()) === "Pixcar" && /comparez le prix d'une prestation/.test(await page.getAttribute('meta[name="description"]', "content")));
     check("T7 console clean", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
     await ctx.close();
     ({ page, ctx } = await open(browser, server, FILE, { width: 390, height: 844, dpr: 2, touch: true }));
-    check("T8 tagline stays desktop-only (mobile keeps the compact header)", !(await page.isVisible(".panel-sub")));
+    check("T8 mobile home: the tagline and the sentence are shown too, the search card starts within the first screen", (await page.isVisible(".hero-tag")) && (await page.isVisible(".hero-sub")) && (await page.evaluate(() => document.getElementById("searchForm").getBoundingClientRect().top < innerHeight * 0.6)));
     await ctx.close();
   } catch (e) {
     check("T section crashed", false, e && e.message);
+  }
+
+  // =============== H. Home: real figures, the three steps, the address check, the search mode ===============
+  if (has("H")) try {
+    let { page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 });
+    const home = await page.evaluate(() => ({ svc: document.getElementById("hsSvc").textContent, svcLbl: document.querySelector("#hsSvc + span").textContent, n: document.querySelectorAll("#service option").length, gap: document.getElementById("hsGap").textContent, gapLbl: document.getElementById("hsGapLbl").textContent, title: document.getElementById("hsGapCard").getAttribute("title"), steps: [...document.querySelectorAll(".steps li span")].map((x) => x.textContent) }));
+    check("H1 first figure: the number of services the page compares (its own list), « prestations comparées »", home.svc === String(home.n) && home.n >= 10 && home.svcLbl === "prestations comparées", JSON.stringify(home));
+    // le second chiffre, recalculé ici à partir de ce que montre la page « Prix et promos » (prix complets des enseignes, prestation par prestation)
+    await page.click(".tab[data-view=prix]");
+    const gaps = [];
+    for (const id of await page.$$eval("#refService option", (l) => l.map((o) => o.value))) {
+      await page.selectOption("#refService", id);
+      await page.waitForTimeout(60);
+      const ps = await page.$$eval("#refList > li", (l) => l.filter((li) => li.querySelector(".ref-price") && !li.querySelector(".tag.warn")).map((li) => li.querySelector(".ref-price").textContent));
+      const v = ps.map(num).filter(isFinite);
+      v.length > 1 && gaps.push(1 - Math.min(...v) / Math.max(...v));
+    }
+    const want = Math.round((100 * gaps.reduce((x, z) => x + z, 0)) / gaps.length);
+    check("H2 second figure: the mean gap between the cheapest and the dearest chain, recomputed from the « Prix et promos » page", gaps.length >= 5 && home.gap === `\u2212${want}\u00a0%` && /enseigne la moins chère et la plus chère/.test(home.gapLbl), JSON.stringify([home.gap, want, gaps.length]));
+    check("H3 ...and its tooltip says how it is computed (number of services, national « à partir de » prices)", home.title === `Moyenne sur ${gaps.length} prestations, prix nationaux «\u00a0à partir de\u00a0» relevés le 1er octobre 2026`, home.title);
+    check("H4 the three steps, worded as in the mockup", JSON.stringify(home.steps) === JSON.stringify(["Choisissez une prestation et votre adresse.", "Comparez les garages autour de vous et demandez des devis.", "Déclarez le prix payé : il nourrit les repères de tout le monde."]), JSON.stringify(home.steps));
+    await page.click(".tab[data-view=garages]");
+    await pickServices(page, "vidange");
+    await page.click("#go");
+    await page.waitForTimeout(300);
+    let st = await page.evaluate(() => ({ msg: document.getElementById("address").validationMessage, focus: document.activeElement.id, mode: document.body.classList.contains("in-search"), hero: !!document.querySelector(".hero").offsetParent, busy: document.body.classList.contains("is-searching") }));
+    check("H5 « Comparer » with no address: the field says « Indiquez une adresse, une ville ou un code postal. » and gets the focus; the home stays, no search", st.msg === "Indiquez une adresse, une ville ou un code postal." && st.focus === "address" && !st.mode && st.hero && !st.busy, JSON.stringify(st));
+    await page.type("#address", "ly");
+    check("H6 typing clears the message", (await page.evaluate(() => document.getElementById("address").validity.valid)), await page.evaluate(() => document.getElementById("address").validationMessage));
+    check("H7 console clean", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
+    await ctx.close();
+    // la recherche part : l'accueil laisse la place à la page des résultats (état d'attente, rond-point sur la carte), recherche dans l'en-tête
+    for (const vp of [{ n: "desktop", width: 1440, height: 900 }, { n: "mobile", width: 390, height: 844, dpr: 2, touch: true }]) {
+      ({ page, ctx } = await open(browser, server, FILE, { ...vp, mock: { overpassDelayMs: 60000 } }));
+      await pickServices(page, "vidange");
+      await page.fill("#address", "12 rue de la république lyon");
+      await page.waitForSelector("#addrList li[data-i]", { state: "visible", timeout: 5000 });
+      await page.click("#addrList li[data-i='0']");
+      await page.click("#go");
+      await page.waitForTimeout(1200);
+      st = await page.evaluate(() => { const s = document.getElementById("status").getBoundingClientRect(), f = document.getElementById("searchForm").getBoundingClientRect(), h = document.querySelector(".topbar").getBoundingClientRect(); return { hero: !!document.querySelector(".hero").offsetParent, more: !!document.querySelector(".home-more").offsetParent, quote: document.querySelector("#status .wait-quote") && document.querySelector("#status .wait-quote").textContent, statusTop: Math.round(s.top), vh: innerHeight, formInHead: f.top >= h.top && f.bottom <= h.bottom, head: [Math.round(h.top), Math.round(h.bottom)] }; });
+      const inHead = vp.n === "desktop" ? st.formInHead : !st.formInHead;
+      check(`H8 [${vp.n}] the search starts: no more home (title, populaires, figures), the waiting line is on screen; ${vp.n === "desktop" ? "the search sits in the header" : "the search card stays above it"}`, !st.hero && !st.more && /titine/.test(st.quote || "") && st.statusTop > 0 && st.statusTop < st.vh - 80 && inHead, JSON.stringify(st));
+      await ctx.close();
+    }
+    ({ page, ctx } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { overpassFail: true, sireneFail: true } }));
+    await pickServices(page, "vidange");
+    await page.fill("#address", "12 rue de la république lyon");
+    await page.waitForSelector("#addrList li[data-i]", { state: "visible", timeout: 5000 });
+    await page.click("#addrList li[data-i='0']");
+    await page.click("#go");
+    await page.waitForFunction(() => /Réessayez dans une minute/.test(document.getElementById("status").textContent), null, { timeout: 15000 });
+    st = await page.evaluate(() => { const s = document.getElementById("status"), r = s.getBoundingClientRect(); return { shown: !!s.offsetParent && r.height > 0 && r.top >= 0 && r.bottom <= innerHeight, retry: !!document.getElementById("retryBtn") && !!document.getElementById("retryBtn").offsetParent, hero: !!document.querySelector(".hero").offsetParent, thead: !!document.querySelector(".thead").offsetParent }; });
+    check("H9 the search fails: the message and « Réessayer » are on screen (the home does not come back over them), no empty table header", st.shown && st.retry && !st.hero && !st.thead, JSON.stringify(st));
+    await ctx.close();
+    // ligne du tableau (ordinateur) : la rue sur la ligne de l'adresse, « code postal commune » masqué (la commune est sous la distance) ;
+    // sur mobile, l'adresse entière ; le texte (lecteurs d'écran, recherche dans la page) garde toujours l'adresse entière
+    for (const vp of [{ n: "desktop", width: 1440, height: 900 }, { n: "mobile", width: 390, height: 844, dpr: 2, touch: true }]) {
+      ({ page, ctx } = await open(browser, server, FILE, { ...vp, mock: { elements: els } }));
+      await search(page, { service: "vidange" });
+      await sortDist(page);
+      st = await page.evaluate(() => {
+        const c = document.querySelector('#list [data-id="osm:node/9201"]');
+        if (!c) return null;
+        c.scrollIntoView({ block: "center" });
+        const a = c.querySelector(".g-addr"), d = c.querySelector(".dist .d-city");
+        return { seen: a.innerText.trim(), all: a.textContent.replace(/\s+/g, " ").trim(), city: d ? d.textContent : "", cut: a.scrollWidth > a.clientWidth + 1 };
+      });
+      const want = vp.n === "desktop" ? "5 rue Neuve" : "5 rue Neuve, 69002 Lyon";
+      check(`H10 [${vp.n}] row address: ${vp.n === "desktop" ? "« 5 rue Neuve », the commune « Lyon » under the distance" : "the whole address"}; the text keeps « 5 rue Neuve, 69002 Lyon »; not cut`, st && st.seen === want && st.all === "5 rue Neuve, 69002 Lyon" && st.city === "Lyon" && !st.cut, JSON.stringify(st));
+      // survol : souligné et ligne teintée à la souris ; rien sur un écran tactile (le survol y resterait collé à la ligne touchée)
+      await page.hover('#list [data-id="osm:node/9201"] .g-addr');
+      await page.waitForTimeout(150);
+      const hv = await page.evaluate(() => { const c = document.querySelector('#list [data-id="osm:node/9201"]'); return { hoverMq: matchMedia("(hover: hover)").matches, under: getComputedStyle(c.querySelector(".g-name")).textDecorationLine, bg: getComputedStyle(c).backgroundColor, hovered: c.matches(":hover") }; });
+      check(`H11 [${vp.n}] pointing at a row ${vp.n === "desktop" ? "underlines the name and tints the row" : "(touch screen) neither underlines the name nor tints the row"}`, hv.hovered && (vp.n === "desktop" ? hv.hoverMq && hv.under === "underline" && hv.bg !== "rgba(0, 0, 0, 0)" : !hv.hoverMq && hv.under === "none"), JSON.stringify(hv));
+      if (vp.n === "desktop") {
+        // la fiche s'ouvre sous la ligne : la ligne garde sa hauteur (le nom et la tuile ne remontent pas contre le cadre)
+        const pos = () => page.evaluate(() => { const c = document.querySelector('#list [data-id="osm:node/9201"]'), r = c.getBoundingClientRect(); return { open: c.classList.contains("is-open"), name: Math.round(c.querySelector(".g-name").getBoundingClientRect().top - r.top), tile: Math.round(c.querySelector(".g-main > .avatar").getBoundingClientRect().top - r.top) }; });
+        const before = await pos();
+        await page.click('#list [data-id="osm:node/9201"] .g-main');
+        await page.waitForTimeout(600);
+        const after = await pos();
+        check("H12 desktop: opening a row's fiche leaves the row's line in place (name and tile at the same height, the tile clear of the frame)", !before.open && after.open && Math.abs(after.name - before.name) <= 1 && Math.abs(after.tile - before.tile) <= 1 && after.tile >= 12, JSON.stringify([before, after]));
+      }
+      await ctx.close();
+    }
+  } catch (e) {
+    check("H section crashed", false, e && e.message);
   }
 
   // =============== D. No « dès » on prices ===============
@@ -126,7 +216,7 @@ async function cornerDiff(browser, page, selector, radius, inset) {
     check("D3 « env. » stays for approximate prices (only « dès » went)", await page.evaluate(() => document.querySelector("#list .amount .from") === null || [...document.querySelectorAll("#list .amount .from")].every((e) => e.textContent === "env.")));
     // a chain-priced garage: price note + map bar + tooltip
     // (Norauto, Feu Vert, Speedy and Midas publish « à partir de » prices: the ones that used to carry « dès »)
-    const chainCard = await page.evaluate(() => { const c = [...document.querySelectorAll("#list > li.card")].find((c) => /^(Norauto|Feu Vert|Speedy|Midas)/.test(c.querySelector(".g-name").textContent) && c.querySelector(".tag.ok") && /Prix enseigne/.test(c.textContent)); return c ? c.dataset.id : null; });
+    const chainCard = await page.evaluate(() => { const c = [...document.querySelectorAll("#list > li.card")].find((c) => /^(Norauto|Feu Vert|Speedy|Midas)/.test(c.querySelector(".g-name").textContent) && c.querySelector(".g-price .amount") && !c.querySelector(".g-price .tag.info")); return c ? c.dataset.id : null; });
     check("D4 a chain-priced card exists in the fixture", !!chainCard);
     if (chainCard) {
       await page.locator(`#list [data-id="${chainCard}"] .g-main`).scrollIntoViewIfNeeded();
@@ -163,18 +253,19 @@ async function cornerDiff(browser, page, selector, radius, inset) {
     // N1: servers down, a 5-day-old saved list is reused
     let { page, ctx } = await open(browser, server, FILE, { width: 1440, height: 900, storage: oldCache(12), mock: { overpassFail: true } });
     await search(page, { service: "vidange" });
-    const sum = norm(await page.textContent("#summary"));
+    const sum = norm((await page.textContent("#summary")) + " " + (await page.textContent("#resNote"))); // l'en-tête des résultats et la note sous le tableau
     check("N1 saved list reused when the servers are down", (await page.$$eval("#list > li.card", (l) => l.length)) === buildElements(12).length, sum);
     check("N2 no OpenStreetMap / « ne répond pas » paragraph in the summary", !/OpenStreetMap|ne répond pas|serveur/i.test(sum), sum);
-    check("N3 the saved-list date and « Actualiser » remain", /Liste des garages enregistrée le/.test(sum) && (await page.isVisible("#refreshBtn")), sum);
-    check("N4 exactly one hint line (the date), nothing about OSM", (await page.$$eval("#summary .hint", (l) => l.length)) === 1);
+    const note = norm(await page.textContent("#resNote"));
+    check("N3 the saved-list date and « Actualiser » remain (in the note under the table)", /Liste des garages enregistrée le/.test(note) && (await page.isVisible("#refreshBtn")), note);
+    check("N4 nothing about OpenStreetMap or a server in that note", !/OpenStreetMap|ne répond pas|serveur/i.test(note), note);
     await ctx.close();
 
     // N5: servers down, no cache: registry fallback, no explanatory paragraph either
     const sir = [0, 1, 2].map((i) => ({ siret: "9000000000" + i, name: `Atelier Registre ${i + 1}`, lat: CENTER.lat + 0.003 * (i + 1), lon: CENTER.lon, adresse: `${i + 3} rue du Registre 69002 LYON` }));
     ({ page, ctx } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { overpassFail: true, sireneItems: sir } }));
     await search(page, { service: "vidange" });
-    const sum2 = norm(await page.textContent("#summary"));
+    const sum2 = norm((await page.textContent("#summary")) + " " + (await page.textContent("#resNote"))); // l'en-tête des résultats et la note sous le tableau
     check("N5 registry list shown when the garage base is down", (await page.$$eval("#list > li.card", (l) => l.length)) === 3, sum2);
     check("N6 no OpenStreetMap / « sans téléphone » paragraph on the registry list", !/OpenStreetMap|sans téléphone|ne répond pas/i.test(sum2), sum2);
     check("N7 the registry cards have no call button", (await page.$$eval("#list .act-call", (l) => l.length)) === 0);
@@ -186,6 +277,7 @@ async function cornerDiff(browser, page, selector, radius, inset) {
 
     // N9: everything down: the error names no technical service
     ({ page, ctx } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { overpassFail: true, sireneFail: true } }));
+    await pickServices(page, "vidange");
     await page.fill("#address", "12 rue de la république lyon");
     await page.waitForSelector("#addrList li[data-i]", { state: "visible", timeout: 5000 });
     await page.click("#addrList li[data-i='0']");
@@ -200,8 +292,9 @@ async function cornerDiff(browser, page, selector, radius, inset) {
     // N10: the optional registry failing says so in plain words
     ({ page, ctx } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { sireneFail: true } }));
     await search(page, { service: "vidange", sirene: true });
-    const sum3 = norm(await page.textContent("#summary"));
-    check("N10 optional registry failure: plain sentence without OpenStreetMap", /Le registre SIRENE n'a pas répondu : aucun atelier n'est ajouté à cette liste\./.test(sum3) && !/OpenStreetMap/.test(sum3), sum3);
+    const sum3 = norm((await page.textContent("#summary")) + " " + (await page.textContent("#resNote"))); // l'en-tête des résultats et la note sous le tableau
+    const note3 = norm(await page.textContent("#resNote"));
+    check("N10 optional registry failure: plain sentence without OpenStreetMap (note under the table)", /Le registre SIRENE n'a pas répondu : aucun atelier n'est ajouté à cette liste\./.test(note3) && !/OpenStreetMap/.test(note3 + sum3), note3);
     // N11: the licence credit stays where the garages are listed, and on the map
     check("N11 ODbL credit under the list", (await page.isVisible("#osmNote")) && /OpenStreetMap/.test(await page.textContent("#osmNote")) && (await page.getAttribute("#osmNote a", "href")) === "https://www.openstreetmap.org/copyright");
     check("N12 ODbL credit on the map", /OpenStreetMap/.test(await page.textContent(".leaflet-control-attribution")));
@@ -301,7 +394,7 @@ async function cornerDiff(browser, page, selector, radius, inset) {
     const call = async (id) => page.$eval(`${sel(id)} .act-call`, (a) => ({ href: a.getAttribute("href"), label: a.getAttribute("aria-label") })).catch(() => null);
     const phones = async (id) => page.$$eval(`${sel(id)} .facts .phone`, (l) => l.map((a) => ({ t: a.textContent, h: a.getAttribute("href") })));
     // two numbers (+33 (0)…, dots, contact:phone and mobile duplicates)
-    check("P1 call button uses the first number, international link, labelled", JSON.stringify(await call(9202)) === JSON.stringify({ href: "tel:+33472000002", label: "Appeler le 04 72 00 00 02" }), JSON.stringify(await call(9202)));
+    check("P1 call button uses the first number, international link, labelled with the garage (no price: « Demander un devis à … »)", JSON.stringify(await call(9202)) === JSON.stringify({ href: "tel:+33472000002", label: "Demander un devis à Garage Deux Numéros (04 72 00 00 02)" }), JSON.stringify(await call(9202)));
     await openCard(page, 9202);
     const two = await phones(9202);
     check("P2 sheet shows two numbers, French format, tel: links (same number in another format counted once, third left out)", JSON.stringify(two) === JSON.stringify([{ t: "04 72 00 00 02", h: "tel:+33472000002" }, { t: "06 12 34 56 78", h: "tel:+33612345678" }]), JSON.stringify(two));
@@ -320,7 +413,7 @@ async function cornerDiff(browser, page, selector, radius, inset) {
     await openCard(page, 9206);
     check("P4c two numbers written in one tag (« / »)", JSON.stringify((await phones(9206)).map((x) => x.t)) === JSON.stringify(["04 72 00 00 06", "04 72 00 00 07"]), JSON.stringify(await phones(9206)));
     // mobile tag only
-    check("P5 a garage with only a « mobile » tag gets its number and call button", JSON.stringify(await call(9203)) === JSON.stringify({ href: "tel:+33798765432", label: "Appeler le 07 98 76 54 32" }), JSON.stringify(await call(9203)));
+    check("P5 a garage with only a « mobile » tag gets its number and call button", JSON.stringify(await call(9203)) === JSON.stringify({ href: "tel:+33798765432", label: "Demander un devis à Garage Mobile Seul (07 98 76 54 32)" }), JSON.stringify(await call(9203)));
     // junk and missing numbers
     check("P6 junk value « n/a » is not shown as a number; no call button", (await call(9204)) === null);
     check("P7 no number: no call button", (await call(9201)) === null);
@@ -343,7 +436,7 @@ async function cornerDiff(browser, page, selector, radius, inset) {
     await page.reload();
     await page.waitForSelector("#list > li.card", { timeout: 12000 });
     await sortDist(page);
-    check("P14 saved list (no network) still gives the mobile-only garage its call button", JSON.stringify(await call(9203)) === JSON.stringify({ href: "tel:+33798765432", label: "Appeler le 07 98 76 54 32" }), JSON.stringify(await call(9203)));
+    check("P14 saved list (no network) still gives the mobile-only garage its call button", JSON.stringify(await call(9203)) === JSON.stringify({ href: "tel:+33798765432", label: "Demander un devis à Garage Mobile Seul (07 98 76 54 32)" }), JSON.stringify(await call(9203)));
     check("P15 console clean", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
     await ctx.close();
     // CT centres: official data field cct_tel, same formatting
@@ -376,18 +469,11 @@ async function cornerDiff(browser, page, selector, radius, inset) {
     for (const scheme of ["light", "dark"]) {
       const { page, ctx } = await open(browser, server, FILE, { width: 1440, height: 900, colorScheme: scheme, mock: { elements: els } });
       await search(page, { service: "vidange" });
-      await page.mouse.move(1000, 450);
-      const sb = await page.$eval("#panelCol", (p) => ({ w: p.offsetWidth - p.clientWidth, over: p.scrollHeight > p.clientHeight }));
-      check(`B1 [${scheme}] the panel scrolls and shows a classic scrollbar`, sb.over && sb.w > 0, JSON.stringify(sb));
-      const cs = await page.evaluate(() => { const p = document.getElementById("panelCol"); const g = (s) => { try { return getComputedStyle(p, s); } catch (e) { return null; } }; const b = g("::-webkit-scrollbar-button"), w = g("::-webkit-scrollbar"); return { btn: b && b.display, width: w && w.width }; });
-      check(`B2 [${scheme}] no arrow buttons, 12 px bar`, cs.btn === "none" && cs.width === "12px", JSON.stringify(cs));
-      let d = await cornerDiff(browser, page, "#panelCol", 28, 18);
-      check(`B3 [${scheme}] scrollbar at the top: nothing drawn outside the rounded corner`, d.corners === 0, JSON.stringify(d));
-      check(`B4 [${scheme}] scrollbar at the top: bar starts below the curve (first 17 px empty)`, d.ends === 0 && d.track > 0, JSON.stringify(d));
-      await page.evaluate(() => { const p = document.getElementById("panelCol"); p.scrollTop = p.scrollHeight; });
+      // le tableau défile avec la page (barre de défilement du navigateur) : la colonne n'a pas la sienne, la carte reste collée à droite
+      await page.evaluate(() => window.scrollTo(0, 700));
       await page.waitForTimeout(250);
-      d = await cornerDiff(browser, page, "#panelCol", 28, 18);
-      check(`B5 [${scheme}] scrolled to the bottom: nothing outside the corner, bar ends above the curve`, d.corners === 0 && d.ends === 0 && d.track > 0, JSON.stringify(d));
+      const sb = await page.evaluate(() => { const p = document.getElementById("panelCol"), st = document.getElementById("stage").getBoundingClientRect(), h = document.querySelector(".topbar").getBoundingClientRect(); return { y: Math.round(scrollY), inner: p.scrollHeight > p.clientHeight + 1 || p.offsetWidth - p.clientWidth > 0, stageTop: Math.round(st.top), head: Math.round(h.bottom), stageBottom: Math.round(st.bottom), vh: innerHeight }; });
+      check(`B1 [${scheme}] the table scrolls with the page (no inner scrollbar) and the map stays in view, right under the header`, sb.y === 700 && !sb.inner && sb.stageTop === sb.head && sb.stageBottom === sb.vh, JSON.stringify(sb));
       await ctx.close();
     }
     // dialog (same rounded corners): short window so that it scrolls

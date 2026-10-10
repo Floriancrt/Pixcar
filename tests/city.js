@@ -55,9 +55,10 @@ const chips = (page) => page.evaluate(() => [...document.querySelectorAll("#list
     said: sr.textContent.replace(/\s+/g, " ").trim(),
     sep: !!d.querySelector('.d-sep[aria-hidden="true"]'), comma: !!d.querySelector(".d-km + .sr-only"),
     inside: dr.right <= cr.right + 0.5 && dr.left >= cr.left - 0.5,
-    // la pastille est posée sur la tuile : elle n'en sort pas (sinon elle passe sur le nom), même avec une commune très longue
-    inTile: (() => { const a = c.querySelector(".g-main > .avatar").getBoundingClientRect(); return dr.left >= a.left - 0.5 && dr.right <= a.right + 0.5; })(),
+    // la distance a sa cellule : elle ne chevauche ni la tuile, ni le nom et l'adresse, ni le type, ni le prix, même avec une commune très longue
+    inCell: [".g-main > .avatar", ".g-id", ".kind", ".g-price"].every((sel) => { const o = c.querySelector(sel).getBoundingClientRect(); return dr.right <= o.left + 0.5 || dr.left >= o.right - 0.5 || dr.bottom <= o.top + 0.5 || dr.top >= o.bottom - 0.5; }),
     cut: city ? city.scrollWidth > city.clientWidth + 1 : false,
+    under: city && km ? city.getBoundingClientRect().top >= km.getBoundingClientRect().bottom - 1 : false,
     ell: city ? (() => { const cs = getComputedStyle(city); return cs.textOverflow === "ellipsis" && cs.overflow === "hidden" && cs.whiteSpace === "nowrap"; })() : false,
     top: Math.round(dr.top), bottom: Math.round(dr.bottom), vh: window.innerHeight,
   };
@@ -101,7 +102,8 @@ const addrText = (page, id) => page.$eval(`#list [data-id="${id}"] [data-ad]`, (
   check("A3 the chip keeps the distance first and shows the city after a separator", ch.every((x) => /^\d+(,\d)? (m|km)$/.test(x.km)) && ch.every((x) => x.sep && x.comma), JSON.stringify(ch.map((x) => [x.km, x.sep, x.comma])));
   check("A4 screen readers hear « à 40 m, Lyon » (separator hidden from them)", ch[0].said === `à ${ch[0].km}, Lyon`, JSON.stringify(ch[0]));
   check("A5 the chip carries the garage id (so that a late answer repaints the right card)", ch.every((x) => x.key === x.id), JSON.stringify(ch.map((x) => [x.key, x.id])));
-  check("A6 desktop: every chip stays inside its card and on its tile, even with a 52-character city", ch.every((x) => x.inside && x.inTile), JSON.stringify(ch.map((x) => [x.inside, x.inTile])));
+  check("A6 desktop: every distance stays inside its row and in its own cell (off the tile, the name, the type and the price), even with a 52-character city", ch.every((x) => x.inside && x.inCell), JSON.stringify(ch.map((x) => [x.inside, x.inCell])));
+  check("A6b desktop (table): the city sits under the distance; a short one (« Lyon », « Gerland », « Bron ») is shown in full, the 52-character one is shortened (« … »)", ch.every((x) => x.under && x.ell) && ch.filter((x) => x.city.length <= 12).length >= 3 && ch.filter((x) => x.city.length <= 12).every((x) => !x.cut) && ch.some((x) => x.city.length > 40 && x.cut), JSON.stringify(ch.map((x) => [x.city.slice(0, 12), x.under, x.cut])));
   await shot(page, "city-01-tags");
   await injectScript(page, AXE);
   const ax1 = await axeRun(page);
@@ -113,7 +115,8 @@ const addrText = (page, id) => page.$eval(`#list [data-id="${id}"] [data-ad]`, (
 
   if (has("B")) {
   // ===== B. no address tag: the city comes from the nearest-address lookup, for the cards that come on screen =====
-  ({ page, ctx, logs } = await opened(env, BARE.concat(ONE), { reverse: { delayMs: 120, at } }, { height: 1800, noSort: true }));
+  // une fenêtre haute (1 000 px) : une dizaine de lignes du tableau à l'écran, moins de la moitié des 24
+  ({ page, ctx, logs } = await opened(env, BARE.concat(ONE), { reverse: { delayMs: 120, at } }, { height: 1000, noSort: true }));
   c = ctx.__counters;
   await settle(ctx);
   ch = await chips(page);
@@ -297,11 +300,11 @@ const addrText = (page, id) => page.$eval(`#list [data-id="${id}"] [data-ad]`, (
   ({ page, ctx, logs } = await opened(env, TAGGED, {}, { width: 390, height: 844, dpr: 2, touch: true }));
   ch = await chips(page);
   const overflowX = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
-  check("F1 mobile (390 px): every chip stays inside its card and on its tile, no sideways scroll", ch.length === 6 && ch.every((x) => x.inside && x.inTile) && !overflowX, JSON.stringify([ch.map((x) => [x.inside, x.inTile]), overflowX]));
+  check("F1 mobile (390 px): every distance stays inside its card, clear of the tile, the name, the type and the price, no sideways scroll", ch.length === 6 && ch.every((x) => x.inside && x.inCell) && !overflowX, JSON.stringify([ch.map((x) => [x.inside, x.inCell]), overflowX]));
   check("F2 mobile: a very long city is shortened (« … ») rather than overflowing; short ones are shown in full", ch[5].cut && ch.every((x) => x.ell) && ch.filter((x) => x.city.length <= 8).every((x) => !x.cut), JSON.stringify(ch.map((x) => [x.city.slice(0, 10), x.cut])));
   check("F3 mobile: the shortened chip still reads in full for a screen reader", ch[5].said === `à ${ch[5].km}, ${LONG}`, ch[5].said);
   const tc = await tileClearance(page);
-  check("F5 mobile: the two-line chip (distance, city) never covers the tile's letter (it moves up above the chip)", tc.length === 6 && tc.every((x) => x.city && x.gap >= 2), JSON.stringify(tc));
+  check("F5 mobile: the distance and its city sit on their own row, clear of the tile, the letter whole inside the tile", tc.length === 6 && tc.every((x) => x.city && x.gap >= 2 && x.ink >= 2), JSON.stringify(tc));
   await shot(page, "city-03-mobile");
   await ctx.close();
   ({ page, ctx, logs } = await opened(env, TAGGED, {}, { colorScheme: "dark" }));

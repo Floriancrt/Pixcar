@@ -52,9 +52,11 @@ const PANEL = ".legal-foot [data-open-legal]";
   const without = await serve(bare);
   const browser = await launch();
   const norm = (t) => String(t).replace(/[\u00a0\u202f]/g, " ").replace(/\s+/g, " ").trim();
-  // La fermeture déclenche l'événement « close » un instant après le clic : on laisse la page le traiter avant de lire son état.
+  // La fermeture déclenche l'événement « close » un instant après le clic (plus tard encore après Échap, qui passe par l'événement
+  // « cancel ») : on laisse la page le traiter avant de lire son état, sans attendre plus d'une seconde.
   const state = async (page) => {
     await page.waitForTimeout(60);
+    await page.waitForFunction(() => document.getElementById("legalDlg").open || document.querySelector("dialog[open]") || !document.documentElement.classList.contains("dlg-open"), null, { timeout: 1000 }).catch(() => {});
     return page.evaluate(() => {
       const a = document.activeElement;
       const focusOn = !a ? "none" : a.closest("#repairDlg") ? "form-link" : a.closest(".sources") ? "sources-link" : a.closest(".legal-foot") ? "panel-link" : a.tagName.toLowerCase();
@@ -76,10 +78,10 @@ const PANEL = ".legal-foot [data-open-legal]";
       check("L1 the window exists and is closed at load, the page is in local mode", (await state(page)).open === false && (await page.evaluate(() => document.body.dataset.store)) === "local");
       await shot(page, "legal-panel");
       const whole = await axeOf(page, null);
-      check("L2b axe: no violation on the whole page with the link at the bottom of the panel (light theme)", whole.length === 0, JSON.stringify(whole));
-      check("L2 the link sits at the bottom of the Garages panel from the first screen; the declaration form's link is hidden in local mode", (await visible(page, PANEL)) && !(await visible(page, "#repairDlg [data-open-legal]")));
+      check("L2b axe: no violation on the whole page with the link at its foot (light theme)", whole.length === 0, JSON.stringify(whole));
+      check("L2 the link sits at the foot of the Garages page (home and results alike); the declaration form's link is hidden in local mode", (await visible(page, PANEL)) && (await page.evaluate((s) => !document.querySelector(s).closest(".res-layout, .home-more, .hero"), PANEL)) && !(await visible(page, "#repairDlg [data-open-legal]")));
       {
-        // Sous le panneau des résultats, que le script remplit, le lien descendrait de plusieurs lignes au démarrage : il est absent de la mise en page jusque-là.
+        // Sous l'accueil et les résultats, que le script remplit, le lien descendrait de plusieurs lignes au démarrage : il est absent de la mise en page jusque-là.
         const noScript = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 }, locale: "fr-FR" });
         const bareLoad = await noScript.newPage();
         await bareLoad.goto(`${withNotice.url}/index.html`, { waitUntil: "load" });
@@ -151,7 +153,7 @@ const PANEL = ".legal-foot [data-open-legal]";
       await openFromPanel(page);
       const txt = norm(await page.evaluate(() => document.getElementById("legalDlg").innerText));
       check("M2 the declaration sections are shown: what is stored (fingerprints), why, how long (24 months declared, 30 days IP, backups)", (await visible(page, "#lg-data")) && (await visible(page, "#lg-why")) && (await visible(page, "#lg-keep")) && /24 mois après leur dépôt/.test(txt) && /Empreintes d'adresses IP : 30 jours/.test(txt) && /Sauvegardes de la base : 30 jours/.test(txt), txt.slice(0, 400));
-      check("M3 the API hosting and the rights section with a mailto link to the contact are shown, the local-only sentence is not", txt.includes("API et base de données") && txt.includes("Vos droits") && txt.includes("Réponse sous un mois") && (await page.evaluate(() => !!document.querySelector('section[aria-labelledby="lg-rights"] a[href="mailto:contact@exemple.test"]'))) && !txt.includes("Elles restent dans ce navigateur : rien n'est envoyé à Pixcar") && !txt.includes("Pixcar ne reçoit aucune donnée vous concernant"), txt);
+      check("M3 the API hosting and the rights section (the RGPD paragraph itself carries the mailto link to the contact) are shown, the local-only sentence is not", txt.includes("API et base de données") && txt.includes("Vos droits") && txt.includes("Réponse sous un mois") && (await page.evaluate(() => [...document.querySelectorAll('section[aria-labelledby="lg-rights"] p')].some((p) => p.textContent.includes("articles 15 à 21") && !!p.querySelector('a[href="mailto:contact@exemple.test"]')))) && !txt.includes("Elles restent dans ce navigateur : rien n'est envoyé à Pixcar") && !txt.includes("Pixcar ne reçoit aucune donnée vous concernant"), txt);
       const v = await axeOf(page, "#legalDlg");
       check("M4 axe: no violation with the API-mode sections", v.length === 0, JSON.stringify(v));
       await shot(page, "legal-desktop-api");

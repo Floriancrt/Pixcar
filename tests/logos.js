@@ -14,7 +14,10 @@ const BRAND = table("logoBrand"), CT = table("ctBrand");
 
 const lum = (rgb) => { const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]); };
 const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
-const rgbOf = (s) => (s.match(/\d+/g) || []).slice(0, 3).map(Number);
+// « rgb(255, 209, 0) » ou, pour une couleur calculée par color-mix(), « color(srgb 1 0.97 0.85) »
+const rgbOf = (s) => (/^color\(srgb /.test(s) ? s.slice(11).split(/\s+/).slice(0, 3).map((x) => parseFloat(x) * 255) : (s.match(/\d+/g) || []).slice(0, 3).map(Number));
+const mix = (a, b, p) => a.map((x, i) => x * p + b[i] * (1 - p));
+const near = (a, b) => a.length === 3 && a.every((x, i) => Math.abs(x - b[i]) <= 1);
 const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const DARK = [17, 19, 21], WHITE = [255, 255, 255];
 
@@ -94,18 +97,19 @@ const listLyon = async (page, extraOpts = {}) => { await search(page, { service:
   const css = await page.evaluate(() => [...document.querySelectorAll(".avatar.mono")].map((a) => { const c = getComputedStyle(a); return { id: a.dataset.c, bg: c.backgroundColor, fg: c.color }; }));
   const low = css.filter((x) => ratio(rgbOf(x.bg), rgbOf(x.fg)) < 4.5);
   check("A5 rendered monogram text contrast >= 4.5:1 on every chain shown", css.length > 0 && low.length === 0, JSON.stringify(low));
+  // tuile pastel de l'enseigne : sa couleur à 15 % sur le blanc de la ligne, la lettre à 45 % sur l'encre (#111216)
+  const INK = [17, 18, 22];
   const sp = css.find((x) => x.id === "speedy");
-  check("A6 Speedy is yellow with dark text", sp && sp.bg === "rgb(255, 209, 0)" && sp.fg === "rgb(17, 19, 21)", JSON.stringify(sp));
+  check("A6 Speedy's tile is a pale yellow (its colour at 15 %) with a dark letter (45 % of it on the ink)", sp && near(rgbOf(sp.bg), mix(hexRgb(BRAND.speedy[0]), WHITE, 0.15)) && near(rgbOf(sp.fg), mix(hexRgb(BRAND.speedy[0]), INK, 0.45)), JSON.stringify(sp));
   const nw = css.find((x) => x.id === "norauto");
-  check("A7 Norauto is red with white text", nw && nw.bg === "rgb(226, 35, 26)" && nw.fg === "rgb(255, 255, 255)", JSON.stringify(nw));
+  check("A7 Norauto's tile is a pale red with a dark red letter", nw && near(rgbOf(nw.bg), mix(hexRgb(BRAND.norauto[0]), WHITE, 0.15)) && near(rgbOf(nw.fg), mix(hexRgb(BRAND.norauto[0]), INK, 0.45)), JSON.stringify(nw));
   const geo = await page.evaluate(() => [...document.querySelectorAll("#list .card")].slice(0, 14).map((c) => {
-    // La tuile (logo, monogramme ou initiale) est en haut à gauche de la carte, alignée sur le haut du nom ; la puce de distance est posée
-    // dans la tuile, en bas.
-    const av = c.querySelector(".avatar"), a = av.getBoundingClientRect(), n = c.querySelector(".g-name").getBoundingClientRect(), d = c.querySelector(".dist").getBoundingClientRect(), m = getComputedStyle(av);
-    return { id: av.dataset.c || "-", rendered: a.height > 0 && n.height > 0, dy: Math.round(a.top - n.top), inTile: d.left >= a.left - 1 && d.right <= a.right + 1 && d.top >= a.top + a.height / 2 && d.bottom <= a.bottom + 1, margin: [m.marginTop, m.marginRight, m.marginBottom, m.marginLeft].join(" ") };
+    // Ligne du tableau : la tuile (logo, monogramme ou initiale) dans la première colonne, centrée sur le bloc nom + adresse, à sa gauche
+    const av = c.querySelector(".avatar"), a = av.getBoundingClientRect(), g = c.querySelector(".g-id").getBoundingClientRect(), m = getComputedStyle(av);
+    return { id: av.dataset.c || "-", rendered: a.height > 0 && g.height > 0, dy: Math.round((a.top + a.bottom) / 2 - (g.top + g.bottom) / 2), gap: Math.round(g.left - a.right), margin: [m.marginTop, m.marginRight, m.marginBottom, m.marginLeft].join(" ") };
   }));
-  const geoOk = geo.filter((g) => g.rendered), geoBad = geo.filter((g) => g.margin !== "0px 0px 0px 0px" || (g.rendered && (Math.abs(g.dy) > 1 || !g.inTile)));
-  check("A9 tiles have no stray margin, are level with the top of the name and carry the distance chip in their lower half (chains and independents)", geo.length >= 10 && geoOk.length >= 4 && geoBad.length === 0, JSON.stringify(geoBad));
+  const geoOk = geo.filter((g) => g.rendered), geoBad = geo.filter((g) => g.margin !== "0px 0px 0px 0px" || (g.rendered && (Math.abs(g.dy) > 2 || g.gap < 8)));
+  check("A9 tiles have no stray margin, sit left of the name and address and are centred on them (chains and independents)", geo.length >= 10 && geoOk.length >= 4 && geoBad.length === 0, JSON.stringify(geoBad));
   await shot(page, "av-01-offline-monograms");
   check("A8 no page error", logs.errors.length === 0, JSON.stringify(logs.errors));
   await ctx.close();
@@ -138,8 +142,8 @@ const listLyon = async (page, extraOpts = {}) => { await search(page, { service:
   check("B15 logos are decorative: alt='', no referrer, parent aria-hidden", await page.$eval(".avatar.has-logo img.lg", (i) => i.getAttribute("alt") === "" && i.referrerPolicy === "no-referrer" && i.parentElement.getAttribute("aria-hidden") === "true"));
   check("B16 no page error; the console only has the expected logo misses", logs.errors.length === 0 && logs.console.length === 0, JSON.stringify([logs.errors, logs.console]));
   const clrW = await tileClearance(page, 80), clrWLogos = clrW.filter((x) => x.logo).length;
-  check("B21 large tiles: the distance chip covers neither a logo nor a letter", clrWLogos >= 6 && clrW.length - clrWLogos >= 6 && clrW.every((x) => x.gap >= 2), JSON.stringify([clrWLogos, clrW.length, clrW.filter((x) => x.gap < 2)]));
-  await page.evaluate(() => document.getElementById("panelCol").scrollTo(0, 0));
+  check("B21 large tiles: the distance has its own column (never on the tile) and the logo or letter sits whole inside its tile", clrWLogos >= 6 && clrW.length - clrWLogos >= 6 && clrW.every((x) => x.gap >= 2 && x.ink >= 2), JSON.stringify([clrWLogos, clrW.length, clrW.filter((x) => x.gap < 2 || x.ink < 2)]));
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(500);
   await shot(page, "av-02-tiers");
 
@@ -177,14 +181,14 @@ const listLyon = async (page, extraOpts = {}) => { await search(page, { service:
   await ctx.close();
 
   // small tiles (phone) — opened once the page above is closed: in « real » mode the local server answers the last context opened.
-  // the logo (or the letter) stays above the distance chip, on one line or two (distance, then city)
+  // the distance (with or without its city) stays off the tile, the logo or the letter whole inside it
   {
     const m = await open(browser, server, FILE, { width: 390, height: 844, dpr: 2, touch: true, real: true, mock: MOCK });
     await listLyon(m.page);
     await waitIds(m.page, ["norauto", "midas", "points", "speedy", "roady", "euromaster"]);
     await m.page.waitForTimeout(500);
     const clr = await tileClearance(m.page, 80), lg = clr.filter((x) => x.logo).length;
-    check("B22 small tiles (390 px): the distance chip covers neither a logo nor a letter", lg >= 6 && clr.length - lg >= 6 && clr.some((x) => !x.city) && clr.every((x) => x.gap >= 2), JSON.stringify([lg, clr.length, clr.filter((x) => x.gap < 2)]));
+    check("B22 small tiles (390 px): the distance is off the tile and the logo or letter sits whole inside it", lg >= 6 && clr.length - lg >= 6 && clr.some((x) => !x.city) && clr.every((x) => x.gap >= 2 && x.ink >= 2), JSON.stringify([lg, clr.length, clr.filter((x) => x.gap < 2 || x.ink < 2)]));
     await shot(m.page, "av-04-mobile");
     await m.ctx.close();
   }

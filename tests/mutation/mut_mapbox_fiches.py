@@ -32,7 +32,7 @@ M = [
  ("the site is not written to the garage", "(f.phone && (g.phone = f.phone), f.hours && (g.hours = f.hours), f.web && (g.web = f.web));", "(f.phone && (g.phone = f.phone), f.hours && (g.hours = f.hours));", "", "F24"),
  ("no mention of the source on filled-in rows", "g.mbx = Object.fromEntries(Object.keys(f).map((k) => [k, !0]));", "g.mbx = {};", "", "F25"),
  ("the mention is put on every row, even those OpenStreetMap filled in", "g.mbx = Object.fromEntries(Object.keys(f).map((k) => [k, !0]));", "g.mbx = { phone: !0, hours: !0, web: !0 };", "", "F32"),
- ("the rows are not repainted when the answer comes", "nd && dl.replaceWith(nd);", "", "", "F24"),
+ ("the rows are not repainted when the answer comes", "if (cur.length === nxt.length) cur.forEach((dd, i) => dd.innerHTML !== nxt[i].innerHTML && (dd.innerHTML = nxt[i].innerHTML));\n      else nd && dl.replaceWith(nd);", "void 0;", "", "F24"),
  ("the « Appeler » button is not refreshed", "act && (act.innerHTML = gActions(g));", "", "", "F26"),
  ("no « Recherche… » while the request is pending (phone row)", '${none(wait ? "Recherche…" : "Non renseigné")} · <a href', '${none("Non renseigné")} · <a href', "", "F20"),
  ("the card is not repainted when the request starts", "((g.mbxBusy = !0), mbxRepaint(g));", "(g.mbxBusy = !0);", "", "F20"),

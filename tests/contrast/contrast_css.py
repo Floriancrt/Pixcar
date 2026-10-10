@@ -1,5 +1,8 @@
 """Contrast audit computed from the SHIPPED tokens (src/css/app.css light block + src/css/tokens.dark.css).
-WCAG AA : 4.5:1 for text, 3:1 for non-text (borders, focus ring, markers, symbol). Charte Orange & Marine."""
+WCAG AA : 4.5:1 for text, 3:1 for large text (>= 24 px, or >= 18.67 px bold) and for non-text (borders, focus ring,
+markers, symbol, price bar). Design « tableau » : en-tête noir, fond crème, tableau blanc, actions orange.
+Le blanc sur orange (3.12:1) n'est permis qu'en grand texte gras : la suite a11y vérifie dans la page que chaque texte
+blanc sur orange l'est (taille et graisse calculées)."""
 import re, sys, pathlib
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 from contrast_px import ratio, blend, lum, rgb
@@ -12,8 +15,8 @@ def parse(block):
 css = open(ROOT / 'src/css/app.css', encoding='utf8').read()
 m = re.search(r':root \{\n  color-scheme: light;\n(.*?)\n\}', css, re.S)
 LIGHT = parse(m.group(1)); DARK = parse(open(ROOT / 'src/css/tokens.dark.css', encoding='utf8').read())
-# la marque (--px-*) n'est définie que dans le bloc clair : le thème sombre l'hérite
-BRAND = {k: LIGHT[k] for k in ('--px-mint', '--px-lime', '--px-ice')}
+# la marque (--px-*, plaque du logo) n'est définie que dans le bloc clair : le thème sombre l'hérite
+BRAND = {k: LIGHT[k] for k in ('--px-mint', '--px-lime', '--px-ice', '--plate')}
 
 def hexof(v):
     v = v.strip()
@@ -34,53 +37,62 @@ def glass_stops(T):
 
 def audit(name, T):
     B = {**BRAND, **T}
+    H = lambda k: hexof(B[k])
     canvas = solid(T['--canvas'], '#000000')
-    g = glass_stops(T)
-    peaks = []
-    for k in ('--glow-a', '--glow-b', '--glow-c'):
-        h = hexof(T[k]); peaks.append(blend(h[0], canvas, h[1]) if isinstance(h, tuple) else canvas)
-    bgs = {'card': hexof(T['--card']), 'card-2': hexof(T['--card-2']), 'canvas': canvas}
-    for i, c in enumerate(g): bgs[f'glass{i}'] = c
-    for i, c in enumerate(peaks): bgs[f'canvas+glow{i}'] = c
+    # fonds sur lesquels on écrit du texte courant (encres 1 à 3, orange des liens)
+    bgs = {'canvas': canvas, 'card': H('--card'), 'card-2': H('--card-2'), 'thead': H('--thead-bg'), 'best row': H('--best-bg'),
+           'row hover': H('--row-hover'), 'pill': H('--pill-bg'), 'search segment': H('--seg-bg')}
+    for i, c in enumerate(glass_stops(T)): bgs[f'glass{i} (map info)'] = c
     rows = []
     def chk(label, fg, bg, need=4.5):
         r = ratio(fg, bg); rows.append((r >= need, label, fg, bg, r, need))
     for bn, bg in bgs.items():
         for tk in ('--ink', '--ink-2', '--ink-3', '--accent'):
-            chk(f'{tk} on {bn}', hexof(T[tk]), bg)
-        for tk in ('--line-strong', '--accent'):
-            chk(f'{tk} non-text on {bn}', hexof(T[tk]), bg, 3.0)
+            chk(f'{tk} on {bn}', H(tk), bg)
+        chk(f'--line-strong non-text on {bn}', H('--line-strong'), bg, 3.0)
+    chk('accent-strong on canvas (eyebrow, 13.8 px bold)', H('--accent-strong'), canvas)
+    chk('accent on accent-soft (hero tag)', H('--accent'), H('--accent-soft'))
+    chk('ink-2 on accent-soft (hint of a ticked service, suggestion text)', H('--ink-2'), H('--accent-soft'))
+    chk('ink on accent-soft (ticked service, hovered suggestion)', H('--ink'), H('--accent-soft'))
     for tone in ('accent', 'promo', 'mint', 'amber'):
-        chk(f'{tone}-ink on {tone}-soft', hexof(T[f'--{tone}-ink']), hexof(T[f'--{tone}-soft']))
-    chk('promo-fg on promo-bg', hexof(T['--promo-fg']), hexof(T['--promo-bg']))
-    chk('on-btn on btn (orange button, navy text)', hexof(T['--on-btn']), hexof(T['--btn']))
-    chk('tip-fg on tip-bg', hexof(T['--tip-fg']), hexof(T['--tip-bg']))
-    chk('red on card', hexof(T['--red']), hexof(T['--card']))
-    chk('red on card-2 (history Supprimer, hover)', hexof(T['--red']), hexof(T['--card-2']))
-    chk('ink-2 on card-2 (tag.info, svc.likely)', hexof(T['--ink-2']), hexof(T['--card-2']))
-    chk('ink on card-2 (act-route)', hexof(T['--ink']), hexof(T['--card-2']))
-    chk('accent-ink on card (links in tinted boxes)', hexof(T['--accent-ink']), hexof(T['--card']))
-    # anneau de focus et marqueurs (non textuel)
-    chk('focus ring non-text on card', hexof(T['--focus']), hexof(T['--card']), 3.0)
-    chk('focus ring non-text on glass', hexof(T['--focus']), g[1], 3.0)
-    mapbg = hexof(T['--map-bg']); ring = hexof(T['--mk-ring'])
-    sel = hexof(T['--mk-sel'])
+        chk(f'{tone}-ink on {tone}-soft', H(f'--{tone}-ink'), H(f'--{tone}-soft'))
+    chk('promo-fg on promo-bg', H('--promo-fg'), H('--promo-bg'))
+    # orange : blanc en grand texte gras seulement (Ajouter, Appeler de la ligne la moins chère, chiffre « Le moins cher »)
+    chk('on-btn on btn: LARGE BOLD TEXT ONLY (>= 18.67 px, 700)', H('--on-btn'), H('--btn'), 3.0)
+    chk("on-btn-2 on btn (current tab, skip link, « Le moins cher » label)", H('--on-btn-2'), H('--btn'))
+    chk('act-ink on act-bg (Appeler / Demander)', H('--act-ink'), H('--act-bg'))
+    chk('note-ink on note-bg (note under the table)', H('--note-ink'), H('--note-bg'))
+    chk('stat-dark-ink on stat-dark (home, label)', H('--stat-dark-ink'), H('--stat-dark'))
+    chk('orange number on stat-dark (home, 32.8 px 800: large text)', H('--px-lime'), H('--stat-dark'), 3.0)
+    chk('step-ink on step-bg (step numbers)', H('--step-ink'), H('--step-bg'))
+    for t in ('blue', 'orange', 'gray'):
+        chk(f'tile-{t}-ink on tile-{t} (tile letter)', H(f'--tile-{t}-ink'), H(f'--tile-{t}'))
+    chk('tip-fg on tip-bg', H('--tip-fg'), H('--tip-bg'))
+    chk('red on card', H('--red'), H('--card'))
+    chk('red on card-2 (history Supprimer, hover)', H('--red'), H('--card-2'))
+    chk('accent-ink on card (links in tinted boxes)', H('--accent-ink'), H('--card'))
+    # échelle de prix, anneau de focus et marqueurs (non textuel)
+    chk('price bar non-text on track', H('--bar'), H('--track'), 3.0)
+    chk('price bar non-text on best row', H('--bar'), H('--best-bg'), 3.0)
+    chk('focus ring non-text on card', H('--focus'), H('--card'), 3.0)
+    chk('focus ring non-text on canvas', H('--focus'), canvas, 3.0)
+    chk('focus ring non-text on search segment', H('--focus'), H('--seg-bg'), 3.0)
+    mapbg = H('--map-bg'); ring = H('--mk-ring'); sel = H('--mk-sel')
     chk('selected marker (fill or ring) non-text on map bg', sel if ratio(sel, mapbg) >= ratio(ring, mapbg) else ring, mapbg, 3.0)
-    chk('priced marker non-text on map bg', hexof(T['--mk-priced']), mapbg, 3.0)
-    # chrome (rail, barres) : marine en clair comme en sombre
-    rail = solid(T['--rail-bg'], '#000000')
-    ci, ci2 = hexof(T['--chrome-ink']), hexof(T['--chrome-ink-2'])
-    chk('chrome-ink on rail', ci, rail); chk('chrome-ink-2 on rail', ci2, rail)
-    hov = blend('#FFFFFF', rail, 0.10); chk('chrome-ink-2 on hover', ci2, hov); chk('chrome-ink on hover', ci, hov)
-    lime, mint, ice = hexof(B['--px-lime']), hexof(B['--px-mint']), hexof(B['--px-ice'])
-    plate, onlime = hexof(B['--plate']), hexof(B['--on-lime'])
-    chk('on-lime text on orange (active tab, add button)', onlime, lime)
-    chk('mint on chrome-tint (desktop add button)', mint, blend(lime, rail, 0.18))
-    chk('orange focus ring on rail (non-text)', lime, rail, 3.0); chk('mint symbol on rail (non-text)', mint, rail, 3.0)
+    chk('priced marker non-text on map bg', H('--mk-priced'), mapbg, 3.0)
+    # en-tête noir (clair comme sombre)
+    top = solid(T['--topbar-bg'], '#000000')
+    ci, ci2 = H('--chrome-ink'), H('--chrome-ink-2')
+    chk('chrome-ink on topbar', ci, top); chk('chrome-ink-2 on topbar', ci2, top)
+    hov = blend('#FFFFFF', top, 0.10); chk('chrome-ink-2 on hover', ci2, hov); chk('chrome-ink on hover', ci, hov)
+    lime, mint, ice, plate = H('--px-lime'), H('--px-mint'), H('--px-ice'), H('--plate')
+    chk('orange focus ring on topbar (non-text)', lime, top, 3.0); chk('mint symbol on plate (non-text)', mint, plate, 3.0)
     chk('orange "car" on plate', lime, plate); chk('ice "pix" on plate', ice, plate)
     bad = [r for r in rows if not r[0]]
     print(f'=== {name}: {len(rows) - len(bad)}/{len(rows)} pass')
     for ok, label, fg, bg, r, need in bad: print(f'  LOW {label:50s} {fg} on {bg} {r:5.2f} (need {need})')
     if '--all' in sys.argv:
         for ok, label, fg, bg, r, need in rows: print(f'  {"OK " if ok else "LOW"} {label:50s} {fg} on {bg} {r:5.2f} (need {need})')
-audit('LIGHT (shipped tokens)', LIGHT); audit('DARK (shipped tokens)', DARK)
+    return len(bad)
+n = audit('LIGHT (shipped tokens)', LIGHT) + audit('DARK (shipped tokens)', DARK)
+sys.exit(1 if n else 0)

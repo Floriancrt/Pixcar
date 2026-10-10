@@ -18,7 +18,7 @@ M = [
  ("city taken from an answer up to 400 m", 'const cityRange = 250,', 'const cityRange = 400,', "C", "C3"),
  ("no limit on simultaneous requests", '    cityMax = 3,', '    cityMax = 50,', "B", "B3"),
  ("one request at a time", '    cityMax = 3,', '    cityMax = 1,', "B", "B3"),
- ("the letter stays under the two-line chip (small tile)", ".g-main:has(.d-city) > .avatar {\n  padding-bottom: 32px;", ".g-main:has(.d-city) > .avatar {\n  padding-bottom: 0;", "F", "F5"),
+ ("the distance row is put on the tile (mobile)", ".g-type {\n  grid-area: meta;", ".g-type {\n  grid-area: tile;", "F", "F5"),
  ("visit cap far too low", '    cityCap = 300,', '    cityCap = 5,', "B", "B9"),
  ("switch window.JG_CITY_LOOKUP ignored", 'cityLook = window.JG_CITY_LOOKUP !== !1,', 'cityLook = !0,', "C", "C12"),
  ("whole list looked up, not only the cards on screen", 'for (const e of es) e.isIntersecting && (io.unobserve(e.target), take(e.target));', 'for (const e of es) (io.unobserve(e.target), take(e.target));', "B", "B1"),
@@ -39,10 +39,12 @@ M = [
  ("capitals not tidied", '  if (!/[a-zà-ÿ]/.test(s))\n    s = s', '  if (false)\n    s = s', "A", "A1"),
  ("cedex kept", '    .replace(/\\s*\\bcedex\\b.*$/i, "")\n', '', "E", "E2"),
  ("arrondissement kept long", '(m, n) => ` ${n}${+n === 1 ? "er" : "e"}`,', '(m) => m,', "E", "E2"),
- # (la pastille est posée en absolu dans la tuile depuis la refonte : la colonne de la liste ne la borne plus, c'est sa largeur maximale qui le fait)
- ("long city overflows the large tile's chip (max-width: none)", '    top: 104px;\n    height: 26px;\n    max-width: 114px;', '    top: 104px;\n    height: 26px;\n    max-width: none;', "AF", "A6"),
- ("chip neither bounded nor shrinkable (max-width and min-width: 0 each cover for the other)", '  max-width: 72px;\n  min-width: 0;\n  padding: 0 7px 0 5px;', '  padding: 0 7px 0 5px;', "F", "F2"),
- ("long city cut without an ellipsis", '  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 500;', '  overflow: hidden;\n  white-space: nowrap;\n  font-weight: 500;', "F", "F2"),
+ # (la distance a sa colonne depuis le tableau : sa cellule la borne, la ville se coupe par « … »)
+ ("a long city widens the distance cell over the price (no min-width: 0)", ".dist {\n  display: inline-flex;\n  flex-direction: column;\n  min-width: 0;\n", ".dist {\n  display: inline-flex;\n  flex-direction: column;\n", "AF", "A6"),
+ ("long city cut without an ellipsis", ".dist .d-city {\n  min-width: 0;\n  max-width: 100%;\n  overflow: hidden;\n  text-overflow: ellipsis;\n", ".dist .d-city {\n  min-width: 0;\n  max-width: 100%;\n  overflow: hidden;\n", "F", "F2"),
+ ("a long city wraps onto several lines instead of being cut", ".dist .d-city {\n  min-width: 0;\n  max-width: 100%;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n", ".dist .d-city {\n  min-width: 0;\n  max-width: 100%;\n  overflow: hidden;\n  text-overflow: ellipsis;\n", "F", "F2"),
+ # (sur ordinateur la ville est sous la distance : sur la même ligne, « Cazères » se coupait en « Cazè… »)
+ ("the city sits beside the distance on desktop (short cities cut)", "  .g-type .dist {\n    flex-direction: column;\n    align-items: flex-start;\n    gap: 2px;\n  }", "  .g-type .dist {\n  }", "A", "A6b"),
 ]
 
 # Variantes du module pur modules/city.js : tests/city_unit.js, sans navigateur

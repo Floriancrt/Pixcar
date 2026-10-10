@@ -93,8 +93,8 @@ async function until(fn, ms = 6000, step = 80) {
       await openHistory(page);
       const h = await history(page);
       check("R1d the history lists the 4 declarations of others, none deletable from here", h && h.rows === 4 && h.del === 0, JSON.stringify(h));
-      const summary = norm(await page.textContent("#summary"));
-      check("R1e the summary says who declared: « par des automobilistes », not « par vous »", /par des automobilistes/.test(summary) && !/par vous/.test(summary), summary.slice(0, 300));
+      const summary = norm(await page.textContent("#resNote"));
+      check("R1e the note under the table says who declared: « par des automobilistes », not « par vous »", /par des automobilistes/.test(summary) && !/par vous/.test(summary), summary.slice(0, 300));
       check("R1f the garages came through the API relay (one upstream call), not straight from OpenStreetMap", api.upstream.calls === 1 && ctx.__counters.overpass === 0, JSON.stringify({ upstream: api.upstream.calls, direct: ctx.__counters.overpass }));
       check("R1g one read of the area, from the centre of its 0.05° cell", apiRepairRequests().filter((r) => r.startsWith("GET")).length === 1);
       await page.click("#addRepairBtn");

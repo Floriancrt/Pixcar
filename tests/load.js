@@ -56,14 +56,13 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
     const idle = await page.evaluate(() => ({
       searching: document.body.classList.contains("is-searching"),
       ld: [...document.querySelectorAll(".map-empty .ld")].map((e) => getComputedStyle(e).display),
-      hint: getComputedStyle(document.querySelector(".map-hint")).display,
-      hintText: document.querySelector(".map-hint span").textContent.trim(),
+      stage: !!document.getElementById("stage").offsetParent,
       laps: document.getAnimations().filter((a) => a.animationName === "ld-lap").length,
       pin: getComputedStyle(document.querySelector(".ma-pin-ring")).fill + "|" + getComputedStyle(document.querySelector(".ma-pin")).fill,
     }));
     check("I1 idle: the ring and the car are not drawn", idle.ld.length === 2 && idle.ld.every((d) => d === "none"), JSON.stringify(idle));
     check("I2 idle: no animation runs (nothing costs anything before a search)", idle.laps === 0 && !idle.searching, JSON.stringify(idle));
-    check("I3 idle: the map card and its sentence are shown", idle.hint !== "none" && idle.hintText === QUOTE, JSON.stringify(idle));
+    check("I3 idle: the home page, no map column yet (it comes with the search)", !idle.stage, JSON.stringify(idle));
     check("I4 console clean", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
     await ctx.close();
   } catch (e) { check("I section crashed", false, e && e.message); }
@@ -76,15 +75,15 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
     const st = await page.evaluate(() => ({
       searching: document.body.classList.contains("is-searching"),
       ld: [...document.querySelectorAll(".map-empty .ld")].map((e) => [getComputedStyle(e).display, getComputedStyle(e).opacity]),
-      hint: getComputedStyle(document.querySelector(".map-hint")).display,
-      teaser: getComputedStyle(document.getElementById("teaser")).display,
+      hero: getComputedStyle(document.querySelector(".hero")).display,
+      stage: !!document.getElementById("stage").offsetParent,
       empty: getComputedStyle(document.querySelector(".map-empty")).display,
       laps: document.getAnimations().filter((a) => a.animationName === "ld-lap").map((a) => ({ state: a.playState, dur: a.effect.getTiming().duration, it: a.effect.getTiming().iterations })),
       goBusy: document.getElementById("go").getAttribute("aria-busy"),
     }));
-    check("L1 searching: body.is-searching, map card hidden, ring and car fully shown", st.searching && st.hint === "none" && st.empty !== "none" && st.ld.every(([d, o]) => d === "inline" && o === "1"), JSON.stringify(st));
+    check("L1 searching: body.is-searching, the map column is there (empty map art), ring and car fully shown", st.searching && st.stage && st.empty !== "none" && st.ld.every(([d, o]) => d === "inline" && o === "1"), JSON.stringify(st));
     check("L2 exactly one lap animation runs on desktop: 2.4 s, endless", st.laps.length === 1 && st.laps[0].state === "running" && st.laps[0].dur === 2400 && st.laps[0].it === Infinity, JSON.stringify(st.laps));
-    check("L3 the price teaser steps aside so the waiting card is close to the button", st.teaser === "none");
+    check("L3 the home title steps aside: the waiting line comes right under the header", st.hero === "none", JSON.stringify(st));
     // geometry: the roundabout is centred on the address pin; the car stays in the outer lane
     const geo = await page.evaluate(() => { const isl = document.querySelector(".map-empty .ld-island").getBoundingClientRect(), pin = document.querySelector(".map-empty .ma-pin").getBoundingClientRect(); return { dx: isl.left + isl.width / 2 - (pin.left + pin.width / 2), dy: isl.top + isl.height / 2 - (pin.top + pin.height / 2), w: isl.width }; });
     check("L4 the ring is centred on the address pin", Math.abs(geo.dx) < 1.5 && Math.abs(geo.dy) < 1.5 && geo.w > 90, JSON.stringify(geo));
@@ -123,7 +122,7 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
     const { page, ctx } = await open(browser, server, FILE, { width: 390, height: 844, dpr: 2, touch: true, mock: slow });
     await begin(page);
     await page.waitForTimeout(900);
-    const m = await page.evaluate(() => { const s = document.getElementById("status"), l = s.querySelector(".wait-loader"), r = s.getBoundingClientRect(), nav = document.getElementById("tabs").getBoundingClientRect(); return { cls: s.className, top: r.top, bottom: r.bottom, vh: innerHeight, navTop: nav.top, loader: l && { d: getComputedStyle(l).display, w: l.getBoundingClientRect().width, h: l.getBoundingClientRect().height, left: l.getBoundingClientRect().left }, cardLeft: r.left, quote: (s.querySelector(".wait-quote") || {}).textContent, stage: getComputedStyle(document.getElementById("stage")).display, laps: document.getAnimations().filter((a) => a.animationName === "ld-lap").length, teaser: getComputedStyle(document.getElementById("teaser")).display }; });
+    const m = await page.evaluate(() => { const s = document.getElementById("status"), l = s.querySelector(".wait-loader"), r = s.getBoundingClientRect(), nav = document.getElementById("tabs").getBoundingClientRect(); return { cls: s.className, top: r.top, bottom: r.bottom, vh: innerHeight, navTop: nav.top, loader: l && { d: getComputedStyle(l).display, w: l.getBoundingClientRect().width, h: l.getBoundingClientRect().height, left: l.getBoundingClientRect().left }, cardLeft: r.left, quote: (s.querySelector(".wait-quote") || {}).textContent, stage: getComputedStyle(document.getElementById("stage")).display, laps: document.getAnimations().filter((a) => a.animationName === "ld-lap").length }; });
     check("M1 mobile: the card shows the sentence and a 72 px pictogram on its left", m.quote === QUOTE && m.loader && m.loader.d === "block" && Math.round(m.loader.w) === 72 && m.loader.left < m.cardLeft + 20, JSON.stringify(m));
     check("M2 mobile: the card is on screen, above the floating navigation, without scrolling", m.top >= 0 && m.bottom <= m.navTop && /\bis-wait\b/.test(m.cls), JSON.stringify([m.top, m.bottom, m.navTop]));
     check("M3 mobile: the map is hidden, so exactly one animation runs (the card's)", m.stage === "none" && m.laps === 1, JSON.stringify([m.stage, m.laps]));
@@ -156,22 +155,23 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
     check("C3 messages outside a search are unchanged (no sentence)", /^Relancez la recherche pour élargir la zone à 20 km\.$/.test(info.text) && info.cls === "status", JSON.stringify(info));
     await ctx.close();
 
-    // C4: failure: the state clears, the error card has no sentence, the idle card is back
+    // C4: failure: the state clears, the error card has no sentence and stays on screen (the home does not come back over it)
     ({ page, ctx } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { overpassFail: true, sireneFail: true } }));
     await begin(page);
     await page.waitForSelector("#status.err", { timeout: 20000 });
     await page.waitForTimeout(300);
-    const f = await page.evaluate(() => ({ searching: document.body.classList.contains("is-searching"), cls: document.getElementById("status").className, quote: !!document.getElementById("status").querySelector(".wait-quote"), hint: getComputedStyle(document.querySelector(".map-hint")).display, ld: [...document.querySelectorAll(".map-empty .ld")].map((e) => getComputedStyle(e).display), go: document.getElementById("go").disabled, teaser: getComputedStyle(document.getElementById("teaser")).display }));
-    check("C4 failure: loading state cleared, error card without the sentence, idle card back, button usable", !f.searching && /\berr\b/.test(f.cls) && !/is-wait/.test(f.cls) && !f.quote && f.hint !== "none" && f.ld.every((d) => d === "none") && !f.go && f.teaser !== "none", JSON.stringify(f));
+    const f = await page.evaluate(() => ({ searching: document.body.classList.contains("is-searching"), cls: document.getElementById("status").className, quote: !!document.getElementById("status").querySelector(".wait-quote"), shown: !!document.getElementById("status").offsetParent, hero: !!document.querySelector(".hero").offsetParent, ld: [...document.querySelectorAll(".map-empty .ld")].map((e) => getComputedStyle(e).display), go: document.getElementById("go").disabled }));
+    check("C4 failure: loading state cleared, error card without the sentence and on screen, ring gone, button usable", !f.searching && /\berr\b/.test(f.cls) && !/is-wait/.test(f.cls) && !f.quote && f.shown && !f.hero && f.ld.every((d) => d === "none") && !f.go, JSON.stringify(f));
     await ctx.close();
 
     // C5: unknown address (error before any request): same
     ({ page, ctx } = await open(browser, server, FILE, { width: 1440, height: 900 }));
+    await pickServices(page, "vidange");
     await page.fill("#address", "zzzz introuvable");
     await page.click("#go");
     await page.waitForSelector("#status.err", { timeout: 10000 });
-    const u = await page.evaluate(() => ({ searching: document.body.classList.contains("is-searching"), text: document.getElementById("status").textContent.trim(), quote: !!document.getElementById("status").querySelector(".wait-quote") }));
-    check("C5 unknown address: error message only, loading state cleared", !u.searching && /Adresse introuvable/.test(u.text) && !u.quote, JSON.stringify(u));
+    const u = await page.evaluate(() => ({ searching: document.body.classList.contains("is-searching"), text: document.getElementById("status").textContent.trim(), quote: !!document.getElementById("status").querySelector(".wait-quote"), shown: !!document.getElementById("status").offsetParent, hero: !!document.querySelector(".hero").offsetParent }));
+    check("C5 unknown address: error message only, on screen (the results page, not the home), loading state cleared", !u.searching && /Adresse introuvable/.test(u.text) && !u.quote && u.shown && !u.hero, JSON.stringify(u));
     await ctx.close();
 
     // C6: a quick search (150 ms, well under the 0.35 s delay) never shows the loader nor the card, although frames are drawn
@@ -223,10 +223,10 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
         return { road: g(".ld-asphalt", "stroke"), dash: g(".ld-dash", "stroke"), car: g(".ld-body", "fill"), edge: g(".ld-edge", "stroke"), island: g(".ld-island", "fill"), all: [...all] };
       });
       const want = scheme === "light"
-        ? { road: "rgb(16, 18, 31)", dash: "rgb(244, 245, 250)", car: "rgb(253, 83, 25)", island: "rgb(255, 255, 255)" }
-        : { road: "rgb(38, 43, 69)", dash: "rgb(244, 245, 250)", car: "rgb(253, 83, 25)", island: "rgb(21, 24, 41)" };
-      check(`A1 [${scheme}] charte colours: navy / grey-blue asphalt, off-white markings (#F4F5FA), orange car (#FD5319)`, col.road === want.road && col.dash === want.dash && col.car === want.car && col.island === want.island, JSON.stringify(col));
-      const allowed = new Set(["rgb(16, 18, 31)", "rgb(38, 43, 69)", "rgb(58, 64, 95)", "rgb(244, 245, 250)", "rgb(253, 83, 25)", "rgb(255, 255, 255)", "rgb(21, 24, 41)", "rgba(0, 0, 0, 0)"]);
+        ? { road: "rgb(17, 18, 22)", dash: "rgb(244, 245, 250)", car: "rgb(253, 83, 25)", island: "rgb(255, 255, 255)" }
+        : { road: "rgb(42, 44, 51)", dash: "rgb(244, 245, 250)", car: "rgb(253, 83, 25)", island: "rgb(24, 25, 30)" };
+      check(`A1 [${scheme}] charte colours: black / dark grey asphalt (the header's black), off-white markings (#F4F5FA), orange car (#FD5319)`, col.road === want.road && col.dash === want.dash && col.car === want.car && col.island === want.island, JSON.stringify(col));
+      const allowed = new Set(["rgb(17, 18, 22)", "rgb(42, 44, 51)", "rgb(61, 63, 71)", "rgb(244, 245, 250)", "rgb(253, 83, 25)", "rgb(255, 255, 255)", "rgb(24, 25, 30)", "rgba(0, 0, 0, 0)"]);
       check(`A2 [${scheme}] nothing outside the charte (no red, blue or yellow anywhere in the pictogram)`, col.all.every((c) => allowed.has(c)), JSON.stringify(col.all));
       await injectScript(page, AXE);
       const ax = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } })).violations.map((v) => ({ id: v.id, n: v.nodes.length })));

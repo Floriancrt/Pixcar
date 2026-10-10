@@ -7,7 +7,7 @@ import { MAPBOX_OPTIONS, mapboxConfig, mapboxTileUrl } from "./modules/mapbox.js
 import { createEnricher, missingOf } from "./modules/mapbox-fiches.js";
 import { phoneList, phoneParse } from "./modules/phone.js";
 import { SVC_MAX, initServicePicker } from "./modules/service-picker.js";
-import { comboOffer, comboPrice, comboPromos, comboRange, comboTag } from "./modules/svc-combo.js";
+import { comboOffer, comboPrice, comboPromos, comboTag } from "./modules/svc-combo.js";
 import { createStore, jsonStorage } from "./modules/repair-store.js";
 import { KEEP_TAG, OVERPASS_MIRRORS, inMetroFrance, overpassQuery } from "./shared/overpass.js";
 import { PLATE_RE, PRICE_MAX, PRICE_MIN, YEAR_MIN } from "./shared/rules.js";
@@ -838,12 +838,10 @@ import { SERVICES } from "./shared/services.js";
       tabs: w("#tabs"),
       sumWhere: w("#sumWhere"),
       editSearch: w("#editSearch"),
-      teaser: w("#teaser"),
       resBody: w("#resBody"),
       mapFab: w("#mapFab"),
       osmNote: w("#osmNote"),
       refService: w("#refService"),
-      panelCol: w("#panelCol"),
       mapInfo: w("#mapInfo"),
       stage: w("#stage"),
       svcBtn: w("#svcBtn"),
@@ -864,6 +862,7 @@ import { SERVICES } from "./shared/services.js";
       moreBtnF: w("#moreBtnF"),
       mapExpand: w("#mapExpand"),
       mapLocate: w("#mapLocate"),
+      resNote: w("#resNote"),
     },
     me = {
       mode: "unknown",
@@ -929,22 +928,29 @@ import { SERVICES } from "./shared/services.js";
     (me.svcs[0] !== fe().id && (me.svcs = [fe().id]),
       (me.svcs = [...new Set(me.svcs)].filter((id) => o.some((t) => t.id === id)).slice(0, SVC_MAX)),
       "ct" === fe().kind && (me.svcs = [fe().id])); // le contrôle technique se cherche seul
-    const l = svcLabels();
-    ((pe.svcVal.textContent = l[0]), (pe.svcN.hidden = l.length < 2), (pe.svcN.textContent = l.length > 1 ? `+${l.length - 1}` : ""), Fe());
+    const l = svcLabels(),
+      none = !me.svcChosen;
+    (pe.svcBtn.classList.toggle("is-empty", none),
+      (pe.svcVal.textContent = none ? "Choisir une prestation" : l[0]),
+      (pe.svcN.hidden = none || l.length < 2),
+      (pe.svcN.textContent = l.length > 1 ? `+${l.length - 1}` : ""),
+      Fe());
   }
   function svcApply(ids) {
-    ((me.svcs = ids.slice()), (pe.service.value = ids[0]), pe.service.dispatchEvent(new Event("change")));
+    ((me.svcChosen = !0), (me.svcs = ids.slice()), (pe.service.value = ids[0]), pe.service.dispatchEvent(new Event("change")));
+    // « Comparer » sans prestation a ouvert la fenêtre : la recherche part dès qu'on a choisi
+    me.pendingGo && ((me.pendingGo = !1), lt());
   }
   function ve() {
     const e = fe();
     ((pe.hint.textContent = e.hint || ""),
       (pe.energyField.hidden = "ct" !== e.kind),
       (pe.moreBtnF.hidden = "ct" === e.kind),
-      (pe.goLabel.textContent = "ct" === e.kind ? "Rechercher les centres" : "Rechercher les garages"),
+      (pe.goLabel.textContent = "Comparer"),
+      pe.go.setAttribute("aria-label", "ct" === e.kind ? "Comparer les centres de contrôle technique" : "Comparer les garages"),
       (pe.refService.value = pe.service.value),
       refShow(fe()),
-      svcShow(),
-      be());
+      svcShow());
   }
   // Page « Prix et promos » : prix nationaux et promotions des enseignes pour une prestation
   function refShow(e) {
@@ -979,54 +985,6 @@ import { SERVICES } from "./shared/services.js";
             .join(""))),
           (pe.refList.innerHTML = n));
       })();
-  }
-  function be() {
-    const e = fe();
-    if (((pe.teaser.hidden = me.raw.length > 0), pe.teaser.hidden)) return;
-    const ss = selSvcs();
-    if (ss.length > 1) {
-      // plusieurs prestations : fourchette des enseignes qui publient le prix de chacune, puis les repères de chaque prestation
-      const rg = comboRange(
-          ss.map((x) => x.id),
-          u,
-        ),
-        pn = new Set(v.filter((t) => ss.some((x) => t.svc.includes(x.id)) && "active" === ie(t)).map((e) => e.c)).size,
-        li = ss
-          .map((x) => {
-            const a = (u[x.id] || []).filter((e) => !e.partial).map((e) => e.p),
-              lo = Math.min(...a),
-              hi = Math.max(...a);
-            return `<li><span>${y(x.label)}</span><b>${a.length ? (lo === hi ? C(lo) : `${C(lo)} à ${C(hi)}`) : "sur devis"}</b></li>`;
-          })
-          .join("");
-      let t = rg
-        ? rg.n > 1
-          ? `Dans les grandes enseignes qui publient le prix de chacune, l'ensemble coûte de <b>${C(rg.min.p)}</b> chez ${y(D(rg.min.c).name)} à <b>${C(rg.max.p)}</b> chez ${y(D(rg.max.c).name)} (prix «\u00a0à\u00a0partir\u00a0de\u00a0»).`
-          : `Seule enseigne à publier le prix de chacune : ${y(D(rg.min.c).name)}, <b>${C(rg.min.p)}</b> pour l'ensemble (prix «\u00a0à\u00a0partir\u00a0de\u00a0»).`
-        : "Aucune grande enseigne ne publie le prix de chacune de ces prestations : demandez des devis, puis déclarez le prix payé.";
-      pn && (t += ` ${pn > 1 ? `${pn} enseignes ont une promotion en cours` : "Une enseigne a une promotion en cours"} sur l'une d'elles.`);
-      pe.teaser.innerHTML = `<h2>${ss.length} prestations : les repères</h2><p>${t}</p><ul class="teaser-svcs">${li}</ul><p><a href="#prix">Voir les prix et promotions des enseignes</a></p>`;
-      return;
-    }
-    let t;
-    if ("ct" === e.kind)
-      t =
-        "Chaque centre agréé déclare ses prix à la DGCCRF : la recherche affiche le prix officiel de chaque centre autour de votre adresse.";
-    else {
-      const a = (u[e.id] || []).filter((e) => !e.partial),
-        n = new Set(v.filter((t) => t.svc.includes(e.id) && "active" === ie(t)).map((e) => e.c)).size;
-      if (a.length > 1) {
-        const n = a.reduce((e, t) => (t.p < e.p ? t : e)),
-          r = a.reduce((e, t) => (t.p > e.p ? t : e));
-        t = `Dans les grandes enseignes, de <b>${C(n.p)}</b> chez ${y(D(n.c).name)} à <b>${C(r.p)}</b> chez ${y(D(r.c).name)}${e.unit ? " " + y(e.unit) : ""} (prix «\u00a0à\u00a0partir\u00a0de\u00a0»).`;
-      } else
-        t = a.length
-          ? `Prix publié : <b>${C(a[0].p)}</b> chez ${y(D(a[0].c).name)}${e.unit ? " " + y(e.unit) : ""}.`
-          : "Aucune grande enseigne n'affiche de prix national : il dépend du modèle. Demandez des devis, puis déclarez le prix payé.";
-      n &&
-        (t += ` ${n > 1 ? `${n} enseignes ont une promotion en cours` : "Une enseigne a une promotion en cours"}.`);
-    }
-    pe.teaser.innerHTML = `<h2>${y(e.label)} : les repères</h2><p>${t}</p><p><a href="#prix">Voir les prix et promotions des enseignes</a></p>`;
   }
   async function we() {
     try {
@@ -1071,7 +1029,29 @@ import { SERVICES } from "./shared/services.js";
       })
       .filter((e) => isFinite(e.lat) && isFinite(e.lon));
   }
-  const svcPicker = initServicePicker({ services: o, get: () => (me.svcs.length ? me.svcs : [fe().id]), apply: svcApply });
+  // Rien n'est coché d'office : tant que le visiteur n'a pas choisi, la fenêtre s'ouvre vide (« Choisissez une prestation »)
+  const svcPicker = initServicePicker({ services: o, get: () => (me.svcChosen ? (me.svcs.length ? me.svcs : [fe().id]) : []), apply: svcApply });
+  // Fenêtre fermée sans valider (Échap, ×, clic dehors) : « Comparer » ne repartira pas tout seul au prochain choix
+  w("#svcDlg").addEventListener("close", () => (me.pendingGo = !1));
+  // « Populaires : » une prestation d'un clic (la recherche part si l'adresse est déjà là)
+  w(".popular").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-pop]");
+    if (!b || !o.some((x) => x.id === b.dataset.pop)) return;
+    (svcApply([b.dataset.pop]), pe.address.value.trim() || me.place ? lt() : pe.address.focus());
+  });
+  // Accueil : nombre de prestations comparées ; écart moyen entre l'enseigne la moins chère et la plus chère, sur les prestations où au
+  // moins deux enseignes publient un prix complet (prix nationaux « à partir de » relevés le 1er octobre 2026)
+  (function () {
+    const gaps = Object.values(u)
+      .map((l) => l.filter((x) => isFinite(x.p) && !x.partial).map((x) => x.p))
+      .filter((l) => l.length > 1)
+      .map((l) => 1 - Math.min(...l) / Math.max(...l));
+    w("#hsSvc").textContent = String(o.length);
+    gaps.length
+      ? ((w("#hsGap").textContent = `\u2212${Math.round((100 * gaps.reduce((x, z) => x + z, 0)) / gaps.length)}\u00a0%`),
+        w("#hsGapCard").setAttribute("title", `Moyenne sur ${gaps.length} prestations, prix nationaux «\u00a0à partir de\u00a0» relevés le 1er octobre 2026`))
+      : (w("#hsGapCard").hidden = !0);
+  })();
   pe.refService.addEventListener("change", () => {
     // une des prestations choisies (il y en a plusieurs) : la page des prix l'affiche, la sélection de la recherche ne change pas
     if (me.svcs.length > 1 && me.svcs.includes(pe.refService.value)) return void refShow(o.find((t) => t.id === pe.refService.value));
@@ -1138,7 +1118,7 @@ import { SERVICES } from "./shared/services.js";
       Fe());
   }
   (pe.address.addEventListener("input", () => {
-    ((me.place = null), clearTimeout(Se));
+    ((me.place = null), clearTimeout(Se), pe.address.setCustomValidity(""));
     const e = pe.address.value.trim();
     e.length < 3 || "preview" === me.mode
       ? Ce()
@@ -1241,10 +1221,15 @@ import { SERVICES } from "./shared/services.js";
         ? `Adresse la plus proche de la position du garage${g.addrDist >= 0 ? " (à " + g.addrDist + " m)" : ""}, d'après la Base Adresse Nationale : à titre indicatif`
         : "",
     adTitleAttr = (g) => (g.addrApprox ? ` title="${y(adTitle(g))}"` : ""),
+    // « rue, code postal commune » : la fin est dans un span que le tableau (ordinateur) masque, la commune y étant sous la distance
+    adSplit = (a) => {
+      const m = /^(.*\S)\s*,\s*(\d{5}\s.*)$/.exec(a);
+      return m ? `${y(m[1])}<span class="a-pc">, ${y(m[2])}</span>` : y(a);
+    },
     adHtml = (g, short) =>
       g.addr
         ? (g.addrApprox ? '<span aria-hidden="true">≈ </span><span class="sr-only">Environ </span>' : "") +
-          y(g.addr)
+          adSplit(g.addr)
         : g.addrBusy
           ? "Recherche de l'adresse…"
           : short
@@ -1432,7 +1417,7 @@ import { SERVICES } from "./shared/services.js";
   }
   function distHtml(g) {
     const c = cityOf(g);
-    return `${he("pin")}<span class="sr-only">à </span><span class="d-km">${y(E(g.dist))}</span>${c ? `<span class="sr-only">, </span><span class="d-sep" aria-hidden="true">·</span><span class="d-city">${y(c)}</span>` : ""}`;
+    return `${he("pin")}<span class="sr-only">à </span><span class="d-km">${y(E(g.dist))}</span>${c ? `<span class="sr-only">, </span><span class="d-sep" aria-hidden="true">·</span><span class="d-city" title="${y(c)}">${y(c)}</span>` : ""}`;
   }
   function cityRepaint(g) {
     for (const n of document.querySelectorAll(`.dist[data-dist="${CSS.escape(g.id)}"]`)) n.innerHTML = distHtml(g);
@@ -1847,6 +1832,10 @@ import { SERVICES } from "./shared/services.js";
   const ot = new Set();
   async function lt(e) {
     if (me.busy) return;
+    if (!me.svcChosen) return void ((me.pendingGo = !0), svcPicker.open());
+    // pas d'adresse : le champ le dit lui-même (bulle du navigateur, lue par les lecteurs d'écran), on reste où l'on est
+    if (!me.place && !pe.address.value.trim())
+      return void (pe.address.setCustomValidity("Indiquez une adresse, une ville ou un code postal."), pe.address.reportValidity(), pe.address.focus());
     const s = fe();
     if (
       (Ce(),
@@ -1859,8 +1848,6 @@ import { SERVICES } from "./shared/services.js";
         let l = me.place;
         if (!l) {
           const e = pe.address.value.trim();
-          if (!e)
-            return (dt("Indiquez une adresse, une ville ou un code postal.", "err"), void pe.address.focus());
           let t;
           dt("Recherche de l'adresse…");
           try {
@@ -2175,6 +2162,7 @@ import { SERVICES } from "./shared/services.js";
   function ct(e) {
     ((me.busy = e),
       document.body.classList.toggle("is-searching", e),
+      e && document.body.classList.add("in-search"), // la page des résultats remplace l'accueil, et le reste après la recherche (erreurs comprises)
       (pe.go.disabled = e),
       pe.go.setAttribute("aria-busy", String(e)),
       e ? (pe.goLabel.textContent = "Recherche…") : ve());
@@ -2220,6 +2208,7 @@ import { SERVICES } from "./shared/services.js";
       (pe.toolbar.hidden = !0),
       (me.searched = !1),
       document.body.classList.remove("has-results", "map-wide"),
+      document.body.classList.add("in-search"),
       pe.mapExpand.setAttribute("aria-pressed", "false"),
       menuClose(),
       (pe.mapPane.hidden = !0),
@@ -2229,7 +2218,6 @@ import { SERVICES } from "./shared/services.js";
       (pe.osmNote.hidden = !0),
       "map" === me.viewMode && St("list"),
       (pe.list.innerHTML = ""),
-      be(),
       renderRepairNote());
   }
   pe.form.addEventListener("submit", (e) => {
@@ -2378,50 +2366,50 @@ import { SERVICES } from "./shared/services.js";
       })(
         applyFilters(r),
       )),
-      (pe.teaser.hidden = !0),
       (function (e, t) {
         const a = +pe.radius.value,
           n = e.filter(mt),
           k = selSvcs().length,
-          near = placeNear();
-        let r = "";
-        if ("ct" === me.kind) {
-          if (
-            ((r += `<p class="big"><b>${e.length} centre${e.length > 1 ? "s" : ""}</b> <span>de contrôle technique à moins de ${a} km${near}</span></p>`),
-            n.length)
-          ) {
-            const e = n.map((e) => e.price.amount),
-              t = n.reduce((e, t) => (t.price.amount < e.price.amount ? t : e));
-            r += `<p class="best">Visite ${y(pe.energy.value.toLowerCase())} : de <b>${C(Math.min(...e))}</b> à <b>${C(Math.max(...e))}</b>. Le moins cher : <b>${y(t.name)}</b>, à ${E(t.dist)}.</p>`;
-          }
-        } else {
-          if (
-            ((r += `<p class="big"><b>${e.length} garage${e.length > 1 ? "s" : ""}</b> <span>à moins de ${a} km${near}</span></p>`),
-            n.length)
-          ) {
-            const e = n.reduce((e, t) => (t.price.amount < e.price.amount ? t : e)),
-              t = n.filter((e) => "declared" === e.price.kind || e.price.declared > 0).length,
-              who = "remote" === RS.mode ? "des automobilistes" : "vous";
-            r +=
-              k > 1
-                ? `<p class="best">${n.length} avec un prix pour les ${k} prestations${t ? ` (dont ${t} avec un prix déclaré par ${who})` : ""}. Le moins cher : <b>${y(e.name)}</b>, à ${E(e.dist)}, <b>${C(e.price.amount)}</b> au total.</p>`
-                : `<p class="best">${n.length} avec un prix${t ? ` (dont ${t} déclaré${t > 1 ? "s" : ""} par ${who})` : " affiché"}. Le moins cher : <b>${y(e.name)}</b>, à ${E(e.dist)}, <b>${C(e.price.amount)}</b>.</p>`;
-          } else
-            e.length
-              ? (r += `<p class="best">${k > 1 ? (e.some((x) => "combo" === x.price.kind) ? `Aucun garage n'affiche un prix pour chacune des ${k} prestations : les totaux sont partiels.` : "Aucun prix public pour ces prestations.") : (u[t.id] || []).length ? "Aucun centre d'enseigne à prix public dans cette zone." : "Aucun prix public pour cette prestation."} Demandez des devis, puis déclarez le prix payé avec « Ajouter une réparation » pour construire l'échelle de prix de chaque garage.</p>`)
-              : (r +=
-                  '<p class="best">Aucun garage référencé dans cette zone. Élargissez le rayon ou ajoutez les ateliers du registre SIRENE (« Plus de filtres »).</p>');
+          ct = "ct" === me.kind,
+          p = me.place,
+          city = p ? ("Ma position" === p.label ? "Ma position" : p.city || p.label || "") : "",
+          // « Parallélisme / géométrie avant » → « Parallélisme », « Vidange (huile + filtre) » → « Vidange »
+          short = (l) => String(l).split(/ \/ | \(/)[0],
+          eyebrow = `${ct ? "Contrôle technique" : k > 1 ? `${k} prestations` : short(t.label)}${city ? ` · ${city}` : ""}`,
+          amounts = n.map((e) => e.price.amount).sort((x, z) => x - z),
+          stat = (v, l, c) => `<p class="stat${c ? " " + c : ""}"><b>${v}</b><span>${l}</span></p>`;
+        let r = `<div class="res-head"><p class="eyebrow">${y(eyebrow)}</p><h1 class="res-title" id="resTitle">${e.length} ${ct ? (e.length > 1 ? "centres comparés" : "centre comparé") : e.length > 1 ? "garages comparés" : "garage comparé"}</h1></div>`;
+        r += `<div class="stats">${stat(amounts.length ? C(amounts[0]) : "—", k > 1 ? "Le moins cher, au total" : "Le moins cher", "st-best")}${stat(amounts.length ? C(N(amounts)) : "—", k > 1 ? "Total médian" : "Prix médian")}${stat(String(amounts.length), k > 1 ? (amounts.length > 1 ? "Totaux complets" : "Total complet") : amounts.length > 1 ? "Prix publiés" : "Prix publié")}</div>`;
+        // la note sous le tableau : ce que les chiffres ne disent pas
+        const notes = [];
+        if (ct) n.length || !e.length || notes.push("Aucun centre de cette zone n'a déclaré de prix pour l'énergie choisie : appelez-les.");
+        else if (!e.length)
+          notes.push("Aucun garage référencé dans cette zone. Élargissez le rayon ou ajoutez les ateliers du registre SIRENE (« Plus de filtres »).");
+        else if (!n.length)
+          notes.push(
+            `${k > 1 ? (e.some((x) => "combo" === x.price.kind) ? `Aucun garage n'affiche un prix pour chacune des ${k} prestations : les totaux sont partiels.` : "Aucun prix public pour ces prestations.") : (u[t.id] || []).length ? "Aucun centre d'enseigne à prix public dans cette zone." : "Aucun prix public pour cette prestation."} Demandez des devis, puis déclarez le prix payé avec « Ajouter une réparation » pour construire l'échelle de prix de chaque garage.`,
+          );
+        else {
+          const d = n.filter((e) => "declared" === e.price.kind || e.price.declared > 0).length,
+            who = "remote" === RS.mode ? "des automobilistes" : "vous";
+          k > 1 && notes.push(`Prix totaux pour les ${k} prestations : ${n.length} garage${n.length > 1 ? "s ont" : " a"} un prix pour chacune.`);
+          d && notes.push(`Dont ${d} prix déclaré${d > 1 ? "s" : ""} par ${who}.`);
+          n.length * 3 < e.length && notes.push("Peu de prix publics ici : déclarez le prix payé pour construire l'échelle de chaque garage.");
+        }
+        if (!ct) {
           const i = [...new Set(e.filter((e) => le(e.promos)).map((e) => e.chain.name))];
           i.length &&
-            (r += `<p class="best"><span class="tag promo">${se}Promo</span> ${i.length > 1 ? "Promotions en cours" : "Promotion en cours"} chez ${y(((s = i), s.length < 2 ? s.join("") : s.slice(0, -1).join(", ") + " et " + s[s.length - 1]))}.</p>`);
+            notes.push(`<span class="tag promo">${se}Promo</span> ${i.length > 1 ? "Promotions en cours" : "Promotion en cours"} chez ${y(i.length < 2 ? i.join("") : i.slice(0, -1).join(", ") + " et " + i[i.length - 1])}.`);
         }
-        var s;
-        for (const e of me.notes) r += `<p class="hint">${y(e)}</p>`;
+        for (const x of me.notes) notes.push(y(x));
         if (me.cachedAt) {
-          const e = new Date(me.cachedAt);
-          r += `<p class="hint">Liste des garages enregistrée le ${y(B(`${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, "0")}-${String(e.getDate()).padStart(2, "0")}`))} à ${String(e.getHours()).padStart(2, "0")} h ${String(e.getMinutes()).padStart(2, "0")}. <button type="button" class="linkish" id="refreshBtn">Actualiser</button></p>`;
+          const x = new Date(me.cachedAt);
+          notes.push(`Liste des garages enregistrée le ${y(B(`${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`))} à ${String(x.getHours()).padStart(2, "0")} h ${String(x.getMinutes()).padStart(2, "0")}. <button type="button" class="linkish" id="refreshBtn">Actualiser</button>`);
         }
-        ((pe.summary.innerHTML = r), (pe.summary.hidden = !1));
+        ((pe.summary.innerHTML = r),
+          (pe.summary.hidden = !1),
+          (pe.resNote.innerHTML = notes.map((x, j) => (0 === j ? `<p class="n-main">${he("tag")}<span>${x}</span></p>` : `<p>${x}</p>`)).join("")),
+          (pe.resNote.hidden = !notes.length));
         const i = w("#refreshBtn");
         i && i.addEventListener("click", () => lt(!0));
       })(r, e),
@@ -2444,44 +2432,53 @@ import { SERVICES } from "./shared/services.js";
   }
   function ft() {
     const e = fe(),
-      t = me.view.slice(0, me.shown);
+      t = me.view.slice(0, me.shown),
+      // échelle : du moins cher au plus cher des garages listés qui ont un prix complet (tous, pas seulement ceux affichés)
+      priced = me.view.filter(mt),
+      vals = priced.map((x) => x.price.amount);
+    scale = vals.length
+      ? { lo: Math.min(...vals), hi: Math.max(...vals), best: priced.reduce((x, z) => (z.price.amount < x.price.amount ? z : x)).id }
+      : { lo: 0, hi: 0, best: "" };
+    const tagOf = (cls, txt) => `<span class="tag p-tag ${cls}">${y(txt)}</span>`,
+      priceCell = (amount, extra, tag) =>
+        `<span class="p-line"><span class="amount">${extra.from || ""}<span class="num">${C(amount)}</span>${extra.unit || ""}</span>${tag || ""}</span>${barHtml(extra.scaled === !1 ? NaN : amount)}`;
     pe.list.innerHTML = t
       .map((t, a) =>
         "ct" === me.kind
           ? (function (e, t) {
               const a = e.ct,
-                n = a
-                  ? `<span class="amount"><span class="num">${C(a.price)}</span></span><span class="tag ok">Prix officiel</span>`
-                  : '<span class="no-price">Prix non déclaré</span>';
-              return bt(e, t, e.network || "Contrôle technique", reviewsLink(e), n, { details: () => $t(e) });
+                n = a ? priceCell(a.price, {}, "") : `<span class="no-price">Prix non déclaré</span>${barHtml(NaN)}`;
+              return bt(e, t, e.network || "Contrôle technique", "", n, { details: () => $t(e) });
             })(t, a)
           : (function (e, t, a) {
               const n = e.price,
                 r = e.promos || [],
                 s = kd(e),
-                i = a.unit ? `<span class="unit">${y(a.unit)}</span>` : "";
+                i = a.unit ? `<span class="unit">${y(a.unit)}</span>` : "",
+                from = n.approx ? '<span class="from">env.</span>' : "",
+                full = mt(e);
               let o;
               o =
                 "declared" === n.kind
-                  ? `<span class="amount"><span class="num">${C(n.amount)}</span>${i}</span><span class="tag info">Prix déclaré</span>`
+                  ? priceCell(n.amount, { unit: i }, tagOf("info", "Prix déclaré"))
                   : "chain" === n.kind
-                    ? `<span class="amount">${n.approx ? '<span class="from">env.</span>' : ""}<span class="num">${C(n.amount)}</span>${i}</span><span class="tag ${n.partial ? "warn" : "ok"}">${n.partial ? "Pièces en plus" : "Prix enseigne"}</span>`
+                    ? priceCell(n.amount, { unit: i, from, scaled: full }, n.partial ? tagOf("warn", "Pièces en plus") : "")
                     : "combo" === n.kind
-                      ? `<span class="amount">${n.approx ? '<span class="from">env.</span>' : ""}<span class="num">${C(n.amount)}</span>${n.missing ? `<span class="unit">+ ${n.missing} sur devis</span>` : ""}</span><span class="tag ${n.partial ? "warn" : n.declared ? "info" : "ok"}">${y(comboTag(n))}</span>`
-                      : "center" === n.kind
-                        ? '<span class="no-price">Tarif fixé par le centre</span>'
-                        : '<span class="no-price">Prix non publié</span>';
+                      ? priceCell(n.amount, { from, unit: n.missing ? `<span class="unit">+ ${n.missing} sur devis</span>` : "", scaled: full }, tagOf(n.partial ? "warn" : n.declared ? "info" : "ok", comboTag(n)))
+                      : `<span class="no-price">${"center" === n.kind ? "Tarif fixé par le centre" : "Prix non publié"}</span>${barHtml(NaN)}`;
               const l = e.rating,
                 c = l
                   ? `<span class="rating" title="${y(`${te(l.avg)} sur 5 · ${V(l.n, "note", "notes")}`)}">${he("star")}<b>${te(l.avg)}</b><span class="n" aria-hidden="true">(${l.n})</span><span class="sr-only">/5 · ${V(l.n, "note", "notes")}</span></span>`
-                  : reviewsLink(e),
-                d = r.filter((e) => "active" === e.st),
-                u = d.length
-                  ? `<p class="g-promo"><span class="tag promo">${se}Promo</span><b>${y(d[0].label)}</b><span>${y(de(d[0]))}${d.length > 1 ? ` · ${V(d.length - 1, "autre offre", "autres offres")} dans les détails` : ""}</span></p>`
-                  : "";
+                  : "",
+                d = r.filter((e) => "active" === e.st);
+              // une promotion en cours : une pastille à côté du prix (les offres et leurs conditions sont dans la fiche)
+              d.length &&
+                (o = o.replace("</span><span class=\"bar\"", `<span class="tag promo" title="${y(d.map((x) => x.label).join(" · "))}">${se}Promo</span></span><span class="bar"`));
               return bt(e, t, s, c, o, {
-                avail: `<p class="svc lvl-${e.offer.lvl}" title="${y(e.offer.why)}"><span class="dot" aria-hidden="true"></span><span class="svc-long">${y(whyShort(e.offer.why))}</span><span class="svc-tiny" aria-hidden="true">${y(whyTiny(e.offer.why))}</span></p>`,
-                strip: u,
+                dot: `<span class="dot lvl-${e.offer.lvl}" aria-hidden="true"></span>`,
+                why: whyShort(e.offer.why),
+                // plusieurs prestations : un garage qui n'en fait qu'une partie le dit en clair sous son type (« 1 prestation sur 2 »)
+                part: "part" === e.offer.lvl ? String(e.offer.why).split(" : ")[0] : "",
                 details: () => yt(e, a),
               });
             })(t, a, e),
@@ -2779,8 +2776,8 @@ import { SERVICES } from "./shared/services.js";
       ? e.network || "Contrôle technique"
       : e.chain
         ? k(e.name).includes(k(e.chain.name))
-          ? "Enseigne"
-          : `Enseigne ${e.chain.name}`
+          ? "Centre d'enseigne"
+          : `Centre ${e.chain.name}`
         : "sirene" === e.src
           ? "Registre SIRENE"
           : e.dealer
@@ -2789,44 +2786,44 @@ import { SERVICES } from "./shared/services.js";
               ? "Spécialiste pneus"
               : "Indépendant";
   }
-  // Boutons de la carte : « Appeler » (si on a un numéro) précédé d'un bouton rond d'itinéraire ; sans numéro, « Itinéraire » seul.
-  // Le lien « Avis » (Google) est en haut à droite de la carte quand le garage n'a pas de note, et dans ses détails.
+  // Bouton de la ligne : « Appeler » quand le garage a un prix, « Demander » (un devis) sinon ; sans numéro, « Itinéraire ».
+  // L'itinéraire et l'avis Google sont aussi dans la fiche.
+  const routeUrl = (e) => `https://www.google.com/maps/dir/?api=1&amp;destination=${e.lat},${e.lon}`;
   function gActions(e) {
     const t = vt(e),
       a = (phoneList(e)[0] || {}).tel || "",
-      route = `https://www.google.com/maps/dir/?api=1&amp;destination=${e.lat},${e.lon}`;
+      priced = e.price && isFinite(e.price.amount);
     return t
-      ? `<a class="mini act-route round" href="${route}" target="_blank" rel="noopener" aria-label="Itinéraire vers ${y(e.name)}" title="Itinéraire"></a><a class="mini act-call" href="tel:${y(a)}" aria-label="Appeler le ${y(t)}">Appeler</a>`
-      : `<a class="mini act-route" href="${route}" target="_blank" rel="noopener" aria-label="Itinéraire vers ${y(e.name)}">Itinéraire</a>`;
+      ? `<a class="act act-call" href="tel:${y(a)}" aria-label="${priced ? "Appeler" : "Demander un devis à"} ${y(e.name)} (${y(t)})">${he("phone")}${priced ? "Appeler" : "Demander"}</a>`
+      : `<a class="act act-route" href="${routeUrl(e)}" target="_blank" rel="noopener" aria-label="Itinéraire vers ${y(e.name)}">${he("route")}Itinéraire</a>`;
   }
-  const reviewsLink = (e) =>
-      `<a class="rating none act-reviews" href="${y(adGoogle(e))}" target="_blank" rel="noopener" aria-label="Avis Google : ${y(e.name)}">${he("star")}Avis</a>`,
-    // « Atelier de marque : prestation probable » → « Prestation probable » (le type du garage est déjà dit à côté)
-    whyShort = (w) => {
+  // « Atelier de marque : prestation probable » → « Prestation probable » (le type du garage est déjà dit à côté)
+  const whyShort = (w) => {
       const t = String(w)
         .replace(/^(Atelier de marque|Spécialiste pneus|Registre SIRENE) : /, "")
         .replace("Banc de géométrie non renseigné : à vérifier", "Banc de géométrie à vérifier");
       return t.charAt(0).toUpperCase() + t.slice(1);
     },
-    // sur la petite carte : « Probable », « À vérifier », « Au catalogue »
-    whyTiny = (w) => (/probable/i.test(w) ? "Probable" : /vérifier/i.test(w) ? "À vérifier" : /catalogue/i.test(w) ? "Au catalogue" : /non renseign/i.test(w) ? "Non renseigné" : "Confirmé"),
     // couleur de la tuile : enseigne, registre SIRENE, atelier de marque, spécialiste pneus, indépendant
     tileKind = (e) =>
       e.chain || e.network ? "k-chain" : "sirene" === e.src ? "k-sirene" : e.dealer ? "k-brand" : "tyres" === e.shop ? "k-tyres" : "k-indep";
+  // Échelle de prix des garages listés (calculée par ft) : la ligne la moins chère et la longueur de chaque barre
+  let scale = { lo: 0, hi: 0, best: "" };
+  const barHtml = (v) =>
+    `<span class="bar" aria-hidden="true">${isFinite(v) ? `<i style="width:${Math.round(scale.hi > scale.lo ? 20 + ((v - scale.lo) / (scale.hi - scale.lo)) * 65 : 20)}%"></i>` : ""}</span>`;
   function bt(e, t, a, n, r, s) {
-    const i = me.openIds.has(e.id);
-    return `<li class="card ${tileKind(e)}${i ? " is-open" : ""}${me.sel === e.id ? " is-selected" : ""}" id="c-${t}" data-id="${y(e.id)}">
+    const i = me.openIds.has(e.id),
+      best = scale.best === e.id;
+    return `<li class="card ${tileKind(e)}${best ? " is-best" : ""}${i ? " is-open" : ""}${me.sel === e.id ? " is-selected" : ""}" id="c-${t}" data-id="${y(e.id)}">
     <div class="g-main" data-act="more">
       ${av(e.name, e.chain, e.network)}
       <div class="g-id">
-        <div class="g-top"><h3><button type="button" class="g-name linkless" data-act="more" aria-expanded="${i}" aria-controls="m-${t}">${y(e.name)}</button></h3>${n}</div>
-        <div class="g-sub"><p class="g-addr${e.addr ? "" : " is-none"}" data-ad="${y(e.id)}"${adTitleAttr(e)}>${adHtml(e)}</p><span class="chev" aria-hidden="true">${i ? "Masquer" : "Détails"}</span></div>
-        <div class="g-meta"><span class="kind">${y(a)}</span>${s.avail || ""}</div>
+        <h3><button type="button" class="g-name linkless" data-act="more" aria-expanded="${i}" aria-controls="m-${t}">${y(e.name)}</button>${n}</h3>
+        <p class="g-addr${e.addr ? "" : " is-none"}" data-ad="${y(e.id)}"${adTitleAttr(e)}>${adHtml(e)}</p>
       </div>
-      <span class="dist" data-dist="${y(e.id)}">${distHtml(e)}</span>
+      <div class="g-type"><span class="k-cell"><span class="kind"${s.why ? ` title="${y(s.why)}"` : ""}>${s.dot || ""}<span class="k-txt">${y(a)}</span>${s.why ? `<span class="sr-only"> · ${y(s.why)}</span>` : ""}</span>${s.part ? `<span class="k-part" aria-hidden="true">${y(s.part)}</span>` : ""}</span><span class="dist" data-dist="${y(e.id)}">${distHtml(e)}</span></div>
       <div class="g-price">${r}</div>
     </div>
-    ${s.strip || ""}
     <div class="g-actions">${gActions(e)}</div>
     <div class="g-more" id="m-${t}"${i ? "" : " hidden"}>${i ? s.details() : ""}</div>
   </li>`;
@@ -2924,7 +2921,7 @@ import { SERVICES } from "./shared/services.js";
             : "center" === a.kind
               ? "L'enseigne ne publie pas de prix national pour cette prestation : demandez un devis au centre."
               : "Ce garage ne publie pas ses prix : demandez un devis, puis déclarez le prix payé."),
-      `${wt(e)}\n      ${multi ? comboHtml(a) : ""}<p class="price-note">${r}</p>\n      ${n.length ? ue(n, t.id) : ""}\n      ${multi ? a.parts.filter((p) => !p.no && "declared" === p.price.kind).map((p) => it(p.price.mine, p.id, !0)).join("") : "declared" === a.kind ? it(a.mine, t.id, !1) : ""}\n      ${(function (
+      `${wt(e)}\n      <p class="svc-why"><span class="dot lvl-${e.offer.lvl}" aria-hidden="true"></span>${y(e.offer.why)}</p>\n      ${multi ? comboHtml(a) : ""}<p class="price-note">${r}</p>\n      ${n.length ? ue(n, t.id) : ""}\n      ${multi ? a.parts.filter((p) => !p.no && "declared" === p.price.kind).map((p) => it(p.price.mine, p.id, !0)).join("") : "declared" === a.kind ? it(a.mine, t.id, !1) : ""}\n      ${(function (
         e,
         t,
       ) {
@@ -2953,13 +2950,13 @@ import { SERVICES } from "./shared/services.js";
       })(
         e,
         t.id,
-      )}\n      <div><button type="button" class="btn" data-act="declare" aria-haspopup="dialog">${he("plus")}Déclarer une réparation</button></div>`
+      )}\n      <div class="g-more-acts"><a class="btn" href="${routeUrl(e)}" target="_blank" rel="noopener">${he("route")}Itinéraire</a><button type="button" class="btn" data-act="declare" aria-haspopup="dialog">${he("plus")}Déclarer une réparation</button></div>`
     );
   }
   function $t(e) {
     const t = e.ct;
     if (!t)
-      return `${wt(e)}<p class="price-note">Ce centre n'a pas déclaré de prix pour les voitures particulières : appelez-le.</p>`;
+      return `${wt(e)}<p class="price-note">Ce centre n'a pas déclaré de prix pour les voitures particulières : appelez-le.</p><div class="g-more-acts"><a class="btn" href="${routeUrl(e)}" target="_blank" rel="noopener">${he("route")}Itinéraire</a></div>`;
     const a =
       isFinite(t.cvMin) || isFinite(t.cvMax)
         ? isFinite(t.cvMin) && isFinite(t.cvMax) && t.cvMin !== t.cvMax
@@ -2978,7 +2975,7 @@ import { SERVICES } from "./shared/services.js";
             })(t.date),
           )
         : ""
-    }${t.matched ? "" : " · aucun tarif déclaré pour l'énergie choisie"} · prix déclaré par le centre à la DGCCRF.</p>`;
+    }${t.matched ? "" : " · aucun tarif déclaré pour l'énergie choisie"} · prix déclaré par le centre à la DGCCRF.</p><div class="g-more-acts"><a class="btn" href="${routeUrl(e)}" target="_blank" rel="noopener">${he("route")}Itinéraire</a></div>`;
   }
   // Peint une fiche ouverte ou fermée (sans toucher à la sélection)
   function kc(e, r, n) {
@@ -2987,8 +2984,7 @@ import { SERVICES } from "./shared/services.js";
     ((s.innerHTML = r && n ? ("ct" === me.kind ? $t(n) : yt(n, fe())) : ""),
       (s.hidden = !r),
       e.classList.toggle("is-open", r),
-      e.querySelector(".g-name").setAttribute("aria-expanded", String(r)),
-      (e.querySelector(".chev").textContent = r ? "Masquer" : "Détails"));
+      e.querySelector(".g-name").setAttribute("aria-expanded", String(r)));
     r && n && (adEnsure(n), mbxEnsure(n));
   }
   // Une seule fiche ouverte à la fois : l'ouvrir la sélectionne (carte + barre récapitulative)
@@ -3006,9 +3002,10 @@ import { SERVICES } from "./shared/services.js";
         n && kc(n, !1);
       }
     (r ? me.openIds.add(a) : me.openIds.delete(a), kc(e, r, n));
-    // la fiche cliquée reste sous le pointeur même si une fiche ouverte au-dessus vient de se refermer
+    // la fiche cliquée reste sous le pointeur même si une fiche ouverte au-dessus vient de se refermer (c'est la page qui défile, sur
+    // ordinateur comme sur mobile : la carte, collée à droite, suit)
     const i = e.getBoundingClientRect().top - o;
-    (i && (ge() ? (pe.panelCol.scrollTop += i) : window.scrollBy(0, i)),
+    (i && window.scrollBy(0, i),
       sl(r ? a : me.sel === a ? null : me.sel));
   }
   function St(e) {
@@ -3025,35 +3022,25 @@ import { SERVICES } from "./shared/services.js";
   // ----- Sélection d'un garage : fiche surlignée, marqueur agrandi + bulle, barre récapitulative -----
   const Mk = new Map();
   let Hl = null;
+  // le garage le moins cher est orange, comme sa ligne du tableau ; le garage choisi est orange aussi, plus gros et entouré d'un halo
   const mkR = (e, t) => (t ? 11 : mt(e) ? 8 : 6),
     mkS = (e, t) => ({
       color: Ct("--mk-ring") || "#fff",
       weight: t ? 3.5 : 2.5,
-      fillColor: t
+      fillColor: t || scale.best === e.id
         ? Ct("--mk-sel") || "#E5440B"
         : mt(e)
           ? Ct("--mk-priced") || "#0a0d0a"
           : Ct("--mk-none") || "#8f998c",
       fillOpacity: 1,
     }),
-    // Cadrage de la carte : on tient compte du panneau (ordinateur) ou des barres (mobile)
-    // Ordinateur : la zone libre de la carte est à droite du panneau (ou du rail si la carte est agrandie) et sous la barre de recherche et les filtres.
-    free = () => {
-      const e = pe.panelCol.getBoundingClientRect(),
-        f = pe.form.getBoundingClientRect(),
-        b = (pe.toolbar.hidden ? pe.form : pe.toolbar).getBoundingClientRect();
-      return { left: Math.round(e.width ? e.right : f.left), top: Math.round(b.bottom) };
-    },
-    fo = () => {
-      if (!ge()) return { paddingTopLeft: [10, 72], paddingBottomRight: [10, 96] };
-      const r = free();
-      return { paddingTopLeft: [r.left + 24, r.top + 24], paddingBottomRight: [90, 24] };
-    },
-    po = () => {
-      if (!ge()) return { paddingTopLeft: [40, 120], paddingBottomRight: [40, 400], animate: !0 };
-      const r = free();
-      return { paddingTopLeft: [r.left + 40, r.top + 90], paddingBottomRight: [90, 170], animate: !0 };
-    },
+    // Cadrage de la carte : sur ordinateur elle a sa colonne (une marge suffit, plus en bas quand la barre d'information est ouverte) ;
+    // sur mobile, la recherche et le bouton « Liste » la recouvrent en haut et en bas.
+    fo = () => (ge() ? { padding: [28, 28] } : { paddingTopLeft: [10, 72], paddingBottomRight: [10, 96] }),
+    po = () =>
+      ge()
+        ? { paddingTopLeft: [40, 40], paddingBottomRight: [40, 230], animate: !0 }
+        : { paddingTopLeft: [40, 120], paddingBottomRight: [40, 400], animate: !0 },
     mp = (e) =>
       e.price && "combo" === e.price.kind
         ? `${e.price.partial ? "total partiel" : "total"} ${C(e.price.amount)}`
@@ -3349,10 +3336,10 @@ import { SERVICES } from "./shared/services.js";
                   fillOpacity: 0.05,
                   interactive: !1,
                 }).addTo(xt),
-                  // les garages avec prix sont dessinés en dernier (au-dessus des autres)
+                  // les garages avec prix sont dessinés en dernier (au-dessus des autres), le moins cher tout à la fin
                   e
                     .slice()
-                    .sort((e, t) => mt(e) - mt(t))
+                    .sort((e, t) => mt(e) + (scale.best === e.id) - (mt(t) + (scale.best === t.id)))
                     .forEach((e) => {
                       const t = L.circleMarker([e.lat, e.lon], { ...mkS(e, !1), radius: mkR(e, !1) })
                         .on("click", () => (ge() && !document.body.classList.contains("map-wide") ? _t(e.id, !0) : sl(e.id)))
@@ -4178,6 +4165,7 @@ import { SERVICES } from "./shared/services.js";
             ((me.place = e.place), (pe.address.value = e.place.label || "")),
           (pe.sirene.checked = !!e.sirene))
         : (pe.service.value = "geo_av"),
+        (me.svcChosen = !!(e && e.svc)),
         _e(),
         ve(),
         fltSync(),

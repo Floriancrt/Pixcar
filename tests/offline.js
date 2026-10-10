@@ -4,7 +4,7 @@ process.env.PIXCAR_SW = "1"; // dans cette suite seulement, le service worker es
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { launch, ROOT } = require("./harness");
+const { launch, ROOT, pickServices } = require("./harness");
 const { installMocks, buildElements } = require("./mocks");
 const { serveDir } = require("./static-server");
 
@@ -77,6 +77,7 @@ function makeVersion(tag, { brokenShell = false, from = DIST } = {}) {
     check("O2b the page is complete: options, title, no error", (await page.$$eval("#service option", (l) => l.length)) > 15 && (await page.title()) === "Pixcar" && !errors.length, JSON.stringify(errors));
 
     // ---------------- O3 : l'hébergeur est en panne, le réseau est coupé
+    await pickServices(page, "vidange"); // aucune prestation n'est choisie d'office (« Comparer » ouvrirait la fenêtre de choix)
     await page.fill("#address", "12 rue de la république lyon");
     await page.waitForSelector("#addrList li[data-i]", { state: "visible" });
     await page.click("#addrList li[data-i='0']");
@@ -88,7 +89,7 @@ function makeVersion(tag, { brokenShell = false, from = DIST } = {}) {
     await page.reload();
     await page.waitForSelector("#service option", { state: "attached", timeout: 8000 });
     await page.waitForSelector("#list > li.card", { timeout: 8000 }).catch(() => {});
-    check("O3a with the host DOWN and the network OFF the page still opens, complete and styled", (await page.title()) === "Pixcar" && (await page.$$eval("#service option", (l) => l.length)) > 15 && (await page.evaluate(() => getComputedStyle(document.body).fontFamily.includes("Outfit") || document.fonts.size >= 0)));
+    check("O3a with the host DOWN and the network OFF the page still opens, complete and styled", (await page.title()) === "Pixcar" && (await page.$$eval("#service option", (l) => l.length)) > 15 && (await page.evaluate(() => getComputedStyle(document.body).fontFamily.includes("Manrope"))));
     check("O3b … and shows the last search again, from the copy kept in the browser", (await page.$$eval("#list > li.card", (l) => l.length)) === before && before > 20, `${before}`);
     await page.click("#go").catch(() => {});
     await sleep(600);

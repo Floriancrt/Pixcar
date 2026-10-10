@@ -69,10 +69,12 @@ const cardsOf = (page) =>
       name: c.querySelector(".g-name").textContent.trim(),
       price: (c.querySelector(".g-price") || {}).textContent || "",
       tag: ((c.querySelector(".g-price .tag") || {}).textContent || "").trim(),
-      svc: c.querySelector(".svc") ? { cls: c.querySelector(".svc").className, title: c.querySelector(".svc").getAttribute("title"), text: c.querySelector(".svc").textContent } : null,
+      svc: c.querySelector(".kind") ? { cls: (c.querySelector(".kind .dot") || {}).className || "", title: c.querySelector(".kind").getAttribute("title"), text: (c.querySelector(".k-part") || {}).textContent || "" } : null,
     })),
   );
 const axeRun = async (page) => {
+  // la fenêtre s'ouvre en fondu : axe mesurerait des couleurs à demi transparentes
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running" || a.effect.getComputedTiming().iterations === Infinity));
   await injectScript(page, AXE); // pas de <script> en ligne : la politique de sécurité du site publiable (dist/) le refuse
   return page.evaluate(async (tags) => (await axe.run(document, { runOnly: { type: "tag", values: tags } })).violations.map((x) => ({ id: x.id, n: x.nodes.length, ex: x.nodes.slice(0, 2).map((n) => n.html.slice(0, 140)) })), TAGS);
 };
@@ -83,10 +85,15 @@ const axeRun = async (page) => {
   try {
     // =============== P. La fenêtre de choix (ordinateur) ===============
     let { page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { elements: ELEMENTS } });
-    await openPicker(page);
+    const start = await page.inputValue("#service");
     let s = await picker(page);
-    check("P1 the « Prestation » button opens the window, the current service is ticked and shown as a chip, the search field has the focus", s.open && s.checked.length === 1 && s.chips.length === 1 && !s.selHidden && s.go === "Valider cette prestation" && s.focus === "svcSearch", JSON.stringify(s));
-    const start = s.checked[0];
+    check("P0 nothing is chosen for the visitor: the bar reads « Choisir une prestation »", s.bar[0] === "Choisir une prestation" && s.bar[1] === "" && !!(await page.$("#svcBtn.is-empty")), JSON.stringify(s.bar));
+    await openPicker(page);
+    s = await picker(page);
+    check("P1 the « Prestation » button opens the window with nothing ticked, no chip, « Choisissez une prestation » disabled, the search field has the focus", s.open && !s.checked.length && !s.chips.length && s.selHidden && s.goDisabled && s.go === "Choisissez une prestation" && s.focus === "svcSearch", JSON.stringify(s));
+    await page.check(`#svcList input[value='${start}']`);
+    s = await picker(page);
+    check("P1b ticking a service shows it as a chip, « Valider cette prestation »", JSON.stringify(s.checked) === JSON.stringify([start]) && s.chips.length === 1 && !s.selHidden && !s.goDisabled && s.go === "Valider cette prestation", JSON.stringify(s));
     await page.fill("#svcSearch", "clim");
     s = await picker(page);
     check("P2a search narrows the list (« clim » → recharge de climatisation)", JSON.stringify(s.visible) === JSON.stringify(["clim"]) && !s.none, JSON.stringify(s.visible));
@@ -122,10 +129,10 @@ const axeRun = async (page) => {
     await page.keyboard.press("Escape");
     await page.waitForTimeout(150);
     s = await picker(page);
-    check("P7 Escape closes without applying: the bar still names the service chosen before, the focus is back on the button", !s.open && s.bar[1] === "" && (await page.inputValue("#service")) === start && s.focus === "svcBtn", JSON.stringify(s));
+    check("P7 Escape closes without applying: still nothing chosen (« Choisir une prestation »), the focus is back on the button", !s.open && s.bar[0] === "Choisir une prestation" && s.bar[1] === "" && !!(await page.$("#svcBtn.is-empty")) && (await page.inputValue("#service")) === start && s.focus === "svcBtn", JSON.stringify(s));
     await openPicker(page);
     s = await picker(page);
-    check("P8 reopened, the window shows the applied choice again (unsaved ticks are forgotten)", JSON.stringify(s.checked) === JSON.stringify([start]), JSON.stringify(s.checked));
+    check("P8 reopened, the window shows the applied choice again: nothing (unsaved ticks are forgotten)", !s.checked.length && s.goDisabled, JSON.stringify(s.checked));
     await page.click("#svcClose");
     await page.waitForTimeout(150);
     check("P9a the × button closes it", !(await picker(page)).open);
@@ -137,8 +144,6 @@ const axeRun = async (page) => {
     s = await picker(page);
     const last = await page.evaluate(() => JSON.parse(localStorage.getItem("jg.last.v1") || "{}"));
     check("P10 validated: the bar reads « Vidange (huile + filtre) » with « +1 », the main service drives the page, the choice is remembered", !s.open && s.bar[0] === "Vidange (huile + filtre)" && s.bar[1] === "+1" && (await page.inputValue("#service")) === "vidange" && JSON.stringify(last.svcs) === JSON.stringify(["vidange", "clim"]) && s.focus === "svcBtn", JSON.stringify([s, last]));
-    const teaser = await page.evaluate(() => ({ h: document.querySelector("#teaser h2").textContent, p: document.querySelector("#teaser p").textContent, rows: [...document.querySelectorAll("#teaser .teaser-svcs li")].map((li) => li.textContent) }));
-    check("P11 before the search, the landmarks speak of both services: range for the whole set, then one line each", teaser.h === "2 prestations : les repères" && /l'ensemble coûte de .+ à .+/.test(teaser.p) && teaser.rows.length === 2 && /^Vidange/.test(teaser.rows[0]) && /^Recharge de climatisation/.test(teaser.rows[1]), JSON.stringify(teaser));
 
     // =============== R. Les résultats d'un ensemble de prestations ===============
     const pV = await chainPrice(page, "vidange", "Norauto"), pC = await chainPrice(page, "clim", "Norauto");
@@ -147,13 +152,13 @@ const axeRun = async (page) => {
     let cards = await cardsOf(page);
     const nor = cards.find((c) => /^Norauto/.test(c.name));
     check("R1 a chain with both prices shows their total, tagged « Total 2 prestations »", nor && near(num(nor.price), pV + pC) && nor.tag === "Total 2 prestations", JSON.stringify([nor, pV, pC]));
-    const sum = norm(await page.textContent("#summary"));
-    check("R2 the summary counts garages with a price for both, and the cheapest is « au total »", /\d+ avec un prix pour les 2 prestations/.test(sum) && /au total\./.test(sum), sum);
+    const sum = norm(await page.textContent("#summary")), rnote = norm(await page.textContent("#resNote"));
+    check("R2 the head gives the cheapest « au total », the median total and the number of complete totals; the note under the table says how many garages have a price for both", /2 prestations · Lyon/.test(sum) && /Le moins cher, au total/.test(sum) && /Total médian/.test(sum) && /\d+ ?Totaux complets/.test(sum) && /Prix totaux pour les 2 prestations : \d+ garages ont un prix pour chacune\./.test(rnote), JSON.stringify([sum, rnote]));
     const full = cards.filter((c) => c.tag === "Total 2 prestations").map((c) => num(c.price));
     const firstPartial = cards.findIndex((c) => c.tag === "Total partiel"), lastFull = cards.map((c) => c.tag).lastIndexOf("Total 2 prestations");
     check("R3 sorted by price: complete totals first, from the cheapest, then partial totals", full.length >= 3 && full.every((v, i) => !i || v >= full[i - 1]) && (firstPartial < 0 || firstPartial > lastFull), JSON.stringify([full.slice(0, 8), firstPartial, lastFull]));
     const clim = cards.find((c) => c.name === "Garage Clim Seule");
-    check("R4 a garage that does only one of them stays, saying « 1 prestation sur 2 » and what it does not do", clim && /lvl-part/.test(clim.svc.cls) && clim.svc.title === "1 prestation sur 2 : ne propose pas vidange (huile + filtre)" && /1 sur 2|1 prestation sur 2/.test(clim.svc.text), JSON.stringify(clim));
+    check("R4 a garage that does only one of them stays, saying « 1 prestation sur 2 » under its type and what it does not do on hover", clim && /lvl-part/.test(clim.svc.cls) && clim.svc.title === "1 prestation sur 2 : ne propose pas vidange (huile + filtre)" && clim.svc.text === "1 prestation sur 2", JSON.stringify(clim));
     check("R5 a garage that does neither is left out", !cards.some((c) => c.name === "Garage Ni Vidange Ni Clim"), JSON.stringify(cards.map((c) => c.name).slice(0, 5)));
     await page.click(`#list [data-id="${nor.id}"] .g-main`);
     await page.waitForTimeout(500);
@@ -173,14 +178,14 @@ const axeRun = async (page) => {
     await page.waitForTimeout(300);
     cards = await cardsOf(page);
     const nor2 = cards.find((c) => /^Norauto/.test(c.name));
-    const sum2 = norm(await page.textContent("#summary"));
+    const sum2 = norm(await page.textContent("#resNote"));
     check("R9 a service without any national price (révision): totals are partial, « + 1 sur devis », never shown as complete", nor2 && nor2.tag === "Total partiel" && near(num(nor2.price), pV) && /\+ 1 sur devis/.test(nor2.price) && !cards.some((c) => c.tag === "Total 2 prestations"), JSON.stringify(nor2));
-    check("R10 ...and the summary says the totals are partial", /Aucun garage n'affiche un prix pour chacune des 2 prestations : les totaux sont partiels\./.test(sum2), sum2);
+    check("R10 ...and the note under the table says the totals are partial", /Aucun garage n'affiche un prix pour chacune des 2 prestations : les totaux sont partiels\./.test(sum2), sum2);
     await pickServices(page, "vidange");
     await page.waitForTimeout(300);
     cards = await cardsOf(page);
     const nor3 = cards.find((c) => /^Norauto/.test(c.name));
-    check("R11 back to one service: the card shows that service's price as before (« Prix enseigne »), the bar has no « +N »", nor3 && near(num(nor3.price), pV) && nor3.tag === "Prix enseigne" && (await picker(page)).bar[1] === "", JSON.stringify(nor3));
+    check("R11 back to one service: the row shows that service's price, no « Total » tag any more, the bar has no « +N »", nor3 && near(num(nor3.price), pV) && !/Total/.test(nor3.price) && (await picker(page)).bar[1] === "", JSON.stringify(nor3));
     await pickServices(page, "ct");
     await page.waitForTimeout(300);
     const st = norm(await page.textContent("#status"));
@@ -206,6 +211,8 @@ const axeRun = async (page) => {
     for (const vp of [{ width: 390, height: 844 }, { width: 320, height: 640 }]) {
       ({ page, ctx, logs } = await open(browser, server, FILE, { ...vp, dpr: 2, touch: true, mock: { elements: ELEMENTS } }));
       await openPicker(page);
+      const f0 = await page.evaluate(() => ({ type: document.activeElement.type, value: document.activeElement.value, first: document.querySelector("#svcList input").value }));
+      check(`M2 [${vp.width} px] on a touch screen the keyboard does not pop up: with nothing chosen yet, the focus goes to the first service of the list, not the search field`, f0.type === "checkbox" && f0.value === f0.first, JSON.stringify(f0));
       for (const cb of await page.$$("#svcList input:checked")) await cb.uncheck();
       for (const id of ["vidange", "clim", "diag"]) await page.check(`#svcList input[value='${id}']`);
       const geo = await page.evaluate(() => {
@@ -214,10 +221,14 @@ const axeRun = async (page) => {
         dlg.scrollTop = 0;
         const go = document.getElementById("svcGo").getBoundingClientRect(), list = document.getElementById("svcList");
         const at = document.elementFromPoint(go.left + go.width / 2, go.top + go.height / 2);
-        return { goBottom: Math.round(go.bottom), vh: innerHeight, hit: at && at.id, listScrolls: list.scrollHeight > list.clientHeight, sheetScrolls: dlg.scrollHeight > dlg.clientHeight + 1, overflowX: document.documentElement.scrollWidth > innerWidth + 1, focus: document.activeElement && document.activeElement.type };
+        return { goBottom: Math.round(go.bottom), vh: innerHeight, hit: at && at.id, listScrolls: list.scrollHeight > list.clientHeight, sheetScrolls: dlg.scrollHeight > dlg.clientHeight + 1, overflowX: document.documentElement.scrollWidth > innerWidth + 1 };
       });
       check(`M1 [${vp.width} px] the sheet keeps « Valider » on screen and clickable, only the list scrolls`, geo.goBottom <= geo.vh && geo.hit === "svcGo" && geo.listScrolls && !geo.sheetScrolls && !geo.overflowX, JSON.stringify(geo));
-      check(`M2 [${vp.width} px] on a touch screen the keyboard does not pop up: the focus goes to the ticked service, not the search field`, geo.focus === "checkbox", JSON.stringify(geo));
+      await page.click("#svcGo");
+      await page.waitForSelector("#svcDlg", { state: "hidden" });
+      await openPicker(page);
+      const f1 = await page.evaluate(() => ({ type: document.activeElement.type, value: document.activeElement.value }));
+      check(`M2b [${vp.width} px] reopened on a touch screen, the focus goes to the first ticked service`, f1.type === "checkbox" && f1.value === "vidange", JSON.stringify(f1));
       await page.click("#svcGo");
       await page.waitForSelector("#svcDlg", { state: "hidden" });
       await search(page, {});
@@ -235,18 +246,65 @@ const axeRun = async (page) => {
     await page.keyboard.press("Enter");
     await page.waitForSelector("#svcDlg[open]");
     await page.keyboard.type("clim");
-    // dans l'ordre de l'écran : la recherche, les pastilles (le bouton × de la prestation déjà choisie), puis la liste
+    // dans l'ordre de l'écran : la recherche, les pastilles (aucune : rien n'est encore choisi), puis la liste
     const onBox = () => page.evaluate(() => (document.activeElement.type === "checkbox" ? document.activeElement.value : ""));
     for (let i = 0; i < 4 && (await onBox()) !== "clim"; i++) await page.keyboard.press("Tab");
     const k1 = await onBox();
     await page.keyboard.press("Space");
     s = await picker(page);
-    check("K1 keyboard only: Enter opens, typing filters, Tab goes through the chips to the matching box, Space ticks it", k1 === "clim" && s.checked.includes("clim"), JSON.stringify([k1, s.checked]));
+    check("K1 keyboard only: Enter opens, typing filters, Tab goes to the matching box, Space ticks it", k1 === "clim" && JSON.stringify(s.checked) === JSON.stringify(["clim"]), JSON.stringify([k1, s.checked]));
     for (let i = 0; i < 40 && (await page.evaluate(() => document.activeElement.id)) !== "svcGo"; i++) await page.keyboard.press("Tab");
     await page.keyboard.press("Enter");
     await page.waitForTimeout(200);
     s = await picker(page);
-    check("K2 ...Tab reaches « Valider », Enter applies, the focus is back on the bar's button", !s.open && s.bar[1] === "+1" && s.focus === "svcBtn", JSON.stringify(s));
+    check("K2 ...Tab reaches « Valider », Enter applies, the focus is back on the bar's button", !s.open && s.bar[0] === "Recharge de climatisation" && s.bar[1] === "" && s.focus === "svcBtn", JSON.stringify(s));
+    await ctx.close();
+
+    // =============== Q. « Comparer » sans prestation, et les « Populaires » de l'accueil ===============
+    const typeAddress = async () => {
+      await page.fill("#address", "12 rue de la république lyon");
+      await page.waitForSelector("#addrList li[data-i]", { state: "visible", timeout: 5000 });
+      await page.click("#addrList li[data-i='0']");
+    };
+    const rows = () => page.$$eval("#list > li", (l) => l.length);
+    ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { elements: ELEMENTS } }));
+    await typeAddress();
+    await page.click("#go");
+    await page.waitForSelector("#svcDlg[open]");
+    s = await picker(page);
+    check("Q1 « Comparer » with no service chosen opens the window (empty) instead of searching", s.open && !s.checked.length && !(await rows()), JSON.stringify(s));
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(200);
+    check("Q2 closed without choosing: no search", !(await picker(page)).open && !(await rows()) && !(await page.evaluate(() => document.body.classList.contains("has-results"))));
+    await pickServices(page, "clim");
+    await page.waitForTimeout(500);
+    check("Q3 ...and a later choice from the bar does not launch one either (the visitor did not ask again)", !(await rows()));
+    await page.click("#go");
+    await page.waitForSelector("#list > li", { timeout: 12000 });
+    check("Q4 with a service chosen, « Comparer » searches", (await rows()) > 0);
+    await ctx.close();
+    ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { elements: ELEMENTS } }));
+    await typeAddress();
+    await page.click("#go");
+    await page.waitForSelector("#svcDlg[open]");
+    await page.check("#svcList input[value='vidange']");
+    await page.click("#svcGo");
+    await page.waitForSelector("#list > li", { timeout: 12000 });
+    check("Q5 « Comparer » → the window → « Valider » goes straight on to the search, for that service", (await rows()) > 0 && (await page.inputValue("#service")) === "vidange" && !(await picker(page)).open);
+    await ctx.close();
+    ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { elements: ELEMENTS } }));
+    const pops = await page.$$eval(".popular [data-pop]", (l) => l.map((b) => ({ id: b.dataset.pop, ok: !!document.querySelector(`#service option[value="${b.dataset.pop}"]`), text: b.textContent.trim() })));
+    check("Q6 five « Populaires » chips, each a real service", pops.length === 5 && pops.every((p) => p.ok && p.text), JSON.stringify(pops));
+    await page.click('.popular [data-pop="geo_av"]');
+    await page.waitForTimeout(300);
+    s = await picker(page);
+    const v7 = await page.evaluate(() => document.getElementById("address").validationMessage);
+    check("Q7 without an address, a chip chooses the service (the bar names it) and puts the focus in the address field, no search and no error", s.bar[0] === "Parallélisme / géométrie avant" && !(await page.$("#svcBtn.is-empty")) && s.focus === "address" && !(await rows()) && v7 === "", JSON.stringify([s, v7]));
+    await typeAddress();
+    await page.click('.popular [data-pop="vidange"]');
+    await page.waitForSelector("#list > li", { timeout: 12000 });
+    check("Q8 with an address, a chip searches right away for that service", (await rows()) > 0 && (await page.inputValue("#service")) === "vidange");
+    check("Q9 no console error", !logs.errors.length && !logs.console.length, JSON.stringify([logs.errors, logs.console]));
     await ctx.close();
 
     // =============== A. Accessibilité (axe) : la fenêtre ouverte et une liste de totaux ===============

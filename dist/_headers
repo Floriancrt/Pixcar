@@ -1,6 +1,6 @@
 # Généré par scripts/build.mjs. Netlify et Cloudflare Pages lisent ce fichier tel quel.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'sha256-G9XqsQmJmY5cdQULLuv+Q0jkVOyoeQ8snoDnyFlseL0='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https://data.geopf.fr https://overpass-api.de https://overpass.openstreetmap.fr https://recherche-entreprises.api.gouv.fr https://data.economie.gouv.fr https://query.wikidata.org; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'sha256-eJHDKavIwiA1wSvJ2WWtOCx6wPGkNcBkPlKu51cIqxE='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https://data.geopf.fr https://overpass-api.de https://overpass.openstreetmap.fr https://recherche-entreprises.api.gouv.fr https://data.economie.gouv.fr https://query.wikidata.org; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=(), usb=()

@@ -26,7 +26,7 @@ async function cards(page, n = 40) {
       kind: t(c, ".kind"),
       price: t(c, ".amount") || t(c, ".no-price"),
       tag: t(c, ".g-price .tag"),
-      avail: t(c, ".svc"),
+      avail: (c.querySelector(".kind") || { getAttribute: () => "" }).getAttribute("title") || "",
       promo: t(c, ".g-promo"),
       rating: t(c, ".rating"),
       dist: t(c, ".borne") || t(c, ".dist"),
@@ -93,7 +93,7 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
   // =============== B. Contrôle technique ===============
   ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 }));
   await pickServices(page, "ct");
-  check("B1 goLabel switches to 'Rechercher les centres'", norm(await page.textContent("#goLabel")) === "Rechercher les centres");
+  check("B1 the button keeps « Comparer » and its accessible name switches to the inspection centres", norm(await page.textContent("#goLabel")) === "Comparer" && (await page.getAttribute("#go", "aria-label")) === "Comparer les centres de contrôle technique", await page.getAttribute("#go", "aria-label"));
   check("B2 energy field shown for CT", await page.isVisible("#energyField"));
   await page.fill("#address", "lyon");
   await page.waitForSelector("#addrList li[data-i]");
@@ -218,10 +218,14 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
   // =============== D. New behaviours (refreshed UI only) ===============
   if (IS_NEW) {
     ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 }));
-    check("D0 desktop: map placeholder visible before search", await page.isVisible(".map-empty"));
+    check("D0 desktop home: hero and search card shown, no map before a search (it comes with the results)", (await page.isVisible(".hero")) && (await page.isVisible("#searchForm")) && !(await page.isVisible("#stage")));
     check("D0b desktop: FAB hidden", !(await page.isVisible("#mapFab")));
-    check("D0c desktop: stage fixed full-viewport", await page.$eval("#stage", (e) => { const r = e.getBoundingClientRect(); return r.width === innerWidth && r.height === innerHeight; }));
     await search(page, { service: "vidange" });
+    const stg = await page.evaluate(() => {
+      const r = document.getElementById("stage").getBoundingClientRect(), h = document.querySelector(".topbar").getBoundingClientRect(), l = document.getElementById("listPane").getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, w: r.width, head: h.bottom, listRight: l.right, pos: getComputedStyle(document.getElementById("stage")).position, iw: document.documentElement.clientWidth, ih: innerHeight };
+    });
+    check("D0c desktop results: the map is a sticky right-hand column (28.3 % of the width) from under the header to the bottom of the window, right of the table", stg.pos === "sticky" && Math.abs(stg.right - stg.iw) <= 1 && Math.abs(stg.w - 0.283 * stg.iw) <= 2 && Math.abs(stg.top - stg.head) <= 1 && Math.abs(stg.bottom - stg.ih) <= 1 && stg.listRight <= stg.left, JSON.stringify(stg));
     check("D0d placeholder gone after search", !(await page.isVisible(".map-empty")) && (await page.isVisible("#mapPane")));
     const st = () => page.evaluate(() => ({
       open: [...document.querySelectorAll(".card.is-open")].map((c) => c.dataset.id),
@@ -260,12 +264,13 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
       check("D5 clicking a far marker renders + opens + selects its card", s.open[0] === far.id && s.sel[0] === far.id && s.bar, JSON.stringify({ ...s, far: far.id }));
       // Le défilement est lissé (scrollIntoView « smooth ») : mesuré, la carte entre dans la fenêtre du panneau 650 à 680 ms après le clic et le
       // défilement s'arrête vers 730 à 760 ms. Une attente fixe de 700 ms est donc trop juste (échec de temps en temps) : on attend l'état voulu, avec une échéance.
-      const inPanel = () => page.$eval(`[data-id="${far.id}"]`, (c) => { const r = c.getBoundingClientRect(), p = document.getElementById("panelCol").getBoundingClientRect(); return r.top >= p.top - 2 && r.top < p.bottom; });
+      // c'est la page qui défile : la ligne doit arriver dans la fenêtre, sous l'en-tête collé (pas dessous)
+      const inPanel = () => page.$eval(`[data-id="${far.id}"]`, (c) => { const r = c.getBoundingClientRect(), h = document.querySelector(".topbar").getBoundingClientRect().bottom; return r.top >= h - 2 && r.top < innerHeight - 40; });
       for (let i = 0; i < 40 && !(await inPanel()); i++) await page.waitForTimeout(50);
-      check("D5b card scrolled into the panel viewport", await inPanel());
+      check("D5b the row is scrolled into the window, just under the sticky header", await inPanel(), await page.$eval(`[data-id="${far.id}"]`, (c) => [c.getBoundingClientRect().top, document.querySelector(".topbar").getBoundingClientRect().bottom, innerHeight]));
     }
     // selecting an unpriced garage then filtering on priced clears the selection
-    await page.evaluate(() => document.getElementById("panelCol").scrollTo(0, 0));
+    await page.evaluate(() => window.scrollTo(0, 0));
     const unpriced = await page.evaluate(() => { const c = [...document.querySelectorAll("#list > li.card")].find((c) => c.querySelector(".no-price")); return c && c.dataset.id; });
     check("D6a found an unpriced card", !!unpriced);
     if (unpriced) {
@@ -296,20 +301,21 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
     check("D9 info-bar × closes card and selection", !s.open.length && !s.sel.length && !s.bar, JSON.stringify(s));
     check("D9b focus returns to the card title after closing the bar", await page.evaluate(() => document.activeElement && document.activeElement.classList.contains("g-name")), await page.evaluate(() => document.activeElement && document.activeElement.outerHTML.slice(0, 80)));
     // clicked card stays put when an open card above it collapses (scroll compensation)
-    await page.evaluate(() => document.getElementById("panelCol").scrollTo(0, 0));
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.click("#list > li:nth-child(2) .g-main");
-    await page.evaluate(() => { const p = document.getElementById("panelCol"), t = document.querySelector("#list > li:nth-child(9)"); p.scrollTop += t.getBoundingClientRect().top - p.getBoundingClientRect().top - 200; });
+    await page.evaluate(() => window.scrollBy(0, document.querySelector("#list > li:nth-child(9)").getBoundingClientRect().top - 300)); // c'est la page qui défile
     await page.waitForTimeout(150);
     const y0 = await page.$eval("#list > li:nth-child(9)", (e) => e.getBoundingClientRect().top);
     await page.mouse.click(300, y0 + 25);
     await page.waitForTimeout(150);
     const y1 = await page.$eval("#list > li:nth-child(9)", (e) => e.getBoundingClientRect().top);
     s = await st();
-    check("D21 card above collapses, clicked card stays in place", Math.abs(y1 - y0) < 3 && s.open.length === 1, JSON.stringify({ y0, y1, open: s.open.length }));
+    const id9 = await page.$eval("#list > li:nth-child(9)", (e) => e.dataset.id);
+    check("D21 card above collapses, clicked card stays in place", y0 > 150 && y0 < 700 && Math.abs(y1 - y0) < 3 && s.open.length === 1 && s.open[0] === id9, JSON.stringify({ y0, y1, open: s.open, id9 }));
     await page.click("#mapInfo [data-mi=close]");
-    // map fit leaves the circle right of the panel
-    const fit = await page.evaluate(() => { const m = window.__maps[0], b = m.getBounds(), pr = document.getElementById("panelCol").getBoundingClientRect(); let c = null; m.eachLayer((l) => { if (l.options && l.options.dashArray && l.getLatLng) c = l.getLatLng(); }); const p = m.latLngToContainerPoint(c); return { cx: p.x, panelRight: pr.right, w: innerWidth }; });
-    check("D10 search circle centred in the free map area (right of panel)", fit.cx > fit.panelRight && fit.cx < fit.w, JSON.stringify(fit));
+    // la carte a sa colonne : le cercle de recherche y est centré et entier
+    const fit = await page.evaluate(() => { const m = window.__maps[0], sz = m.getSize(); let c = null; m.eachLayer((l) => { if (l.options && l.options.dashArray && l.getLatLng) c = l; }); const p = m.latLngToContainerPoint(c.getLatLng()), b = c.getBounds(), nw = m.latLngToContainerPoint(b.getNorthWest()), se = m.latLngToContainerPoint(b.getSouthEast()); return { cx: Math.round(p.x), w: sz.x, h: sz.y, l: Math.round(nw.x), t: Math.round(nw.y), r: Math.round(se.x), b: Math.round(se.y) }; });
+    check("D10 search circle centred in the map column and wholly inside it", Math.abs(fit.cx - fit.w / 2) <= 2 && fit.l >= 0 && fit.t >= 0 && fit.r <= fit.w && fit.b <= fit.h, JSON.stringify(fit));
     await ctx.close();
 
     // ---- preview mode: banner must be visible on desktop ----
@@ -351,14 +357,14 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
     await page.waitForTimeout(800);
     await page.setViewportSize({ width: 1180, height: 820 });
     await page.waitForTimeout(800);
-    const rz = await page.evaluate(() => { const p = document.getElementById("panelCol"), r = p.getBoundingClientRect(), m = window.__maps[0], c = m.getContainer().getBoundingClientRect(); return { panelVisible: getComputedStyle(p).display !== "none" && r.width > 300, fab: getComputedStyle(document.getElementById("mapFab")).display, mapW: Math.round(c.width), mapSize: m.getSize().x, vw: innerWidth }; });
-    check("D22 rotate tablet from map mode to desktop width: panel back, map resized, FAB hidden", rz.panelVisible && rz.fab === "none" && rz.mapW === rz.vw && rz.mapSize === rz.vw, JSON.stringify(rz));
+    const rz = await page.evaluate(() => { const p = document.getElementById("panelCol"), r = p.getBoundingClientRect(), m = window.__maps[0], c = m.getContainer().getBoundingClientRect(); return { panelVisible: getComputedStyle(p).display !== "none" && r.width > 300, fab: getComputedStyle(document.getElementById("mapFab")).display, mapW: Math.round(c.width), mapSize: m.getSize().x, col: Math.round(document.getElementById("stage").getBoundingClientRect().width), vw: document.documentElement.clientWidth }; });
+    check("D22 rotate tablet from map mode to desktop width: panel back, map resized to its column, FAB hidden", rz.panelVisible && rz.fab === "none" && Math.abs(rz.col - 0.283 * rz.vw) <= 2 && rz.mapW === rz.col && rz.mapSize === rz.mapW, JSON.stringify(rz));
     await ctx.close();
 
     // ---- dark theme tokens + reduced motion ----
     ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, colorScheme: "dark" }));
     const dk = await page.evaluate(() => ({ card: getComputedStyle(document.documentElement).getPropertyValue("--card").trim(), scheme: getComputedStyle(document.documentElement).colorScheme }));
-    check("D18 dark tokens applied", dk.card === "#151829" && /dark/.test(dk.scheme), JSON.stringify(dk));
+    check("D18 dark tokens applied", dk.card === "#18191e" && /dark/.test(dk.scheme), JSON.stringify(dk));
     await ctx.close();
     ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, reducedMotion: "reduce" }));
     await search(page, { service: "vidange" });

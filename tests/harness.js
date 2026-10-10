@@ -198,6 +198,8 @@ async function clearFilters(page) {
 
 /** Type an address, pick the first suggestion, optionally set radius, submit, wait for results. */
 async function search(page, { service, address = "12 rue de la république lyon", km, sirene = false } = {}) {
+  // Aucune prestation n'est choisie d'office : sans `service`, on prend celle que la liste propose en premier (la valeur du <select> caché)
+  if (!service && (await page.$("#svcBtn.is-empty"))) service = await page.inputValue("#service");
   if (service) await pickServices(page, service);
   await page.fill("#address", address);
   await page.waitForSelector("#addrList li[data-i]", { state: "visible", timeout: 5000 });
@@ -244,23 +246,33 @@ async function markerPoint(page, which = 0) {
   }, which);
 }
 
-/** Pour les n premières cartes : espace (px) entre le bas de ce que montre la tuile et le haut de la pastille de distance posée dessus.
- *  Négatif = la pastille cache le bas de la lettre ou du logo. Lettre : son encre réelle (la boîte de ligne d'Outfit descend bien plus
- *  bas que les capitales), mesurée par measureText ; logo : la boîte de l'image moins sa marge intérieure. */
+/** Pour les n premières lignes : la tuile (logo, monogramme ou initiale) et la distance, chacune dans sa colonne. `gap` : écart (px)
+ *  entre la boîte de la distance et celle de la tuile, sur l'axe qui les sépare (négatif = elles se chevauchent) ; `ink` : marge (px)
+ *  entre ce que montre la tuile et son bord (négatif = la lettre ou le logo déborde). Lettre : son encre réelle, mesurée par
+ *  measureText (la boîte de ligne de la police descend bien plus bas que les capitales) ; logo : la boîte de l'image moins sa marge
+ *  intérieure. */
 async function tileClearance(page, n = 12) {
   return page.evaluate((n) => [...document.querySelectorAll("#list > li.card")].slice(0, n).map((c) => {
-    const av = c.querySelector(".g-main > .avatar"), d = c.querySelector(".dist"), img = av.querySelector("img.lg");
-    let bottom;
-    if (img && av.classList.contains("has-logo")) bottom = img.getBoundingClientRect().bottom - parseFloat(getComputedStyle(img).paddingBottom);
-    else {
-      const t = [...av.childNodes].find((x) => x.nodeType === 3 && x.textContent.trim()), r = document.createRange(), cs = getComputedStyle(av);
-      r.selectNodeContents(t);
-      const cx = document.createElement("canvas").getContext("2d");
+    const av = c.querySelector(".g-main > .avatar"), a = av.getBoundingClientRect(), d = c.querySelector(".dist").getBoundingClientRect(), img = av.querySelector("img.lg");
+    let box;
+    if (img && av.classList.contains("has-logo")) {
+      const r = img.getBoundingClientRect(), p = getComputedStyle(img);
+      box = { l: r.left + parseFloat(p.paddingLeft), r: r.right - parseFloat(p.paddingRight), t: r.top + parseFloat(p.paddingTop), b: r.bottom - parseFloat(p.paddingBottom) };
+    } else {
+      const t = [...av.childNodes].find((x) => x.nodeType === 3 && x.textContent.trim()), rg = document.createRange(), cs = getComputedStyle(av);
+      rg.selectNodeContents(t);
+      const tr = rg.getBoundingClientRect(), cx = document.createElement("canvas").getContext("2d");
       cx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-      const m = cx.measureText(t.textContent.trim());
-      bottom = r.getBoundingClientRect().top + m.fontBoundingBoxAscent + m.actualBoundingBoxDescent;
+      const m = cx.measureText(t.textContent.trim()), base = tr.top + m.fontBoundingBoxAscent, x0 = tr.left + (tr.width - m.width) / 2;
+      box = { l: x0 - m.actualBoundingBoxLeft, r: x0 + m.actualBoundingBoxRight, t: base - m.actualBoundingBoxAscent, b: base + m.actualBoundingBoxDescent };
     }
-    return { id: c.dataset.id, city: !!d.querySelector(".d-city"), logo: av.classList.contains("has-logo"), gap: Math.round(d.getBoundingClientRect().top - bottom) };
+    return {
+      id: c.dataset.id,
+      city: !!c.querySelector(".dist .d-city"),
+      logo: av.classList.contains("has-logo"),
+      gap: Math.round(Math.max(d.left - a.right, d.top - a.bottom, a.left - d.right, a.top - d.bottom)),
+      ink: Math.round(Math.min(box.l - a.left, a.right - box.r, box.t - a.top, a.bottom - box.b)),
+    };
   }), n);
 }
 
