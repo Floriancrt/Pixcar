@@ -136,7 +136,7 @@ B = [
  ("the single-file page says the table is read", 'const parts = await pageParts(false);', 'const parts = await pageParts(!!garages);', "B2"),
  ("both text variants are kept", '((mode === "on") === !!on ? text : "")', '(text)', "A14"),
  ("the privacy window does not carry the table's paragraphs", 'garagesVariants(variants(await read(SRC, "partials/legal.html")), withGarages)', 'garagesVariants(variants(await read(SRC, "partials/legal.html")), false)', "A13"),
- ("the sources text does not carry the table's paragraph", 'garagesVariants(await read(SRC, "partials/body.html"), withGarages)', 'garagesVariants(await read(SRC, "partials/body.html"), false)', "A11"),
+ ("the sources text does not carry the table's paragraph", 'garagesVariants(variants(await read(SRC, "partials/body.html")), withGarages)', 'garagesVariants(variants(await read(SRC, "partials/body.html")), false)', "A11"),
  ("dist/ is built with the texts of the single-file page", 'const dist = only === "single" ? null : await buildDist(distParts);', 'const dist = only === "single" ? null : await buildDist(parts);', "A11"),
 ]
 

@@ -71,7 +71,7 @@ B = [
  ("every build takes src/mapbox.json", 'pages !== undefined ? config.accessToken ?? "" : ""', 'config.accessToken ?? ""', "M09"),
  ("an empty PIXCAR_MAPBOX_TOKEN does not switch Mapbox off", "const fromEnv = process.env.PIXCAR_MAPBOX_TOKEN;", "const fromEnv = process.env.PIXCAR_MAPBOX_TOKEN || undefined;", "M10"),
  ("Mapbox allowed without the privacy window that tells visitors", 'if ((apiBase || analytics || mapbox) && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1")', 'if ((apiBase || analytics) && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1")', "M11"),
- ("Mapbox text variants chosen by the wrong switch", '(flag === "GA" ? analytics : mapbox)', '(flag === "GA" ? analytics : analytics)', "M61"),
+ ("Mapbox text variants chosen by the wrong switch", 'MB: () => !!mapbox,', 'MB: () => !!analytics,', "M61"),
  ("Mapbox host added to the content security policy", "\"img-src 'self' data: blob: https:\", // tuiles de la carte (Mapbox, IGN, CARTO)", "\"img-src 'self' data: blob: https: https://api.mapbox.com\", // tuiles de la carte (Mapbox, IGN, CARTO)", "M12"),
  ("early connection to Mapbox", "const preconnect = () => [GEOCODER, apiOrigin].filter(Boolean)", 'const preconnect = () => [GEOCODER, apiOrigin, mapbox ? "https://api.mapbox.com" : ""].filter(Boolean)', "M03b"),
  ("token not written in the page", 'MAPBOX_TOKEN: mapbox ? mapbox.token : "",', 'MAPBOX_TOKEN: "",', "M03"),
