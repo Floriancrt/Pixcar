@@ -1,7 +1,7 @@
 // Functional tests. Same scenarios run on the original and on the refreshed page;
 // semantic snapshots are written to JSON so the two can be diffed (non-regression of data + logic).
 // Checks tagged [new] only apply to the refreshed UI.
-const { serve, launch, open, search, shot, markerPoint, ROOT } = require("./harness");
+const { serve, launch, open, search, shot, markerPoint, ROOT, sortBy, pickServices, filterBy, clearFilters, editSearch } = require("./harness");
 const fs = require("fs");
 const path = require("path");
 
@@ -38,7 +38,7 @@ const summaryText = (page) => page.$eval("#summary", (e) => e.textContent.replac
 const toolbarState = (page) =>
   page.evaluate(() => ({
     sort: [...document.querySelectorAll("[data-sort]")].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.sort),
-    filter: [...document.querySelectorAll("[data-filter]")].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.filter),
+    filter: [...document.querySelectorAll("[data-ftype], [data-fprice]")].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.ftype || b.dataset.fprice),
   }));
 const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
 
@@ -59,29 +59,32 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
   check("A3 after 'Afficher plus' all 66 cards", (await listCount(page)) === 66, await listCount(page));
   check("A3b 'Afficher plus' hidden when exhausted", !(await page.isVisible("#moreBtn")));
 
-  await page.click("[data-sort=dist]");
+  await sortBy(page, "dist");
   await page.waitForTimeout(200);
   snaps.A_sortDist = (await cards(page, 12)).map((c) => `${c.name}|${c.dist}|${c.price}`);
-  await page.click("[data-sort=note]");
+  await sortBy(page, "note");
   await page.waitForTimeout(200);
   snaps.A_sortNote = (await cards(page, 6)).map((c) => `${c.name}|${c.price}`);
-  await page.click("[data-sort=price]");
-  for (const f of ["priced", "promo", "chains", "indep"]) {
-    await page.click(`[data-filter=${f}]`);
+  await sortBy(page, "price");
+  // une seule dimension de filtre à la fois, comme les pastilles d'avant (« Avec prix », « En promo », « Enseignes », « Indépendants »)
+  const FILTER = { priced: ["price", "priced"], promo: ["price", "promo"], chains: ["type", "chains"], indep: ["type", "indep"] };
+  for (const f of Object.keys(FILTER)) {
+    await clearFilters(page);
+    await filterBy(page, ...FILTER[f]);
     await page.waitForTimeout(150);
     snaps["A_filter_" + f] = { n: await listCount(page), first: (await cards(page, 5)).map((c) => c.name), tb: await toolbarState(page) };
   }
-  await page.click("[data-filter=all]");
-  await page.click("[data-chain=norauto]");
+  await clearFilters(page);
+  await filterBy(page, "chain", "norauto");
   await page.waitForTimeout(150);
   snaps.A_chain_norauto = { n: await listCount(page), names: (await cards(page, 10)).map((c) => c.name) };
-  await page.click("[data-chain=norauto]");
-  await page.click("#editSearch");
-  await page.click("#radiusChips .chip[data-km='5']");
+  await filterBy(page, "chain", "norauto");
+  await editSearch(page);
+  await page.selectOption("#radius", "5");
   await page.waitForTimeout(300);
   snaps.A_radius5 = { summary: await summaryText(page), n: await listCount(page) };
   // widening beyond the fetched radius must NOT silently re-fetch
-  await page.click("#radiusChips .chip[data-km='20']");
+  await page.selectOption("#radius", "20");
   await page.waitForTimeout(200);
   snaps.A_radius20_status = norm(await page.textContent("#status"));
   check("A4 console clean (OSM flow)", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
@@ -89,7 +92,7 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
 
   // =============== B. Contrôle technique ===============
   ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 }));
-  await page.selectOption("#service", "ct");
+  await pickServices(page, "ct");
   check("B1 goLabel switches to 'Rechercher les centres'", norm(await page.textContent("#goLabel")) === "Rechercher les centres");
   check("B2 energy field shown for CT", await page.isVisible("#energyField"));
   await page.fill("#address", "lyon");
@@ -267,16 +270,16 @@ const listCount = (page) => page.$$eval("#list > li.card", (l) => l.length);
     check("D6a found an unpriced card", !!unpriced);
     if (unpriced) {
       await page.click(`[data-id="${unpriced}"] .g-main`);
-      await page.click("[data-filter=priced]");
+      await filterBy(page, "price", "priced");
       await page.waitForTimeout(250);
       s = await st();
       check("D6 filter hiding the selected garage clears selection + bar", !s.sel.length && !s.bar && !s.markers.length, JSON.stringify(s));
     }
-    await page.click("[data-filter=all]");
+    await clearFilters(page);
     // new search clears selection
     await page.click("#list > li:nth-child(2) .g-main");
-    await page.click("#editSearch");
-    await page.click("#radiusChips .chip[data-km='5']");
+    await editSearch(page);
+    await page.selectOption("#radius", "5");
     await page.click("#go");
     await page.waitForTimeout(900);
     s = await st();

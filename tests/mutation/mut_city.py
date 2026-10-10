@@ -18,6 +18,7 @@ M = [
  ("city taken from an answer up to 400 m", 'const cityRange = 250,', 'const cityRange = 400,', "C", "C3"),
  ("no limit on simultaneous requests", '    cityMax = 3,', '    cityMax = 50,', "B", "B3"),
  ("one request at a time", '    cityMax = 3,', '    cityMax = 1,', "B", "B3"),
+ ("the letter stays under the two-line chip (small tile)", ".g-main:has(.d-city) > .avatar {\n  padding-bottom: 32px;", ".g-main:has(.d-city) > .avatar {\n  padding-bottom: 0;", "F", "F5"),
  ("visit cap far too low", '    cityCap = 300,', '    cityCap = 5,', "B", "B9"),
  ("switch window.JG_CITY_LOOKUP ignored", 'cityLook = window.JG_CITY_LOOKUP !== !1,', 'cityLook = !0,', "C", "C12"),
  ("whole list looked up, not only the cards on screen", 'for (const e of es) e.isIntersecting && (io.unobserve(e.target), take(e.target));', 'for (const e of es) (io.unobserve(e.target), take(e.target));', "B", "B1"),
@@ -31,7 +32,7 @@ M = [
  ("city of the answer not kept", 'cy = d >= 0 && d <= cityRange ? cityTidy(o.city) || cityFromAddr(o.label) : "",', 'cy = "",', "B", "B10"),
  ("city not read from the label when the answer has none", 'cy = d >= 0 && d <= cityRange ? cityTidy(o.city) || cityFromAddr(o.label) : "",', 'cy = d >= 0 && d <= cityRange ? cityTidy(o.city) : "",', "C", "C5"),
  ("late answer does not repaint the chip", '          cityRepaint(g);\n        })\n        .catch(() => {})', '        })\n        .catch(() => {})', "B", "B1"),
- ("address completion does not repaint the chip", '    (c && (c.href = adGoogle(g)), cityRepaint(g));', '    c && (c.href = adGoogle(g));', "C", "C13"),
+ ("address completion does not repaint the chip", 'c.href = adGoogle(g);\n    cityRepaint(g);', 'c.href = adGoogle(g);', "C", "C13"),
  ("no comma for screen readers", '<span class="sr-only">, </span><span class="d-sep"', '<span class="d-sep"', "A", "A3"),
  ("separator read aloud", '<span class="d-sep" aria-hidden="true">·</span>', '<span class="d-sep">·</span>', "A", "A4"),
  ("chip not tied to its garage", '<span class="dist" data-dist="${y(e.id)}">', '<span class="dist">', "AB", "A5"),
@@ -39,8 +40,8 @@ M = [
  ("cedex kept", '    .replace(/\\s*\\bcedex\\b.*$/i, "")\n', '', "E", "E2"),
  ("arrondissement kept long", '(m, n) => ` ${n}${+n === 1 ? "er" : "e"}`,', '(m) => m,', "E", "E2"),
  ("long city overflows the chip (track not bounded)", '  grid-template-columns: minmax(0, 1fr);\n  gap: 6px;', '  gap: 6px;', "AF", "A6"),
- ("chip neither bounded nor shrinkable (max-width and min-width: 0 each cover for the other)", '  max-width: 100%;\n  min-width: 0;\n}\n.dist .ic {', '}\n.dist .ic {', "AF", "A6"),
- ("long city cut without an ellipsis", '  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 600;', '  white-space: nowrap;\n  font-weight: 600;', "F", "F2"),
+ ("chip neither bounded nor shrinkable (max-width and min-width: 0 each cover for the other)", '  max-width: 72px;\n  min-width: 0;\n  padding: 0 7px 0 5px;', '  padding: 0 7px 0 5px;', "F", "F2"),
+ ("long city cut without an ellipsis", '  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 500;', '  overflow: hidden;\n  white-space: nowrap;\n  font-weight: 500;', "F", "F2"),
 ]
 
 # Variantes du module pur modules/city.js : tests/city_unit.js, sans navigateur

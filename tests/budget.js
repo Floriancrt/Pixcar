@@ -17,7 +17,12 @@ const KB = 1024;
 // Table de garages (+3,1 Ko) et fonds / fiches Mapbox (+3,1 Ko, inactifs tant que src/mapbox.json n'a pas de jeton) fusionnés dans main le 6 octobre 2026 : tous les
 // visiteurs téléchargent ce code même quand ces fonctions sont éteintes (mesuré : js 54,2 · première visite 116,2 · tout-en-un 119,2) ; les budgets du script, du chemin
 // critique et de la page tout-en-un montent de 6 Ko, les autres ne bougent pas. Pour les rabaisser : ne charger ces modules qu'à la demande (le build n'a pas de découpage du JS).
-const BUDGET = { page: 30, html: 10, js: 58, css: 22, font: 34, critical: 118, sw: 3, single: 122, icon: 20 };
+// Refonte « Orange & Marine » et plusieurs prestations (branche ux-orange-marine, octobre 2026) : barre de recherche flottante, menus de filtres et
+// de tri, fenêtre des prestations (modules/service-picker.js, 2,0 Ko gzip seul) et totaux (modules/svc-combo.js, 1,1 Ko), nouvelles fiches et feuille
+// en bas d'écran (mesuré : js 59,4 · feuille de style 22,8 · page 33,9 · première visite 124,8 · tout-en-un 127,9, contre js 54,2 · feuille de style
+// 20,4 · page 30,5 · première visite 116,2 · tout-en-un 119,2 avant, soit +8,6 Ko à la première visite) : budgets du script +3, de la feuille de style
+// +1,5, de la page +2, du chemin critique +5 et de la page tout-en-un +5. Pour les rabaisser : charger la fenêtre des prestations à la demande.
+const BUDGET = { page: 32, html: 10, js: 61, css: 23.5, font: 34, critical: 123, sw: 3, single: 127, icon: 20 };
 
 const results = [];
 const check = (name, cond, detail = "") => {

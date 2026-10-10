@@ -4,7 +4,7 @@
 // le même faux OpenStreetMap. Chaque scénario ouvre un contexte neuf et part d'une API remise à zéro.
 const fs = require("fs");
 const path = require("path");
-const { serve, launch, open, search, ROOT, injectScript } = require("./harness");
+const { serve, launch, open, search, ROOT, injectScript, sortBy, pickServices } = require("./harness");
 const { startApi } = require("./api-harness");
 const { buildElements } = require("./mocks");
 
@@ -86,7 +86,7 @@ async function until(fn, ms = 6000, step = 80) {
       check("R1a the page is in remote mode (store flag, Sources text variant)", (await page.evaluate(() => document.body.dataset.store)) === "remote" && (await page.isVisible('[data-store-only="remote"] >> nth=0').catch(() => false)) !== undefined);
       check("R1b only the remote wording is displayed in « Sources » (declared repairs, garages relay), not the local one", await page.evaluate(() => { const vis = (e) => getComputedStyle(e).display !== "none"; const remote = [...document.querySelectorAll('details.sources [data-store-only="remote"]')], local = [...document.querySelectorAll('details.sources [data-store-only="local"]')]; return remote.length === 2 && local.length === 1 && remote.every(vis) && local.every((e) => !vis(e)); }));
       await search(page, { service: "vidange" });
-      await page.click("[data-sort=dist]");
+      await sortBy(page, "dist");
       await page.waitForTimeout(300);
       const tag = await declaredTag(page);
       check("R1c the garage's card shows the declared price: median of what others declared (55, 60, 65, 70 → 62,50 €)", tag && /Prix déclaré/.test(tag.tag) && /62,50/.test(tag.amount), JSON.stringify(tag));
@@ -110,7 +110,7 @@ async function until(fn, ms = 6000, step = 80) {
       let { page, ctx, logs } = await fresh();
       await others([55, 60, 65, 70]);
       await search(page, { service: "vidange" });
-      await page.click("[data-sort=dist]");
+      await sortBy(page, "dist");
       await declare(page);
       const synced = await until(async () => { const r = await stored(page); return r && r.length === 1 && r[0].sync === "synced"; });
       check("R2a the declaration is stored with its secret and reaches « synced »", synced, JSON.stringify(await stored(page)));
@@ -149,7 +149,7 @@ async function until(fn, ms = 6000, step = 80) {
       let { page, ctx } = await fresh();
       await others([55, 60, 65]);
       await search(page, { service: "vidange" });
-      await page.click("[data-sort=dist]");
+      await sortBy(page, "dist");
       api.chaos.mode = "down";
       await declare(page);
       check("R5a the declaration is accepted by the page at once", /Réparation enregistrée/.test(await toast(page)) && (await stored(page)).length === 1);
@@ -176,7 +176,7 @@ async function until(fn, ms = 6000, step = 80) {
       await others([55, 60, 65, 70]);
       api.chaos.delayMs = 3200;
       api.chaos.delayPath = "/v1/repairs";
-      await page.selectOption("#service", "vidange");
+      await pickServices(page, "vidange");
       await page.fill("#address", "12 rue de la république lyon");
       await page.waitForSelector("#addrList li[data-i]", { state: "visible" });
       await page.click("#addrList li[data-i='0']");
@@ -229,7 +229,7 @@ async function until(fn, ms = 6000, step = 80) {
     {
       let { page, ctx } = await fresh();
       await search(page, { service: "vidange" });
-      await page.click("[data-sort=dist]");
+      await sortBy(page, "dist");
       await declare(page, { price: "59,90" });
       await until(async () => (await api.rows()).length === 1);
       await declare(page, { price: "61" });
@@ -285,7 +285,7 @@ async function until(fn, ms = 6000, step = 80) {
       const legacy = { id: "r-ancienne", garageId: "osm:node/1022", garageName: "Norauto Bron", garageAddr: "98 rue X", lat: null, lon: null, chainId: "norauto", model: "Renault Clio", rating: 5, serviceId: "vidange", price: 72, date: "2026-08-02", comment: "", createdAt: "2026-08-02T10:00:00Z" };
       let { page, ctx } = await fresh({ storage: { "jg.repairs.v1": [legacy] } });
       await search(page, { service: "vidange" });
-      await page.click("[data-sort=dist]");
+      await sortBy(page, "dist");
       await openHistory(page);
       const h = await history(page);
       check("R13a an old declaration is displayed, deletable, labelled « Gardée sur cet appareil »", h && h.rows === 1 && h.del === 1 && h.states.join() === "Gardée sur cet appareil", JSON.stringify(h));
@@ -327,7 +327,7 @@ async function until(fn, ms = 6000, step = 80) {
       let { page, ctx } = await fresh();
       await others([55, 60, 65, 70]);
       await search(page, { service: "vidange" });
-      await page.click("[data-sort=dist]");
+      await sortBy(page, "dist");
       api.chaos.mode = "down";
       await declare(page);
       await openHistory(page);

@@ -16,6 +16,7 @@ const FILE = "index.html"; // avec « dist », le serveur de test sert dist/ com
 
 const SUITES = [
   { name: "func", cmd: ["node", "tests/func.js", FILE, "new"] },
+  { name: "services", cmd: ["node", "tests/services.js", FILE] }, // plusieurs prestations : la fenêtre de choix et les totaux
   { name: "logos", cmd: ["node", "tests/logos.js"], env: { FILE } },
   { name: "brand", cmd: ["node", "tests/brand.js"], env: { FILE } },
   { name: "addr", cmd: ["node", "tests/addr.js"], env: { FILE } },

@@ -152,4 +152,25 @@
         <button type="submit" class="primary">Enregistrer</button>
       </div>
     </form>
+  </dialog>  <dialog id="svcDlg" class="dlg svc-dlg" aria-labelledby="svcDlgTitle">
+    <form id="svcForm" novalidate>
+      <div class="dlg-head">
+        <h2 id="svcDlgTitle">Quelles prestations souhaitez-vous réaliser ?</h2>
+        <button type="button" class="dlg-close" id="svcClose" aria-label="Fermer">×</button>
+      </div>
+      <div class="field">
+        <label for="svcSearch" class="sr-only">Rechercher une prestation</label>
+        <div class="svc-search">
+          <svg class="ic" aria-hidden="true"><use href="#i-search" /></svg>
+          <input id="svcSearch" type="text" autocomplete="off" spellcheck="false" placeholder="Rechercher une prestation…" />
+        </div>
+      </div>
+      <div class="svc-sel" id="svcSel" hidden>
+        <h3 class="svc-sel-h" id="svcSelH">Prestations sélectionnées</h3>
+        <ul class="svc-chips" id="svcChips" aria-labelledby="svcSelH"></ul>
+      </div>
+      <div class="svc-list" id="svcList"></div>
+      <p class="hint svc-note" id="svcNote" aria-live="polite"></p>
+      <button type="submit" class="primary svc-go" id="svcGo">Valider cette prestation</button>
+    </form>
   </dialog>

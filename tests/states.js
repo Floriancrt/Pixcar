@@ -1,5 +1,5 @@
 // Visual states of the refreshed page (light/dark, desktop/tablet/mobile).
-const { serve, launch, open, search, shot, sheet, markerPoint, ROOT } = require("./harness");
+const { serve, launch, open, search, shot, sheet, markerPoint, ROOT, pickServices, editSearch } = require("./harness");
 const path = require("path");
 const FILE = process.argv[2] || "index.html";
 (async () => {
@@ -24,7 +24,7 @@ const FILE = process.argv[2] || "index.html";
   await shot(page, "d-11-after-close");
   // scroll panel to top & expand the search form
   await page.evaluate(() => document.getElementById("panelCol").scrollTo(0, 0));
-  await page.click("#editSearch");
+  await editSearch(page);
   await page.waitForTimeout(300);
   await shot(page, "d-12-form-expanded");
   // dialog
@@ -39,7 +39,7 @@ const FILE = process.argv[2] || "index.html";
 
   // ---------- Desktop CT ----------
   ({ page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900 }));
-  await page.selectOption("#service", "ct");
+  await pickServices(page, "ct");
   await page.fill("#address", "lyon");
   await page.waitForSelector("#addrList li[data-i]");
   await page.click("#addrList li[data-i='0']");

@@ -9,7 +9,7 @@ delete process.env.PIXCAR_ROOT; // la suite construit et sert ses propres pages
 const { execFileSync, spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const { serve, launch, open, search, ROOT, injectScript } = require("./harness");
+const { serve, launch, open, search, ROOT, injectScript, sortBy } = require("./harness");
 const { buildElements, CENTER } = require("./mocks");
 const { serveDir } = require("./static-server");
 
@@ -122,9 +122,8 @@ const axeOf = async (page) => {
 // Ouvre la page, lance la recherche, trie par distance (les garages d'essai sont les plus proches) et attend la carte quand elle doit s'afficher.
 const opened = async (browser, srv, mock, o = {}) => {
   const r = await open(browser, srv, "index.html", { width: 1440, height: 900, mock, ...o });
-  if (o.search && o.search.sirene) await r.page.click("#moreOpts > summary"); // « Plus d'ateliers » : la case du registre SIRENE y est
   await search(r.page, { service: "vidange", ...(o.search || {}) });
-  await r.page.click("[data-sort=dist]");
+  await sortBy(r.page, "dist");
   await r.page.waitForTimeout(400);
   if (o.map !== false) await tilesIn(r.page);
   return r;

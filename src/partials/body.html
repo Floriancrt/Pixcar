@@ -42,77 +42,114 @@
         restent consultables.
       </div>
 
-      <!-- ===== Garages : panneau (liste) + carte plein écran ===== -->
+      <!-- ===== Garages : barre de recherche, filtres, résultats (panneau) et carte ===== -->
       <section class="view" id="view-garages" data-view="garages" aria-labelledby="garagesTitle">
-        <div class="panel-col" id="panelCol">
-          <header class="panel-head">
-            <h1 id="garagesTitle"><span class="t-brand"><span class="px-word" role="img" aria-label="Pixcar"></span></span><span class="t-text">Garages</span><span class="sr-only"> autour de votre adresse</span></h1>
-            <p class="panel-sub">1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto</p>
-          </header>
-          <form id="searchForm" class="search" novalidate>
-            <div class="field">
-              <label for="service">Prestation</label>
-              <select id="service" class="svc-select"><!--SERVICE_OPTIONS--></select>
-              <p class="hint full-only" id="serviceHint"><!--SERVICE_HINT--></p>
-            </div>
-            <div class="sum-line" id="searchSum">
-              <p class="sum-where">
-                <svg class="ic" aria-hidden="true"><use href="#i-pin" /></svg><span id="sumWhere"></span>
-              </p>
-              <button type="button" class="btn" id="editSearch" aria-expanded="false" aria-controls="searchForm">
-                <svg class="ic" aria-hidden="true"><use href="#i-edit" /></svg>Modifier
+        <!-- Barre de recherche : flottante en haut sur ordinateur ; sur mobile, carte de résumé que « Modifier » déplie -->
+        <form id="searchForm" class="search" novalidate>
+          <div class="sum-line" id="searchSum">
+            <p class="sum-where">
+              <svg class="ic" aria-hidden="true"><use href="#i-pin" /></svg>
+              <span class="sum-txt"><b id="sumWhere"></b><span id="sumSvc"></span></span>
+            </p>
+            <button type="button" class="btn" id="editSearch" aria-expanded="false" aria-controls="searchForm" aria-label="Modifier la recherche">
+              <svg class="ic" aria-hidden="true"><use href="#i-edit" /></svg><span class="lbl-edit">Modifier</span>
+            </button>
+          </div>
+          <div class="field addr-field full-only" id="addrField">
+            <label for="address">Où</label>
+            <div class="addr">
+              <input
+                id="address"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Adresse, ville ou code postal"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                aria-controls="addrList"
+              />
+              <button type="button" id="addrClear" class="addr-btn" aria-label="Effacer l'adresse" title="Effacer l'adresse">
+                <svg class="ic" aria-hidden="true"><use href="#i-close" /></svg>
+              </button>
+              <button type="button" id="locateBtn" class="addr-btn" aria-label="Utiliser ma position" title="Utiliser ma position">
+                <svg class="ic" aria-hidden="true"><use href="#i-locate" /></svg>
               </button>
             </div>
-            <div class="field addr-field full-only" id="addrField">
-              <label for="address">Votre adresse</label>
-              <div class="addr">
-                <input
-                  id="address"
-                  type="text"
-                  autocomplete="off"
-                  spellcheck="false"
-                  placeholder="N°, rue, code postal ou ville"
-                  role="combobox"
-                  aria-autocomplete="list"
-                  aria-expanded="false"
-                  aria-controls="addrList"
-                />
-                <button
-                  type="button"
-                  id="locateBtn"
-                  class="icon-btn"
-                  aria-label="Utiliser ma position"
-                  title="Utiliser ma position"
-                >
-                  <svg class="ic" aria-hidden="true"><use href="#i-locate" /></svg>
-                </button>
-              </div>
-              <ul id="addrList" class="suggest" role="listbox" aria-label="Adresses proposées" hidden></ul>
+            <ul id="addrList" class="suggest" role="listbox" aria-label="Adresses proposées" hidden></ul>
+          </div>
+          <div class="field svc-field">
+            <label for="svcBtn">Prestation</label>
+            <button type="button" id="svcBtn" class="svc-btn" aria-haspopup="dialog" aria-describedby="serviceHint">
+              <span class="svc-val" id="svcVal"><!--SERVICE_LABEL--></span>
+              <span class="svc-n" id="svcN" hidden></span>
+              <svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg>
+            </button>
+            <select id="service" class="svc-select" tabindex="-1" aria-hidden="true" hidden><!--SERVICE_OPTIONS--></select>
+            <p class="hint svc-hint" id="serviceHint"><!--SERVICE_HINT--></p>
+          </div>
+          <div class="field full-only radius-field">
+            <label for="radius">Rayon</label>
+            <select id="radius">
+              <option value="3">3 km</option>
+              <option value="5">5 km</option>
+              <option value="10" selected>10 km</option>
+              <option value="20">20 km</option>
+              <option value="30">30 km</option>
+              <option value="50">50 km</option>
+            </select>
+          </div>
+          <div class="field full-only" id="energyField" hidden>
+            <label for="energy">Énergie</label>
+            <select id="energy">
+              <option>Essence</option>
+              <option>Diesel</option>
+              <option>Hybride</option>
+              <option>Électrique</option>
+              <option>Gaz</option>
+            </select>
+          </div>
+          <div class="go-row full-only">
+            <button type="submit" id="go" class="primary">
+              <svg class="ic" aria-hidden="true"><use href="#i-search" /></svg
+              ><span id="goLabel" class="go-label">Rechercher les garages</span>
+            </button>
+          </div>
+        </form>
+
+        <!-- Filtres : au-dessus de la carte sur ordinateur, sous la barre de recherche sur mobile (visibles quand il y a des résultats) -->
+        <div class="mapbar" id="toolbar" hidden>
+          <div class="dd-wrap">
+            <button type="button" class="dd" id="ddType" aria-haspopup="true" aria-expanded="false" aria-controls="menuType">
+              <span class="dd-lbl">Type</span><span class="dd-n" hidden></span><svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg>
+            </button>
+            <div class="menu" id="menuType" role="group" aria-label="Type de garage" hidden>
+              <button type="button" class="mopt" data-ftype="all" aria-pressed="true"><span class="cb" aria-hidden="true"></span>Tous</button>
+              <button type="button" class="mopt" data-ftype="chains" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Enseignes</button>
+              <button type="button" class="mopt" data-ftype="indep" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Indépendants</button>
             </div>
-            <div class="field full-only">
-              <span class="lbl" id="radiusLbl">Rayon autour de l'adresse</span>
-              <input type="hidden" id="radius" value="10" />
-              <div class="chips" id="radiusChips" role="group" aria-labelledby="radiusLbl">
-                <button type="button" class="chip" data-km="3">3 km</button>
-                <button type="button" class="chip" data-km="5">5 km</button>
-                <button type="button" class="chip" data-km="10">10 km</button>
-                <button type="button" class="chip" data-km="20">20 km</button>
-                <button type="button" class="chip" data-km="30">30 km</button>
-                <button type="button" class="chip" data-km="50">50 km</button>
-              </div>
+          </div>
+          <div class="dd-wrap">
+            <button type="button" class="dd" id="ddPrice" aria-haspopup="true" aria-expanded="false" aria-controls="menuPrice">
+              <span class="dd-lbl">Prix</span><span class="dd-n" hidden></span><svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg>
+            </button>
+            <div class="menu" id="menuPrice" role="group" aria-label="Prix" hidden>
+              <button type="button" class="mopt" data-fprice="all" aria-pressed="true"><span class="cb" aria-hidden="true"></span>Tous</button>
+              <button type="button" class="mopt" data-fprice="priced" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Avec prix</button>
+              <button type="button" class="mopt" data-fprice="promo" aria-pressed="false"><span class="cb" aria-hidden="true"></span>En promo</button>
             </div>
-            <div class="field" id="energyField" hidden>
-              <label for="energy">Énergie du véhicule</label>
-              <select id="energy">
-                <option>Essence</option>
-                <option>Diesel</option>
-                <option>Hybride</option>
-                <option>Électrique</option>
-                <option>Gaz</option>
-              </select>
-            </div>
-            <details class="more full-only" id="moreOpts">
-              <summary>Plus d'ateliers</summary>
+          </div>
+          <div class="dd-wrap" id="chainWrap" hidden>
+            <button type="button" class="dd" id="ddChain" aria-haspopup="true" aria-expanded="false" aria-controls="menuChain">
+              <span class="dd-lbl">Enseignes</span><span class="dd-n" hidden></span><svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg>
+            </button>
+            <div class="menu" id="menuChain" role="group" aria-label="Enseignes dans la zone" hidden></div>
+          </div>
+          <div class="dd-wrap dd-more">
+            <button type="button" class="fbtn" id="moreBtnF" aria-haspopup="true" aria-expanded="false" aria-controls="moreOpts" aria-label="Plus de filtres" title="Plus de filtres">
+              <svg class="ic" aria-hidden="true"><use href="#i-filter" /></svg>
+            </button>
+            <div class="menu menu-more" id="moreOpts" role="group" aria-label="Plus de filtres" hidden>
               <label class="check"
                 ><input type="checkbox" id="sirene" />
                 <span>Ajouter les ateliers du registre des entreprises (SIRENE)</span></label
@@ -121,37 +158,40 @@
                 Ajoute les ateliers déclarés à l'INSEE (code NAF 45.20A) absents d'OpenStreetMap. Liste plus complète,
                 sans prix, et parfois des adresses de domicile.
               </p>
-            </details>
-            <div class="go-row full-only">
-              <button type="submit" id="go" class="primary">
-                <svg class="ic" aria-hidden="true"><use href="#i-search" /></svg
-                ><span id="goLabel">Rechercher les garages</span>
-              </button>
             </div>
-          </form>
+          </div>
+        </div>
+
+        <div class="panel-col" id="panelCol">
+          <header class="panel-head">
+            <h1 id="garagesTitle"><span class="t-brand"><span class="px-word" role="img" aria-label="Pixcar"></span></span><span class="t-text">Garages</span><span class="sr-only"> autour de votre adresse</span></h1>
+            <div class="home-intro">
+              <p class="panel-sub">1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto</p>
+              <ol class="steps">
+                <li><b aria-hidden="true">1</b><span>Choisissez une prestation et votre adresse.</span></li>
+                <li><b aria-hidden="true">2</b><span>Comparez les garages autour de vous et demandez des devis.</span></li>
+                <li><b aria-hidden="true">3</b><span>Déclarez le prix payé : il nourrit les repères de tout le monde.</span></li>
+              </ol>
+            </div>
+          </header>
           <section class="teaser" id="teaser" aria-live="polite"></section>
           <section class="results" id="results" aria-live="polite" aria-label="Résultats">
             <h2 class="sr-only">Résultats</h2>
             <div id="status" class="status"></div>
-            <div id="summary" class="summary" hidden></div>
-            <p id="repairNote" class="hint repair-note" hidden></p>
-            <div id="toolbar" class="toolbar" hidden>
-              <div class="tool-group">
-                <span class="lbl-s" id="sortLbl">Trier</span>
-                <div class="seg" role="group" aria-labelledby="sortLbl">
-                  <button type="button" data-sort="price" aria-pressed="true">Prix</button>
-                  <button type="button" data-sort="dist" aria-pressed="false">Distance</button>
-                  <button type="button" data-sort="note" aria-pressed="false">Note</button>
+            <div class="res-top" id="resTop" hidden>
+              <div id="summary" class="summary" hidden></div>
+              <div class="sortbox" id="sortBox">
+                <button type="button" class="sort-btn" id="sortBtn" aria-haspopup="true" aria-expanded="false" aria-controls="sortMenu">
+                  <span>Trier : <b id="sortVal">prix</b></span><svg class="ic" aria-hidden="true"><use href="#i-sort" /></svg>
+                </button>
+                <div class="menu" id="sortMenu" role="group" aria-label="Trier par" hidden>
+                  <button type="button" class="mopt" data-sort="price" aria-pressed="true"><span class="cb" aria-hidden="true"></span>Prix</button>
+                  <button type="button" class="mopt" data-sort="dist" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Distance</button>
+                  <button type="button" class="mopt" data-sort="note" aria-pressed="false"><span class="cb" aria-hidden="true"></span>Note</button>
                 </div>
               </div>
-              <div class="filters" id="filters" role="group" aria-label="Filtrer">
-                <button type="button" class="chip" data-filter="all" aria-pressed="true">Tous</button>
-                <button type="button" class="chip" data-filter="priced" aria-pressed="false">Avec prix</button>
-                <button type="button" class="chip" data-filter="promo" aria-pressed="false">En promo</button>
-                <button type="button" class="chip" data-filter="chains" aria-pressed="false">Enseignes</button>
-                <button type="button" class="chip" data-filter="indep" aria-pressed="false">Indépendants</button>
-              </div>
             </div>
+            <p id="repairNote" class="hint repair-note" hidden></p>
             <div class="res-body" id="resBody">
               <div class="list-pane" id="listPane">
                 <ol id="list" class="list"></ol>
@@ -202,6 +242,12 @@
             </div>
           </div>
           <aside class="map-info" id="mapInfo" aria-label="Garage sélectionné" hidden></aside>
+          <button type="button" class="map-btn map-expand" id="mapExpand" aria-pressed="false" aria-label="Agrandir la carte" title="Agrandir la carte" hidden>
+            <svg class="ic" aria-hidden="true"><use href="#i-expand" /></svg>
+          </button>
+          <button type="button" class="map-btn map-locate" id="mapLocate" aria-label="Rechercher autour de ma position" title="Rechercher autour de ma position">
+            <svg class="ic" aria-hidden="true"><use href="#i-locate" /></svg>
+          </button>
         </div>
         <button type="button" class="fab" id="mapFab" aria-controls="stage" hidden>
           <svg class="ic" aria-hidden="true"><use href="#i-map" /></svg><span>Carte</span>

@@ -1,5 +1,5 @@
 // Missing garage addresses: nearest address from the IGN reverse geocoder, shown with "≈", cached, bounded to 80 m.
-const { serve, launch, open, search, shot, ROOT, injectScript } = require("./harness");
+const { serve, launch, open, search, shot, ROOT, injectScript, sortBy, pickServices } = require("./harness");
 const { buildElements, CENTER } = require("./mocks");
 const fs = require("fs"), path = require("path");
 const FILE = process.env.FILE || "index.html";
@@ -37,7 +37,7 @@ const opened = async (page, mock, o = {}) => {
   // in this suite must come from the opening of a card.
   const r = await open(page.browser, page.server, FILE, { ...W, mock: { elements: ELEMENTS, ...mock }, ...o, initScript: "window.JG_CITY_LOOKUP=false;" + ((o && o.initScript) || "") });
   await search(r.page, { service: "vidange" });
-  await r.page.click("[data-sort=dist]"); await r.page.waitForTimeout(400);
+  await sortBy(r.page, "dist"); await r.page.waitForTimeout(400);
   return r;
 };
 const nearly = (a, b) => Math.abs(a - b) < 2e-6;
@@ -102,7 +102,7 @@ const nearly = (a, b) => Math.abs(a - b) < 2e-6;
   const nReq = c.reverse;
   await page.reload();
   await page.waitForSelector("#list > li", { timeout: 8000 });
-  await page.click("[data-sort=dist]"); await page.waitForTimeout(400);
+  await sortBy(page, "dist"); await page.waitForTimeout(400);
   await openCard(page, 1); await page.waitForTimeout(200);
   const again = await val(page, 1);
   check("B1 after a reload the address is there at once (cache), with no new request", again && again.approx && !again.busy && /Rue du Test, 69007 Lyon$/.test(again.text) && c.reverse === nReq, JSON.stringify([again, c.reverse, nReq]));
@@ -119,7 +119,7 @@ const nearly = (a, b) => Math.abs(a - b) < 2e-6;
   await page.evaluate(() => { const m = JSON.parse(localStorage.getItem("jg.addr.v1")); for (const k in m) m[k].t -= 91 * 864e5; localStorage.setItem("jg.addr.v1", JSON.stringify(m)); });
   await page.reload();
   await page.waitForSelector("#list > li", { timeout: 8000 });
-  await page.click("[data-sort=dist]"); await page.waitForTimeout(400);
+  await sortBy(page, "dist"); await page.waitForTimeout(400);
   await openCard(page, 1); await waitDone(page, 1);
   check("B2 an answer older than 90 days is asked again", c.reverse === nReq + 1, [c.reverse, nReq]);
   await ctx.close();
@@ -180,7 +180,7 @@ const nearly = (a, b) => Math.abs(a - b) < 2e-6;
 
   // ===== G. contrôle technique: addresses come with the data, never looked up =====
   ({ page, ctx } = await open(browser, server, FILE, { ...W, mock: { elements: ELEMENTS } }));
-  await page.selectOption("#service", "ct");
+  await pickServices(page, "ct");
   await page.fill("#address", "12 rue de la république lyon"); await page.waitForSelector("#addrList li[data-i]", { state: "visible" }); await page.click("#addrList li[data-i='0']");
   await page.click("#go"); await page.waitForSelector("#list > li.card", { timeout: 12000 });
   await page.click("#list > li:nth-child(1) .g-main"); await page.waitForTimeout(400);

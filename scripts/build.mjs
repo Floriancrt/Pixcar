@@ -251,6 +251,7 @@ async function pageParts(withGarages) {
     ["<!--LD_CAR-->", car],
     ["<!--SERVICE_OPTIONS-->", optionsHtml(SERVICES), 2],
     ["<!--SERVICE_HINT-->", esc(SERVICES[0].hint)], // la première prestation est celle que la page sélectionne à la première visite
+    ["<!--SERVICE_LABEL-->", esc(SERVICES[0].label)], // son libellé : texte du bouton « Prestation » avant le démarrage du script (pas de décalage)
     ["<!--LEGAL_LINK_PANEL-->", legal.linkPanel],
     ["<!--LEGAL_LINK_SOURCES-->", legal.linkSources],
   ]);

@@ -27,7 +27,7 @@ M = [
  # ---- repli
  ("no fallback when Mapbox refuses the tiles", "failed >= 2 &&", "failed >= 999999 &&", "", "M40"),
  ("fallback at the very first refused tile (a single lost tile is enough to give up Mapbox)", "failed >= 2 &&", "failed >= 1 &&", "", "M45"),
- ("the abandoned background stays on the map", "((passed = !0), Mt.removeLayer(layer), showBase(i + 1))", "((passed = !0), showBase(i + 1))", "", "M41"),
+ ("the abandoned background stays on the map", "Mt.removeLayer(layer), showBase(i + 1))", "showBase(i + 1))", "", "M41"),
  ("CARTO unreachable: last resort lost", 'L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {', 'L.tileLayer("https://{s}.basemaps.cartocdn.invalid/rastertiles/voyager/{z}/{x}/{y}{r}.png", {', "", "M44"),
  # ---- crédit
  ("no credit for Mapbox on the map", "maxZoom: 19, attribution: MAPBOX_ATTRIBUTION }", 'maxZoom: 19, attribution: "" }', "", "M28"),

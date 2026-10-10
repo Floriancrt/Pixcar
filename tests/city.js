@@ -1,7 +1,7 @@
 // City in the distance chip of the cards ("2,5 km · Bron"): where the city comes from (OSM tags, address, registry,
 // technical inspection, nearest-address lookup), the lookup rules (cards on screen only, 3 at a time, 250 m, cache,
 // failure, switch), the interplay with the address lookup of tests/addr.js, and the layout of the chip.
-const { serve, launch, open, search, shot, ROOT, injectScript } = require("./harness");
+const { serve, launch, open, search, shot, ROOT, injectScript, sortBy, pickServices, tileClearance } = require("./harness");
 const { CENTER } = require("./mocks");
 const fs = require("fs"), path = require("path");
 const FILE = process.argv[2] || process.env.FILE || "index.html";
@@ -32,7 +32,7 @@ const at = (lat) => (lat > CENTER.lat + BAND ? { city: "Vénissieux", postcode: 
 const ID = (n) => `osm:node/${9400 + n}`;
 const bareNum = (id) => (/^osm:node\/94\d\d$/.test(id) ? +id.slice(-2) : -1);
 
-const dist = async (page) => { await page.click("[data-sort=dist]"); await page.waitForTimeout(350); };
+const dist = async (page) => { await sortBy(page, "dist"); await page.waitForTimeout(350); };
 // A cards are ~190 px tall and the list starts ~650 px down the page: a 1440 × 900 window shows two of them.
 // `tall` windows show more at once, which is what the queue (3 at a time) needs to be seen at work.
 // `noSort`: read the page as the search left it. Sorting redraws every card, which would hide a chip that a late answer
@@ -136,9 +136,9 @@ const addrText = (page, id) => page.$eval(`#list [data-id="${id}"] [data-ad]`, (
   check("B9 24 requests in all (one per garage without a city), still 3 at a time at most", c.reverse === N && c.reverseMax === 3, JSON.stringify([c.reverse, c.reverseMax]));
   const ents = Object.values(await memory(page));
   check("B10 answers cached with their city (« c ») next to the address of the same answer", ents.length === N && ents.every((e) => e.c && e.a && e.d === 14), JSON.stringify(ents.slice(0, 2)));
-  await page.click("[data-sort=price]"); await page.waitForTimeout(250);
+  await sortBy(page, "price"); await page.waitForTimeout(250);
   await dist(page);
-  await page.click("[data-sort=note]"); await page.waitForTimeout(250);
+  await sortBy(page, "note"); await page.waitForTimeout(250);
   await dist(page);
   await page.evaluate((id) => document.querySelector(`#list [data-id="${CSS.escape(id)}"]`).scrollIntoView({ block: "center" }), ID(0));
   await settle(ctx, 500);
@@ -181,7 +181,7 @@ const addrText = (page, id) => page.$eval(`#list [data-id="${id}"] [data-ad]`, (
   ch = await chips(page);
   const m2 = Object.values(await memory(page));
   const n3 = c.reverse;
-  await page.click("[data-sort=price]"); await page.waitForTimeout(250); await dist(page); await settle(ctx, 500);
+  await sortBy(page, "price"); await page.waitForTimeout(250); await dist(page); await settle(ctx, 500);
   check("C3 an answer 300 m away is refused: no city, the chip shows the distance only", ch.length === 2 && ch.every((x) => x.city === "" && /^à \d+ m$/.test(x.said)), JSON.stringify(ch.map((x) => [x.city, x.said])));
   check("C4 the refusal is cached (empty city) and not asked again", m2.length === 2 && m2.every((e) => e.a === "" && e.c === "") && n3 === 2 && c.reverse === n3, JSON.stringify([m2, n3, c.reverse]));
   await ctx.close();
@@ -212,18 +212,19 @@ const addrText = (page, id) => page.$eval(`#list [data-id="${id}"] [data-ad]`, (
   await ctx.close();
   // C8: the service is down (all 12 cards on screen), then comes back
   const down = { fail: true };
-  ({ page, ctx, logs } = await opened(env, BARE.slice(0, 12), { reverse: down }, { height: 3200, initScript: "window.JG_TUNE.cityPause=3000;" }));
+  // pause de 6 s : le temps de relire la liste deux fois (deux tris par le menu « Trier ») sans qu'elle se termine
+  ({ page, ctx, logs } = await opened(env, BARE.slice(0, 12), { reverse: down }, { height: 3200, initScript: "window.JG_TUNE.cityPause=6000;" }));
   c = ctx.__counters; await settle(ctx, 900);
   ch = await chips(page);
   const mDown = await page.evaluate(() => localStorage.getItem("jg.addr.v1"));
   const stopped = c.reverse;
   check("C8 service down: it stops after a few failures (at most 6 requests for 12 garages), nothing cached", stopped >= 4 && stopped <= 6 && mDown === null, JSON.stringify([stopped, mDown]));
   check("C9 ...the chips keep the distance alone, no page error", ch.length === 12 && ch.every((x) => x.city === "" && /^à \d+ m$/.test(x.said)) && logs.errors.length === 0, JSON.stringify([ch.map((x) => x.said).slice(0, 3), logs.errors]));
-  await page.click("[data-sort=price]"); await page.waitForTimeout(250); await dist(page); await settle(ctx, 500);
+  await sortBy(page, "price"); await page.waitForTimeout(250); await dist(page); await settle(ctx, 500);
   check("C10 during the pause a new display of the list asks nothing", c.reverse === stopped, [c.reverse, stopped]);
   down.fail = false; // the service is back
-  await page.waitForTimeout(3200);
-  await page.click("[data-sort=price]"); await page.waitForTimeout(250); await dist(page); await settle(ctx, 600);
+  await page.waitForTimeout(6200);
+  await sortBy(page, "price"); await page.waitForTimeout(250); await dist(page); await settle(ctx, 600);
   ch = await chips(page);
   check("C11 after the pause the lookups start again and, the service answering, every card gets its city", c.reverse > stopped && ch.length === 12 && ch.every((x) => x.city === "Lyon"), JSON.stringify([c.reverse, stopped, ch.map((x) => x.city)]));
   await ctx.close();
@@ -269,7 +270,7 @@ const addrText = (page, id) => page.$eval(`#list [data-id="${id}"] [data-ad]`, (
   // ===== E. the other sources carry their city with the data =====
   // E1: technical inspection
   ({ page, ctx } = await open(browser, server, FILE, { width: 1440, height: 900, mock: { elements: TAGGED } }));
-  await page.selectOption("#service", "ct");
+  await pickServices(page, "ct");
   await page.fill("#address", "12 rue de la république lyon"); await page.waitForSelector("#addrList li[data-i]", { state: "visible" }); await page.click("#addrList li[data-i='0']");
   await page.click("#go"); await page.waitForSelector("#list > li.card", { timeout: 12000 }); await page.waitForTimeout(500);
   ch = await chips(page);
@@ -297,6 +298,8 @@ const addrText = (page, id) => page.$eval(`#list [data-id="${id}"] [data-ad]`, (
   check("F1 mobile (390 px): every chip stays inside its card, no sideways scroll", ch.length === 6 && ch.every((x) => x.inside) && !overflowX, JSON.stringify([ch.map((x) => x.inside), overflowX]));
   check("F2 mobile: a very long city is shortened (« … ») rather than overflowing; short ones are shown in full", ch[5].cut && ch.every((x) => x.ell) && ch.filter((x) => x.city.length <= 8).every((x) => !x.cut), JSON.stringify(ch.map((x) => [x.city.slice(0, 10), x.cut])));
   check("F3 mobile: the shortened chip still reads in full for a screen reader", ch[5].said === `à ${ch[5].km}, ${LONG}`, ch[5].said);
+  const tc = await tileClearance(page);
+  check("F5 mobile: the two-line chip (distance, city) never covers the tile's letter (it moves up above the chip)", tc.length === 6 && tc.every((x) => x.city && x.gap >= 2), JSON.stringify(tc));
   await shot(page, "city-03-mobile");
   await ctx.close();
   ({ page, ctx, logs } = await opened(env, TAGGED, {}, { colorScheme: "dark" }));

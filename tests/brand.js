@@ -87,9 +87,17 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
     });
     const exp = scheme === "light" ? { user: ["#ffffff", "#10121F"], selected: ["#E5440B", "#ffffff"], priced: ["#10121F", "#ffffff"], radius: ["#E5440B", "#E5440B"] } : { user: ["#07080f", "#ff7c49"], selected: ["#ff7c49", "#07080f"], priced: ["#f4f5fa", "#07080f"], radius: ["#ff7c49", "#ff7c49"] };
     check(`${T}10 markers use the Pixcar tokens (user ring, selected, priced, search radius)`, JSON.stringify(mk.user) === JSON.stringify(exp.user) && JSON.stringify(mk.selected) === JSON.stringify(exp.selected) && JSON.stringify(mk.priced) === JSON.stringify(exp.priced) && JSON.stringify(mk.radius) === JSON.stringify(exp.radius), JSON.stringify(mk));
-    const av = await page.evaluate(() => [...document.querySelectorAll("#list .avatar:not([data-c])")].slice(0, 12).map((a) => getComputedStyle(a).backgroundColor));
+    // tuile des indépendants : un seul fond neutre, le jeton --card-2 (la couleur dit le type de garage, pas le nom)
+    const av = await page.evaluate(() => {
+      const probe = document.createElement("i");
+      probe.style.background = "var(--card-2)";
+      document.body.append(probe);
+      const token = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return { token, tiles: [...document.querySelectorAll("#list .card.k-indep .avatar:not(.has-logo)")].slice(0, 12).map((a) => getComputedStyle(a).backgroundColor) };
+    });
     const hue = (c) => { const [r, g, b] = rgb(c).map((x) => x / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b); if (mx === mn) return -1; const d = mx - mn; let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return Math.round(((h * 60) + 360) % 360); };
-    check(`${T}11 independents' initials stay in the green family (hue 80-180)`, av.length >= 5 && av.every((c) => { const h = hue(c); return h >= 80 && h <= 180; }), JSON.stringify(av.map(hue)));
+    check(`${T}11 independents' tiles all use the neutral tile token (--card-2), whatever their name`, av.tiles.length >= 5 && av.tiles.every((c) => c === av.token), JSON.stringify({ token: av.token, hues: av.tiles.map(hue) }));
     check(`${T}12 no page error`, logs.errors.length === 0 && logs.console.length === 0, JSON.stringify([logs.errors, logs.console]));
     await ctx.close();
 

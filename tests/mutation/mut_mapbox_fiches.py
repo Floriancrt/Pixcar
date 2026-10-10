@@ -24,7 +24,7 @@ M = [
  ("enrich=off is not honoured", '"off" !== mbxCfg.enrich &&', "", "", "F70"),
  ("the run-time switch (JG_MAPBOX_ENRICH) is not honoured", "window.JG_MAPBOX_ENRICH !== !1 &&", "", "", "F71"),
  ("complete cards are asked too (no more « something is missing » test)", "(g.mbxTry || 0) < 2 &&\n      missingOf(g);", "(g.mbxTry || 0) < 2;", "", "F30"),
- ("only OpenStreetMap garages are completed (not the SIRENE register's)", '("osm" === g.src || "sirene" === g.src) &&', '("osm" === g.src) &&', "", "F45"),
+ ("only OpenStreetMap garages are completed (not the SIRENE register's)", '("osm" === g.src || "sirene" === g.src || "ovt" === g.src) &&', '("osm" === g.src || "ovt" === g.src) &&', "", "F45"),
  ("the token is not sent", "createEnricher({ token: mbxCfg.token })", 'createEnricher({ token: "" })', "", "F22b"),
  # ---- ce qu'on fait de la réponse
  ("the phone is not written to the garage", "(f.phone && (g.phone = f.phone), f.hours && (g.hours = f.hours), f.web && (g.web = f.web));", "(f.hours && (g.hours = f.hours), f.web && (g.web = f.web));", "", "F24"),

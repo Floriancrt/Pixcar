@@ -1,6 +1,6 @@
 // Loading state: ring road + car on the map, waiting sentence in the status card.
 // Usage: node load.js [file] [sections]   (default index.html; run it on an older build to see what the old build lacks)
-const { serve, launch, open, SHOTS, ROOT, injectScript } = require("./harness");
+const { serve, launch, open, SHOTS, ROOT, injectScript, pickServices, editSearch } = require("./harness");
 const { buildElements, CENTER } = require("./mocks");
 const fs = require("fs");
 const path = require("path");
@@ -28,7 +28,7 @@ const bez = (p) => {
 const expectAngle = (t) => (360 - 360 * bez(Math.min((t % 2400) / 1800, 1))) % 360; // counter-clockwise from the top, in clockwise degrees
 
 async function begin(page, { service = "vidange", address = "12 rue de la république lyon" } = {}) {
-  await page.selectOption("#service", service);
+  await pickServices(page, service);
   await page.fill("#address", address);
   await page.waitForSelector("#addrList li[data-i]", { state: "visible", timeout: 5000 });
   await page.click("#addrList li[data-i='0']");
@@ -149,8 +149,8 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
     check("C1 the loading state is on during the search and gone when results arrive", mid && !end.searching && end.status === "" && end.statusDisplay === "none" && end.ld.every((d) => d === "none") && end.laps === 0, JSON.stringify([mid, end]));
     check("C2 the real map replaces the decor", end.mapShown && end.empty === "none");
     // C3: an information message outside a search keeps its plain look
-    await page.click("#editSearch");
-    await page.click("#radiusChips .chip[data-km='20']");
+    await editSearch(page);
+    await page.selectOption("#radius", "20");
     await page.waitForTimeout(200);
     const info = await page.evaluate(() => ({ cls: document.getElementById("status").className, text: document.getElementById("status").textContent.trim() }));
     check("C3 messages outside a search are unchanged (no sentence)", /^Relancez la recherche pour élargir la zone à 20 km\.$/.test(info.text) && info.cls === "status", JSON.stringify(info));
@@ -186,7 +186,7 @@ const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
 
     // C7: contrôle technique goes through the same states
     ({ page, ctx } = await open(browser, server, FILE, { width: 1440, height: 900 }));
-    await page.selectOption("#service", "ct");
+    await pickServices(page, "ct");
     await page.fill("#address", "lyon");
     await page.waitForSelector("#addrList li[data-i]");
     await page.click("#addrList li[data-i='0']");

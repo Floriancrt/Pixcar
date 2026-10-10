@@ -6,7 +6,7 @@ from lib import run
 
 M = [
  # name, find, replace, sections, must-fail check prefix
- ("dès back on card prices", '<span class="amount">${n.approx', '<span class="amount">${n.from ? \'<span class="from">dès</span>\' : ""}${n.approx', "D", "D1"),
+ ("dès back on card prices", '<span class="amount">${n.approx ? \'<span class="from">env.</span>\' : ""}<span class="num">${C(n.amount)}</span>${i}</span>', '<span class="amount">${n.from ? \'<span class="from">dès</span>\' : ""}${n.approx ? \'<span class="from">env.</span>\' : ""}<span class="num">${C(n.amount)}</span>${i}</span>', "D", "D1"),
  ("dès back in the summary", 'à ${E(e.dist)}, <b>${C(e.price.amount)}</b>.</p>', 'à ${E(e.dist)}, ${e.price.from ? "dès " : ""}<b>${C(e.price.amount)}</b>.</p>', "D", "D2"),
  ("dès back on the Prix page", '<span class="ref-price">${t.approx', '<span class="ref-price">${t.from ? "<small>dès</small> " : ""}${t.approx', "D", "D8"),
  ("dès back in the « prix enseigne » note", 'prix enseigne ${C(s.p)}', 'prix enseigne ${s.from ? "dès " : ""}${C(s.p)}', "D", "D7"),
@@ -18,7 +18,7 @@ M = [
  ("copy fallback selects the first number of the card", '(t.parentElement || a).querySelector(".phone")', 'a.querySelector(".phone")', "P", "P4b"),
  ("label not on the number's baseline", 'grid-template-columns: auto minmax(0, 1fr);\n  align-items: baseline;', 'grid-template-columns: auto minmax(0, 1fr);\n  align-items: start;', "P", "P17"),
  ("no Google Maps link when the number is missing", '<a href="${y(adGoogle(e))}" target="_blank" rel="noopener">chercher sur Google Maps</a>', '', "P", "P8"),
- ("« Horaires » row dropped when missing", '["Horaires", e.hours ? y(I(e.hours)) : none("Non renseignés")]', 'e.hours ? ["Horaires", y(I(e.hours))] : null', "P", "P10"),
+ ("« Horaires » row dropped when missing", '["Horaires", e.hours ? y(I(e.hours)) + src("hours") : none(wait ? "Recherche…" : "Non renseignés")]', 'e.hours ? ["Horaires", y(I(e.hours)) + src("hours")] : null', "P", "P10"),
  ("chains' median tile missing", '<div class="cmp is-ref">', '<div class="cmp is-refx">', "S", "S1"),
  ("garage median marker at the chains' position", '<span class="scale-med" style="left:${l(m)}%">', '<span class="scale-med" style="left:${l(c)}%">', "S", "S4"),
  ("gap sign inverted", 'gap < 0 ? "sous les enseignes" : "au-dessus des enseignes"', 'gap < 0 ? "au-dessus des enseignes" : "sous les enseignes"', "S", "S3"),
