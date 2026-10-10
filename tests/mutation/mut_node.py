@@ -91,9 +91,9 @@ M = [
  ("infra: backups are off unless asked for", CFN, "    Default: 30\n    AllowedValues: [0, 7, 14, 30, 35, 60, 90, 180, 365]", "    Default: 0\n    AllowedValues: [0, 7, 14, 30, 35, 60, 90, 180, 365]", SRV, ["infra"]),
  ("infra: a backup resource exists whatever the retention", CFN, "  BackupSelection:\n    Type: AWS::Backup::BackupSelection\n    Condition: HasBackup\n", "  BackupSelection:\n    Type: AWS::Backup::BackupSelection\n", SRV, ["infra"]),
  # ---- mentions légales : texte, durées annoncées, garde du build
- ("legal: the API can be opened to the public without the notice", BUILD, 'if (apiBase && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1")', "if (false)", SRV, ["legal"]),
- ("legal: the trial switch is always on", BUILD, 'apiBase && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1"', "apiBase && false", SRV, ["legal"]),
- ("legal: an incomplete file builds the window anyway", BUILD, "if (problems.length) {\n    if (apiBase", "if (false) {\n    if (apiBase", SRV, ["legal"]),
+ ("legal: the API can be opened to the public without the notice", BUILD, 'if ((apiBase || analytics || mapbox) && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1")', "if (false)", SRV, ["legal"]),
+ ("legal: the trial switch is always on", BUILD, '(apiBase || analytics || mapbox) && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1"', "(apiBase || analytics || mapbox) && false", SRV, ["legal"]),
+ ("legal: an incomplete file builds the window anyway", BUILD, "if (problems.length) {\n    if ((apiBase", "if (false) {\n    if ((apiBase", SRV, ["legal"]),
  ("legal: any contact is accepted", BUILD, 'if (filled("contact") && !', 'if (false && !', SRV, ["legal"]),
  ("legal: a retention that is not a whole number of months is accepted", BUILD, 'if (filled("repairRetentionMonths") && !(', 'if (false && !(', SRV, ["legal"]),
  ("legal: the editor's text is inserted as HTML", BUILD, "return esc(String(config[k]).trim());", "return String(config[k]).trim();", SRV, ["legal"]),
