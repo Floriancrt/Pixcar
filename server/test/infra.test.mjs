@@ -49,8 +49,22 @@ function scan(node, found = { refs: new Set(), attrs: new Set(), conditions: new
 const ENDPOINT = "abc123def456.dsql.eu-north-1.on.aws";
 const API_ROLE_ARN = "arn:aws:iam::123456789012:role/pixcar-ApiRole-1A2B3C4D5E6F";
 const ATTRIBUTES = { "Cluster.Endpoint": ENDPOINT, "ApiRole.Arn": API_ROLE_ARN };
+// paramètres changés pour un essai (valeur par défaut sinon)
+let overrides = {};
+// condition évaluée avec les paramètres à leur valeur par défaut (ou ceux de « overrides »)
+function holds(node) {
+  if (node && node.Condition) return holds(t.Conditions[node.Condition]);
+  if (node && node["Fn::Not"]) return !holds(node["Fn::Not"][0]);
+  if (node && node["Fn::And"]) return node["Fn::And"].every(holds);
+  if (node && node["Fn::Or"]) return node["Fn::Or"].some(holds);
+  if (node && node["Fn::Equals"]) return valueOf(node["Fn::Equals"][0]) === valueOf(node["Fn::Equals"][1]);
+  throw new Error("condition inconnue du test : " + JSON.stringify(node));
+}
 function valueOf(node) {
   if (typeof node === "string") return node;
+  if (node && node["Fn::If"]) return valueOf(holds({ Condition: node["Fn::If"][0] }) ? node["Fn::If"][1] : node["Fn::If"][2]);
+  if (node && typeof node["Fn::Sub"] === "string") return node["Fn::Sub"].replace(/\$\{(\w+)\}/g, (m, k) => valueOf({ Ref: k }));
+  if (node && node.Ref && Object.hasOwn(overrides, node.Ref)) return overrides[node.Ref];
   if (node && node.Ref) {
     const p = t.Parameters[node.Ref];
     assert.ok(p && p.Default !== undefined, `« ${node.Ref} » n'a pas de valeur par défaut`);
@@ -244,5 +258,60 @@ describe("CloudFormation template (infra/pixcar-api.yaml)", () => {
     const alarms = Object.entries(R).filter(([, r]) => r.Type === "AWS::CloudWatch::Alarm");
     assert.ok(alarms.length >= 3);
     for (const [id, a] of alarms) assert.deepEqual([a.Condition, a.Properties.AlarmActions], ["HasAlarmEmail", [{ Ref: "AlarmTopic" }]], id);
+  });
+});
+
+describe("Espace Pro in the templates (infra/pixcar-api.yaml, infra/pixcar-pro.yaml)", () => {
+  const POOL = "eu-north-1_AbCdEf123", CLIENT = "3n4b5c6d7e8f9g0h1i2j3k4l5m";
+  const NOTIFY = "arn:aws:sms-voice:eu-north-1:123456789012:notify-configuration/nc-0123456789";
+  const boot = (over) => {
+    overrides = over;
+    try {
+      return loadConfig({ ...environment("ApiFunction"), PLATE_PEPPER: "p".repeat(20), IP_PEPPER: "i".repeat(20) });
+    } finally {
+      overrides = {};
+    }
+  };
+
+  test("closed by default; with the pool and the client it opens for e-mail only; with Notify, SMS too — and the function still boots in production", () => {
+    assert.equal(boot({}).pro.enabled, false);
+    const mail = boot({ ProUserPoolId: POOL, ProClientId: CLIENT });
+    assert.deepEqual([mail.pro.enabled, mail.pro.userPoolId, mail.pro.clientId, mail.pro.sender, mail.pro.emailFrom], [true, POOL, CLIENT, "aws", "Pixcar <verification@pixcar.fr>"]);
+    assert.deepEqual(mail.pro.channels, ["email", "email_domain"]);
+    const sms = boot({ ProUserPoolId: POOL, ProClientId: CLIENT, ProNotifyConfigurationArn: NOTIFY });
+    assert.deepEqual([sms.pro.channels, sms.pro.notifyConfigurationId], [["email", "email_domain", "sms"], NOTIFY]);
+    assert.equal(boot({ ProUserPoolId: POOL }).pro.enabled, false, "sans client, rien n'ouvre");
+  });
+
+  test("sending rights only when the Pro space is open: one SES identity, one Notify configuration, never « * »", () => {
+    const p = R.ApiProSendPolicy;
+    assert.equal(p.Condition, "HasPro");
+    assert.deepEqual(p.Properties.RoleName, { Ref: "ApiRole" });
+    const [mail, sms] = p.Properties.PolicyDocument.Statement;
+    assert.deepEqual([mail.Action, mail.Resource], ["ses:SendEmail", { "Fn::Sub": "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${ProEmailDomain}" }]);
+    assert.equal(sms["Fn::If"][0], "HasProSms");
+    assert.deepEqual([sms["Fn::If"][1].Action, sms["Fn::If"][1].Resource, sms["Fn::If"][2]], ["sms-voice:SendNotifyTextMessage", { Ref: "ProNotifyConfigurationArn" }, { Ref: "AWS::NoValue" }]);
+    assert.ok(!actions("ApiRole").has("ses:SendEmail"), "pas dans la politique permanente du rôle");
+  });
+
+  test("the Pro stack: passwordless accounts (Essentials, e-mail code sent through SES), a public client with two flows, nothing deleted with the stack", () => {
+    const text = readFileSync(join(ROOT, "infra/pixcar-pro.yaml"), "utf8");
+    const p = parse(text, { customTags });
+    const P = p.Resources;
+    assert.match(p.Metadata.AWSToolsMetrics.AWSAgentToolkit, /^aws-cloudformation@\d+$/);
+    assert.ok(Buffer.byteLength(text) < 51_200 && Buffer.byteLength(p.Description) < 1024);
+    for (const id of ["EmailIdentity", "UserPool"]) assert.deepEqual([P[id].DeletionPolicy, P[id].UpdateReplacePolicy], ["Retain", "Retain"], id);
+    const pool = P.UserPool.Properties;
+    assert.equal(P.UserPool.Condition, "HasAccounts");
+    assert.equal(pool.UserPoolTier, "ESSENTIALS");
+    assert.ok(pool.Policies.SignInPolicy.AllowedFirstAuthFactors.includes("EMAIL_OTP"));
+    assert.deepEqual([pool.UsernameAttributes, pool.AutoVerifiedAttributes, pool.DeletionProtection], [["email"], ["email"], "ACTIVE"]);
+    assert.equal(pool.EmailConfiguration.EmailSendingAccount, "DEVELOPER", "code e-mail de connexion : Cognito exige SES");
+    assert.match(pool.EmailConfiguration.SourceArn["Fn::Sub"], /:identity\/\$\{EmailDomain\}$/);
+    const client = P.UserPoolClient.Properties;
+    assert.deepEqual([client.GenerateSecret, client.ExplicitAuthFlows, client.EnableTokenRevocation], [false, ["ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"], true]);
+    assert.equal(P.UserPoolClient.Condition, "HasAccounts");
+    for (const out of ["UserPoolId", "UserPoolClientId"]) assert.equal(p.Outputs[out].Condition, "HasAccounts", out);
+    assert.equal(p.Parameters.CreateAccounts.Default, "false", "premier déploiement : l'identité SES seule");
   });
 });

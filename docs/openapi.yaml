@@ -38,6 +38,12 @@ servers:
 tags:
   - name: Réparations
   - name: Relais OpenStreetMap
+  - name: Espace Pro
+    description: |
+      Un compte Amazon Cognito (connexion sans mot de passe) prouve qu'il gère un garage : SIRET actif d'une activité de garage, situé
+      au garage, puis un code à 6 chiffres reçu par un moyen **connu du garage** (e-mail public, e-mail sur le domaine du site propre au
+      garage, SMS au portable). Quand le garage offre plusieurs moyens, le demandeur choisit. Ces routes répondent `404 pro_disabled`
+      tant que l'Espace Pro n'est pas ouvert (`PRO_ENABLED=1`). Jeton : `Authorization: Bearer <jeton d'accès Cognito>`.
   - name: Exploitation
 
 paths:
@@ -178,6 +184,152 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "429": { description: Trop de requêtes amont (par visiteur) ou serveur occupé. , content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "502": { description: Aucun serveur OpenStreetMap ne répond et aucune copie n'existe. , content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/me:
+    get:
+      tags: [Espace Pro]
+      summary: Le compte et ses garages (vérifiés ou en cours de vérification)
+      operationId: proMe
+      security: [{ cognito: [] }]
+      responses:
+        "200":
+          description: Compte (« sub » Cognito) et demandes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account, claims]
+                properties:
+                  account: { type: string }
+                  claims: { type: array, items: { $ref: "#/components/schemas/ProClaim" } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/ProDisabled" }
+  /v1/pro/siret/{siret}:
+    get:
+      tags: [Espace Pro]
+      summary: Contrôle d'un SIRET et garages situés à cet établissement, avec leurs moyens de vérification masqués
+      description: |
+        Le registre public des entreprises (recherche-entreprises.api.gouv.fr) doit connaître le SIRET, l'établissement être actif et
+        son activité principale être celle d'un garage (45.20A, 45.20B, 45.32Z, 45.11Z). Les garages proposés sont ceux de nos données
+        à moins de 300 m de la position de l'établissement (même code postal et même nom quand le registre n'a pas de position). Les
+        cibles ne sont jamais renvoyées en clair : `c•••••@garage-dupont.fr`, `06 •• •• •• 78`, ou le seul domaine pour l'option
+        « domaine ». 30 interrogations du registre par heure et par compte (un SIRET vu depuis moins de 10 minutes ne compte pas).
+      operationId: proSiret
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: siret, in: path, required: true, schema: { type: string }, description: "14 chiffres (espaces tolérés)." }
+      responses:
+        "200":
+          description: Établissement et garages candidats (10 au plus, même nom d'abord, puis le plus proche).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [establishment, garages]
+                properties:
+                  establishment:
+                    type: object
+                    required: [siret, name, addr, naf]
+                    properties:
+                      siret: { type: string, pattern: "^\\d{14}$" }
+                      name: { type: string }
+                      company: { type: string }
+                      addr: { type: string }
+                      naf: { type: string, example: 45.20A }
+                  garages: { type: array, items: { $ref: "#/components/schemas/ProGarage" } }
+        "400": { description: "SIRET mal formé ou clé de contrôle fausse (`bad_siret`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "SIRET inconnu du registre (`siret_not_found`), ou Espace Pro fermé (`pro_disabled`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "Établissement fermé (`siret_closed`) ou activité qui n'est pas celle d'un garage (`siret_activity`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { description: "Registre des entreprises injoignable (`sirene_unavailable`, Retry-After: 60) ou base indisponible.", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/claims:
+    post:
+      tags: [Espace Pro]
+      summary: Demander le rattachement d'un garage et recevoir un code par le moyen choisi
+      description: |
+        Le SIRET est contrôlé à nouveau ; le garage doit être l'un des candidats de `GET /v1/pro/siret/{siret}`. Le code (6 chiffres,
+        valable 10 minutes, 5 essais) part vers la cible connue du garage ; pour l'option `domain`, vers `localPart@domaine-du-garage`.
+        Limites : 3 envois par garage et 5 par compte sur 24 h, 30 par heure pour tout le service, 3 demandes en cours par compte.
+        Une nouvelle demande du même compte pour le même garage remplace la précédente.
+      operationId: proClaim
+      security: [{ cognito: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [siret, garageId, option, holder]
+              properties:
+                siret: { type: string }
+                garageId: { type: string, description: Identifiant du garage (celui des tuiles de la carte). }
+                option: { type: string, example: "email:0", description: "`id` d'une option de `ProGarage.options`." }
+                localPart: { type: string, maxLength: 64, description: "Option `domain` seulement : la partie avant le @." }
+                holder:
+                  type: object
+                  required: [firstName, lastName, role, certify]
+                  properties:
+                    firstName: { type: string, maxLength: 60 }
+                    lastName: { type: string, maxLength: 60 }
+                    role: { type: string, enum: [manager, employee, other] }
+                    certify: { type: boolean, enum: [true], description: "« Je certifie être habilité(e) à représenter cet établissement »." }
+      responses:
+        "201": { description: Demande créée, code envoyé., content: { application/json: { schema: { $ref: "#/components/schemas/ProClaim" } } } }
+        "400": { description: "JSON illisible (`bad_json`) ou SIRET mal formé (`bad_siret`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "SIRET inconnu du registre (`siret_not_found`), ou Espace Pro fermé (`pro_disabled`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Garage déjà rattaché à un autre compte (`already_claimed`, avec `contact`) ou au vôtre (`already_yours`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "Champ invalide (`validation`, `holder`, `local_part`), option inconnue (`option`), garage pas à l'adresse de l'établissement (`siret_far`), SIRET refusé (`siret_closed`, `siret_activity`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { description: "Limite d'envois (`send_limited`, avec `scope` : garage, account, global), trop de demandes en cours (`too_many_pending`) ou trop d'interrogations du registre par ce compte (`rate_limited`).", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "502": { description: "Le code n'a pas pu partir (`send_failed`) : la demande est close.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "503": { description: "Registre des entreprises injoignable (`sirene_unavailable`) ou base indisponible.", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/claims/{id}:
+    get:
+      tags: [Espace Pro]
+      summary: État d'une demande du compte
+      operationId: proGetClaim
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: La demande., content: { application/json: { schema: { $ref: "#/components/schemas/ProClaim" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Introuvable, ou demande d'un autre compte.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/claims/{id}/code:
+    post:
+      tags: [Espace Pro]
+      summary: Essayer le code reçu
+      description: Chaque essai est compté avant la comparaison. Le bon code rattache le garage au compte (un seul compte par garage).
+      operationId: proCode
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string, pattern: "^\\d{6}$" } } } } }
+      responses:
+        "200": { description: Vérifiée (ou déjà vérifiée)., content: { application/json: { schema: { $ref: "#/components/schemas/ProClaim" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: Introuvable., content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Demande close (`claim_closed`), garage rattaché entre-temps à un autre compte (`already_claimed`), ou essai simultané (`busy`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "410": { description: "Code expiré (`code_expired`) : en demander un nouveau.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "Code faux (`bad_code`, avec `attemptsLeft`) ou mal formé (`validation`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "423": { description: "Cinquième code faux (`locked`) : la demande est close.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/claims/{id}/resend:
+    post:
+      tags: [Espace Pro]
+      summary: Recevoir un nouveau code (60 s après le précédent, 3 envois par demande)
+      operationId: proResend
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Nouveau code envoyé ; l'ancien ne vaut plus., content: { application/json: { schema: { $ref: "#/components/schemas/ProClaim" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: Introuvable., content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Demande close (`claim_closed`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { description: "Trop tôt (`resend_too_soon`, avec `retryAfter`) ou limite d'envois (`send_limited`).", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "502": { description: "Le code n'a pas pu partir (`send_failed`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   /healthz:
     get:
       tags: [Exploitation]
@@ -196,7 +348,20 @@ paths:
         "503": { description: Base indisponible ou arrêt en cours. , content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, db: { type: string }, draining: { type: boolean } } } } } }
 
 components:
+  securitySchemes:
+    cognito:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Jeton d'accès du groupe d'utilisateurs Amazon Cognito de l'Espace Pro (signature RS256, émetteur, client et expiration vérifiés par l'API).
   responses:
+    ProUnauthorized:
+      description: "Jeton absent, invalide ou expiré (`unauthorized`)."
+      headers: { WWW-Authenticate: { schema: { type: string } } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    ProDisabled:
+      description: "Espace Pro fermé (`pro_disabled`)."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     BadRequest:
       description: Paramètres manquants ou hors limites.
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
@@ -209,6 +374,44 @@ components:
       headers: { Retry-After: { schema: { type: integer } } }
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
   schemas:
+    ProGarage:
+      type: object
+      required: [id, name, addr, distanceM, status, options]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        addr: { type: string }
+        distanceM: { type: integer, nullable: true, description: Distance à l'établissement (null quand le registre n'a pas de position). }
+        status: { type: string, enum: [free, mine, claimed], description: "`claimed` : rattaché à un autre compte (vérification manuelle)." }
+        options:
+          type: array
+          description: Moyens de vérification, dans l'ordre de la page (vide quand le garage n'est pas libre).
+          items:
+            type: object
+            required: [id, channel, hint]
+            properties:
+              id: { type: string, example: "sms:1" }
+              channel: { type: string, enum: [email, email_domain, sms] }
+              hint: { type: string, example: "06 •• •• •• 78" }
+              domain: { type: string, description: Option `email_domain` seulement. }
+    ProClaim:
+      type: object
+      required: [id, garageId, garageName, status, channel, hint, holder]
+      properties:
+        id: { type: string, format: uuid }
+        garageId: { type: string }
+        garageName: { type: string }
+        garageAddr: { type: string }
+        status: { type: string, enum: [pending, verified, failed, revoked] }
+        channel: { type: string, enum: [email, email_domain, sms] }
+        hint: { type: string, description: Cible masquée (ou l'adresse composée par le demandeur pour l'option `domain`). }
+        holder: { type: object, required: [name, role], properties: { name: { type: string }, role: { type: string, enum: [manager, employee, other] } } }
+        codeLive: { type: boolean }
+        expiresInSeconds: { type: integer, minimum: 0 }
+        resendInSeconds: { type: integer, minimum: 0 }
+        resendsLeft: { type: integer, minimum: 0 }
+        attemptsLeft: { type: integer, minimum: 0 }
+        verifiedAt: { type: string, format: date-time }
     Error:
       type: object
       required: [error]

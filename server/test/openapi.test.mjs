@@ -112,9 +112,54 @@ describe("docs/openapi.yaml ↔ API", () => {
     assert.ok(op("GET", "/readyz").responses["503"]);
   });
 
+  test("the Pro routes answer with documented statuses and shapes", async () => {
+    const { parseContactRows } = await import("../lib/contact.mjs");
+    const siret = "73282932000074";
+    const pro = await makeApp({
+      env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1" },
+      proOptions: { sirene: async (s) => (s === siret ? { siret, name: "GARAGE DUPONT", company: "DUPONT", addr: "1 RUE X 31220 CAZERES", naf: "45.20A", active: true, lat: 43.2176, lon: 1.1014, pc: "31220" } : null) },
+    });
+    const keep = t;
+    t = pro;
+    try {
+      const g = { id: "aaaaaaaa-0000-4000-8000-000000000001", name: "Garage Dupont", lat: 43.2174, lon: 1.1014, emails: ["contact@garage-dupont.fr"], phones: ["+33612345678"], web: "https://garage-dupont.fr/" };
+      await pro.app.pro.repo.upsertContacts(parseContactRows([g]).rows, "doc");
+      const me = { "x-pro-dev-account": "doc" };
+      const holder = { firstName: "Camille", lastName: "Durand", role: "manager", certify: true };
+      await call("GET", "/v1/pro/me", "/v1/pro/me", { status: 401 });
+      await call("GET", "/v1/pro/me", "/v1/pro/me", { headers: me, status: 200 });
+      await call("GET", "/v1/pro/siret/{siret}", `/v1/pro/siret/${siret}`, { headers: me, status: 200 });
+      await call("GET", "/v1/pro/siret/{siret}", "/v1/pro/siret/123", { headers: me, status: 400 });
+      await call("GET", "/v1/pro/siret/{siret}", "/v1/pro/siret/35600000049837", { headers: me, status: 404 });
+      await call("POST", "/v1/pro/claims", "/v1/pro/claims", { headers: me, body: { siret, garageId: g.id, option: "nope", holder }, status: 422 });
+      const created = await call("POST", "/v1/pro/claims", "/v1/pro/claims", { headers: me, body: { siret, garageId: g.id, option: "sms:0", holder }, status: 201 });
+      const id = JSON.parse(created.text).id;
+      await call("GET", "/v1/pro/claims/{id}", `/v1/pro/claims/${id}`, { headers: me, status: 200 });
+      await call("POST", "/v1/pro/claims/{id}/resend", `/v1/pro/claims/${id}/resend`, { headers: me, status: 429 });
+      const code = pro.app.pro.senders.outbox[0].code;
+      await call("POST", "/v1/pro/claims/{id}/code", `/v1/pro/claims/${id}/code`, { headers: me, body: { code: String((Number(code) + 1) % 1e6).padStart(6, "0") }, status: 422 });
+      await call("POST", "/v1/pro/claims/{id}/code", `/v1/pro/claims/${id}/code`, { headers: me, body: { code }, status: 200 });
+      await call("POST", "/v1/pro/claims/{id}/resend", `/v1/pro/claims/${id}/resend`, { headers: me, status: 409 });
+      await call("POST", "/v1/pro/claims", "/v1/pro/claims", { headers: { "x-pro-dev-account": "other" }, body: { siret, garageId: g.id, option: "sms:0", holder }, status: 409 });
+    } finally {
+      t = keep;
+      await pro.close();
+    }
+    const off = await makeApp();
+    try {
+      assert.equal((await off.call("GET", "/v1/pro/me")).status, 404);
+      assert.ok(op("GET", "/v1/pro/me").responses["404"]);
+    } finally {
+      await off.close();
+    }
+  });
+
   test("no route exists that the document does not mention", async () => {
     const documented = new Set(Object.entries(doc.paths).flatMap(([p, ops]) => Object.keys(ops).map((m) => `${m.toUpperCase()} ${p}`)));
-    assert.deepEqual([...documented].sort(), ["DELETE /v1/repairs/{id}", "GET /healthz", "GET /readyz", "GET /v1/overpass", "GET /v1/repairs", "POST /v1/repairs"]);
+    assert.deepEqual([...documented].sort(), [
+      "DELETE /v1/repairs/{id}", "GET /healthz", "GET /readyz", "GET /v1/overpass", "GET /v1/pro/claims/{id}", "GET /v1/pro/me", "GET /v1/pro/siret/{siret}", "GET /v1/repairs",
+      "POST /v1/pro/claims", "POST /v1/pro/claims/{id}/code", "POST /v1/pro/claims/{id}/resend", "POST /v1/repairs",
+    ]);
     // et chaque méthode non documentée d'une route documentée est refusée en 405
     for (const [method, path] of [["PUT", "/v1/repairs"], ["DELETE", "/v1/repairs"], ["POST", "/v1/overpass"], ["POST", "/healthz"], ["GET", `/v1/repairs/${repair().id}`]]) {
       const res = await t.call(method, path, {});

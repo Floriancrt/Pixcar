@@ -11,7 +11,8 @@ Metadata:
     must:
       - "secrets (PLATE_PEPPER, IP_PEPPER) dans SSM SecureString, jamais dans cette pile ni dans l'environnement des fonctions"
       - "PLATE_PEPPER ne change jamais une fois en service (empreintes des plaques, doublons, effacement)"
-      - "rôle de base pixcar_api = DML sur 4 tables seulement ; admin réservé à la fonction ops"
+      - "rôle de base pixcar_api = DML sur les tables de l'application seulement (APP_TABLES, server/migrate.mjs) ; admin réservé à la fonction ops"
+      - "Espace Pro fermé tant que ProUserPoolId est vide (pile infra/pixcar-pro.yaml) ; contacts privés des garages jamais publiés"
       - "la durée des sauvegardes (BackupRetentionDays) est celle annoncée dans la politique de confidentialité : elles contiennent les empreintes de plaques"
     ref:
       - { at: docs/exploitation.md, has: "déploiement AWS, opérations, coûts, fin du plan gratuit" }
@@ -89,12 +90,33 @@ Parameters:
     Default: "cron(30 2 * * ? *)"
     AllowedPattern: '^cron\(.+\)$'
     Description: Moment de la sauvegarde quotidienne, en UTC (expression cron d'AWS Backup).
+  ProUserPoolId:
+    Type: String
+    Default: ""
+    Description: Espace Pro — groupe d'utilisateurs Cognito (sortie UserPoolId de la pile infra/pixcar-pro.yaml). Vide = Espace Pro fermé.
+    AllowedPattern: '^([a-z]{2}(-[a-z]+)+-\d_[A-Za-z0-9]+)?$'
+  ProClientId:
+    Type: String
+    Default: ""
+    Description: Espace Pro — client d'application Cognito (sortie UserPoolClientId de la même pile).
+    AllowedPattern: '^[a-z0-9]{0,64}$'
+  ProEmailDomain:
+    Type: String
+    Default: pixcar.fr
+    Description: Espace Pro — domaine de l'identité SES qui envoie les codes de vérification (verification@<domaine>).
+  ProNotifyConfigurationArn:
+    Type: String
+    Default: ""
+    Description: Espace Pro — ARN de la configuration AWS End User Messaging Notify (codes par SMS). Vide = pas de SMS (e-mail seulement).
+    AllowedPattern: '^(arn:aws[a-z-]*:sms-voice:[a-z0-9-]+:\d{12}:\S+)?$'
 
 Conditions:
   HasDomain: !And [!Not [!Equals [!Ref ApiDomainName, ""]], !Not [!Equals [!Ref ApiCertificateArn, ""]]]
   HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, ""]]
   HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, "0"]]
   HasBackup: !Not [!Equals [!Ref BackupRetentionDays, "0"]]
+  HasPro: !And [!Not [!Equals [!Ref ProUserPoolId, ""]], !Not [!Equals [!Ref ProClientId, ""]]]
+  HasProSms: !And [!Condition HasPro, !Not [!Equals [!Ref ProNotifyConfigurationArn, ""]]]
 
 Resources:
   # ---- base de données
@@ -183,7 +205,37 @@ Resources:
           SSM_PREFIX: !Ref SsmPrefix
           REQUEST_TIMEOUT_MS: "10000"
           LOG_LEVEL: info
+          # Espace Pro : fermé tant que la pile infra/pixcar-pro.yaml n'a pas donné son groupe d'utilisateurs ; SMS seulement avec Notify
+          PRO_ENABLED: !If [HasPro, "1", "0"]
+          COGNITO_USER_POOL_ID: !Ref ProUserPoolId
+          COGNITO_CLIENT_ID: !Ref ProClientId
+          PRO_EMAIL_FROM: !Sub "Pixcar <verification@${ProEmailDomain}>"
+          PRO_NOTIFY_CONFIGURATION_ID: !Ref ProNotifyConfigurationArn
+          PRO_CHANNELS: !If [HasProSms, "email,email_domain,sms", "email,email_domain"]
       Tags: [{ Key: Project, Value: pixcar }]
+
+  # Espace Pro : droit d'envoyer les codes de vérification, et rien d'autre (une identité SES, une configuration Notify)
+  ApiProSendPolicy:
+    Type: AWS::IAM::RolePolicy
+    Condition: HasPro
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "politique à part, présente seulement quand l'Espace Pro est ouvert : le rôle de l'API n'a ce droit que si nécessaire"
+        must: ["ses:SendEmail sur l'identité du domaine seulement", "sms-voice:SendNotifyTextMessage sur la configuration Notify seulement"]
+    Properties:
+      RoleName: !Ref ApiRole
+      PolicyName: pro-send
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ProEmail
+            Effect: Allow
+            Action: "ses:SendEmail"
+            Resource: !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${ProEmailDomain}"
+          - !If
+            - HasProSms
+            - { Sid: ProSms, Effect: Allow, Action: "sms-voice:SendNotifyTextMessage", Resource: !Ref ProNotifyConfigurationArn }
+            - !Ref AWS::NoValue
 
   # ---- passerelle HTTP
   HttpApi:

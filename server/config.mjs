@@ -32,11 +32,14 @@ export function loadConfig(env = process.env) {
   // Cognito et de vrais envois (SES pour l'e-mail, Notify pour le SMS) ; l'envoi simulé et l'en-tête de développement y sont refusés.
   const proEnabled = env.PRO_ENABLED === "1";
   const proSender = env.PRO_SENDER || (production ? "aws" : "memory");
+  // moyens de vérification ouverts : on peut commencer par l'e-mail (SES) et ajouter le SMS quand Notify est prêt
+  const proChannels = String(env.PRO_CHANNELS || "email,email_domain,sms").split(",").map((s) => s.trim()).filter(Boolean);
+  for (const c of proChannels) if (!["email", "email_domain", "sms"].includes(c)) problems.push(`PRO_CHANNELS : « ${c} » inconnu (email, email_domain, sms)`);
   if (production && proEnabled) {
     if (!/^[a-z]{2}(-[a-z]+)+-\d_[A-Za-z0-9]+$/.test(env.COGNITO_USER_POOL_ID || "")) problems.push("COGNITO_USER_POOL_ID : groupe d'utilisateurs Amazon Cognito des comptes pro (ex. eu-north-1_AbC123)");
     if (!/^[a-z0-9]{10,64}$/i.test(env.COGNITO_CLIENT_ID || "")) problems.push("COGNITO_CLIENT_ID : client d'application Cognito de l'Espace Pro");
     if (proSender !== "aws") problems.push("PRO_SENDER : « aws » attendu en production (l'envoi simulé n'envoie rien)");
-    if (!env.PRO_NOTIFY_CONFIGURATION_ID) problems.push("PRO_NOTIFY_CONFIGURATION_ID : configuration AWS End User Messaging Notify (SMS)");
+    if (proChannels.includes("sms") && !env.PRO_NOTIFY_CONFIGURATION_ID) problems.push("PRO_NOTIFY_CONFIGURATION_ID : configuration AWS End User Messaging Notify (SMS), ou retirer « sms » de PRO_CHANNELS");
     if (env.PRO_DEV_AUTH === "1") problems.push("PRO_DEV_AUTH : interdit en production");
   }
   if (problems.length) throw new Error("Configuration incomplète :\n  - " + problems.join("\n  - "));
@@ -69,6 +72,7 @@ export function loadConfig(env = process.env) {
       clientId: env.COGNITO_CLIENT_ID || "",
       devAuth: !production && env.PRO_DEV_AUTH === "1", // en-tête x-pro-dev-account accepté à la place d'un jeton (développement seulement)
       sender: proSender,
+      channels: proChannels,
       awsRegion: env.PRO_AWS_REGION || env.AWS_REGION || "eu-north-1",
       emailFrom: env.PRO_EMAIL_FROM || "Pixcar <verification@pixcar.fr>",
       contact: env.PRO_CONTACT || "contact@pixcar.fr",

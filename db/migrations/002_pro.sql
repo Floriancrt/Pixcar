@@ -33,6 +33,9 @@ CREATE TABLE pro_claims (
   siret           text NOT NULL CHECK (char_length(siret) = 14),
   status          text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'failed', 'revoked')),
   channel         text NOT NULL CHECK (channel IN ('email', 'email_domain', 'sms')),
+  holder_name     text NOT NULL CHECK (char_length(holder_name) BETWEEN 3 AND 120),     -- « Prénom Nom » de la personne qui demande
+  holder_role     text NOT NULL CHECK (holder_role IN ('manager', 'employee', 'other')), -- gérant(e), salarié(e), autre
+  certified_at    timestamptz NOT NULL DEFAULT now(),                                   -- case « je certifie être habilité(e) » cochée
   target          text CHECK (char_length(target) <= 254),                         -- adresse ou numéro du code ; effacé à la vérification
   target_hash     text NOT NULL CHECK (char_length(target_hash) = 64),             -- HMAC (hexadécimal) de la cible : trace sans la cible
   target_hint     text NOT NULL CHECK (char_length(target_hint) <= 260),           -- cible masquée, telle que montrée au demandeur

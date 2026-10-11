@@ -23,6 +23,9 @@
 //                            prend celui de src/mapbox.json (vide tant qu'il n'est pas renseigné : fond de l'IGN) ; les autres sorties n'en ont aucun.
 //                            PIXCAR_MAPBOX_TOKEN= (vide) le désactive même avec --pages. PIXCAR_MAPBOX_STYLE = style (« mapbox/light-v11 »).
 //                            PIXCAR_MAPBOX_ENRICH = « off », « map » (par défaut) ou « always » : fiches complétées par Mapbox (téléphone, horaires, site), voir src/mapbox.json.
+//                            PIXCAR_PRO_POOL, PIXCAR_PRO_CLIENT = groupe d'utilisateurs et client d'application Amazon Cognito de l'Espace Pro : avec eux (et l'API),
+//                            dist/ reçoit la page pro/ (connexion sans mot de passe, rattachement d'un garage). Sans ces variables, la version publiée
+//                            (--pages) prend celles de src/pro.json (vides tant que l'Espace Pro n'est pas ouvert : pas de page pro/) ; les autres sorties n'en ont pas.
 //
 // Deux sorties à partir des mêmes sources :
 //   index.html   page tout-en-un (CSS, JS, police et icônes en ligne) : s'ouvre depuis le disque, se déploie n'importe où ;
@@ -134,6 +137,26 @@ const mapbox = await (async () => {
   const enrich = String(process.env.PIXCAR_MAPBOX_ENRICH || config.enrich || "map").trim();
   if (!["off", "map", "always"].includes(enrich)) throw new Error(`réglage Mapbox « enrich » invalide (« off », « map » ou « always » attendu) : ${enrich}`);
   return { token, style, enrich };
+})();
+
+// Espace Pro : page dist/pro/ (connexion Amazon Cognito sans mot de passe, rattachement d'un garage par SIRET et code). Construite seulement
+// quand le groupe d'utilisateurs et le client sont connus ET que l'API est branchée : sans eux, aucune trace de l'Espace Pro dans le site.
+// Jamais dans la page tout-en-un. Les identifiants Cognito ne sont pas secrets (ils figurent dans toute page de connexion Cognito).
+const pro = await (async () => {
+  let config = {};
+  try {
+    config = JSON.parse(await read(SRC, "pro.json"));
+  } catch {
+    /* pas de fichier : pas d'Espace Pro */
+  }
+  const pick = (envName, key) => String(process.env[envName] !== undefined ? process.env[envName] : pages !== undefined ? config[key] ?? "" : "").trim();
+  const pool = pick("PIXCAR_PRO_POOL", "userPoolId");
+  const client = pick("PIXCAR_PRO_CLIENT", "clientId");
+  if (!pool && !client) return null;
+  if (!/^[a-z]{2}(-[a-z]+)+-\d_[A-Za-z0-9]+$/.test(pool)) throw new Error(`Espace Pro : groupe d'utilisateurs Cognito invalide (« eu-north-1_AbC123 » attendu) : ${pool}`);
+  if (!/^[a-z0-9]{10,64}$/i.test(client)) throw new Error(`Espace Pro : client d'application Cognito invalide : ${client}`);
+  if (!apiBase) throw new Error("Espace Pro : la page pro/ a besoin de l'API (PIXCAR_API_BASE)");
+  return { pool, client, cognito: `https://cognito-idp.${pool.split("_")[0]}.amazonaws.com` };
 })();
 
 // Leaflet est chargé à la demande (premier affichage de la carte). Page tout-en-un : CDN. dist : copie locale puis CDN.
@@ -343,7 +366,7 @@ const CS_STYLE = ["https://app.contentsquare.com"];
 const CS_CONNECT = ["https://*.contentsquare.net", "https://*.contentsquare.com"];
 // Fiches complétées par Mapbox : la page interroge api.mapbox.com (Search Box) à l'ouverture d'une fiche. Les tuiles sont des images (img-src https: les couvre).
 const MAPBOX_CONNECT = ["https://api.mapbox.com"];
-export function contentSecurityPolicy(origin = apiOrigin, styleHash = "", ga = !!analytics, mbx = !!mapbox && mapbox.enrich !== "off", cs = !!contentsquare) {
+export function contentSecurityPolicy(origin = apiOrigin, styleHash = "", ga = !!analytics, mbx = !!mapbox && mapbox.enrich !== "off", cs = !!contentsquare, cognito = pro ? pro.cognito : "") {
   return [
     "default-src 'self'",
     `script-src ${["'self'", "https://cdnjs.cloudflare.com", ...(ga ? GOOGLE_SCRIPT : []), ...(cs ? CS_SCRIPT : [])].join(" ")}`, // le CDN ne sert que de secours à la copie locale de Leaflet
@@ -351,7 +374,7 @@ export function contentSecurityPolicy(origin = apiOrigin, styleHash = "", ga = !
     "style-src-attr 'unsafe-inline'", // quelques positions calculées (repères de l'échelle de prix, marqueurs)
     "img-src 'self' data: blob: https:", // tuiles de la carte (Mapbox, IGN, CARTO), logos (Wikimedia Commons), icônes des sites d'enseignes
     "font-src 'self'",
-    `connect-src ${["'self'", origin, ...CONNECT, ...(ga ? GOOGLE_CONNECT : []), ...(cs ? CS_CONNECT : []), ...(mbx ? MAPBOX_CONNECT : [])].filter(Boolean).join(" ")}`,
+    `connect-src ${["'self'", origin, ...CONNECT, ...(ga ? GOOGLE_CONNECT : []), ...(cs ? CS_CONNECT : []), ...(mbx ? MAPBOX_CONNECT : []), cognito].filter(Boolean).join(" ")}`, // cognito : en-têtes communs (_headers) quand le site a l'Espace Pro
     `worker-src 'self'${cs ? " blob:" : ""}`,
     "manifest-src 'self'",
     "object-src 'none'",
@@ -363,8 +386,8 @@ export function contentSecurityPolicy(origin = apiOrigin, styleHash = "", ga = !
 // GitHub Pages ne laisse pas choisir les en-têtes de réponse : la politique de sécurité du contenu et la politique de référent
 // passent par des balises <meta>, placées tout en haut de <head>, avant ce qui charge quoi que ce soit. frame-ancestors n'y est pas
 // pris en compte par les navigateurs : on la retire plutôt que de laisser un avertissement dans la console.
-function withPolicyMeta(html, styleHash) {
-  const csp = contentSecurityPolicy(apiOrigin, styleHash).split("; ").filter((d) => !d.startsWith("frame-ancestors")).join("; ");
+function withPolicyMeta(html, styleHash, csp = contentSecurityPolicy(apiOrigin, styleHash, undefined, undefined, undefined, "")) {
+  csp = csp.split("; ").filter((d) => !d.startsWith("frame-ancestors")).join("; ");
   const tags = `<meta http-equiv="Content-Security-Policy" content="${csp}">\n<meta name="referrer" content="strict-origin-when-cross-origin">\n`;
   const charset = '<meta charset="utf-8">\n';
   if (html.split(charset).length !== 2) throw new Error("balise <meta charset> introuvable ou en double : impossible de placer la politique de sécurité");
@@ -389,7 +412,7 @@ function headersFile(styleHash) {
   Cache-Control: no-cache
 /sw.js
   Cache-Control: no-cache
-
+${pro ? "/pro/\n  Cache-Control: no-cache\n/pro/index.html\n  Cache-Control: no-cache\n" : ""}
 # Fichiers dont le nom contient l'empreinte de leur contenu : jamais modifiés, gardés un an.
 /assets/*
   Cache-Control: ${immutable}
@@ -409,6 +432,7 @@ async function buildDist(parts) {
   await rm(DIST, { recursive: true, force: true });
   await mkdir(join(DIST, "assets/fonts"), { recursive: true });
   const fontUrls = [];
+  const fonts = []; // { name, range } : reprises par la feuille de style de l'Espace Pro
   let fontCss = fallbackFaces;
   for (const f of FONTS) {
     const buf = await readFile(join(SRC, "assets/fonts", f.file));
@@ -416,6 +440,7 @@ async function buildDist(parts) {
     await writeFile(join(DIST, "assets/fonts", name), buf);
     fontCss += fontFace(`assets/fonts/${name}`, f.range); // le CSS est dans la page : chemins depuis la racine du site
     fontUrls.push(`assets/fonts/${name}`);
+    fonts.push({ name, range: f.range });
   }
   const css = await buildCss(fontCss);
 
@@ -463,8 +488,48 @@ async function buildDist(parts) {
     await writeFile(join(DIST, "CNAME"), pages.toLowerCase() + "\n"); // GitHub Pages lit le domaine personnalisé ici
     await writeFile(join(DIST, ".nojekyll"), ""); // servir les fichiers tels quels, sans passer par Jekyll
   } else await writeFile(join(DIST, "_headers"), headersFile(styleHash));
-  await writeFile(join(DIST, "robots.txt"), "User-agent: *\nAllow: /\n" + (garages ? "Disallow: /garages/\n" : ""));
+  await writeFile(join(DIST, "robots.txt"), "User-agent: *\nAllow: /\n" + (garages ? "Disallow: /garages/\n" : "") + (pro ? "Disallow: /pro/\n" : ""));
+  if (pro) await buildPro(fonts);
   return { html: html.length, js: js.length, css: css.length, version };
+}
+
+// ------------------------------------------------------------------------------------------------ Espace Pro (dist/pro/)
+// Page à part, sans rien d'en ligne : feuille de style et script dans assets/ (noms à empreinte), donc permis par 'self' dans la politique de
+// sécurité commune (_headers) ; la version publiée (--pages) porte sa propre balise <meta> (connect-src : l'API et Cognito, rien d'autre).
+// Pas dans la coque du service worker : l'Espace Pro n'a pas de sens hors connexion.
+const PRO_CSP = (cognito) =>
+  ["default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data:", "font-src 'self'", `connect-src ${[apiOrigin, cognito].join(" ")}`, "object-src 'none'", "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'"].join("; ");
+export const proContentSecurityPolicy = () => (pro ? PRO_CSP(pro.cognito) : "");
+async function buildPro(fonts) {
+  const app = await read(SRC, "css/app.css");
+  const word = /\.px-word\s*\{[^}]*\}/.exec(app);
+  if (!word) throw new Error("Espace Pro : règle .px-word introuvable dans css/app.css (mot-symbole du logo)");
+  let css = fonts.map((f) => fontFace(`fonts/${f.name}`, f.range)).join("") + fallbackFaces + word[0] + "\n" + (await read(SRC, "css/pro.css"));
+  if (!dev) css = (await transform(css, { loader: "css", minify: true })).code;
+  const cssName = `pro.${hash(css)}.css`;
+  await writeFile(join(DIST, "assets", cssName), css);
+  const js = (await build({ entryPoints: [join(SRC, "js/pro/main.js")], bundle: true, format: "iife", target: "es2020", minify: !dev, legalComments: "none", write: false, logLevel: "warning" })).outputFiles[0].text;
+  const jsName = `pro.${hash(js)}.js`;
+  await writeFile(join(DIST, "assets", jsName), js);
+  const mark = /<symbol id="px-mark"[\s\S]*?<\/symbol>/.exec(await read(SRC, "partials/sprite.html"));
+  if (!mark) throw new Error("Espace Pro : symbole px-mark introuvable dans partials/sprite.html");
+  let contact = "";
+  try {
+    contact = JSON.parse(await read(SRC, "legal.json")).contact || "";
+  } catch {}
+  if (!/^[^\s@<>"]+@[^\s@<>"]+$/.test(contact)) throw new Error("Espace Pro : adresse de contact absente ou invalide dans src/legal.json (« contact ») : la vérification manuelle y renvoie");
+  const headAssets = [
+    `<link rel="icon" href="../favicon.ico" sizes="48x48">`,
+    `<link rel="icon" type="image/svg+xml" href="../favicon.svg">`,
+    `<link rel="preload" href="../assets/fonts/${fonts[0].name}" as="font" type="font/woff2" crossorigin>`,
+    `<link rel="stylesheet" href="../assets/${cssName}">`,
+  ].join("\n");
+  const fill = { API_BASE: apiBase, POOL: pro.pool, CLIENT: pro.client, CONTACT: contact, HEAD_ASSETS: headAssets, MARK: mark[0], SCRIPTS: `<script src="../assets/${jsName}" defer></script>` };
+  let html = squeeze((await read(SRC, "pro/index.html")).replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => (k in fill ? fill[k] : m)));
+  if (/\{\{[A-Z_]+\}\}/.test(html)) throw new Error("Espace Pro : marque {{…}} non remplacée dans pro/index.html");
+  if (pages) html = withPolicyMeta(html, "", PRO_CSP(pro.cognito));
+  await mkdir(join(DIST, "pro"), { recursive: true });
+  await writeFile(join(DIST, "pro", "index.html"), html);
 }
 
 // ------------------------------------------------------------------------------------------------

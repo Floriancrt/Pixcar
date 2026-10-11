@@ -215,6 +215,10 @@ describe("SIRET, codes and configuration", () => {
     assert.equal(loadConfig(prod).pro.enabled, false);
     assert.equal(loadConfig({ NODE_ENV: "test" }).pro.sender, "memory");
     assert.throws(() => loadConfig({ ...prod, PRO_ENABLED: "1" }), /COGNITO_USER_POOL_ID[\s\S]*COGNITO_CLIENT_ID[\s\S]*PRO_NOTIFY_CONFIGURATION_ID/);
+    // e-mail seulement (SMS pas encore prêt) : pas besoin de Notify ; un moyen inconnu est refusé
+    const emailOnly = loadConfig({ ...prod, PRO_ENABLED: "1", COGNITO_USER_POOL_ID: POOL, COGNITO_CLIENT_ID: CLIENT, PRO_CHANNELS: "email,email_domain" });
+    assert.deepEqual(emailOnly.pro.channels, ["email", "email_domain"]);
+    assert.throws(() => loadConfig({ ...prod, PRO_CHANNELS: "email,fax" }), /PRO_CHANNELS : « fax »/);
     assert.throws(() => loadConfig({ ...prod, PRO_ENABLED: "1", COGNITO_USER_POOL_ID: POOL, COGNITO_CLIENT_ID: CLIENT, PRO_NOTIFY_CONFIGURATION_ID: "nc-1", PRO_SENDER: "memory" }), /PRO_SENDER/);
     assert.throws(() => loadConfig({ ...prod, PRO_ENABLED: "1", COGNITO_USER_POOL_ID: POOL, COGNITO_CLIENT_ID: CLIENT, PRO_NOTIFY_CONFIGURATION_ID: "nc-1", PRO_DEV_AUTH: "1" }), /PRO_DEV_AUTH/);
     const ok = loadConfig({ ...prod, PRO_ENABLED: "1", COGNITO_USER_POOL_ID: POOL, COGNITO_CLIENT_ID: CLIENT, PRO_NOTIFY_CONFIGURATION_ID: "nc-1" });

@@ -130,7 +130,7 @@ describe("operations (Lambda « ops »)", () => {
   test("pro-stats, pro-claims and pro-revoke: a verified link can be withdrawn, and the target is never shown", async () => {
     const id = "bbbbbbbb-0000-4000-8000-0000000000aa";
     await db.query(
-      "INSERT INTO pro_claims (id, account_id, garage_id, siret, status, channel, target, target_hash, target_hint, verified_at) VALUES (gen_random_uuid(), 'acc-1', $1, '73282932000074', 'verified', 'email', NULL, $2, 'c•••••@garage.fr', now())",
+      "INSERT INTO pro_claims (id, account_id, garage_id, siret, status, channel, holder_name, holder_role, target, target_hash, target_hint, verified_at) VALUES (gen_random_uuid(), 'acc-1', $1, '73282932000074', 'verified', 'email', 'Camille Durand', 'manager', NULL, $2, 'c•••••@garage.fr', now())",
       [id, "a".repeat(64)],
     );
     assert.deepEqual((await ops({ op: "pro-stats" })).claims, { verified: 1 });

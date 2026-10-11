@@ -3,7 +3,8 @@
 // Les services publics (adresses, OpenStreetMap…) restent simulés par mocks.js.
 const http = require("http");
 
-async function startApi({ origin, writeLimit = 1000 } = {}) {
+// env : variables d'environnement en plus (ex. PRO_ENABLED) ; proOptions : briques de l'Espace Pro remplacées (vérificateur de jetons, registre)
+async function startApi({ origin, writeLimit = 1000, env = {}, proOptions } = {}) {
   const { createApp, loadServices } = await import("../server/app.mjs");
   const { loadConfig } = await import("../server/config.mjs");
   const { createDb } = await import("../server/db.mjs");
@@ -17,14 +18,14 @@ async function startApi({ origin, writeLimit = 1000 } = {}) {
   // (la copie de 10 s d'une zone expire alors sans attendre).
   const base = Date.parse("2026-10-01T12:00:00Z"), t0 = Date.now(), clock = { skew: 0 };
   const now = () => base + (Date.now() - t0) + clock.skew;
-  const config = { ...loadConfig({ NODE_ENV: "test", ALLOWED_ORIGINS: origin }), writeLimitPerHour: writeLimit, writeLimitGlobalPerMinute: 10000, readLimitPerMinute: 100000 };
+  const config = { ...loadConfig({ NODE_ENV: "test", ALLOWED_ORIGINS: origin, ...env }), writeLimitPerHour: writeLimit, writeLimitGlobalPerMinute: 10000, readLimitPerMinute: 100000 };
   const upstream = { calls: 0, elements: [], fail: false, delayMs: 0 };
   const fetchImpl = async () => {
     upstream.calls++;
     if (upstream.delayMs) await new Promise((r) => setTimeout(r, upstream.delayMs)); // un serveur OpenStreetMap lent
     return upstream.fail ? new Response("indisponible", { status: 503 }) : new Response(JSON.stringify({ elements: upstream.elements }), { status: 200 });
   };
-  const app = createApp({ db, config, services: await loadServices(), now, fetchImpl, overpassOptions: { staggerMs: 50 } });
+  const app = createApp({ db, config, services: await loadServices(), now, fetchImpl, overpassOptions: { staggerMs: 50 }, proOptions });
   const handler = toNodeListener(app);
   // mode : "ok" · "down" (connexion coupée, comme une API éteinte) · délai ajouté (delayMs, éventuellement à un chemin) · failNext : N prochaines réponses en erreur
   const chaos = { mode: "ok", delayMs: 0, delayPath: "", failNext: 0, status: 503, requests: [] };

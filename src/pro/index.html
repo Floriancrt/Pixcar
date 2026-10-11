@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="description" content="Espace Pro de Pixcar : les garagistes rattachent leur garage pour y annoncer leurs prix.">
+<meta name="theme-color" content="#111216">
+<meta name="pixcar-api" content="{{API_BASE}}">
+<meta name="pixcar-pro" content="{{POOL}}" data-client="{{CLIENT}}">
+<title>Espace Pro · Pixcar</title>
+{{HEAD_ASSETS}}
+</head>
+<body>
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  {{MARK}}
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></symbol>
+  <symbol id="i-at" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.6" /><path d="M15.6 12v1.6a2.4 2.4 0 0 0 4.8 0V12a8.4 8.4 0 1 0-3.3 6.7" /></symbol>
+  <symbol id="i-sms" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.2" /><path d="M10.5 18.5h3" /></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.6 3 8.4 7 10 4-1.6 7-5.4 7-10V6z" /><path d="m9 12 2.2 2.2L15.5 10" /></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5m6-6-6 6 6 6" /></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6" /></symbol>
+  <symbol id="i-garage" viewBox="0 0 24 24"><path d="M3 10.5 12 4l9 6.5V20H3z" /><path d="M7 20v-6h10v6M7 17h10" /></symbol>
+</svg>
+<a class="skip" href="#main">Aller au contenu</a>
+
+<header class="pro-top">
+  <a class="brand" href="../" aria-label="Pixcar : retour au comparateur">
+    <span class="brand-mark"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#px-mark" /></svg></span>
+    <span class="px-word brand-word" aria-hidden="true"></span>
+  </a>
+  <span class="pro-badge">Espace Pro</span>
+  <div class="pro-account" id="account" hidden>
+    <span class="pro-who" id="accountEmail"></span>
+    <button type="button" class="link-btn on-dark" id="signOut">Se déconnecter</button>
+  </div>
+</header>
+
+<main id="main" class="pro-main" tabindex="-1">
+  <noscript><p class="pro-alert">L'Espace Pro a besoin de JavaScript.</p></noscript>
+  <div class="pro-alert" id="alert" role="alert" hidden></div>
+
+  <ol class="steps" id="steps" aria-label="Étapes" hidden>
+    <li data-step="garage"><span class="step-n">1</span><span class="step-l">Votre garage</span></li>
+    <li data-step="you"><span class="step-n">2</span><span class="step-l">Vous</span></li>
+    <li data-step="verify"><span class="step-n">3</span><span class="step-l">Vérification</span></li>
+    <li data-step="done"><span class="step-n">4</span><span class="step-l">Vos premiers prix</span></li>
+  </ol>
+
+  <p class="pro-loading" data-screen="loading">Chargement…</p>
+
+  <!-- Connexion / inscription : e-mail seul, un code arrive par e-mail -->
+  <section class="card narrow" data-screen="login" hidden aria-labelledby="loginTitle">
+    <h1 id="loginTitle" tabindex="-1" data-when="login">Connexion</h1>
+    <h1 id="signupTitle" tabindex="-1" data-when="signup">Créer mon accès</h1>
+    <p class="lead" data-when="login">Sans mot de passe : un code à 6 chiffres reçu par e-mail.</p>
+    <p class="lead" data-when="signup">Pour gérer la fiche de votre garage sur Pixcar. Sans mot de passe : un code à 6 chiffres reçu par e-mail.</p>
+    <form id="loginForm" novalidate>
+      <label for="email">E-mail professionnel</label>
+      <input id="email" type="email" autocomplete="email" inputmode="email" spellcheck="false" aria-describedby="emailErr" required>
+      <p class="field-err" id="emailErr" hidden></p>
+      <button class="btn primary" type="submit" id="loginBtn"><span data-when="login">Recevoir mon code</span><span data-when="signup">Créer mon accès</span></button>
+    </form>
+    <p class="switch" data-when="login">Pas encore d'accès ? <button type="button" class="link-btn" data-mode="signup">Gérer mon garage</button></p>
+    <p class="switch" data-when="signup">Déjà un accès ? <button type="button" class="link-btn" data-mode="login">Se connecter</button></p>
+    <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>Connexion gérée par notre prestataire d'identité (Amazon Cognito). Pixcar ne voit jamais votre code.</span></p>
+  </section>
+
+  <section class="card narrow" data-screen="otp" hidden aria-labelledby="otpTitle">
+    <button type="button" class="back" data-go="login"><svg class="ic" aria-hidden="true"><use href="#i-back" /></svg><span id="otpEmail"></span></button>
+    <h1 id="otpTitle" tabindex="-1">Votre code</h1>
+    <p class="lead">Nous venons d'envoyer un code à 6 chiffres à <b id="otpTo"></b>. Pensez à regarder dans les courriers indésirables.</p>
+    <form id="otpForm" novalidate>
+      <label for="otp">Code reçu par e-mail</label>
+      <input id="otp" class="code-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" spellcheck="false" aria-describedby="otpErr" required>
+      <p class="field-err" id="otpErr" hidden></p>
+      <button class="btn primary" type="submit">Se connecter</button>
+    </form>
+    <p class="switch"><button type="button" class="link-btn" id="otpResend">Recevoir un nouveau code</button></p>
+  </section>
+
+  <!-- Tableau de bord : garages rattachés et vérifications en cours -->
+  <section class="wide" data-screen="home" hidden aria-labelledby="homeTitle">
+    <h1 id="homeTitle" tabindex="-1">Vos garages</h1>
+    <ul class="garage-list" id="garageList"></ul>
+    <p class="empty" id="noGarage" hidden>Aucun garage n'est encore rattaché à votre compte. Rattachez le vôtre en deux minutes : SIRET, puis un code reçu par e-mail ou SMS.</p>
+    <button type="button" class="btn primary" data-go="garage"><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg>Rattacher un garage</button>
+  </section>
+
+  <!-- Étape 1 : SIRET -->
+  <section class="split" data-screen="garage" hidden aria-labelledby="garageTitle">
+    <div>
+      <h1 id="garageTitle" tabindex="-1">Quel est votre garage ?</h1>
+      <p class="lead">Le numéro SIRET figure sur vos factures et sur votre extrait Kbis.</p>
+      <form id="siretForm" novalidate>
+        <label for="siret">SIRET de l'établissement</label>
+        <input id="siret" type="text" inputmode="numeric" autocomplete="off" maxlength="20" spellcheck="false" aria-describedby="siretHelp siretErr" required>
+        <p class="help" id="siretHelp">14 chiffres. Vous avez plusieurs ateliers ? Commencez par l'un d'eux, vous ajouterez les autres ensuite.</p>
+        <p class="field-err" id="siretErr" hidden></p>
+        <button class="btn primary" type="submit">Rechercher</button>
+      </form>
+      <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-info" /></svg><span>Nous vérifions le SIRET dans le répertoire public des entreprises (SIRENE, Insee). Aucun document à envoyer.</span></p>
+    </div>
+    <div class="card" id="siretResult" hidden>
+      <h2 class="etab-name" id="etabName"></h2>
+      <p class="etab-addr" id="etabAddr"></p>
+      <ul class="checks">
+        <li><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg><span>Établissement actif<small>Répertoire SIRENE</small></span></li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg><span>Activité <span id="etabNaf"></span><small>Entretien, réparation ou équipement automobile</small></span></li>
+      </ul>
+      <fieldset class="choices" id="garageChoice">
+        <legend>Votre garage sur la carte Pixcar</legend>
+        <div id="garageOptions"></div>
+      </fieldset>
+      <p class="warn" id="noCandidate" hidden></p>
+      <button type="button" class="btn primary" id="pickGarage">C'est mon garage<svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></button>
+      <p class="switch">Ce n'est pas lui ? <button type="button" class="link-btn" id="changeSiret">Modifier le SIRET</button></p>
+    </div>
+  </section>
+
+  <!-- Étape 2 : la personne -->
+  <section class="card narrow" data-screen="you" hidden aria-labelledby="youTitle">
+    <h1 id="youTitle" tabindex="-1">Qui êtes-vous ?</h1>
+    <p class="lead">Pour <b id="youGarage"></b>.</p>
+    <form id="youForm" novalidate>
+      <div class="row2">
+        <div><label for="firstName">Prénom</label><input id="firstName" type="text" autocomplete="given-name" maxlength="60" required></div>
+        <div><label for="lastName">Nom</label><input id="lastName" type="text" autocomplete="family-name" maxlength="60" required></div>
+      </div>
+      <fieldset class="chips">
+        <legend>Votre fonction</legend>
+        <label class="chip"><input type="radio" name="role" value="manager" checked><span>Gérant(e)</span></label>
+        <label class="chip"><input type="radio" name="role" value="employee"><span>Salarié(e)</span></label>
+        <label class="chip"><input type="radio" name="role" value="other"><span>Autre</span></label>
+      </fieldset>
+      <label for="youEmail">E-mail</label>
+      <input id="youEmail" type="email" readonly>
+      <label class="check"><input type="checkbox" id="certify" aria-describedby="youErr"><span>Je certifie être habilité(e) à représenter cet établissement. Une fausse déclaration entraîne la fermeture de l'accès.</span></label>
+      <p class="field-err" id="youErr" hidden></p>
+      <button class="btn primary" type="submit">Continuer : vérification</button>
+    </form>
+  </section>
+
+  <!-- Étape 3 : choix du moyen, puis le code -->
+  <section class="card narrow" data-screen="verify" hidden aria-labelledby="verifyTitle">
+    <h1 id="verifyTitle" tabindex="-1">Recevez votre code</h1>
+    <p class="lead">Un code à 6 chiffres part vers une adresse ou un numéro <b>connu du garage</b>. Choisissez celui que vous consultez.</p>
+    <form id="channelForm" novalidate>
+      <fieldset class="choices">
+        <legend>Où recevoir le code ?</legend>
+        <div id="channelOptions"></div>
+      </fieldset>
+      <p class="field-err" id="channelErr" hidden></p>
+      <button class="btn primary" type="submit">Envoyer le code</button>
+    </form>
+    <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg><span>Nous n'écrivons jamais à une adresse ni à un numéro saisi ici. Trois envois au plus par jour et par garage.</span></p>
+  </section>
+
+  <section class="card narrow" data-screen="code" hidden aria-labelledby="codeTitle">
+    <h1 id="codeTitle" tabindex="-1">Saisissez le code</h1>
+    <p class="lead">Envoyé <span id="codeWhere"></span>.</p>
+    <form id="codeForm" novalidate>
+      <label for="code">Code reçu</label>
+      <input id="code" class="code-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" spellcheck="false" aria-describedby="codeHelp codeErr" required>
+      <p class="help" id="codeHelp">Valable 10 minutes.</p>
+      <p class="field-err" id="codeErr" hidden></p>
+      <button class="btn primary" type="submit">Valider le code</button>
+    </form>
+    <p class="switch">
+      <button type="button" class="link-btn" id="resend">Recevoir un nouveau code</button><span class="muted" id="resendIn"></span>
+      <span aria-hidden="true"> · </span><button type="button" class="link-btn" data-go="verify">Choisir un autre moyen</button>
+    </p>
+  </section>
+
+  <!-- Étape 4 -->
+  <section class="card narrow" data-screen="done" hidden aria-labelledby="doneTitle">
+    <p class="ok-badge"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>Garage vérifié</p>
+    <h1 id="doneTitle" tabindex="-1">C'est fait</h1>
+    <p class="lead"><b id="doneGarage"></b> est rattaché à votre compte.</p>
+    <p>Prochaine étape : vos premiers prix. Cette partie de l'Espace Pro arrive bientôt ; nous vous écrirons dès qu'elle sera ouverte.</p>
+    <button type="button" class="btn primary" data-go="home">Mes garages</button>
+  </section>
+
+  <!-- Vérification impossible en ligne -->
+  <section class="card narrow" data-screen="manual" hidden aria-labelledby="manualTitle">
+    <h1 id="manualTitle" tabindex="-1">Vérification manuelle</h1>
+    <p class="lead" id="manualWhy"></p>
+    <p>Écrivez-nous à <a id="manualMail" href="mailto:{{CONTACT}}">{{CONTACT}}</a> avec le SIRET de l'établissement : nous vérifions à la main et vous répondons sous quelques jours.</p>
+    <button type="button" class="btn" data-go="garage">Essayer un autre SIRET</button>
+  </section>
+</main>
+
+<footer class="pro-foot">
+  <details class="pro-privacy">
+    <summary>Vos données dans l'Espace Pro</summary>
+    <ul>
+      <li><b>Votre compte</b> : votre adresse e-mail, gérée par Amazon Cognito (Amazon Web Services, région Europe, Stockholm). Pas de mot de passe : un code à usage unique vous est envoyé à chaque connexion.</li>
+      <li><b>Le rattachement d'un garage</b> : le SIRET, le garage, vos prénom, nom et fonction, la case de certification cochée, le moyen de vérification choisi (montré masqué) et les dates. Ils prouvent que vous gérez le garage et servent en cas de contestation ; ils sont gardés tant que le garage est rattaché à votre compte. Une demande qui n'aboutit pas est effacée après 30 jours, le journal des envois après 90 jours.</li>
+      <li><b>Les coordonnées des garages</b> (e-mail public, site, portable) viennent de données publiques (Overture Maps) ; elles ne servent qu'à envoyer le code de vérification et ne sont jamais affichées en clair.</li>
+      <li>Accès, rectification, effacement : <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>.</li>
+    </ul>
+  </details>
+  <p><a href="../">Pixcar, le comparateur</a><span aria-hidden="true"> · </span><a href="mailto:{{CONTACT}}">{{CONTACT}}</a></p>
+</footer>
+{{SCRIPTS}}
+</body>
+</html>

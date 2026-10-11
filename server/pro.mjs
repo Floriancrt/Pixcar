@@ -36,6 +36,19 @@ export function newCode() {
   }
 }
 
+// « Qui êtes-vous ? » : prénom, nom, fonction, et la case « je certifie être habilité(e) à représenter cet établissement » (trace écrite en cas
+// de litige). Aucun numéro de téléphone personnel n'est demandé.
+const ROLES = ["manager", "employee", "other"];
+const personName = (v) => String(v || "").normalize("NFC").replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim();
+export function parseHolder(h) {
+  if (!h || typeof h !== "object") return { error: "Indiquez vos prénom, nom et fonction." };
+  const first = personName(h.firstName), last = personName(h.lastName);
+  if (first.length < 1 || first.length > 60 || last.length < 1 || last.length > 60 || !/\p{L}/u.test(first + last)) return { error: "Prénom et nom : 60 caractères au plus chacun." };
+  if (!ROLES.includes(h.role)) return { error: "Fonction : gérant(e), salarié(e) ou autre." };
+  if (h.certify !== true) return { error: "Cochez la case qui certifie que vous êtes habilité(e) à représenter cet établissement." };
+  return { name: `${first} ${last}`, role: h.role };
+}
+
 // Comparaison en temps constant de deux textes de même longueur (empreintes hexadécimales).
 function sameText(a, b) {
   if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
@@ -75,9 +88,13 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
   }
 
   // ---- registre
-  async function establishment(siret) {
+  // Le registre n'est interrogé qu'une fois par SIRET et par 10 minutes ; chaque interrogation compte dans la limite du compte, que la
+  // recherche vienne de GET /siret ou de POST /claims (sinon une suite de demandes ferait autant d'appels au registre).
+  async function establishment(siret, sub) {
     const hit = sireneCache.get(siret);
     if (hit && now() - hit.at < SIRENE_TTL_MS) return hit.value;
+    const check = lookups.check(sub);
+    if (!check.ok) throw Object.assign(new Error("trop de recherches"), { limited: check.retryAfter });
     const value = await lookup(siret);
     sireneCache.set(siret, { at: now(), value });
     if (sireneCache.size > 500) sireneCache.delete(sireneCache.keys().next().value);
@@ -85,13 +102,14 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
   }
 
   // Établissement contrôlé + garages candidats, ou { error: Response }.
-  async function checkSiret(raw) {
+  async function checkSiret(raw, sub) {
     const siret = normalizeSiret(raw);
     if (!isSiret(siret)) return { error: apiError(400, "bad_siret", "Numéro SIRET invalide : 14 chiffres, clé de contrôle comprise.") };
     let e;
     try {
-      e = await establishment(siret);
+      e = await establishment(siret, sub);
     } catch (err) {
+      if (err.limited) return { error: apiError(429, "rate_limited", "Trop de recherches de SIRET. Réessayez plus tard.", {}, { "retry-after": String(err.limited) }) };
       log({ level: "warn", msg: "registre des entreprises indisponible", error: err.message });
       return { error: apiError(503, "sirene_unavailable", "Le registre des entreprises ne répond pas. Réessayez dans quelques minutes.", {}, { "retry-after": "60" }) };
     }
@@ -116,9 +134,12 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
       addr: g.addr,
       distanceM: g.distanceM ?? null,
       status: owner ? (owner.account_id === sub ? "mine" : "claimed") : "free",
-      options: owner ? [] : verificationOptions(g, { domainShared }).map(({ id, channel, hint, domain }) => (domain ? { id, channel, hint, domain } : { id, channel, hint })),
+      options: owner ? [] : openOptions(g, domainShared).map(({ id, channel, hint, domain }) => (domain ? { id, channel, hint, domain } : { id, channel, hint })),
     };
   }
+
+  // moyens ouverts par la configuration (PRO_CHANNELS) parmi ceux que le garage permet
+  const openOptions = (g, domainShared) => verificationOptions(g, { domainShared }).filter((o) => pro.channels.includes(o.channel));
 
   const claimView = (c) => {
     const dbNow = c.db_now ? new Date(c.db_now).getTime() : now();
@@ -132,6 +153,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
       status: c.status,
       channel: c.channel,
       hint: c.target_hint,
+      holder: { name: c.holder_name, role: c.holder_role },
       ...(c.status === "pending"
         ? {
             codeLive: !!live,
@@ -173,14 +195,16 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
   async function postClaim(request, sub) {
     const body = await readJson(request, 2048);
     if (body.error) return apiError(400, "bad_json", "JSON attendu (2 Ko au plus).");
-    const { siret, garageId, option, localPart } = body.value || {};
+    const { siret, garageId, option, localPart, holder } = body.value || {};
     if (typeof garageId !== "string" || typeof option !== "string") return apiError(422, "validation", "garageId et option requis.");
-    const checked = await checkSiret(siret);
+    const who = parseHolder(holder);
+    if (who.error) return apiError(422, "holder", who.error);
+    const checked = await checkSiret(siret, sub);
     if (checked.error) return checked.error;
     const g = checked.garages.find((x) => x.garage_id === garageId);
     if (!g) return apiError(422, "siret_far", "Ce garage n'est pas à l'adresse de cet établissement. Une vérification manuelle reste possible.");
     const domainShared = g.web_domain ? (await repo.domainCount(g.web_domain)) > 1 : false;
-    const chosen = resolveOption(g, option, { localPart, domainShared });
+    const chosen = openOptions(g, domainShared).some((o) => o.id === option) ? resolveOption(g, option, { localPart, domainShared }) : { error: "option" };
     if (chosen.error === "local_part") return apiError(422, "local_part", "Adresse invalide : lettres, chiffres, point, tiret ou souligné avant le @.");
     if (chosen.error) return apiError(422, "option", "Ce moyen de vérification n'est pas proposé pour ce garage.");
 
@@ -192,6 +216,8 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
       garageId,
       siret: checked.siret,
       channel: chosen.channel,
+      holderName: who.name,
+      holderRole: who.role,
       target: chosen.target,
       targetHash: await digest("target:" + chosen.target),
       targetHint: chosen.hint,
@@ -260,9 +286,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
   }
 
   async function getSiret(sub, raw) {
-    const check = lookups.check(sub);
-    if (!check.ok) return apiError(429, "rate_limited", "Trop de recherches. Réessayez plus tard.", {}, { "retry-after": String(check.retryAfter) });
-    const checked = await checkSiret(raw);
+    const checked = await checkSiret(raw, sub);
     if (checked.error) return checked.error;
     const e = checked.establishment;
     return json(

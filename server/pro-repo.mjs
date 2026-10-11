@@ -14,7 +14,7 @@ const meters = (a, b) => {
 export { meters };
 
 const CONTACT_COLUMNS = "garage_id, name, addr, pc, lat, lon, brand, emails, phones, web_domain";
-const CLAIM_COLUMNS = "c.id, c.garage_id, c.siret, c.status, c.channel, c.target_hint, c.code_expires_at, c.attempts, c.sends, c.last_sent_at, c.created_at, c.verified_at";
+const CLAIM_COLUMNS = "c.id, c.garage_id, c.siret, c.status, c.channel, c.holder_name, c.holder_role, c.target_hint, c.code_expires_at, c.attempts, c.sends, c.last_sent_at, c.created_at, c.verified_at";
 
 export function createProRepo(db) {
   const one = async (sql, params) => (await db.query(sql, params)).rows[0] || null;
@@ -37,9 +37,12 @@ export function createProRepo(db) {
     // garages à moins de radiusM du point, du plus proche au plus loin
     async contactsNear({ lat, lon, radiusM }) {
       const box = cellsAround(lat, lon, radiusM / 1000);
+      // les cases (index) puis le carré du rayon : même en ville dense, seuls les garages du carré sont lus
+      const dLat = radiusM / 111_320, dLon = radiusM / (111_320 * Math.max(0.05, Math.cos((lat * Math.PI) / 180)));
       const { rows } = await db.query(
-        `SELECT ${CONTACT_COLUMNS} FROM garage_contacts WHERE area_y BETWEEN $1 AND $2 AND area_x BETWEEN $3 AND $4 LIMIT 2000`,
-        [box.y0, box.y1, box.x0, box.x1],
+        `SELECT ${CONTACT_COLUMNS} FROM garage_contacts
+         WHERE area_y BETWEEN $1 AND $2 AND area_x BETWEEN $3 AND $4 AND lat BETWEEN $5 AND $6 AND lon BETWEEN $7 AND $8 LIMIT 500`,
+        [box.y0, box.y1, box.x0, box.x1, lat - dLat, lat + dLat, lon - dLon, lon + dLon],
       );
       return rows
         .map((r) => ({ ...r, distanceM: Math.round(meters({ lat, lon }, r)) }))
@@ -106,8 +109,8 @@ export function createProRepo(db) {
         )
         .then((r) => r.rows),
 
-    // Nouvelle demande et son premier code. c : { id, accountId, garageId, siret, channel, target, targetHash, targetHint, codeHash,
-    // ttlSeconds, maxPending, limits }. Résultat : { kind: "created" } | { kind: "owned" } | { kind: "mine" } | { kind: "limited", scope }
+    // Nouvelle demande et son premier code. c : { id, accountId, garageId, siret, channel, holderName, holderRole, target, targetHash,
+    // targetHint, codeHash, ttlSeconds, maxPending, limits }. Résultat : { kind: "created" } | { kind: "owned" } | { kind: "mine" } | { kind: "limited", scope }
     // | { kind: "too_many" }. Rien n'est envoyé ici : l'envoi suit la transaction (elle peut être rejouée).
     createClaim(c) {
       return db.tx(async (t) => {
@@ -122,9 +125,9 @@ export function createProRepo(db) {
         // une demande en cours du même compte pour le même garage est remplacée : un seul code valable à la fois
         await t.query("UPDATE pro_claims SET status = 'failed', code_hash = NULL, target = NULL WHERE account_id = $1 AND garage_id = $2 AND status = 'pending'", [c.accountId, c.garageId]);
         await t.query(
-          `INSERT INTO pro_claims (id, account_id, garage_id, siret, status, channel, target, target_hash, target_hint, code_hash, code_expires_at, attempts, sends, last_sent_at)
-           VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, $8, $9, now() + $10::int * interval '1 second', 0, 1, now())`,
-          [c.id, c.accountId, c.garageId, c.siret, c.channel, c.target, c.targetHash, c.targetHint, c.codeHash, c.ttlSeconds],
+          `INSERT INTO pro_claims (id, account_id, garage_id, siret, status, channel, holder_name, holder_role, certified_at, target, target_hash, target_hint, code_hash, code_expires_at, attempts, sends, last_sent_at)
+           VALUES ($1, $2, $3, $4, 'pending', $5, $11, $12, now(), $6, $7, $8, $9, now() + $10::int * interval '1 second', 0, 1, now())`,
+          [c.id, c.accountId, c.garageId, c.siret, c.channel, c.target, c.targetHash, c.targetHint, c.codeHash, c.ttlSeconds, c.holderName, c.holderRole],
         );
         await t.query("INSERT INTO pro_events (kind, account_id, garage_id, channel) VALUES ('send', $1, $2, $3)", [c.accountId, c.garageId, c.channel]);
         return { kind: "created" };

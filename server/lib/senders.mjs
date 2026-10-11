@@ -52,6 +52,7 @@ export function createSenders(pro, { production = false, log = () => {} } = {}) 
             DestinationPhoneNumber: target,
             TemplateId: pro.notifyTemplateId || undefined,
             TemplateVariables: { code, time: String(minutes) },
+            TimeToLive: pro.codeTtlSeconds, // secondes ; 72 h par défaut chez AWS, inutile pour un code valable 10 minutes
           }),
         );
         return { id: out.MessageId || "" };

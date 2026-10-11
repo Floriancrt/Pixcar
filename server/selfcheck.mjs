@@ -182,7 +182,7 @@ export async function selfcheck(db, { log = () => {} } = {}) {
   const claimA = crypto.randomUUID();
   const claimB = crypto.randomUUID();
   const newClaim = (id, who, codeHash) =>
-    pro.createClaim({ id, accountId: acc(who), garageId: proGarage, siret: "73282932000074", channel: "email", target: "selfcheck@example.invalid", targetHash: randomHex(32), targetHint: "s•••••@example.invalid", codeHash, ttlSeconds: 600, maxPending: 3, limits: proLimits });
+    pro.createClaim({ id, accountId: acc(who), garageId: proGarage, siret: "73282932000074", channel: "email", holderName: "Auto Contrôle", holderRole: "other", target: "selfcheck@example.invalid", targetHash: randomHex(32), targetHint: "s•••••@example.invalid", codeHash, ttlSeconds: 600, maxPending: 3, limits: proLimits });
   await check("Espace Pro : contacts privés écrits par lot (jsonb), relus autour d'un point et par domaine", async () => {
     const row = (garageId, n) => ({ garageId, name: "Garage d'auto-contrôle", addr: "", pc: "", lat: LAT + n / 10000, lon: LON, brand: false, emails: ["selfcheck@example.invalid"], phones: ["+33600000000"], webDomain: `selfcheck-${tag}.invalid` });
     expect((await pro.upsertContacts([row(proGarage, 0), row(proGarage2, 1)], `selfcheck-${tag}`)) === 2, "2 lignes écrites");
@@ -207,7 +207,7 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     let refused = false;
     try {
       await db.query(
-        "INSERT INTO pro_claims (id, account_id, garage_id, siret, status, channel, target_hash, target_hint) VALUES ($1, $2, $3, '73282932000074', 'verified', 'email', $4, 'x')",
+        "INSERT INTO pro_claims (id, account_id, garage_id, siret, status, channel, holder_name, holder_role, target_hash, target_hint) VALUES ($1, $2, $3, '73282932000074', 'verified', 'email', 'Auto Contrôle', 'other', $4, 'x')",
         [claimB, acc("b"), proGarage, randomHex(32)],
       );
     } catch (e) {

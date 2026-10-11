@@ -57,7 +57,8 @@ describe("Espace Pro : vérification d'un garagiste", () => {
   const as = (who) => ({ "x-pro-dev-account": who });
   const call = (who, method, path, body) => t.call(method, path, { body, headers: who ? as(who) : {} });
   const json = async (res) => ({ status: res.status, body: await res.json(), headers: res.headers });
-  const claim = (who, body) => call(who, "POST", "/v1/pro/claims", { siret: S.dupont, garageId: A, option: "email:0", ...body }).then(json);
+  const HOLDER = { firstName: "Camille", lastName: "Durand", role: "manager", certify: true };
+  const claim = (who, body) => call(who, "POST", "/v1/pro/claims", { siret: S.dupont, garageId: A, option: "email:0", holder: HOLDER, ...body }).then(json);
   const lastCode = () => outbox()[outbox().length - 1].code;
   const wrong = (code) => String((Number(code) + 1) % 1_000_000).padStart(6, "0");
 
@@ -319,6 +320,43 @@ describe("Espace Pro : vérification d'un garagiste", () => {
     assert.equal((await claim("bob", { option: "email:9" })).body.error.code, "option");
   });
 
+  test("« Qui êtes-vous ? »: first and last name, a role, and the certification box are required, and kept with the request", async () => {
+    for (const [holder, needle] of [
+      [undefined, "prénom"],
+      [{ ...HOLDER, firstName: "" }, "Prénom"],
+      [{ ...HOLDER, lastName: "x".repeat(61) }, "60"],
+      [{ ...HOLDER, firstName: "123", lastName: "456" }, "Prénom"],
+      [{ ...HOLDER, role: "boss" }, "Fonction"],
+      [{ ...HOLDER, certify: "true" }, "Cochez"],
+      [{ ...HOLDER, certify: false }, "Cochez"],
+    ]) {
+      const r = await claim("alice", { holder });
+      assert.equal(r.status, 422, JSON.stringify(holder));
+      assert.equal(r.body.error.code, "holder");
+      assert.match(r.body.error.message, new RegExp(needle));
+    }
+    assert.equal(outbox().length, 0);
+    const ok = await claim("alice", { holder: { ...HOLDER, firstName: "  Jean-\u0007Marie ", lastName: "d'Ormesson" } });
+    assert.equal(ok.status, 201);
+    assert.deepEqual(ok.body.holder, { name: "Jean- Marie d'Ormesson", role: "manager" });
+    const row = (await t.db.query("SELECT holder_name, holder_role, certified_at FROM pro_claims")).rows[0];
+    assert.ok(row.certified_at);
+  });
+
+  test("PRO_CHANNELS closes a means everywhere: not offered, and refused if asked anyway", async () => {
+    const mailOnly = await makeApp({ env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1", PRO_CHANNELS: "email,email_domain" }, proOptions: { sirene: async (s) => REGISTRY[s] || null } });
+    try {
+      await mailOnly.app.pro.repo.upsertContacts(parseContactRows(CONTACTS).rows, "t");
+      const look = await json(await mailOnly.call("GET", `/v1/pro/siret/${S.dupont}`, { headers: as("zoe") }));
+      assert.deepEqual(look.body.garages.find((g) => g.id === A).options.map((o) => o.id), ["email:0", "domain"]);
+      const sms = await json(await mailOnly.call("POST", "/v1/pro/claims", { headers: as("zoe"), body: { siret: S.dupont, garageId: A, option: "sms:1", holder: HOLDER } }));
+      assert.equal(sms.body.error.code, "option");
+      assert.equal(mailOnly.app.pro.senders.outbox.length, 0);
+    } finally {
+      await mailOnly.close();
+    }
+  });
+
   test("the garage must be at the establishment's address", async () => {
     assert.equal((await claim("alice", { garageId: D })).body.error.code, "siret_far");
     assert.equal((await claim("alice", { siret: S.far })).body.error.code, "siret_far");
@@ -376,6 +414,21 @@ describe("Espace Pro : vérification d'un garagiste", () => {
     assert.equal((await call("bob", "POST", `/v1/pro/claims/${c.body.id}/resend`)).status, 404);
     assert.equal((await json(await call("alice", "GET", `/v1/pro/claims/${c.body.id}`))).body.status, "pending");
     assert.equal((await call("alice", "GET", "/v1/pro/claims/pas-un-uuid")).status, 404);
+  });
+
+  test("registry lookups are limited per account, whether they come from a search or from a request", async () => {
+    const few = await makeApp({ env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1", PRO_LOOKUPS_PER_ACCOUNT_PER_HOUR: "2" }, proOptions: { sirene: async () => null } });
+    try {
+      const ask = (path, body) => few.call(body ? "POST" : "GET", path, { headers: as("mallory"), body });
+      assert.equal((await ask(`/v1/pro/siret/${siretOf("5555555550001")}`)).status, 404);
+      assert.equal((await ask("/v1/pro/claims", { siret: siretOf("5555555550002"), garageId: A, option: "email:0", holder: HOLDER })).status, 404);
+      const third = await ask("/v1/pro/claims", { siret: siretOf("5555555550003"), garageId: A, option: "email:0", holder: HOLDER });
+      assert.equal(third.status, 429);
+      assert.ok(Number(third.headers.get("retry-after")) > 0);
+      assert.equal((await ask(`/v1/pro/siret/${siretOf("5555555550001")}`)).status, 404, "un SIRET déjà vu (en cache) ne compte pas");
+    } finally {
+      await few.close();
+    }
   });
 
   test("the registry is asked once per SIRET for 10 minutes", async () => {

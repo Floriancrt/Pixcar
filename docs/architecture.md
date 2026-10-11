@@ -100,6 +100,7 @@ Contrat complet : [openapi.yaml](openapi.yaml). Résumé :
 | `DELETE /v1/repairs/:id` | La retire | Jeton dans `X-Delete-Token`. **404 pour tout ce qui ne va pas** (identifiant inconnu, mauvais jeton) : on ne révèle pas ce qui existe. |
 | `GET /v1/overpass?data=` | Relais en cache de la requête de liste des garages | N'accepte **que** la requête exacte de la page (`parseOverpassQuery`) : ce n'est pas un proxy ouvert. |
 | `GET /healthz` · `GET /readyz` | Vivacité · disponibilité (503 si la base ne répond pas ou pendant l'arrêt) | |
+| `/v1/pro/…` | Espace Pro : rattachement d'un garage à un compte Cognito (SIRET, moyen de vérification choisi, code) | Fermé par défaut (`404 pro_disabled`). Jeton d'accès Cognito vérifié par l'API. Détail : `server/pro.mjs`, [exploitation.md](exploitation.md#10-espace-pro--vérification-des-garagistes). |
 
 **Lecture** : la zone est lue en base une fois par 10 s et par instance (copie en mémoire, une seule requête SQL même pour des centaines de visiteurs simultanés) ; la réponse porte `Cache-Control: public, max-age=30, s-maxage=60, stale-while-revalidate=300, stale-if-error=86400` et un `ETag` (calculé une fois par version de la réponse, 304 sur `If-None-Match`). Si la base tombe, la dernière bonne copie sert jusqu'à 1 h (`x-pixcar-stale`).
 

@@ -32,6 +32,7 @@ const SUITES = [
   { name: "mapbox", cmd: ["node", "tests/mapbox.js"] }, // fond de carte Mapbox : construit lui-même ses pages (avec et sans jeton)
   { name: "mbxfiches", cmd: ["node", "tests/mapbox-fiches.js"] }, // fiches complétées par Mapbox (téléphone, horaires, site) : construit lui-même ses pages
   { name: "garagesmbx", cmd: ["node", "tests/garages-mapbox.js"] }, // table de garages ET fiches complétées par Mapbox, ensemble : construit lui-même sa page
+  { name: "pro", cmd: ["node", "tests/pro.js"] }, // Espace Pro (dist/pro/) : construit lui-même son site, vraie API, Cognito simulé
   { name: "prerender", cmd: ["node", "tests/prerender.js", FILE] },
   { name: "budget", cmd: ["node", "tests/budget.js"], distOnly: true },
   { name: "offline", cmd: ["node", "tests/offline.js"], distOnly: true },

@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Espace Pro de Pixcar : identité d'envoi SES du domaine (codes de vérification des garages, et codes de connexion de Cognito) puis comptes
+  sans mot de passe (Amazon Cognito, code par e-mail). Pile séparée de l'API : ses sorties deviennent des paramètres de la pile pixcar.
+  Deux temps : CreateAccounts=false (identité SES seule, DKIM à publier chez le registraire), puis true une fois l'identité vérifiée.
+
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    arch: "page pro/ -> Cognito (InitiateAuth USER_AUTH, EMAIL_OTP) -> jeton d'accès -> API Pixcar (vérifie le jeton) ; Cognito et l'API envoient leurs e-mails par SES, domaine du paramètre EmailDomain"
+    must:
+      - "connexion sans mot de passe par code e-mail : Cognito l'exige en niveau Essentials ET avec un envoi par SES (pas l'envoi par défaut de Cognito)"
+      - "client d'application public (pas de secret) : la page est statique ; seuls USER_AUTH et REFRESH_TOKEN_AUTH sont permis"
+      - "le groupe d'utilisateurs contient les comptes des garagistes : conservé si la pile est supprimée"
+    ref:
+      - { at: docs/exploitation.md, has: "Espace Pro : ordre des actions AWS et DNS, sortie du mode test SES" }
+
+Parameters:
+  EmailDomain:
+    Type: String
+    Default: pixcar.fr
+    Description: Domaine d'envoi (identité SES vérifiée par DKIM ; trois enregistrements CNAME à publier chez le registraire).
+    AllowedPattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+  CreateAccounts:
+    Type: String
+    Default: "false"
+    AllowedValues: ["false", "true"]
+    Description: '"true" seulement quand l''identité SES du domaine est vérifiée (Cognito refuse un envoi par une identité non vérifiée).'
+  CognitoEmailFrom:
+    Type: String
+    Default: "Pixcar <connexion@pixcar.fr>"
+    Description: Expéditeur des codes de connexion envoyés par Cognito (adresse du domaine ci-dessus).
+    MaxLength: 200
+
+Conditions:
+  HasAccounts: !Equals [!Ref CreateAccounts, "true"]
+
+Resources:
+  EmailIdentity:
+    Type: AWS::SES::EmailIdentity
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "Easy DKIM 2048 bits : les codes partent signés du domaine de Pixcar (meilleure délivrabilité, pas d'usurpation)"
+        must: ["les 3 CNAME DKIM (sorties) publiés chez le registraire avant toute mise en service", "le compte SES sort du mode test sur demande (support AWS) : en mode test, seuls des destinataires vérifiés reçoivent les codes"]
+    Properties:
+      EmailIdentity: !Ref EmailDomain
+      DkimSigningAttributes:
+        NextSigningKeyLength: RSA_2048_BIT
+      FeedbackAttributes:
+        EmailForwardingEnabled: true
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Condition: HasAccounts
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "comptes des garagistes, identifiés par leur e-mail ; connexion par code reçu par e-mail (aucun mot de passe à créer ni à oublier)"
+        must: ["UserPoolTier ESSENTIALS (connexion par code e-mail)", "EmailSendingAccount DEVELOPER par l'identité SES du domaine", "protection contre la suppression active"]
+        mutable: review-required
+    Properties:
+      UserPoolName: !Sub "${AWS::StackName}-garagistes"
+      UserPoolTier: ESSENTIALS
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      UsernameConfiguration: { CaseSensitive: false }
+      DeletionProtection: ACTIVE
+      Policies:
+        SignInPolicy:
+          AllowedFirstAuthFactors: [EMAIL_OTP, PASSWORD]
+        PasswordPolicy:
+          MinimumLength: 12
+      AccountRecoverySetting:
+        RecoveryMechanisms: [{ Name: verified_email, Priority: 1 }]
+      AdminCreateUserConfig: { AllowAdminCreateUserOnly: false }
+      UserAttributeUpdateSettings: { AttributesRequireVerificationBeforeUpdate: [email] }
+      EmailConfiguration:
+        EmailSendingAccount: DEVELOPER
+        From: !Ref CognitoEmailFrom
+        SourceArn: !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${EmailDomain}"
+      VerificationMessageTemplate:
+        DefaultEmailOption: CONFIRM_WITH_CODE
+        EmailSubject: "Pixcar : votre code de confirmation"
+        EmailMessage: "Votre code de confirmation pour l'Espace Pro Pixcar : {####}. Si vous n'avez rien demandé, ignorez ce message."
+      UserPoolTags: { Project: pixcar }
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Condition: HasAccounts
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "client public de la page pro/ (statique) : pas de secret possible dans une page"
+        must: ["GenerateSecret false", "flux USER_AUTH et REFRESH_TOKEN_AUTH seulement", "révocation des jetons active (déconnexion)"]
+    Properties:
+      ClientName: pixcar-pro-web
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows: [ALLOW_USER_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      EnableTokenRevocation: true
+      # LEGACY : « aucun compte pour cette adresse » s'affiche tel quel. L'inscription (SignUp) révèle de toute façon qu'une adresse a un compte ;
+      # masquer l'erreur à la connexion ne protégerait rien et laisserait un garagiste sans compte attendre un code qui n'arrive jamais.
+      PreventUserExistenceErrors: LEGACY
+      AuthSessionValidity: 10
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 1
+      TokenValidityUnits: { AccessToken: minutes, IdToken: minutes, RefreshToken: days }
+
+Outputs:
+  DkimRecord1:
+    Description: CNAME DKIM n° 1 à publier chez le registraire (nom → valeur).
+    Value: !Sub "${EmailIdentity.DkimDNSTokenName1} CNAME ${EmailIdentity.DkimDNSTokenValue1}"
+  DkimRecord2:
+    Value: !Sub "${EmailIdentity.DkimDNSTokenName2} CNAME ${EmailIdentity.DkimDNSTokenValue2}"
+  DkimRecord3:
+    Value: !Sub "${EmailIdentity.DkimDNSTokenName3} CNAME ${EmailIdentity.DkimDNSTokenValue3}"
+  UserPoolId:
+    Condition: HasAccounts
+    Description: À passer à la pile pixcar (ProUserPoolId) et au build du site (PIXCAR_PRO_POOL, src/pro.json).
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Condition: HasAccounts
+    Description: À passer à la pile pixcar (ProClientId) et au build du site (PIXCAR_PRO_CLIENT, src/pro.json).
+    Value: !Ref UserPoolClient
