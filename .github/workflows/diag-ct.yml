@@ -1,0 +1,57 @@
+# Diagnostic en lecture seule des prix du contrôle technique (jeu prix-controle-technique de data.economie.gouv.fr).
+# Ne publie rien : écrit des statistiques et les lignes des centres de Bayonne dans le journal et le résumé de l'exécution.
+name: Diagnostic prix contrôle technique
+on:
+  push:
+    branches: [diag-ct-prix]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Télécharger le jeu complet
+        run: |
+          curl -sSf --retry 3 -o ct.json "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-controle-technique/exports/json?select=cct_siret,cct_denomination,cct_adresse,cct_code_postal,cct_commune,cat_vehicule_id,cat_vehicule_libelle,cat_energie_id,cat_energie_libelle,prix_visite,prix_contre_visite_mini,prix_contre_visite_maxi,date_application_visite,date_application_contre_visite"
+          ls -l ct.json
+      - name: Analyser
+        run: |
+          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import json, collections, statistics, re
+          rows = json.load(open("ct.json"))
+          print(f"## {len(rows)} lignes, {len({r.get('cct_siret') for r in rows})} centres (SIRET)\n")
+          def num(v):
+              try: return float(v)
+              except (TypeError, ValueError): return None
+          cats = collections.Counter((r.get("cat_vehicule_id"), r.get("cat_vehicule_libelle")) for r in rows)
+          print("### Catégories de véhicule\n")
+          for (i, l), n in cats.most_common(): print(f"- `{i}` {l} : {n}")
+          en = collections.Counter((r.get("cat_energie_id"), r.get("cat_energie_libelle")) for r in rows)
+          print("\n### Énergies\n")
+          for (i, l), n in en.most_common(): print(f"- `{i}` {l} : {n}")
+          print("\n### Prix de visite par catégorie (min, quartiles, max ; à 0 ; < 30 € ; manquants)\n")
+          by = collections.defaultdict(list)
+          for r in rows: by[r.get("cat_vehicule_libelle")].append(num(r.get("prix_visite")))
+          for c, v in sorted(by.items(), key=lambda x: -len(x[1])):
+              v2 = sorted(x for x in v if x is not None)
+              if not v2: print(f"- {c} : aucun prix"); continue
+              q = statistics.quantiles(v2, n=4) if len(v2) > 3 else v2
+              print(f"- {c} : n={len(v2)}, min={v2[0]}, q={[round(x,1) for x in q]}, max={v2[-1]}, à 0 : {sum(1 for x in v2 if x == 0)}, < 30 : {sum(1 for x in v2 if x < 30)}, manquants : {sum(1 for x in v if x is None)}")
+          print("\n### Dates d'application de la visite (année : lignes)\n")
+          yrs = collections.Counter(str(r.get("date_application_visite") or "")[:4] for r in rows)
+          for y, n in sorted(yrs.items()): print(f"- {y or 'vide'} : {n}")
+          print("\n### Doublons : même centre, même catégorie, même énergie\n")
+          k = collections.Counter((r.get("cct_siret"), r.get("cat_vehicule_id"), r.get("cat_energie_id")) for r in rows)
+          print(f"- {sum(1 for n in k.values() if n > 1)} combinaisons en double ou plus (sur {len(k)})")
+          print("\n### Centres sans aucune ligne « véhicule particulier »\n")
+          sirets = collections.defaultdict(set)
+          for r in rows: sirets[r.get("cct_siret")].add(r.get("cat_vehicule_libelle") or "")
+          novp = [s for s, cs in sirets.items() if not any(re.search(r"particulier|\bvp\b|tourisme", c or "", re.I) for c in cs)]
+          print(f"- {len(novp)} centres sur {len(sirets)}")
+          print("\n### Centres de Bayonne (64100) : toutes leurs lignes\n")
+          print("| SIRET | centre | adresse | cat | énergie | visite | CV min | CV max | date visite |")
+          print("|---|---|---|---|---|---|---|---|---|")
+          for r in sorted((r for r in rows if str(r.get("cct_code_postal")) == "64100"), key=lambda r: (r.get("cct_denomination") or "", str(r.get("cat_vehicule_id")), str(r.get("cat_energie_id")))):
+              print(f"| {r.get('cct_siret')} | {r.get('cct_denomination')} | {r.get('cct_adresse')} | {r.get('cat_vehicule_id')} {r.get('cat_vehicule_libelle')} | {r.get('cat_energie_libelle')} | {r.get('prix_visite')} | {r.get('prix_contre_visite_mini')} | {r.get('prix_contre_visite_maxi')} | {r.get('date_application_visite')} |")
+          PY
