@@ -278,6 +278,10 @@ function icoFile(sizes, colorHex) {
 }
 
 // ---------- CT mock (prix-controle-technique) ----------
+// Prix du contrôle technique (jeu DGCCRF) : mêmes catégories et libellés que le vrai jeu (relevé du 11 octobre 2026 : « Voiture
+// particulière » est la catégorie 1, avec un è). Les voitures particulières ont les prix tirés ci-dessous ; les autres catégories, plus
+// chères, et le camping-car à 0 € (prestation non proposée, comme dans le vrai jeu) ne doivent jamais être affichés pour une voiture.
+const CT_OTHER_CATS = [[2, "4 x 4", 12], [3, "Voiture de collection", 0], [4, "Camionnette", 15], [5, "Camping-car (moins de 3,5 tonnes)", null]];
 function ctRows() {
   const rnd = mulberry32(7);
   const names = ["AUTOSUR LYON GERLAND", "DEKRA LYON 7", "SECURITEST VILLEURBANNE", "AUTOVISION BRON", "CONTROLE AUTO DU RHONE", "NORISKO VENISSIEUX", "VERIF'AUTO DECINES", "AUTO SECURITE LYON 3"];
@@ -289,9 +293,11 @@ function ctRows() {
       rows.push({
         cct_siret: "8123456780" + (10 + i), cct_denomination: n, cct_adresse: `${10 + i * 7} avenue du Test`, cct_code_postal: "69007", cct_commune: "LYON",
         cct_tel: "04 72 00 00 0" + i, cct_url: "", latitude: lat, longitude: lon,
-        cat_vehicule_id: 1, cat_vehicule_libelle: "Véhicule particulier", cat_energie_id: 1, cat_energie_libelle: en,
+        cat_vehicule_id: 1, cat_vehicule_libelle: "Voiture particulière", cat_energie_id: 1, cat_energie_libelle: en,
         prix_visite: pr, prix_contre_visite_mini: 15, prix_contre_visite_maxi: 25, date_application_visite: "2026-03-01",
       });
+      for (const [id, label, plus] of CT_OTHER_CATS)
+        rows.push({ ...rows[rows.length - 1], cat_vehicule_id: id, cat_vehicule_libelle: label, prix_visite: plus === null ? 0 : pr + plus, prix_contre_visite_mini: plus === null ? 0 : 15, prix_contre_visite_maxi: plus === null ? 0 : 25 });
     }
   });
   return rows;
@@ -487,7 +493,7 @@ async function installMocks(ctx, opts = {}) {
     // Contrôle technique
     if (h === "data.economie.gouv.fr") {
       counters.ct++;
-      return route.fulfill({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify(ctRows()) });
+      return route.fulfill({ status: 200, contentType: "application/json", headers: CORS, body: JSON.stringify(opts.ct || ctRows()) });
     }
     // Google Analytics (suite « consent », opts.google) : la bibliothèque gtag.js est remplacée par un script qui fait ce que fait la vraie à
     // l'arrivée (dépose _ga et _ga_<flux>, envoie des mesures par fetch, balise et image vers les hôtes de mesure) ; chaque appel est compté dans
@@ -541,4 +547,4 @@ var q=window._uxa||[];window._uxa={push:function(c){run(c);return 1;}};for(var i
   });
 }
 
-module.exports = { installMocks, buildElements, CENTER, tilePNG, logoPNG, iconPNG, icoFile };
+module.exports = { ctRows, installMocks, buildElements, CENTER, tilePNG, logoPNG, iconPNG, icoFile };

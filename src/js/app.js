@@ -1674,14 +1674,24 @@ import { SERVICES } from "./shared/services.js";
     const f = fieldLabels(e.tableFields);
     return f.length ? `<p class="fact-note">Complété par la base Overture Maps, à titre indicatif : ${y(f.join(", "))}.</p>` : "";
   }
+  // Prix du contrôle technique (jeu « prix-controle-technique » de la DGCCRF, une ligne par centre, catégorie et énergie). Seules les
+  // lignes « Voiture particulière » (cat_vehicule_id 1) comptent : ni 4 x 4, ni camionnette, ni camping-car, ni collection. Un prix de
+  // visite hors de 20 à 300 € n'est pas un tarif mais un code (0 : prestation non proposée, 999…) ; de même une contre-visite au-delà
+  // de 200 €. Relevé sur le jeu complet le 11 octobre 2026 : 261 lignes « voiture particulière » à 0 €, une à 1 €, une à 12 €, une
+  // à 500 €, une à 999 € ; les vrais tarifs vont de 45 à 250 €.
+  const CT_VP = 1,
+    CT_MIN = 20,
+    CT_MAX = 300,
+    CV_MAX = 200,
+    ctPriceOk = (p) => isFinite(p) && p >= CT_MIN && p <= CT_MAX,
+    cvOk = (p) => isFinite(p) && p >= 0 && p <= CV_MAX;
   const Qe = (e) =>
       /cyclo|moto|tricycle|quadri|cat[ée]gorie\s*l\b|\bl[1-7]e?\b|2\s*roues|3\s*roues|deux.roues/i.test(e),
-    Ke = (e) => /particulier|\bvp\b|tourisme/i.test(e);
+    // l'identifiant de catégorie fait foi ; le libellé (« Voiture particulière », avec un è) seulement s'il manque
+    Ke = (e) => (isFinite(e.catId) ? e.catId === CT_VP : /particuli[eè]re?\b|\bvp\b|tourisme/i.test(e.cat) && !Qe(e.cat));
   function Ue(e, t) {
-    let a = e.rows.filter((e) => !Qe(e.cat) && isFinite(e.price));
-    const n = a.filter((e) => Ke(e.cat));
-    n.length && (a = n);
-    const r = a.filter((e) => k(e.energy) === k(t) || k(e.energy).includes(k(t))),
+    const a = e.rows.filter((e) => Ke(e) && ctPriceOk(e.price)),
+      r = a.filter((e) => k(e.energy) === k(t) || k(e.energy).includes(k(t))),
       s = r.length ? r : a;
     return s.length ? { ...s.reduce((e, t) => (t.price < e.price ? t : e)), matched: r.length > 0 } : null;
   }
@@ -1937,6 +1947,7 @@ import { SERVICES } from "./shared/services.js";
                   t.set(r, s));
               }
               s.rows.push({
+                catId: a.cat_vehicule_id == null || a.cat_vehicule_id === "" ? NaN : Number(a.cat_vehicule_id),
                 cat: String(a.cat_vehicule_libelle || ""),
                 energy: String(a.cat_energie_libelle || ""),
                 price: $(a.prix_visite),
@@ -1952,7 +1963,7 @@ import { SERVICES } from "./shared/services.js";
               const e = (function () {
                 const e = new Map();
                 for (const t of me.raw)
-                  for (const a of t.rows) a.energy && !Qe(a.cat) && e.set(k(a.energy), a.energy);
+                  for (const a of t.rows) a.energy && Ke(a) && ctPriceOk(a.price) && e.set(k(a.energy), a.energy);
                 return [...e.values()].sort((e, t) => e.localeCompare(t, "fr"));
               })();
               if (!e.length) return;
@@ -2957,12 +2968,19 @@ import { SERVICES } from "./shared/services.js";
     const t = e.ct;
     if (!t)
       return `${wt(e)}<p class="price-note">Ce centre n'a pas déclaré de prix pour les voitures particulières : appelez-le.</p><div class="g-more-acts"><a class="btn" href="${routeUrl(e)}" target="_blank" rel="noopener">${he("route")}Itinéraire</a></div>`;
-    const a =
-      isFinite(t.cvMin) || isFinite(t.cvMax)
-        ? isFinite(t.cvMin) && isFinite(t.cvMax) && t.cvMin !== t.cvMax
-          ? `${C(t.cvMin)} à ${C(t.cvMax)}`
-          : C(isFinite(t.cvMin) ? t.cvMin : t.cvMax)
-        : "";
+    // contre-visite : une valeur hors de 0 à 200 € est ignorée ; 0 € des deux côtés, c'est une contre-visite gratuite
+    const lo = cvOk(t.cvMin) ? t.cvMin : NaN,
+      hi = cvOk(t.cvMax) ? t.cvMax : NaN,
+      cv = (v) => (0 === v ? "gratuite" : C(v)),
+      a =
+        isFinite(lo) || isFinite(hi)
+          ? isFinite(lo) && isFinite(hi) && lo !== hi
+            ? `${C(lo)} à ${C(hi)}`
+            : cv(isFinite(lo) ? lo : hi)
+          : "";
+    // un tarif déclaré il y a plus de deux ans (43 % des lignes datent de 2020, la première année de l'obligation) a pu changer
+    const when = new Date(t.date),
+      old = !isNaN(when) && Date.now() - when.getTime() > 730 * 864e5;
     return `${wt(e, [a ? ["Contre-visite", a] : null])}\n      <p class="price-note">Visite ${y(t.energy || "")}${t.cat ? " · " + y(t.cat.toLowerCase()) : ""}${
       t.date
         ? " · en vigueur depuis le " +
@@ -2975,7 +2993,9 @@ import { SERVICES } from "./shared/services.js";
             })(t.date),
           )
         : ""
-    }${t.matched ? "" : " · aucun tarif déclaré pour l'énergie choisie"} · prix déclaré par le centre à la DGCCRF.</p><div class="g-more-acts"><a class="btn" href="${routeUrl(e)}" target="_blank" rel="noopener">${he("route")}Itinéraire</a></div>`;
+    }${t.matched ? "" : " · aucun tarif déclaré pour l'énergie choisie"} · prix déclaré par le centre à la DGCCRF.${
+      old ? " Déclaré il y a plus de deux ans : le tarif a pu changer, appelez le centre pour le confirmer." : ""
+    }</p><div class="g-more-acts"><a class="btn" href="${routeUrl(e)}" target="_blank" rel="noopener">${he("route")}Itinéraire</a></div>`;
   }
   // Peint une fiche ouverte ou fermée (sans toucher à la sélection)
   function kc(e, r, n) {

@@ -24,6 +24,7 @@ const SUITES = [
   { name: "ux", cmd: ["node", "tests/ux.js", FILE] },
   { name: "load", cmd: ["node", "tests/load.js", FILE] },
   { name: "veh", cmd: ["node", "tests/veh.js", FILE] },
+  { name: "ct", cmd: ["node", "tests/ct.js", FILE] }, // prix du contrôle technique : lignes calquées sur le vrai jeu de la DGCCRF (voiture particulière, codes 0 / 999)
   { name: "remote", cmd: ["node", "tests/remote.js", FILE] },
   { name: "legal", cmd: ["node", "tests/legal.js"] }, // construit lui-même la page avec une copie des sources dont src/legal.json est complet
   { name: "consent", cmd: ["node", "tests/consent.js"] }, // mesure d'audience : construit lui-même ses pages (avec et sans identifiant Google)
