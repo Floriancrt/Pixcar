@@ -39,6 +39,9 @@ const ROWS = [
   ...centre(4, "CONTROLE GRATUIT CV", [[1, "Essence", 85, 0, 0, "2026-06-18"], [1, "Diesel", 85, 0, 0, "2026-06-18"]]),
   // sans identifiant de catégorie : le libellé décide (« Véhicule particulier » ou « Voiture particulière »)
   ...centre(5, "CENTRE SANS IDENTIFIANT", [[null, "Essence", 88, 15, 30, "2026-05-01", "Voiture particulière"], [null, "Diesel", 70, 15, 30, "2026-05-01", "Camping-car (moins de 3,5 tonnes)"]]),
+  // les lignes réelles du Contrôle Technique du Seignanx (prix.conso.gouv.fr, signalé le 11 octobre 2026) : voiture particulière 79 € en
+  // essence, mais voiture de collection à 59 € : la collection ne doit pas passer pour le tarif d'une voiture
+  ...centre(6, "CONTROLE TECHNIQUE DU SEIGNANX", [...all(1, [79, 79, 0, 92, 92], [15, 25], "2020-10-15"), ...all(2, [79, 79, 0, 92, 92], [15, 25], "2020-10-15"), [3, "Essence", 59, 15, 25, "2020-10-15"]]),
 ];
 
 (async () => {
@@ -75,6 +78,7 @@ const ROWS = [
     check("CT3 …et signale un tarif déclaré il y a plus de deux ans (10 septembre 2020)", /en vigueur depuis le 10 septembre 2020/.test(f) && /Déclaré il y a plus de deux ans : le tarif a pu changer/.test(f), f.slice(0, 400));
     check("CT4 « Le moins cher » ne peut plus être 0 € : 79 € (le seul tarif voiture plus bas que les autres), pas la camionnette à 59 €", s.best === "79 €" && !s.stats.some((x) => /^0\s?€/.test(x)), JSON.stringify(s.stats));
     check("CT5 a camionnette cheaper than the car is never shown for a car (79 €, not 59 €)", s.rows["CONTROLE AUTO ANCIEN"] && /^79\s?€/.test(s.rows["CONTROLE AUTO ANCIEN"].price), JSON.stringify(s.rows["CONTROLE AUTO ANCIEN"]));
+    check("CT5b Contrôle Technique du Seignanx (vraies lignes) : 79 € en essence, pas la voiture de collection à 59 €", s.rows["CONTROLE TECHNIQUE DU SEIGNANX"] && /^79\s?€/.test(s.rows["CONTROLE TECHNIQUE DU SEIGNANX"].price), JSON.stringify(s.rows["CONTROLE TECHNIQUE DU SEIGNANX"]));
     check("CT6 no valid car price (all 0 €): « Prix non déclaré », neither the camping-car (85 €) nor the motorcycle (65 €)", s.rows["CENTRE SANS TARIF VOITURE"] && /non déclaré/i.test(s.rows["CENTRE SANS TARIF VOITURE"].price), JSON.stringify(s.rows["CENTRE SANS TARIF VOITURE"]));
     f = await fiche("CENTRE SANS TARIF VOITURE");
     check("CT7 …its fiche says the centre declared no price for cars and to call it", /n'a pas déclaré de prix pour les voitures particulières/.test(f), f.slice(0, 200));
