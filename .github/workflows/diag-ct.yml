@@ -18,40 +18,40 @@ jobs:
       - name: Analyser
         run: |
           python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
-          import json, collections, statistics, re
+          import json, collections, re
           rows = json.load(open("ct.json"))
-          print(f"## {len(rows)} lignes, {len({r.get('cct_siret') for r in rows})} centres (SIRET)\n")
           def num(v):
               try: return float(v)
               except (TypeError, ValueError): return None
-          cats = collections.Counter((r.get("cat_vehicule_id"), r.get("cat_vehicule_libelle")) for r in rows)
-          print("### Catégories de véhicule\n")
-          for (i, l), n in cats.most_common(): print(f"- `{i}` {l} : {n}")
-          en = collections.Counter((r.get("cat_energie_id"), r.get("cat_energie_libelle")) for r in rows)
-          print("\n### Énergies\n")
-          for (i, l), n in en.most_common(): print(f"- `{i}` {l} : {n}")
-          print("\n### Prix de visite par catégorie (min, quartiles, max ; à 0 ; < 30 € ; manquants)\n")
+          vp = [r for r in rows if r.get("cat_vehicule_id") in (1, "1")]
+          vals = [num(r.get("prix_visite")) for r in vp]
+          vals = [v for v in vals if v is not None]
+          print(f"## Voiture particulière : {len(vp)} lignes\n")
+          print("### Valeurs basses (< 50 €) : valeur -> lignes\n")
+          for v, n in sorted(collections.Counter(v for v in vals if v < 50).items()): print(f"- {v} : {n}")
+          print("\n### Valeurs hautes (> 140 €) : valeur -> lignes\n")
+          for v, n in sorted(collections.Counter(v for v in vals if v > 140).items()): print(f"- {v} : {n}")
+          print("\n### Contre-visite : valeurs > 100 € (CV maxi)\n")
+          cv = collections.Counter(num(r.get("prix_contre_visite_maxi")) for r in vp if (num(r.get("prix_contre_visite_maxi")) or 0) > 100)
+          for v, n in sorted(cv.items()): print(f"- {v} : {n}")
+          # ancien choix du site (toutes catégories hors 2 et 3 roues, le moins cher) contre le nouveau (voiture particulière, prix valide)
+          L = re.compile(r"cyclo|moto|tricycle|quadri|cat[ée]gorie\s*l\b|\bl[1-7]e?\b|2\s*roues|3\s*roues|deux.roues", re.I)
           by = collections.defaultdict(list)
-          for r in rows: by[r.get("cat_vehicule_libelle")].append(num(r.get("prix_visite")))
-          for c, v in sorted(by.items(), key=lambda x: -len(x[1])):
-              v2 = sorted(x for x in v if x is not None)
-              if not v2: print(f"- {c} : aucun prix"); continue
-              q = statistics.quantiles(v2, n=4) if len(v2) > 3 else v2
-              print(f"- {c} : n={len(v2)}, min={v2[0]}, q={[round(x,1) for x in q]}, max={v2[-1]}, à 0 : {sum(1 for x in v2 if x == 0)}, < 30 : {sum(1 for x in v2 if x < 30)}, manquants : {sum(1 for x in v if x is None)}")
-          print("\n### Dates d'application de la visite (année : lignes)\n")
-          yrs = collections.Counter(str(r.get("date_application_visite") or "")[:4] for r in rows)
-          for y, n in sorted(yrs.items()): print(f"- {y or 'vide'} : {n}")
-          print("\n### Doublons : même centre, même catégorie, même énergie\n")
-          k = collections.Counter((r.get("cct_siret"), r.get("cat_vehicule_id"), r.get("cat_energie_id")) for r in rows)
-          print(f"- {sum(1 for n in k.values() if n > 1)} combinaisons en double ou plus (sur {len(k)})")
-          print("\n### Centres sans aucune ligne « véhicule particulier »\n")
-          sirets = collections.defaultdict(set)
-          for r in rows: sirets[r.get("cct_siret")].add(r.get("cat_vehicule_libelle") or "")
-          novp = [s for s, cs in sirets.items() if not any(re.search(r"particulier|\bvp\b|tourisme", c or "", re.I) for c in cs)]
-          print(f"- {len(novp)} centres sur {len(sirets)}")
-          print("\n### Centres de Bayonne (64100) : toutes leurs lignes\n")
-          print("| SIRET | centre | adresse | cat | énergie | visite | CV min | CV max | date visite |")
-          print("|---|---|---|---|---|---|---|---|---|")
-          for r in sorted((r for r in rows if str(r.get("cct_code_postal")) == "64100"), key=lambda r: (r.get("cct_denomination") or "", str(r.get("cat_vehicule_id")), str(r.get("cat_energie_id")))):
-              print(f"| {r.get('cct_siret')} | {r.get('cct_denomination')} | {r.get('cct_adresse')} | {r.get('cat_vehicule_id')} {r.get('cat_vehicule_libelle')} | {r.get('cat_energie_libelle')} | {r.get('prix_visite')} | {r.get('prix_contre_visite_mini')} | {r.get('prix_contre_visite_maxi')} | {r.get('date_application_visite')} |")
+          for r in rows: by[r.get("cct_siret")].append(r)
+          def pick(rs, energy, new):
+              if new:
+                  c = [r for r in rs if r.get("cat_vehicule_id") in (1, "1") and (num(r.get("prix_visite")) or 0) >= 20 and num(r.get("prix_visite")) < 300]
+              else:
+                  c = [r for r in rs if not L.search(r.get("cat_vehicule_libelle") or "") and num(r.get("prix_visite")) is not None]
+              m = [r for r in c if energy.lower() in (r.get("cat_energie_libelle") or "").lower()]
+              c = m or c
+              return min((num(r.get("prix_visite")) for r in c), default=None)
+          for energy in ("Essence", "Diesel", "Electrique"):
+              diff = zero = none_new = 0
+              for s, rs in by.items():
+                  o, n = pick(rs, energy, False), pick(rs, energy, True)
+                  if o != n: diff += 1
+                  if o == 0: zero += 1
+                  if n is None: none_new += 1
+              print(f"\n### {energy} : centres dont le prix affiché change : {diff} sur {len(by)} ; affichés à 0 € avant : {zero} ; sans prix valide après : {none_new}")
           PY
