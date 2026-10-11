@@ -18,11 +18,11 @@ export async function freshDb() {
   return db;
 }
 
-export async function makeApp({ config = {}, fetchImpl, now, log, overpassOptions } = {}) {
+export async function makeApp({ config = {}, env = {}, fetchImpl, now, log, overpassOptions, proOptions } = {}) {
   const db = await freshDb();
   await migrate(db);
-  const cfg = { ...loadConfig({ NODE_ENV: "test", ALLOWED_ORIGINS: ORIGIN }), ...config };
-  const app = createApp({ db, config: cfg, services: await loadServices(), fetchImpl, now, log, overpassOptions });
+  const cfg = { ...loadConfig({ NODE_ENV: "test", ALLOWED_ORIGINS: ORIGIN, ...env }), ...config };
+  const app = createApp({ db, config: cfg, services: await loadServices(), fetchImpl, now, log, overpassOptions, proOptions });
   const call = (method, path, { body, headers = {}, ip = "203.0.113.7", origin } = {}) =>
     app.fetch(
       new Request("http://api.test" + path, {
@@ -32,7 +32,7 @@ export async function makeApp({ config = {}, fetchImpl, now, log, overpassOption
       }),
       { remoteIp: ip },
     );
-  const reset = () => db.exec("TRUNCATE repairs, garages, write_log, upstream_cache CASCADE");
+  const reset = () => db.exec("TRUNCATE repairs, garages, write_log, upstream_cache, garage_contacts, pro_claims, pro_events CASCADE");
   return { app, db, config: cfg, call, reset, close: () => app.close() };
 }
 

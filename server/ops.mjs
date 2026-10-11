@@ -11,6 +11,13 @@
 //                                         garages sans réparation > 7 jours)
 //   {"op":"selfcheck"}                    rejoue sur la vraie base tout ce que demande l'application (voir selfcheck.mjs)
 //   {"op":"whoami"}                       rôle de base et type de base utilisés
+// Espace Pro (contacts privés des garages, voir scripts/pro/push-contacts.mjs) :
+//   {"op":"import-contacts","importId":"2026-10-11T08-00","rows":[…]}   écrit un lot de contacts (500 au plus), validés un par un
+//   {"op":"prune-contacts","importId":"…"}                              retire les contacts que ce chargement complet n'a pas réécrits
+//                                                                        (refusé si ce chargement compte moins de la moitié des lignes)
+//   {"op":"pro-stats"}                                                  demandes par état, nombre de garages avec contacts
+//   {"op":"pro-claims","garageId":"…"}                                  demandes et rattachement d'un garage (jamais la cible en clair)
+//   {"op":"pro-revoke","garageId":"…"}                                  retire le rattachement vérifié d'un garage (vérification contestée)
 import { repairRetentionMonths } from "./config.mjs";
 import { createDb } from "./db.mjs";
 import { jsonLog } from "./lib/log.mjs";
@@ -19,6 +26,8 @@ import { isUuid } from "./lib/validate.mjs";
 import { MIGRATIONS_DIR, ensureRuntimeRole, migrate } from "./migrate.mjs";
 import { moderate } from "./moderate.mjs";
 import { createRepo } from "./repo.mjs";
+import { IMPORT_BATCH_MAX, createProRepo } from "./pro-repo.mjs";
+import { parseContactRows } from "./lib/contact.mjs";
 import { selfcheck } from "./selfcheck.mjs";
 
 const MAX_ITEMS = 50;
@@ -26,6 +35,15 @@ const list = (value, what, valid) => {
   if (!Array.isArray(value) || !value.length || value.length > MAX_ITEMS) throw new Error(`« ${what} » : une liste de 1 à ${MAX_ITEMS} éléments est attendue`);
   for (const v of value) if (typeof v !== "string" || !valid(v)) throw new Error(`« ${what} » : valeur refusée (${JSON.stringify(v).slice(0, 40)})`);
   return value;
+};
+
+const importIdOf = (v) => {
+  if (typeof v !== "string" || !/^[\w.:-]{1,40}$/.test(v)) throw new Error("« importId » : identifiant du chargement attendu (lettres, chiffres, . : - _ ; 40 au plus)");
+  return v;
+};
+const garageIdOf = (v) => {
+  if (typeof v !== "string" || !/^[0-9a-f-]{8,40}$/.test(v)) throw new Error("« garageId » : identifiant Overture attendu");
+  return v;
 };
 
 export function createOps({ openDb, env = process.env, log = () => {} }) {
@@ -60,9 +78,28 @@ export function createOps({ openDb, env = process.env, log = () => {} }) {
         const secrets = await readSecrets(env, { names: ["PLATE_PEPPER"] }); // seul le secret des plaques sert ici
         return runModerate(["forget", ...plates], db, secrets.PLATE_PEPPER || env.PLATE_PEPPER || "");
       }),
-    purge: () => withDb(async (db) => ({ deleted: await createRepo(db).purge({ repairRetentionMonths: repairRetentionMonths(env) }) })),
+    purge: () =>
+      withDb(async (db) => ({ deleted: { ...(await createRepo(db).purge({ repairRetentionMonths: repairRetentionMonths(env) })), ...(await createProRepo(db).purge()) } })),
     selfcheck: () => withDb((db) => selfcheck(db, { log: (m) => log({ level: "info", msg: m }) })),
     whoami: () => withDb(async (db) => ({ db: db.kind, role: (await db.query("SELECT current_user AS who")).rows[0].who })),
+    "import-contacts": (e) => {
+      const importId = importIdOf(e.importId);
+      if (!Array.isArray(e.rows) || !e.rows.length || e.rows.length > IMPORT_BATCH_MAX) throw new Error(`« rows » : une liste de 1 à ${IMPORT_BATCH_MAX} contacts est attendue`);
+      const { rows, rejected } = parseContactRows(e.rows);
+      return withDb(async (db) => ({ written: await createProRepo(db).upsertContacts(rows, importId), rejected }));
+    },
+    "prune-contacts": (e) => {
+      const importId = importIdOf(e.importId);
+      return withDb(async (db) => {
+        const repo = createProRepo(db);
+        const { total, kept } = await repo.contactStats(importId);
+        if (!kept || kept * 2 < total) throw new Error(`chargement ${importId} : ${kept} lignes sur ${total} ; moins de la moitié, suppression refusée (chargement incomplet ?)`);
+        return { removed: await repo.pruneContacts(importId), kept };
+      });
+    },
+    "pro-stats": () => withDb((db) => createProRepo(db).proStats()),
+    "pro-claims": (e) => withDb(async (db) => ({ claims: await createProRepo(db).claimsOfGarage(garageIdOf(e.garageId)) })),
+    "pro-revoke": (e) => withDb(async (db) => ({ revoked: await createProRepo(db).revoke(garageIdOf(e.garageId)) })),
   };
 
   return async (event) => {

@@ -11,6 +11,7 @@ import { createMemoryLimiter } from "./lib/ratelimit.mjs";
 import { createOverpassProxy } from "./lib/overpass.mjs";
 import { isToken, isUuid, parseRepair } from "./lib/validate.mjs";
 import { createRepo } from "./repo.mjs";
+import { createPro } from "./pro.mjs";
 import { REPAIR_SERVICES } from "../src/js/shared/services.js";
 
 const CACHE_REPAIRS = "public, max-age=30, s-maxage=60, stale-while-revalidate=300, stale-if-error=86400";
@@ -58,8 +59,9 @@ function createBreaker({ threshold = 4, cooldownMs = 5000, now = Date.now } = {}
 const utcDate = (ms) => new Date(ms).toISOString().slice(0, 10);
 const unavailable = (headers = {}) => apiError(503, "unavailable", "Service momentanément indisponible. Réessayez dans quelques secondes.", {}, { "retry-after": "5", ...headers });
 
-export function createApp({ db, config, services, fetchImpl = globalThis.fetch, now = Date.now, log = () => {}, overpassOptions = {} }) {
+export function createApp({ db, config, services, fetchImpl = globalThis.fetch, now = Date.now, log = () => {}, overpassOptions = {}, proOptions = {} }) {
   const repo = createRepo(db);
+  const pro = createPro({ db, config, fetchImpl, now, log, ...proOptions }); // Espace Pro (server/pro.mjs) : coupé tant que PRO_ENABLED ne vaut pas 1
   const breaker = createBreaker({ now });
   const proxy = createOverpassProxy({ repo, fetchImpl, now, log, userAgent: config.overpassUserAgent, ...overpassOptions });
   const readLimiter = createMemoryLimiter({ limit: config.readLimitPerMinute, windowMs: 60_000, now });
@@ -254,6 +256,7 @@ export function createApp({ db, config, services, fetchImpl = globalThis.fetch, 
       return limited(readLimiter.check(ip)) || deleteRepair(request, id);
     }
     if (path === "/v1/overpass") return method === "GET" ? limited(readLimiter.check(ip)) || getOverpass(request, url, ip) : methodNotAllowed("GET");
+    if (path === "/v1/pro" || path.startsWith("/v1/pro/")) return limited(readLimiter.check(ip)) || pro.handle(request, path);
     return apiError(404, "not_found", "Route inconnue.");
   }
   const methodNotAllowed = (allow) => apiError(405, "method_not_allowed", "Méthode non autorisée.", {}, { allow });
@@ -289,7 +292,8 @@ export function createApp({ db, config, services, fetchImpl = globalThis.fetch, 
       return response;
     },
     // à lancer toutes les heures (index.mjs) : purge des journaux, caches et déclarations périmés
-    maintenance: () => repo.purge({ repairRetentionMonths: config.repairRetentionMonths }),
+    maintenance: async () => ({ ...(await repo.purge({ repairRetentionMonths: config.repairRetentionMonths })), ...(await pro.maintenance()) }),
+    pro,
     drain() {
       draining = true;
     },

@@ -271,7 +271,7 @@ fake_rows = [
 ]
 saved = (O.latest_release, O.read_places, S.load)
 O.latest_release = lambda: "release/2026-09-23.1"
-O.read_places = lambda poly, release, log=print, country="FR": (fake_rows, 5000)
+O.read_places = lambda poly, release, log=print, country="FR", with_emails=False: (fake_rows, 5000)
 S.load = lambda codes, log=print, workers=4, fetcher=None: ([{"name": "Garage Dupont", "lat": 43.2174, "lon": 1.1014, "siret": "1"}], [{"name": "Garage Fermé Depuis Longtemps", "lat": 43.2000, "lon": 1.0800, "siret": "2"}], [])
 tmp = tempfile.mkdtemp(prefix="garages-test-")
 try:
@@ -314,6 +314,37 @@ try:
     # garde contre une lecture partielle
     code = B.main(["--area", "bbox:0.9,43.0,1.3,43.4", "--sirene", "off", "--out", out_dir + "4", "--built", "2026-10-06", "--min-entries", "1000"])
     check(code == 2, "moins de garages que le minimum demandé : code %r" % code)
+    # contacts privés de l'Espace Pro : fichier à part, hors des tuiles, e-mails lus seulement pour lui
+    asked = []
+    O.read_places = lambda poly, release, log=print, country="FR", with_emails=False: (asked.append(with_emails), contact_rows)[1:] + (5000,)
+    contact_rows = [dict(r) for r in fake_rows]
+    contact_rows[0]["emails"] = ["Contact@Dupont-Auto.example.fr", "reseau@siege.example.fr"]
+    contact_rows[1]["emails"] = ["atelier@dupont-auto.example.fr"]
+    contact_rows[1]["phones"] = ["06 99 00 00 51"]
+    contact_rows[3]["emails"] = ["reseau@siege.example.fr", "pas-un-mail"]
+    S.load = lambda codes, log=print, workers=4, fetcher=None: ([], [], [])
+    try:
+        B.main(["--area", "bbox:0.9,43.0,1.3,43.4", "--sirene", "off", "--out", out_dir + "7", "--contacts-out", os.path.join(out_dir + "7", "contacts.jsonl"), "--built", "2026-10-06"])
+        check(False, "un fichier de contacts dans le dossier publié aurait dû être refusé")
+    except SystemExit as e:
+        check("hors du dossier" in str(e), "contacts dans le dossier publié : refus (%s)" % e)
+    contacts_path = os.path.join(tmp, "private", "contacts.jsonl")
+    summary8 = os.path.join(tmp, "summary8.md")
+    code = B.main(["--area", "bbox:0.9,43.0,1.3,43.4", "--sirene", "off", "--out", out_dir + "8", "--contacts-out", contacts_path, "--built", "2026-10-06", "--summary", summary8])
+    check(code == 0 and asked == [True], "construction avec contacts : code %r, e-mails demandés %r" % (code, asked))
+    check(oct(os.stat(contacts_path).st_mode & 0o777) == "0o600", "fichier privé lisible par son seul propriétaire")
+    contacts = [json.loads(l) for l in open(contacts_path, encoding="utf-8")]
+    tiles8 = [g for f in os.listdir(os.path.join(out_dir + "8", "t")) for g in json.load(open(os.path.join(out_dir + "8", "t", f), encoding="utf-8"))["g"]]
+    check(sorted(c["id"] for c in contacts) == sorted(g["id"] for g in tiles8), "un contact par garage publié, mêmes identifiants")
+    dup = next(c for c in contacts if c["name"].startswith("Garage Dupont"))
+    check(dup["emails"] == ["contact@dupont-auto.example.fr", "atelier@dupont-auto.example.fr"], "e-mails des fiches réunies, adresse partagée écartée : %r" % dup.get("emails"))
+    check(dup["phones"] == ["+33199000050", "+33699000051"] and dup["web"] == "https://dupont-auto.example.fr", "tous les numéros des fiches réunies, site : %r" % dup)
+    pneus = next(c for c in contacts if c["name"] == "Pneus Rapides")
+    check("emails" not in pneus, "adresse portée par deux garages : écartée partout ; adresse invalide : ignorée (%r)" % pneus)
+    raw = open(os.path.join(out_dir + "8", "t", os.listdir(os.path.join(out_dir + "8", "t"))[0]), encoding="utf-8").read() + open(os.path.join(out_dir + "8", "index.json"), encoding="utf-8").read()
+    check("@" not in raw and not T.validate_dir(out_dir + "8"), "aucun e-mail dans les tuiles publiées, sortie conforme")
+    text8 = open(summary8, encoding="utf-8").read()
+    check("Contacts privés" in text8 and "e-mail 1" in text8 and "écartés car portés par plusieurs garages : 2 e-mails" in text8 and "@" not in text8, "résumé des contacts : agrégats seulement (%s)" % text8[-300:])
 finally:
     O.latest_release, O.read_places, S.load = saved
     shutil.rmtree(tmp, ignore_errors=True)

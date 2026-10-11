@@ -28,6 +28,17 @@ export function loadConfig(env = process.env) {
   if (env.DATABASE_URL && env.DSQL_ENDPOINT) problems.push("DATABASE_URL et DSQL_ENDPOINT sont exclusifs : choisir une seule base");
   // pas de valeur par défaut en production : derrière un répartiteur, « 0 » ferait partager à tous les visiteurs la même limite de débit
   if (production && (env.TRUST_PROXY === undefined || env.TRUST_PROXY === "")) problems.push("TRUST_PROXY : 0 (visiteurs directs), N (derrière N relais de confiance) ou cloudflare — à choisir explicitement, sinon tous les visiteurs partagent une même limite de débit");
+  // Espace Pro (vérification des garagistes) : coupé tant que PRO_ENABLED ne vaut pas 1. En production, il exige le groupe d'utilisateurs
+  // Cognito et de vrais envois (SES pour l'e-mail, Notify pour le SMS) ; l'envoi simulé et l'en-tête de développement y sont refusés.
+  const proEnabled = env.PRO_ENABLED === "1";
+  const proSender = env.PRO_SENDER || (production ? "aws" : "memory");
+  if (production && proEnabled) {
+    if (!/^[a-z]{2}(-[a-z]+)+-\d_[A-Za-z0-9]+$/.test(env.COGNITO_USER_POOL_ID || "")) problems.push("COGNITO_USER_POOL_ID : groupe d'utilisateurs Amazon Cognito des comptes pro (ex. eu-north-1_AbC123)");
+    if (!/^[a-z0-9]{10,64}$/i.test(env.COGNITO_CLIENT_ID || "")) problems.push("COGNITO_CLIENT_ID : client d'application Cognito de l'Espace Pro");
+    if (proSender !== "aws") problems.push("PRO_SENDER : « aws » attendu en production (l'envoi simulé n'envoie rien)");
+    if (!env.PRO_NOTIFY_CONFIGURATION_ID) problems.push("PRO_NOTIFY_CONFIGURATION_ID : configuration AWS End User Messaging Notify (SMS)");
+    if (env.PRO_DEV_AUTH === "1") problems.push("PRO_DEV_AUTH : interdit en production");
+  }
   if (problems.length) throw new Error("Configuration incomplète :\n  - " + problems.join("\n  - "));
 
   const trust = (env.TRUST_PROXY || "0").toLowerCase();
@@ -52,5 +63,28 @@ export function loadConfig(env = process.env) {
     moderation: env.MODERATION === "off" ? "off" : "auto",
     repairRetentionMonths: repairRetentionMonths(env),
     requestTimeoutMs: int(env.REQUEST_TIMEOUT_MS, 10_000, 1000),
+    pro: {
+      enabled: proEnabled,
+      userPoolId: env.COGNITO_USER_POOL_ID || "",
+      clientId: env.COGNITO_CLIENT_ID || "",
+      devAuth: !production && env.PRO_DEV_AUTH === "1", // en-tête x-pro-dev-account accepté à la place d'un jeton (développement seulement)
+      sender: proSender,
+      awsRegion: env.PRO_AWS_REGION || env.AWS_REGION || "eu-north-1",
+      emailFrom: env.PRO_EMAIL_FROM || "Pixcar <verification@pixcar.fr>",
+      contact: env.PRO_CONTACT || "contact@pixcar.fr",
+      notifyConfigurationId: env.PRO_NOTIFY_CONFIGURATION_ID || "",
+      notifyTemplateId: env.PRO_NOTIFY_TEMPLATE_ID || "notify-code-verification-french-009",
+      sesConfigurationSet: env.PRO_SES_CONFIGURATION_SET || "",
+      codeTtlSeconds: int(env.PRO_CODE_TTL_SECONDS, 600, 60),
+      maxAttempts: int(env.PRO_MAX_ATTEMPTS, 5, 1),
+      resendAfterSeconds: int(env.PRO_RESEND_AFTER_SECONDS, 60, 10),
+      maxSendsPerClaim: int(env.PRO_MAX_SENDS_PER_CLAIM, 3, 1),
+      maxPendingPerAccount: int(env.PRO_MAX_PENDING_PER_ACCOUNT, 3, 1),
+      sendsPerGaragePerDay: int(env.PRO_SENDS_PER_GARAGE_PER_DAY, 3, 1),
+      sendsPerAccountPerDay: int(env.PRO_SENDS_PER_ACCOUNT_PER_DAY, 5, 1),
+      sendsGlobalPerHour: int(env.PRO_SENDS_GLOBAL_PER_HOUR, 30, 1),
+      lookupsPerAccountPerHour: int(env.PRO_LOOKUPS_PER_ACCOUNT_PER_HOUR, 30, 1),
+      maxDistanceM: int(env.PRO_MAX_DISTANCE_M, 300, 50),
+    },
   };
 }

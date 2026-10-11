@@ -9,6 +9,10 @@
 lieux sur liste d'exclusion → réunion des doublons → retrait des lieux fermés d'après le registre SIRENE → écriture des tuiles → contrôle.
 Rien n'est publié : la sortie est un dossier, que `node scripts/build.mjs --garages <dossier>` joint au site (voir README).
 Aucune donnée d'entreprise individuelle du registre n'est écrite ; le rapport (sortie standard) ne contient que des agrégats.
+
+Espace Pro : --contacts-out <fichier> écrit EN PLUS, hors du dossier des tuiles, les contacts privés des garages publiés (e-mails, numéros, site),
+une ligne JSON par garage, que scripts/pro/push-contacts.mjs charge dans la base de l'API. Ce fichier ne doit jamais être publié ni versionné :
+à produire sur un poste de travail (dossier private/, ignoré par git), pas dans le workflow GitHub (ses artefacts sont lisibles par tous).
 """
 import argparse
 import datetime
@@ -81,7 +85,12 @@ def main(argv=None):
     ap.add_argument("--min-entries", type=int, default=0, help="échoue si la table compte moins de garages (garde contre une lecture partielle)")
     ap.add_argument("--built", default=None, help="date de construction AAAA-MM-JJ (par défaut : aujourd'hui, UTC)")
     ap.add_argument("--summary", help="fichier où écrire le résumé en Markdown (ex. $GITHUB_STEP_SUMMARY)")
+    ap.add_argument("--contacts-out", help="fichier PRIVÉ des contacts de l'Espace Pro (JSON Lines), hors du dossier --out ; jamais publié")
     a = ap.parse_args(argv)
+    if a.contacts_out:
+        out_abs, c_abs = os.path.abspath(a.out), os.path.abspath(a.contacts_out)
+        if os.path.commonpath([out_abs, c_abs]) == out_abs:
+            raise SystemExit("--contacts-out doit être hors du dossier --out : les tuiles sont publiées, les contacts jamais")
 
     t0 = time.time()
     lines = []
@@ -92,7 +101,7 @@ def main(argv=None):
     release = O.latest_release() if a.release == "auto" else a.release
     log("version d'Overture : %s" % release)
     poly = area_polygon(a.area, a.rough, release, log)
-    rows, scanned = O.read_places(poly, release, log)
+    rows, scanned = O.read_places(poly, release, log, with_emails=bool(a.contacts_out))
 
     records, invalid = [], 0
     for r in rows:
@@ -105,7 +114,8 @@ def main(argv=None):
     before = len(records)
     records = [r for r in records if r["id"] not in excl]
     excluded = before - len(records)
-    records, absorbed, too_big = T.merge_duplicates(records)
+    members = {}
+    records, absorbed, too_big = T.merge_duplicates(records, members_out=members)
 
     closure, missing, dropped = "none", [], []
     if a.sirene == "on":
@@ -122,6 +132,12 @@ def main(argv=None):
     meta = {"built": built, "source": "%s, thème places, version %s. %s" % ("Overture Maps", release.split("/")[-1], CREDIT), "closure": closure, "closure_missing": missing}
     stats = T.write_tiles(records, a.out, meta)
     problems = T.validate_dir(a.out, a.min_entries)
+    contact_line = None
+    if a.contacts_out:
+        contacts, cs = T.build_contacts(records, rows, members)
+        T.write_contacts(contacts, a.contacts_out)
+        contact_line = ("- Contacts privés (Espace Pro, fichier non publié) : %d garages ; e-mail %d, portable %d, site %d ; écartés car portés par plusieurs garages : "
+                        "%d e-mails, %d numéros." % (cs["garages"], cs["email"], cs["mobile"], cs["web"], cs["shared_emails"], cs["shared_phones"]))
 
     n = len(records)
     by_kind = {k: sum(1 for r in records if r["kind"] == k) for k in T.KIND_LETTERS}
@@ -137,6 +153,8 @@ def main(argv=None):
         "- %d cases, %.1f Ko en JSON, %.1f Ko compressé (gzip) ; la plus lourde : %s." % (stats["tiles"], stats["bytes"] / 1024, stats["gz"] / 1024,
             ", ".join("%s %.1f Ko gz" % (k, v[1] / 1024) for k, v in sorted(stats["sizes"].items(), key=lambda kv: -kv[1][1])[:1])),
     ]
+    if contact_line:
+        lines.append(contact_line)
     ids = []
     if a.probe:
         pl, ids = probe_lines(records, dropped, tuple(float(v) for v in a.probe.split(",")))

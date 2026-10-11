@@ -1,5 +1,6 @@
 """Lecture d'Overture Maps (thème « places ») sur S3, par plages d'octets : seuls les groupes de lignes (row groups) dont la boîte englobante touche la zone
-sont téléchargés. Le fichier est public, sans compte ni clé. Colonnes lues : celles dont la table a besoin, jamais les e-mails ni les réseaux sociaux.
+sont téléchargés. Le fichier est public, sans compte ni clé. Colonnes lues : celles dont la table a besoin, jamais les réseaux sociaux ; les e-mails
+seulement pour le fichier PRIVÉ des contacts de l'Espace Pro (build.py --contacts-out), jamais pour les tuiles publiées.
 """
 import time
 import urllib.parse
@@ -20,6 +21,7 @@ KINDS = {
     "auto_glass_service": "v",
 }
 COLUMNS = ["id", "names", "taxonomy", "confidence", "websites", "phones", "addresses", "sources", "bbox", "brand"]
+CONTACT_COLUMNS = COLUMNS + ["emails"]
 
 
 def _get(url, tries=4, timeout=60):
@@ -138,8 +140,9 @@ def keep_place(r, country="FR"):
     return not (country and addr.get("country") not in (country, None))
 
 
-def read_places(poly, release, log=print, country="FR"):
-    """Lieux de garage de la zone « poly » (forme shapely) : lignes brutes (dict) avec la position au centre de la boîte du lieu."""
+def read_places(poly, release, log=print, country="FR", with_emails=False):
+    """Lieux de garage de la zone « poly » (forme shapely) : lignes brutes (dict) avec la position au centre de la boîte du lieu.
+    with_emails : lit aussi la colonne des e-mails (fichier privé des contacts seulement)."""
     import numpy as np
     from shapely import contains_xy
 
@@ -151,7 +154,7 @@ def read_places(poly, release, log=print, country="FR"):
         hits = row_group_hits(fs, k, bbox)
         if not hits:
             continue
-        rows = read_groups(fs, k, hits, COLUMNS)
+        rows = read_groups(fs, k, hits, CONTACT_COLUMNS if with_emails else COLUMNS)
         scanned += len(rows)
         groups += len(hits)
         if not rows:

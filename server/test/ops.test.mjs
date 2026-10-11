@@ -32,7 +32,7 @@ describe("operations (Lambda « ops »)", () => {
   test("migrate applies the migrations once (nothing the second time); the database role is a DSQL matter and is skipped elsewhere", async () => {
     const first = await ops({ op: "migrate" });
     assert.equal(first.ok, true, first.error);
-    assert.deepEqual(first.applied, ["001_init.sql"]);
+    assert.deepEqual(first.applied, ["001_init.sql", "002_pro.sql"]);
     assert.ok(first.role.skipped);
     assert.deepEqual((await ops({ op: "migrate" })).applied, []);
   });
@@ -43,7 +43,7 @@ describe("operations (Lambda « ops »)", () => {
     assert.equal(stats.code, 0);
     assert.ok(Array.isArray(stats.lines));
     assert.equal((await ops({ op: "list" })).lines[0], "Rien en attente.");
-    assert.deepEqual((await ops({ op: "purge" })).deleted, { writeLog: 0, upstreamCache: 0, repairs: 0, garages: 0 });
+    assert.deepEqual((await ops({ op: "purge" })).deleted, { writeLog: 0, upstreamCache: 0, repairs: 0, garages: 0, proEvents: 0, proClaims: 0 });
   });
 
   test("purge erases the declarations older than REPAIR_RETENTION_MONTHS (24 months when it is not set), and keeps the others", async () => {
@@ -104,6 +104,44 @@ describe("operations (Lambda « ops »)", () => {
     assert.equal(out.passed, out.total);
     assert.ok(out.total >= 18);
     assert.equal((await db.query("SELECT count(*)::int AS n FROM garages WHERE id LIKE 'custom:selfcheck-%'")).rows[0].n, 0, "aucune donnée d'essai ne reste");
+  });
+
+  test("import-contacts writes a batch (rows checked one by one), prune-contacts removes what a complete load did not rewrite", async () => {
+    const row = (n, over = {}) => ({ id: `bbbbbbbb-0000-4000-8000-${String(n).padStart(12, "0")}`, name: `Garage ${n}`, lat: 43.2 + n / 1000, lon: 1.1, emails: [`g${n}@garage${n}.fr`], ...over });
+    const first = await ops({ op: "import-contacts", importId: "load-1", rows: [row(1), row(2), row(3), { id: "x", name: "?" }] });
+    assert.deepEqual([first.ok, first.written, first.rejected], [true, 3, 1]);
+    // second chargement complet : le garage 3 a disparu, le 2 a changé d'adresse
+    assert.equal((await ops({ op: "import-contacts", importId: "load-2", rows: [row(1), row(2, { emails: ["nouveau@garage2.fr"] })] })).written, 2);
+    const pruned = await ops({ op: "prune-contacts", importId: "load-2" });
+    assert.deepEqual([pruned.ok, pruned.removed, pruned.kept], [true, 1, 2]);
+    const left = (await db.query("SELECT garage_id, emails FROM garage_contacts ORDER BY garage_id")).rows;
+    assert.deepEqual(left.map((r) => r.emails), [["g1@garage1.fr"], ["nouveau@garage2.fr"]]);
+    // un chargement partiel ne peut pas effacer le reste
+    await ops({ op: "import-contacts", importId: "load-3", rows: [row(9)] });
+    const refused = await ops({ op: "prune-contacts", importId: "load-3" });
+    assert.equal(refused.ok, false);
+    assert.match(refused.error, /moins de la moitié/);
+    assert.equal((await db.query("SELECT count(*)::int AS n FROM garage_contacts")).rows[0].n, 3);
+    for (const bad of [{ importId: "load 4" }, { importId: "load-4", rows: [] }, { importId: "load-4", rows: Array(501).fill(row(1)) }, { importId: "x".repeat(41), rows: [row(1)] }])
+      assert.equal((await ops({ op: "import-contacts", ...bad })).ok, false, JSON.stringify(bad).slice(0, 60));
+    await db.exec("TRUNCATE garage_contacts");
+  });
+
+  test("pro-stats, pro-claims and pro-revoke: a verified link can be withdrawn, and the target is never shown", async () => {
+    const id = "bbbbbbbb-0000-4000-8000-0000000000aa";
+    await db.query(
+      "INSERT INTO pro_claims (id, account_id, garage_id, siret, status, channel, target, target_hash, target_hint, verified_at) VALUES (gen_random_uuid(), 'acc-1', $1, '73282932000074', 'verified', 'email', NULL, $2, 'c•••••@garage.fr', now())",
+      [id, "a".repeat(64)],
+    );
+    assert.deepEqual((await ops({ op: "pro-stats" })).claims, { verified: 1 });
+    const listed = await ops({ op: "pro-claims", garageId: id });
+    assert.equal(listed.claims.length, 1);
+    assert.equal(listed.claims[0].account_id, "acc-1");
+    assert.ok(!("target" in listed.claims[0]) && !("target_hash" in listed.claims[0]));
+    assert.equal((await ops({ op: "pro-revoke", garageId: id })).revoked, 1);
+    assert.equal((await ops({ op: "pro-revoke", garageId: id })).revoked, 0);
+    assert.equal((await ops({ op: "pro-claims", garageId: "pas un id" })).ok, false);
+    await db.exec("TRUNCATE pro_claims, pro_events");
   });
 
   test("a failing operation is reported in the answer (ok: false), not thrown at the platform", async () => {

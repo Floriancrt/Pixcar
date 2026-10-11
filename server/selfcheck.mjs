@@ -5,11 +5,16 @@
 // Écrit des données d'essai (garages « custom:selfcheck-… », empreinte d'adresse « 5e1fc4ec… ») et les supprime toutes à la fin.
 import { randomHex } from "./lib/crypto.mjs";
 import { createRepo } from "./repo.mjs";
+import { createProRepo } from "./pro-repo.mjs";
 
 const TEST_IP = "5e1fc4ec".repeat(8);
 const LAT = 0.5; // plein Atlantique : aucune vraie zone d'utilisateurs
 const LON = -20.5;
-const INDEXES = ["garages_area_idx", "repairs_garage_service_idx", "repairs_no_duplicate_idx", "repairs_pending_idx", "write_log_ip_idx", "write_log_at_idx"];
+const INDEXES = [
+  "garages_area_idx", "repairs_garage_service_idx", "repairs_no_duplicate_idx", "repairs_pending_idx", "write_log_ip_idx", "write_log_at_idx",
+  "garage_contacts_area_idx", "garage_contacts_domain_idx", "garage_contacts_import_idx", "pro_claims_account_idx", "pro_claims_garage_idx",
+  "pro_claims_one_owner_idx", "pro_events_garage_idx", "pro_events_account_idx", "pro_events_at_idx",
+];
 
 export async function selfcheck(db, { log = () => {} } = {}) {
   const repo = createRepo(db);
@@ -168,7 +173,54 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     expect((await count("SELECT count(*) AS n FROM repairs WHERE garage_id = $1", [garageB])) === 0, "plus aucune réparation");
   });
 
+  // ---- Espace Pro : contacts privés, demande, code, rattachement unique (garages « 5e1fc4ec-…-<tag> », comptes « selfcheck-<tag>-… »)
+  const pro = createProRepo(db);
+  const proGarage = `5e1fc4ec-0000-4000-8000-0000${tag}`;
+  const proGarage2 = `5e1fc4ec-0000-4000-8001-0000${tag}`;
+  const acc = (x) => `selfcheck-${tag}-${x}`;
+  const proLimits = { perGaragePerDay: 1000, perAccountPerDay: 1000, globalPerHour: 1_000_000 };
+  const claimA = crypto.randomUUID();
+  const claimB = crypto.randomUUID();
+  const newClaim = (id, who, codeHash) =>
+    pro.createClaim({ id, accountId: acc(who), garageId: proGarage, siret: "73282932000074", channel: "email", target: "selfcheck@example.invalid", targetHash: randomHex(32), targetHint: "s•••••@example.invalid", codeHash, ttlSeconds: 600, maxPending: 3, limits: proLimits });
+  await check("Espace Pro : contacts privés écrits par lot (jsonb), relus autour d'un point et par domaine", async () => {
+    const row = (garageId, n) => ({ garageId, name: "Garage d'auto-contrôle", addr: "", pc: "", lat: LAT + n / 10000, lon: LON, brand: false, emails: ["selfcheck@example.invalid"], phones: ["+33600000000"], webDomain: `selfcheck-${tag}.invalid` });
+    expect((await pro.upsertContacts([row(proGarage, 0), row(proGarage2, 1)], `selfcheck-${tag}`)) === 2, "2 lignes écrites");
+    expect((await pro.upsertContacts([row(proGarage, 0)], `selfcheck-${tag}`)) === 1, "mise à jour (ON CONFLICT DO UPDATE)");
+    const near = await pro.contactsNear({ lat: LAT, lon: LON, radiusM: 300 });
+    expect(near.some((g) => g.garage_id === proGarage && Array.isArray(g.emails) && g.emails[0] === "selfcheck@example.invalid"), "garage retrouvé avec ses e-mails");
+    expect((await pro.domainCount(`selfcheck-${tag}.invalid`)) === 2, "domaine porté par 2 garages");
+  });
+  await check("Espace Pro : demande créée avec son code, essai faux compté, nouveau code, bon code : garage rattaché", async () => {
+    expect((await newClaim(claimA, "a", "a".repeat(64))).kind === "created", "demande créée");
+    const bad = await pro.tryCode({ id: claimA, accountId: acc("a"), maxAttempts: 5, matches: async (h) => h === "f".repeat(64) });
+    expect(bad.kind === "bad" && bad.attemptsLeft === 4, "essai faux : " + JSON.stringify(bad));
+    const sent = await pro.resend({ id: claimA, accountId: acc("a"), codeHash: "b".repeat(64), ttlSeconds: 600, resendAfterSeconds: 0, maxSends: 3, limits: proLimits });
+    expect(sent.kind === "sent" && sent.target === "selfcheck@example.invalid", "nouveau code : " + sent.kind);
+    const ok = await pro.tryCode({ id: claimA, accountId: acc("a"), maxAttempts: 5, matches: async (h) => h === "b".repeat(64) });
+    expect(ok.kind === "verified", "rattaché : " + ok.kind);
+    const row = (await db.query("SELECT status, target, code_hash, attempts FROM pro_claims WHERE id = $1", [claimA])).rows[0];
+    expect(row.status === "verified" && row.target === null && row.code_hash === null, "cible et code effacés");
+  });
+  await check("Espace Pro : un second compte ne peut pas rattacher le même garage (index unique partiel)", async () => {
+    expect((await newClaim(claimB, "b", "c".repeat(64))).kind === "owned", "refusé à la création");
+    let refused = false;
+    try {
+      await db.query(
+        "INSERT INTO pro_claims (id, account_id, garage_id, siret, status, channel, target_hash, target_hint) VALUES ($1, $2, $3, '73282932000074', 'verified', 'email', $4, 'x')",
+        [claimB, acc("b"), proGarage, randomHex(32)],
+      );
+    } catch (e) {
+      refused = /^23/.test(String(e.code || "")) || /duplicate|unique/i.test(e.message);
+    }
+    expect(refused, "second compte vérifié refusé par la base");
+    expect((await pro.revoke(proGarage)) === 1 && !(await pro.verifiedOwner(proGarage)), "rattachement retiré");
+  });
+
   await check("nettoyage : plus aucune donnée d'essai", async () => {
+    await db.query("DELETE FROM pro_claims WHERE account_id LIKE $1", [`selfcheck-${tag}-%`]);
+    await db.query("DELETE FROM pro_events WHERE account_id LIKE $1", [`selfcheck-${tag}-%`]);
+    await db.query("DELETE FROM garage_contacts WHERE import_id = $1", [`selfcheck-${tag}`]);
     await db.query("DELETE FROM repairs WHERE garage_id LIKE 'custom:selfcheck-%'");
     await db.query("DELETE FROM garages WHERE id LIKE 'custom:selfcheck-%'");
     await db.query("DELETE FROM write_log WHERE ip_hash = $1", [TEST_IP]);

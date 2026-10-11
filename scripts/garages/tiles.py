@@ -125,8 +125,9 @@ def build_record(row, kinds):
 
 
 # ---------------------------------------------------------------------------------------------------------------------------- doublons
-def merge_duplicates(records, max_cluster=3):
-    """Réunit les lieux qui se recoupent (même nom à 150 m : règle de la page). Renvoie (liste, nombre de lieux absorbés, amas trop gros laissés tels quels)."""
+def merge_duplicates(records, max_cluster=3, members_out=None):
+    """Réunit les lieux qui se recoupent (même nom à 150 m : règle de la page). Renvoie (liste, nombre de lieux absorbés, amas trop gros laissés tels quels).
+    members_out (dict, facultatif) : reçoit, pour chaque fiche gardée qui en a absorbé d'autres, la liste des identifiants réunis (elle comprise)."""
     n = len(records)
     parent = list(range(n))
 
@@ -171,9 +172,79 @@ def merge_duplicates(records, max_cluster=3):
         src = "".join(sorted({c for m in members for c in m.get("src", "")}))
         if src:
             head["src"] = src
+        if members_out is not None:
+            members_out[head["id"]] = [m["id"] for m in members]
         out.append(head)
         absorbed += len(members) - 1
     return out, absorbed, too_big
+
+
+# ---------------------------------------------------------------------------------------------------------------------------- contacts privés (Espace Pro)
+_EMAIL = re.compile(r"^[a-z0-9](?:[a-z0-9._%+-]{0,62}[a-z0-9_%+-])?@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
+
+
+def clean_email(raw):
+    e = str(raw or "").strip().lower()
+    if e.startswith("mailto:"):
+        e = e[7:]
+    return e if len(e) <= 254 and ".." not in e and _EMAIL.match(e) else ""
+
+
+def build_contacts(records, rows, members=None):
+    """Contacts PRIVÉS des garages publiés (fichier de l'Espace Pro, jamais joint au site) : e-mails et numéros de toutes les fiches réunies,
+    site brut. Une adresse ou un numéro que portent deux garages (siège d'un réseau, standard commun) ne prouve rien : il est écarté.
+    Renvoie (contacts, statistiques agrégées)."""
+    by_id = {str(r["id"]): r for r in rows}
+    members = members or {}
+    draft = []
+    for rec in records:
+        src = [by_id[i] for i in members.get(rec["id"], [rec["id"]]) if i in by_id]
+        emails, phones = [], []
+        for r in src:
+            for e in r.get("emails") or []:
+                e = clean_email(e)
+                if e and e not in emails:
+                    emails.append(e)
+            for p in M.phone_parse([p for p in (r.get("phones") or []) if p]):
+                if p not in phones:
+                    phones.append(p)
+        web = ""
+        for r in src:
+            web = next((w for w in (r.get("websites") or []) if clean_site(w)), "")
+            if web:
+                break
+        addr = ", ".join(x for x in (rec.get("addr", ""), " ".join(x for x in (rec.get("pc", ""), rec.get("loc", "")) if x)) if x)
+        draft.append({"id": rec["id"], "name": rec["name"], "addr": addr[:240], "pc": rec.get("pc", ""), "lat": rec["lat"], "lon": rec["lon"],
+                      "brand": bool(rec.get("brand")), "emails": emails[:5], "phones": phones[:4], "web": clean_site(web)})
+    seen_e, seen_p = {}, {}
+    for c in draft:
+        for e in c["emails"]:
+            seen_e[e] = seen_e.get(e, 0) + 1
+        for p in c["phones"]:
+            seen_p[p] = seen_p.get(p, 0) + 1
+    out, shared_e, shared_p = [], 0, 0
+    for c in draft:
+        keep_e = [e for e in c["emails"] if seen_e[e] == 1]
+        keep_p = [p for p in c["phones"] if seen_p[p] == 1]
+        shared_e += len(c["emails"]) - len(keep_e)
+        shared_p += len(c["phones"]) - len(keep_p)
+        c = dict(c, emails=keep_e, phones=keep_p)
+        out.append({k: v for k, v in c.items() if v not in ("", [], False) or k in ("id", "name", "lat", "lon")})
+    mobile = re.compile(r"^\+33[67]\d{8}$")
+    stats = {"garages": len(out), "email": sum(1 for c in out if c.get("emails")), "mobile": sum(1 for c in out if any(mobile.match(p) for p in c.get("phones", []))),
+             "web": sum(1 for c in out if c.get("web")), "shared_emails": shared_e, "shared_phones": shared_p}
+    return out, stats
+
+
+def write_contacts(contacts, path):
+    """Écrit le fichier privé (une ligne JSON par garage), lisible par son seul propriétaire."""
+    d = os.path.dirname(os.path.abspath(path))
+    os.makedirs(d, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        for c in sorted(contacts, key=lambda c: c["id"]):
+            f.write(json.dumps(c, ensure_ascii=False, separators=(",", ":")) + "\n")
+    os.chmod(path, 0o600)
 
 
 # ---------------------------------------------------------------------------------------------------------------------------- établissements fermés
