@@ -55,7 +55,7 @@
           <div class="sum-line" id="searchSum">
             <p class="sum-where">
               <svg class="ic" aria-hidden="true"><use href="#i-pin" /></svg>
-              <span class="sum-txt"><b id="sumWhere"></b><span id="sumSvc"></span></span>
+              <span class="sum-txt"><b id="sumWhere" data-cs-mask></b><span id="sumSvc"></span></span>
             </p>
             <button type="button" class="btn" id="editSearch" aria-expanded="false" aria-controls="searchForm" aria-label="Modifier la recherche">
               <svg class="ic" aria-hidden="true"><use href="#i-edit" /></svg><span class="lbl-edit">Modifier</span>
@@ -71,7 +71,7 @@
             <select id="service" class="svc-select" tabindex="-1" aria-hidden="true" hidden><!--SERVICE_OPTIONS--></select>
             <p class="hint svc-hint" id="serviceHint"><!--SERVICE_HINT--></p>
           </div>
-          <div class="field addr-field full-only" id="addrField">
+          <div class="field addr-field full-only" id="addrField" data-cs-mask>
             <label for="address">Où</label>
             <div class="addr">
               <svg class="ic f-ic" aria-hidden="true"><use href="#i-pin" /></svg>

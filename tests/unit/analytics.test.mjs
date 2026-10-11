@@ -1,11 +1,12 @@
-// Mesure d'audience : les fonctions pures de modules/analytics.js (identifiant, validité du choix, cookies de Google). Le comportement dans le
+// Mesure d'audience : les fonctions pures de modules/analytics.js (identifiants Google et Contentsquare, validité du choix, cookies). Le comportement dans le
 // navigateur (bandeau, chargement après accord, retrait) est vérifié par tests/consent.js.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { CHOICE_DAYS, CHOICE_KEY, COOKIE_SECONDS, cookieDomains, googleCookieNames, initAnalytics, measurementId, readChoice, saveChoice } from "../../src/js/modules/analytics.js";
+import { CHOICE_DAYS, CHOICE_KEY, COOKIE_SECONDS, contentsquareCookieNames, contentsquareId, cookieDomains, googleCookieNames, initAnalytics, measurementId, readChoice, saveChoice } from "../../src/js/modules/analytics.js";
 
 const DAY = 864e5;
 const docWith = (content) => ({ querySelector: (sel) => (sel === 'meta[name="pixcar-analytics"]' && content !== undefined ? { content } : null) });
+const csDocWith = (content) => ({ querySelector: (sel) => (sel === 'meta[name="pixcar-contentsquare"]' && content !== undefined ? { content } : null) });
 const storeWith = (value) => ({ getItem: (k) => (k === CHOICE_KEY ? (value === undefined ? null : typeof value === "string" ? value : JSON.stringify(value)) : null) });
 const NOW = 1_800_000_000_000;
 
@@ -24,6 +25,16 @@ describe("measurementId", () => {
   });
   test("absent, vide ou mal formé : chaîne vide (aucune mesure)", () => {
     for (const bad of [undefined, "", "UA-12345-1", "g-abc123", "G-abc123", "G-AB", "G-ABCDEFGHIJKLM", "G-ABC 123", "G-ABC123;alert(1)", "https://www.googletagmanager.com/gtag/js?id=G-ABC123"]) assert.equal(measurementId(docWith(bad)), "", String(bad));
+  });
+});
+
+describe("contentsquareId", () => {
+  test("l'identifiant du tag (nom du fichier t.contentsquare.net/uxa/<identifiant>.js) est repris, espaces autour retirés", () => {
+    assert.equal(contentsquareId(csDocWith("cdb4789d71fe2")), "cdb4789d71fe2");
+    assert.equal(contentsquareId(csDocWith("  abc123def4567 ")), "abc123def4567");
+  });
+  test("absent, vide ou mal formé (majuscules, chemin, trop court ou trop long) : chaîne vide, aucun tag", () => {
+    for (const v of [undefined, "", "CDB4789D71FE2", "abc/../x", "cdb4789d71fe2.js", "abc123", "a".repeat(21), "cdb4789d71fe2?x=1", "javascript:1"]) assert.equal(contentsquareId(csDocWith(v)), "", String(v));
   });
 });
 
@@ -86,6 +97,17 @@ describe("googleCookieNames", () => {
   });
 });
 
+describe("contentsquareCookieNames", () => {
+  test("repère tous les cookies « _cs_… » (_cs_id, _cs_s, _cs_c, _cs_optout…), pas les autres", () => {
+    assert.deepEqual(contentsquareCookieNames("a=1; _cs_id=1.2; _cs_s=1.0; _cs_c=1; _cs_optout=1; _cs_root-domain=pixcar.fr; _ga=1; cs_id=2; _csx=3; x_cs_id=4"), ["_cs_id", "_cs_s", "_cs_c", "_cs_optout", "_cs_root-domain"]);
+  });
+  test("un nom une seule fois, rien quand il n'y a rien", () => {
+    assert.deepEqual(contentsquareCookieNames("_cs_id=1; _cs_id=2"), ["_cs_id"]);
+    assert.deepEqual(contentsquareCookieNames(""), []);
+    assert.deepEqual(contentsquareCookieNames("_ga=1; _gid=2"), []);
+  });
+});
+
 describe("cookieDomains", () => {
   test("du nom complet au domaine enregistrable, jamais le suffixe seul", () => {
     assert.deepEqual(cookieDomains("www.pixcar.fr"), ["www.pixcar.fr", "pixcar.fr"]);
@@ -103,5 +125,7 @@ describe("initAnalytics", () => {
     assert.equal(initAnalytics(docWith(""), {}), null);
     assert.equal(initAnalytics(docWith(undefined), {}), null);
     assert.equal(initAnalytics(docWith("G-ABC123"), undefined), null);
+    assert.equal(initAnalytics(csDocWith(""), {}), null);
+    assert.equal(initAnalytics(csDocWith("cdb4789d71fe2"), undefined), null);
   });
 });

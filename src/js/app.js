@@ -2832,7 +2832,7 @@ import { SERVICES } from "./shared/services.js";
   function rb(e) {
     return me.place && Number.isFinite(e.dist)
       ? `<div class="route" role="group" aria-label="Trajet à vol d'oiseau">
-      <div class="r-step r-from"><span class="r-lbl">Votre adresse</span><span class="r-val">${y(me.place.label || "Adresse de recherche")}</span></div>
+      <div class="r-step r-from"><span class="r-lbl">Votre adresse</span><span class="r-val" data-cs-mask>${y(me.place.label || "Adresse de recherche")}</span></div>
       <div class="r-step r-to"><span class="r-lbl">${"ct" === me.kind ? "Centre" : "Garage"}</span><span class="r-val" data-ad="${y(e.id)}" aria-live="polite"${adTitleAttr(e)}>${adHtml(e)}</span></div>
       <span class="r-dist">${y(E(e.dist))} à vol d'oiseau</span>
     </div>`

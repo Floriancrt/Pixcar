@@ -10,6 +10,11 @@
 // Actif seulement si la page porte <meta name="pixcar-analytics" content="G-…"> (renseignée au build : src/analytics.json pour la version
 // publiée, ou PIXCAR_GA_ID, voir scripts/build.mjs) ; sinon ce module ne fait rien : la page ouverte depuis le disque, le développement et
 // les tests n'envoient rien à Google.
+//
+// Contentsquare (analyse de l'utilisation des pages : clics, défilements, enregistrement des sessions) suit le même choix : son tag
+// (t.contentsquare.net/uxa/<identifiant>.js, <meta name="pixcar-contentsquare">) n'est ajouté qu'après l'accord ; un refus lui demande de
+// s'arrêter (commande « optout ») et supprime ses cookies « _cs_… » (sauf _cs_optout, qui ne garde que le refus). Les deux outils peuvent
+// être branchés séparément : le bandeau existe dès qu'il y en a un.
 
 export const CHOICE_KEY = "jg.consent.v1";
 export const CHOICE_DAYS = 183; // six mois : durée de validité d'un choix (accepté ou refusé), ensuite on redemande
@@ -17,6 +22,8 @@ export const COOKIE_SECONDS = 34128000; // 395 jours (13 mois) : la durée maxim
 const ID_FORMAT = /^G-[A-Z0-9]{6,12}$/;
 const DAY = 864e5;
 const LIBRARY = "https://www.googletagmanager.com/gtag/js?id=";
+const CS_FORMAT = /^[0-9a-f]{8,20}$/;
+const CS_TAG = "https://t.contentsquare.net/uxa/";
 const LABEL = { granted: "accepté", denied: "refusé", unset: "pas encore fait" };
 
 // Identifiant de mesure (« G-XXXXXXXXXX ») lu dans la page ; vide s'il manque ou n'a pas la bonne forme.
@@ -24,6 +31,13 @@ export function measurementId(doc = document) {
   const meta = doc.querySelector('meta[name="pixcar-analytics"]');
   const id = String((meta && meta.content) || "").trim();
   return ID_FORMAT.test(id) ? id : "";
+}
+
+// Identifiant du tag Contentsquare lu dans la page (le nom du fichier du tag) ; vide s'il manque ou n'a pas la bonne forme.
+export function contentsquareId(doc = document) {
+  const meta = doc.querySelector('meta[name="pixcar-contentsquare"]');
+  const id = String((meta && meta.content) || "").trim();
+  return CS_FORMAT.test(id) ? id : "";
 }
 
 // Choix gardé : « granted », « denied », ou null (jamais répondu, plus vieux que six mois, daté du futur, illisible).
@@ -56,6 +70,15 @@ export function googleCookieNames(cookieString) {
   return [...new Set(names)];
 }
 
+// Noms des cookies de Contentsquare présents dans document.cookie : tous commencent par « _cs_ » (_cs_id, _cs_s, _cs_c, _cs_optout…).
+export function contentsquareCookieNames(cookieString) {
+  const names = String(cookieString)
+    .split(";")
+    .map((part) => part.split("=")[0].trim())
+    .filter((name) => /^_cs_[A-Za-z0-9_.-]+$/.test(name));
+  return [...new Set(names)];
+}
+
 // Domaines où Google a pu déposer un cookie : « www.pixcar.fr » → www.pixcar.fr, pixcar.fr (jamais « fr »). Rien pour une adresse IP ni « localhost ».
 export function cookieDomains(hostname) {
   const host = String(hostname || "").toLowerCase();
@@ -68,7 +91,8 @@ export function cookieDomains(hostname) {
 
 export function initAnalytics(doc = document, win = typeof window === "undefined" ? undefined : window) {
   const id = win ? measurementId(doc) : "";
-  if (!id) return null;
+  const csId = win ? contentsquareId(doc) : "";
+  if (!id && !csId) return null;
   let storage = null;
   try {
     storage = win.localStorage;
@@ -80,6 +104,7 @@ export function initAnalytics(doc = document, win = typeof window === "undefined
   let choice = storage ? readChoice(storage) : null;
   let shown = choice === null; // bandeau affiché tant que le visiteur n'a rien décidé
   let loaded = false;
+  let csLoaded = false;
   let returnTo = null;
 
   const render = () => {
@@ -92,7 +117,7 @@ export function initAnalytics(doc = document, win = typeof window === "undefined
   // Accord : l'extrait de Google, à l'identique (consent par défaut en plus : seule la mesure d'audience est permise, ni publicité ni profils),
   // puis le chargement de gtag.js. Une seconde acceptation dans la même page rallume l'envoi sans recharger la bibliothèque.
   const params = { cookie_expires: COOKIE_SECONDS, allow_google_signals: false, allow_ad_personalization_signals: false };
-  const enable = () => {
+  const enableGoogle = () => {
     win["ga-disable-" + id] = false;
     if (loaded) {
       win.gtag("consent", "update", { analytics_storage: "granted" });
@@ -113,14 +138,42 @@ export function initAnalytics(doc = document, win = typeof window === "undefined
     doc.head.appendChild(script);
   };
 
-  // Refus ou retrait : l'envoi est coupé (l'interrupteur officiel « ga-disable-<identifiant> »), les cookies de Google sont supprimés.
-  const disable = () => {
-    win["ga-disable-" + id] = true;
-    if (loaded) win.gtag("consent", "update", { analytics_storage: "denied" });
-    const hosts = cookieDomains(win.location && win.location.hostname);
-    for (const name of googleCookieNames(doc.cookie)) {
+  // Contentsquare : la file de commandes « _uxa » (le tag la lit à son arrivée), le consentement donné (utile si le projet Contentsquare
+  // l'exige avant de mesurer), puis le tag. Après un refus (ici ou à une visite précédente : cookie _cs_optout), « optin » le relance.
+  const enableContentsquare = () => {
+    const queue = (win._uxa = win._uxa || []);
+    if (csLoaded || contentsquareCookieNames(doc.cookie).includes("_cs_optout")) queue.push(["optin"]);
+    queue.push(["trackConsentGranted"]);
+    if (csLoaded) return;
+    csLoaded = true;
+    const script = doc.createElement("script");
+    script.async = true;
+    script.src = CS_TAG + csId + ".js";
+    doc.head.appendChild(script);
+  };
+  const enable = () => {
+    if (id) enableGoogle();
+    if (csId) enableContentsquare();
+  };
+
+  const forget = (names, hosts) => {
+    for (const name of names) {
       doc.cookie = `${name}=; Max-Age=0; Path=/`;
       for (const host of hosts) doc.cookie = `${name}=; Max-Age=0; Path=/; Domain=${host}`;
+    }
+  };
+  // Refus ou retrait : l'envoi est coupé (l'interrupteur officiel « ga-disable-<identifiant> » ; la commande « optout » de Contentsquare),
+  // les cookies des deux outils sont supprimés (sauf _cs_optout, posé par « optout » : il ne contient que le refus).
+  const disable = () => {
+    const hosts = cookieDomains(win.location && win.location.hostname);
+    if (id) {
+      win["ga-disable-" + id] = true;
+      if (loaded) win.gtag("consent", "update", { analytics_storage: "denied" });
+      forget(googleCookieNames(doc.cookie), hosts);
+    }
+    if (csId) {
+      if (csLoaded) (win._uxa = win._uxa || []).push(["optout"]);
+      forget(contentsquareCookieNames(doc.cookie).filter((name) => name !== "_cs_optout"), hosts);
     }
   };
 
@@ -160,5 +213,5 @@ export function initAnalytics(doc = document, win = typeof window === "undefined
 
   if (choice === "granted") enable();
   render();
-  return { id, choice: () => choice };
+  return { id, csId, choice: () => choice };
 }

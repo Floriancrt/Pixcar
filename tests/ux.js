@@ -101,7 +101,7 @@ async function cornerDiff(browser, page, selector, radius, inset) {
     check("T4 the sentence is on screen, between the title and the search card", await page.evaluate(() => { const r = document.querySelector(".hero-sub").getBoundingClientRect(), h = document.getElementById("garagesTitle").getBoundingClientRect(), f = document.getElementById("searchForm").getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.right <= innerWidth && r.bottom <= innerHeight && r.top >= h.bottom - 1 && r.bottom <= f.top + 1; }));
     const html = await page.content();
     check("T5 old sentences are gone", !html.includes("Choisissez une prestation et une adresse") && !html.includes("Comparez le prix d'une prestation autour de votre adresse"));
-    check("T6 page title and meta description unchanged", (await page.title()) === "Pixcar" && /comparez le prix d'une prestation/.test(await page.getAttribute('meta[name="description"]', "content")));
+    check("T6 page title Pixcar, meta description the one shown by search engines", (await page.title()) === "Pixcar" && (await page.getAttribute('meta[name="description"]', "content")) === "1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto.");
     check("T7 console clean", logs.console.length === 0 && logs.errors.length === 0, JSON.stringify([logs.console, logs.errors]));
     await ctx.close();
     ({ page, ctx } = await open(browser, server, FILE, { width: 390, height: 844, dpr: 2, touch: true }));
@@ -220,6 +220,35 @@ async function cornerDiff(browser, page, selector, radius, inset) {
       }
       await ctx.close();
     }
+    // en-tête des résultats (ordinateur) : la recherche prend la place libre entre le logo et « Prix et promos », sans rien chevaucher ;
+    // l'adresse en a la plus grande part, et une adresse longue y tient en entier dès 1440 px
+    const LONG = "12 Rue de la République, 69002 Lyon";
+    for (const w of [1024, 1280, 1440, 1920]) {
+      ({ page, ctx } = await open(browser, server, FILE, { width: w, height: 900 }));
+      await search(page, { service: "vidange" });
+      const hd = await page.evaluate((long) => {
+        const r = (sel) => { const b = document.querySelector(sel).getBoundingClientRect(); return { l: Math.round(b.left), r: Math.round(b.right), w: Math.round(b.width), t: Math.round(b.top), b: Math.round(b.bottom) }; };
+        const a = document.getElementById("address");
+        a.value = long;
+        return { brand: r(".topbar .brand"), search: r("#searchForm"), addr: r(".search .addr-field"), svc: r(".search .svc-field"), rad: r(".search .radius-field"), tab: r('.topbar .tab:not([aria-current="page"])'), add: r("#addRepairBtn"), cut: a.scrollWidth > a.clientWidth + 1, vw: innerWidth };
+      }, LONG);
+      const clear = hd.search.l >= hd.brand.r + 16 && hd.search.r <= hd.tab.l - 16 && hd.tab.r <= hd.add.l && hd.add.r <= hd.vw;
+      const share = hd.addr.w > hd.svc.w && hd.addr.w > hd.rad.w && hd.addr.w >= 0.4 * hd.search.w;
+      check(`H16 [${w} px] header search between the logo and « Prix et promos », nothing overlaps; the address has the largest share${w >= 1440 ? " and a long address fits whole" : ""}`, clear && share && (w < 1440 || !hd.cut), JSON.stringify(hd));
+      await ctx.close();
+    }
+    // mobile, fiche ouverte : le trait du détail passe sous le bouton « Appeler » et sous la jauge, au lieu de les prolonger
+    ({ page, ctx } = await open(browser, server, FILE, { width: 390, height: 844, dpr: 2, touch: true }));
+    await search(page, { service: "vidange" });
+    await page.click("#list > li:nth-child(1) .g-main");
+    await page.waitForTimeout(500);
+    const sep = await page.evaluate(() => {
+      const c = document.querySelector("#list > li:nth-child(1)"), more = c.querySelector(".g-more"), call = c.querySelector(".g-actions"), bar = c.querySelector(".g-price .bar"), price = c.querySelector(".g-price");
+      const line = more.getBoundingClientRect().top, bt = call.getBoundingClientRect(), pr = price.getBoundingClientRect();
+      return { open: !more.hidden, line: Math.round(line), callBottom: Math.round(bt.bottom), barBottom: bar ? Math.round(bar.getBoundingClientRect().bottom) : null, priceBottom: Math.round(pr.bottom), border: getComputedStyle(more).borderTopWidth, barBesidePrice: bar ? bar.getBoundingClientRect().right <= bt.left : null };
+    });
+    check("H17 mobile, open row: the detail's line runs at least 14 px under « Appeler » and under the price gauge (it no longer continues the gauge), the gauge stays beside the button", sep.open && sep.border === "1px" && sep.line - sep.callBottom >= 14 && sep.barBottom !== null && sep.line - sep.barBottom >= 14 && sep.barBesidePrice, JSON.stringify(sep));
+    await ctx.close();
   } catch (e) {
     check("H section crashed", false, e && e.message);
   }

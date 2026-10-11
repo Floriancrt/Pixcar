@@ -21,7 +21,8 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
     let { page, ctx, logs } = await open(browser, server, FILE, { width: 1440, height: 900, colorScheme: scheme });
     const head = await page.evaluate(() => ({
       title: document.title,
-      icon: (document.querySelector('link[rel="icon"]') || {}).href || "",
+      icon: (document.querySelector('link[rel="icon"][type="image/svg+xml"]') || {}).href || "",
+      ico: (document.querySelector('link[rel="icon"][sizes="48x48"]') || {}).href || "",
       touch: (document.querySelector('link[rel="apple-touch-icon"]') || {}).href || "",
       themeColors: [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.content),
       sprite: (document.getElementById("px-mark") || { querySelector: () => null }).querySelector("path") && document.getElementById("px-mark").querySelector("path").getAttribute("d"),
@@ -36,6 +37,17 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
           return /<svg/.test(svg) && /<path/.test(svg) && png[0] === 0x89 && png[1] === 0x50 && png[2] === 0x4e && png[3] === 0x47;
         }, [head.icon, head.touch]);
     check(`${T}2 favicon is an SVG holding the symbol (data URI, or favicon.svg), apple-touch-icon a PNG`, iconsOk, head.icon.slice(0, 60));
+    // site publiable : favicon.ico (16, 32, 48 px, images PNG) pour les robots qui demandent /favicon.ico (Google retient 48 px au moins)
+    // (lu sur le disque : Playwright abandonne toute requête */favicon.ico de la page dès qu'une route est active)
+    const ico = /^data:/.test(head.icon)
+      ? head.ico === ""
+      : (() => {
+          if (!/\/favicon\.ico$/.test(head.ico)) return false;
+          const b = fs.readFileSync(path.join(ROOT, process.env.PIXCAR_ROOT || "", decodeURIComponent(new URL(head.ico).pathname))), n = b.readUInt16LE(4), sizes = [];
+          for (let i = 0; i < n; i++) sizes.push(b[6 + 16 * i]);
+          return b.readUInt16LE(2) === 1 && sizes.join() === "16,32,48" && b[b.readUInt32LE(6 + 16 * 2 + 12)] === 0x89;
+        })();
+    check(`${T}2b favicon.ico next to the SVG on the publishable site (16, 32 and 48 px); none in the all-in-one page`, ico, head.ico.slice(0, 60));
     check(`${T}3 a single theme-color, the black of the header (#111216)`, head.themeColors.length === 1 && head.themeColors[0] === "#111216", JSON.stringify(head.themeColors));
     check(`${T}4 symbol path has 16 sectors, an arc pair each`, head.sprite && (head.sprite.match(/M/g) || []).length === 16 && (head.sprite.match(/A/g) || []).length === 32, head.sprite && head.sprite.slice(0, 80));
     const brand = await page.evaluate(() => {

@@ -36,7 +36,7 @@
               déclaration depuis son navigateur. Ni l'immatriculation ni l'adresse IP ne sont conservées en clair.
             </li>
             <li>
-              <b>Rien d'autre</b>&nbsp;: ni nom, ni adresse électronique, ni compte<!--GA:off-->, ni cookie<!--/GA:off-->.
+              <b>Rien d'autre</b>&nbsp;: ni nom, ni adresse électronique, ni compte<!--AU:off-->, ni cookie<!--/AU:off-->.
             </li>
           </ul>
           <p>
@@ -78,7 +78,7 @@
         <section aria-labelledby="lg-third">
           <h3 id="lg-third">Services que votre navigateur contacte</h3>
           <p>
-            Pixcar ne vend <!--GA:off-->ni ne partage <!--/GA:off--><!--GA:on-->pas <!--/GA:on-->vos données. Pour afficher la page, la carte et les garages, votre navigateur
+            Pixcar ne vend <!--AU:off-->ni ne partage <!--/AU:off--><!--AU:on-->pas <!--/AU:on-->vos données. Pour afficher la page, la carte et les garages, votre navigateur
             contacte directement ces services, qui voient son adresse IP et ce qu'il leur demande&nbsp;:
           </p>
           <ul>
@@ -117,6 +117,9 @@
               Google (Google Analytics), seulement si vous acceptez la mesure d'audience (voir «&nbsp;Mesure d'audience&nbsp;»
               ci-dessous).
             </li><!--/GA:on-->
+            <!--CS:on--><li>
+              Contentsquare, seulement si vous acceptez la mesure d'audience (voir «&nbsp;Mesure d'audience&nbsp;» ci-dessous).
+            </li><!--/CS:on-->
           </ul>
           <p>Chacun applique sa propre politique de confidentialité.</p>
           <!--GT:on-->
@@ -127,15 +130,18 @@
           </p>
           <!--/GT:on-->
         </section>
-        <!--GA:on-->
+        <!--AU:on-->
         <section aria-labelledby="lg-audience">
-          <h3 id="lg-audience">Mesure d'audience (Google Analytics)</h3>
+          <h3 id="lg-audience">Mesure d'audience ({{au.tools}})</h3>
           <p>
-            Pour savoir combien de personnes visitent Pixcar et quelles pages elles consultent, l'éditeur utilise Google
-            Analytics, un service de Google Ireland Limited (Irlande) et de Google LLC (États-Unis),
-            <b>seulement si vous l'acceptez</b>. Tant que vous n'avez pas répondu, ou si vous refusez, aucun cookie n'est
-            déposé et rien n'est envoyé à Google.
+            Pour savoir combien de personnes visitent Pixcar et quelles pages elles consultent<!--CS:on-->, et pour voir comment ces
+            pages sont utilisées<!--/CS:on-->, l'éditeur utilise {{au.tools}}, <b>seulement si vous l'acceptez</b>. Tant que vous
+            n'avez pas répondu, ou si vous refusez, aucun cookie n'est déposé et rien n'est envoyé à {{au.recipients}}.<!--GA:on--><!--CS:on-->
+            Un seul choix vaut pour les deux.<!--/CS:on--><!--/GA:on-->
           </p>
+          <!--GA:on-->
+          <h4>Google Analytics</h4>
+          <p>Un service de Google Ireland Limited (Irlande) et de Google LLC (États-Unis).</p>
           <ul>
             <li>
               <b>Ce que Google reçoit</b>&nbsp;: l'adresse IP de votre navigateur, la page consultée et sa provenance, la
@@ -169,6 +175,45 @@
               écrivant à <a href="mailto:{{legal.contact}}">{{legal.contact}}</a>.
             </li>
           </ul>
+          <!--/GA:on-->
+          <!--CS:on-->
+          <h4>Contentsquare</h4>
+          <p>Un service de Contentsquare SAS (France).</p>
+          <ul>
+            <li>
+              <b>Ce que Contentsquare reçoit</b>&nbsp;: l'adresse IP de votre navigateur, les pages consultées, vos clics,
+              défilements et mouvements dans la page, ce que la page affiche (pour pouvoir rejouer la visite), des informations sur
+              votre appareil et votre navigateur, et un identifiant tiré au hasard, gardé dans un cookie. L'adresse que vous cherchez
+              et le formulaire de déclaration (immatriculation comprise) sont masqués&nbsp;: ils ne lui sont pas envoyés.
+            </li>
+            <li>
+              <b>Cookies</b>&nbsp;: <code>_cs_id</code>, <code>_cs_s</code> et <code>_cs_c</code>, déposés après votre accord,
+              13&nbsp;mois au plus&nbsp;; <code>_cs_optout</code> ne garde que votre refus.
+            </li>
+            <li>
+              <b>À quoi ça sert</b>&nbsp;: comprendre comment les pages sont utilisées (où l'on clique, jusqu'où l'on fait défiler,
+              ce qui gêne), avec des cartes de clics et le revisionnage de visites, pour améliorer le site. Pour l'éditeur seul&nbsp;:
+              aucune publicité.
+            </li>
+            <li>
+              <b>Combien de temps</b>&nbsp;: Contentsquare garde ces données {{cs.retentionMonths}}&nbsp;mois au plus. Votre choix est
+              gardé six mois dans votre navigateur, puis redemandé.
+            </li>
+            <li>
+              <b>Base légale</b>&nbsp;: votre consentement (RGPD, article 6, paragraphe 1, point a). Vous pouvez le retirer à tout
+              moment, sans rien perdre du site&nbsp;: refuser arrête Contentsquare et supprime ses cookies.
+            </li>
+            <li>
+              <b>Où</b>&nbsp;: les lieux où Contentsquare traite ces données et ses garanties sont décrits dans sa politique de
+              confidentialité.
+            </li>
+            <li>
+              <b>Vos droits</b>&nbsp;: accès, effacement, opposition (voir «&nbsp;Vos droits&nbsp;» plus bas). Pixcar ne peut pas
+              retrouver ces données sans l'identifiant de votre cookie <code>_cs_id</code>&nbsp;: indiquez-le en écrivant à
+              <a href="mailto:{{legal.contact}}">{{legal.contact}}</a>.
+            </li>
+          </ul>
+          <!--/CS:on-->
           <p>
             Votre choix&nbsp;: <b data-consent-label aria-live="polite">pas encore fait</b>.
           </p>
@@ -177,14 +222,14 @@
             <button type="button" class="btn" data-consent="grant" aria-pressed="false">Accepter</button>
           </p>
         </section>
-        <!--/GA:on-->
+        <!--/AU:on-->
         <section aria-labelledby="lg-local">
           <h3 id="lg-local">Dans votre navigateur</h3>
           <p>
-            <!--GA:off-->Pixcar n'utilise aucun cookie.<!--/GA:off--><!--GA:on-->Pixcar ne dépose lui-même aucun cookie&nbsp;;
-            seule la mesure d'audience, si vous l'acceptez, en dépose (voir «&nbsp;Mesure d'audience&nbsp;» plus haut).<!--/GA:on-->
-            Il garde dans le stockage de votre navigateur&nbsp;: vos préférences<!--GA:on--> (dont votre choix sur la mesure
-            d'audience)<!--/GA:on-->, votre dernière recherche, des copies de réponses (adresses, garages, logos), le véhicule saisi et vos réparations
+            <!--AU:off-->Pixcar n'utilise aucun cookie.<!--/AU:off--><!--AU:on-->Pixcar ne dépose lui-même aucun cookie&nbsp;;
+            seule la mesure d'audience, si vous l'acceptez, en dépose (voir «&nbsp;Mesure d'audience&nbsp;» plus haut).<!--/AU:on-->
+            Il garde dans le stockage de votre navigateur&nbsp;: vos préférences<!--AU:on--> (dont votre choix sur la mesure
+            d'audience)<!--/AU:on-->, votre dernière recherche, des copies de réponses (adresses, garages, logos), le véhicule saisi et vos réparations
             déclarées<span data-store-only="remote">, avec le jeton qui permet de les retirer</span>.
             <span data-store-only="local">Elles restent dans ce navigateur&nbsp;: rien n'est envoyé à Pixcar.</span>
             Un service worker garde une copie de la page pour qu'elle s'ouvre sans connexion. Vous pouvez tout effacer
@@ -211,7 +256,7 @@
             garage, depuis le navigateur qui l'a envoyée.
           </p>
           <p data-store-only="local">
-            Pixcar ne reçoit aucune donnée vous concernant<!--GA:on--> (hors mesure d'audience, si vous l'acceptez)<!--/GA:on-->&nbsp;: vos réparations et vos préférences restent dans votre
+            Pixcar ne reçoit aucune donnée vous concernant<!--AU:on--> (hors mesure d'audience, si vous l'acceptez)<!--/AU:on-->&nbsp;: vos réparations et vos préférences restent dans votre
             navigateur (l'hébergeur des pages peut tenir ses propres journaux techniques). Il n'y a donc rien à consulter,
             corriger ou effacer chez Pixcar&nbsp;; ce que garde votre navigateur se vide dans ses réglages. Une question&nbsp;:
             <a href="mailto:{{legal.contact}}">{{legal.contact}}</a>.

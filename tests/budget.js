@@ -66,7 +66,7 @@ check(`B5 main font ≤ ${BUDGET.font} Ko`, size.font <= BUDGET.font * KB, kb(si
 const critical = size.page + size.js + size.font;
 check(`B6 everything a first visit needs before it is usable ≤ ${BUDGET.critical} Ko (now ${kb(critical)})`, critical <= BUDGET.critical * KB, kb(critical));
 check(`B7 service worker ≤ ${BUDGET.sw} Ko`, size.sw <= BUDGET.sw * KB, kb(size.sw));
-check(`B8 icons stay small`, read("apple-touch-icon.png").length <= BUDGET.icon * KB && read("favicon.svg").length <= 5 * KB);
+check(`B8 icons stay small`, read("apple-touch-icon.png").length <= BUDGET.icon * KB && read("favicon.svg").length <= 5 * KB && read("favicon.ico").length <= 10 * KB);
 const single = gz(fs.readFileSync(path.join(ROOT, "index.html")));
 check(`B9 the all-in-one page ≤ ${BUDGET.single} Ko gzip (now ${kb(single)})`, single <= BUDGET.single * KB, kb(single));
 
@@ -92,6 +92,7 @@ const rules = parseHeaders(path.join(DIST, "_headers"));
 const headersFor = (p) => Object.assign({}, ...rules.filter((r) => r.re.test(p)).map((r) => r.headers));
 const csp = headersFor("/")["content-security-policy"] || "";
 check("B19 hashed assets: cached a year, immutable", /max-age=31536000/.test(headersFor("/assets/app.x.js")["cache-control"]) && /immutable/.test(headersFor("/assets/app.x.js")["cache-control"]));
+check("B19b fixed-name icons (favicon.svg, favicon.ico, apple-touch-icon.png) are cached one day", ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"].every((p) => headersFor(p)["cache-control"] === "public, max-age=86400"));
 check("B20 the page and the service worker are revalidated at every visit", ["/", "/index.html", "/sw.js"].every((p) => /no-cache/.test(headersFor(p)["cache-control"] || "")));
 const styleHash = crypto.createHash("sha256").update(style).digest("base64");
 check("B21a the policy allows the inline stylesheet by its hash, and that hash is the current one (a stale hash would unstyle the whole page)", csp.includes(`style-src 'self' 'sha256-${styleHash}'`), csp.match(/style-src[^;]*/)[0]);

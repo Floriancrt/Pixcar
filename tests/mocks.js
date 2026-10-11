@@ -303,7 +303,7 @@ async function installMocks(ctx, opts = {}) {
   const log = opts.log || (() => {});
   const fonts = (key) => fs.readFileSync(path.join(__dirname, "fixtures", "fonts", key));
   const elements = opts.elements || buildElements();
-  const counters = (ctx.__counters = { overpass: 0, geocode: 0, tiles: 0, ct: 0, sirene: 0, wikidata: 0, upload: 0, logoFiles: [], siteIcons: [], sparql: "", other: [], google: [], mapbox: [], mapboxSearch: [], reverse: 0, reverseUrls: [] });
+  const counters = (ctx.__counters = { overpass: 0, geocode: 0, tiles: 0, ct: 0, sirene: 0, wikidata: 0, upload: 0, logoFiles: [], siteIcons: [], sparql: "", other: [], google: [], contentsquare: [], mapbox: [], mapboxSearch: [], reverse: 0, reverseUrls: [] });
 
   await ctx.route("**/*", async (route) => {
     const url = new URL(route.request().url());
@@ -505,6 +505,33 @@ new Image().src="https://www.google-analytics.com/g/collect?v=2&img=1&tid=${id}"
 fetch("https://analytics.google.com/g/collect?v=2&tid=${id}",{mode:"no-cors"}).catch(function(){});})();`;
         return route.fulfill({ status: 200, contentType: "application/javascript", headers: CORS, body });
       }
+      return route.fulfill({ status: 204, headers: CORS, body: "" });
+    }
+    // Contentsquare (suite « consent », opts.contentsquare) : le tag t.contentsquare.net/uxa/<id>.js est remplacé par un script qui fait ce que
+    // fait le vrai à l'arrivée : il lit la file « _uxa » (commandes gardées dans window.__csCommands ; « optout » pose _cs_optout et retire les
+    // autres cookies, « optin » l'enlève, un _cs_optout présent au chargement arrête tout), dépose _cs_id et _cs_s (et _cs_c sur
+    // « trackConsentGranted »), envoie des données par fetch et balise vers *.contentsquare.net et *.contentsquare.com, charge un module d'un
+    // autre sous-domaine et crée un worker depuis un blob: (enregistrement des sessions). Chaque appel est compté dans counters.contentsquare.
+    if (opts.contentsquare && /(^|\.)contentsquare\.(net|com)$/.test(h)) {
+      counters.contentsquare.push(url.href);
+      if (h === "t.contentsquare.net" && /^\/uxa\/[0-9a-f]+\.js$/.test(url.pathname)) {
+        const body = `(function(){window.__csLoaded=(window.__csLoaded||0)+1;
+var cmds=window.__csCommands=window.__csCommands||[],off=/(^|; )_cs_optout=/.test(document.cookie),started=false;
+function start(){if(off||started)return;started=true;
+document.cookie="_cs_id=1.1700000000.1; Max-Age=34128000; Path=/";document.cookie="_cs_s=1.0.0.1700000000; Max-Age=1800; Path=/";
+fetch("https://c.ba.contentsquare.net/pageview?pid=1",{method:"POST",mode:"no-cors"}).catch(function(){});
+if(navigator.sendBeacon)navigator.sendBeacon("https://k.ba.contentsquare.net/v2/events");
+fetch("https://q-aeu1.contentsquare.com/v1/check",{mode:"no-cors"}).catch(function(){});
+var m=document.createElement("script");m.src="https://srm.ba.contentsquare.net/module.js";document.head.appendChild(m);
+try{var w=new Worker(URL.createObjectURL(new Blob(["postMessage(1)"],{type:"text/javascript"})));w.onmessage=function(){window.__csWorker=1;};}catch(e){window.__csWorkerError=String(e);}}
+function run(c){cmds.push(c[0]);
+if(c[0]==="optout"){off=true;started=false;document.cookie="_cs_optout=1; Max-Age=34128000; Path=/";["_cs_id","_cs_s","_cs_c"].forEach(function(n){document.cookie=n+"=; Max-Age=0; Path=/";});}
+if(c[0]==="optin"){off=false;document.cookie="_cs_optout=; Max-Age=0; Path=/";}
+if(c[0]==="trackConsentGranted"&&!off){document.cookie="_cs_c=1; Max-Age=34128000; Path=/";start();}}
+var q=window._uxa||[];window._uxa={push:function(c){run(c);return 1;}};for(var i=0;i<q.length;i++)run(q[i]);start();})();`;
+        return route.fulfill({ status: 200, contentType: "application/javascript", headers: CORS, body });
+      }
+      if (h === "srm.ba.contentsquare.net") return route.fulfill({ status: 200, contentType: "application/javascript", headers: CORS, body: "window.__csModule=(window.__csModule||0)+1;" });
       return route.fulfill({ status: 204, headers: CORS, body: "" });
     }
     // anything else: record + block

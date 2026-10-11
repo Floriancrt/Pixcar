@@ -37,7 +37,7 @@ function site(name, token) {
   const src = path.join(OUT, name + "-src");
   fs.cpSync(SRC, src, { recursive: true });
   fs.writeFileSync(path.join(src, "legal.json"), JSON.stringify(LEGAL));
-  const env = { ...process.env, PIXCAR_API_BASE: "", PIXCAR_GA_ID: "" };
+  const env = { ...process.env, PIXCAR_API_BASE: "", PIXCAR_GA_ID: "", PIXCAR_CS_ID: "" };
   delete env.PIXCAR_MAPBOX_STYLE;
   delete env.PIXCAR_MAPBOX_ENRICH;
   if (token) env.PIXCAR_MAPBOX_TOKEN = token;

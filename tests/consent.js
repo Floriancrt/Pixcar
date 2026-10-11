@@ -25,6 +25,7 @@ const OUT = path.join(__dirname, ".out", "consent-site");
 const SRC = process.env.PIXCAR_SRC || path.join(ROOT, "src"); // les tests de mutation y mettent une copie modifiée des sources
 const BUILD = process.env.PIXCAR_BUILD ? path.resolve(ROOT, process.env.PIXCAR_BUILD) : path.join(ROOT, "scripts/build.mjs"); // les tests de mutation y mettent une copie modifiée du build
 const ID = "G-TEST123456";
+const CSID = "abc123def4567"; // identifiant de tag Contentsquare fictif (même forme que celui du dépôt)
 const REAL = JSON.parse(fs.readFileSync(path.join(SRC, "analytics.json"), "utf8")); // l'identifiant et la durée du dépôt, pour la version publiée
 const LEGAL = {
   editorLine: "Pixcar est édité à titre non professionnel par Jeanne Exemple, responsable du traitement des données décrites ici.",
@@ -38,33 +39,39 @@ const KEY = "jg.consent.v1";
 const DAY = 864e5;
 const GOOGLE_HOST = /(^|\.)(googletagmanager\.com|google-analytics\.com|analytics\.google\.com)$/;
 const googleOf = (urls) => urls.filter((u) => { try { return GOOGLE_HOST.test(new URL(u).hostname); } catch { return false; } });
+const CS_HOST = /(^|\.)contentsquare\.(net|com)$/;
+const csOf = (urls) => urls.filter((u) => { try { return CS_HOST.test(new URL(u).hostname); } catch { return false; } });
 
 // Construit un site dans OUT/<name> : ga = identifiant (« » : aucune mesure ; undefined : ce que la construction décide seule), only = single|dist.
-function site(name, { ga, legal = LEGAL, only = "single", pages, api = "" } = {}) {
+function site(name, { ga, cs, legal = LEGAL, only = "single", pages, api = "" } = {}) {
   const src = path.join(OUT, name + "-src");
   fs.cpSync(SRC, src, { recursive: true });
   fs.writeFileSync(path.join(src, "legal.json"), JSON.stringify(legal));
   const env = { ...process.env, PIXCAR_API_BASE: api };
   if (ga === undefined) delete env.PIXCAR_GA_ID;
   else env.PIXCAR_GA_ID = ga;
+  if (cs === undefined) delete env.PIXCAR_CS_ID;
+  else env.PIXCAR_CS_ID = cs;
   const args = [BUILD, "--only", only, "--src", src, "--out", path.join(OUT, name)];
   if (pages) args.push("--pages", pages);
   execFileSync(process.execPath, args, { stdio: "pipe", env });
   return path.join(OUT, name, only === "dist" ? "dist" : "");
 }
-const attempt = (name, { ga, legal = LEGAL, pages } = {}) => {
+const attempt = (name, { ga, cs, legal = LEGAL, pages } = {}) => {
   const src = path.join(OUT, name + "-src");
   fs.cpSync(SRC, src, { recursive: true });
   fs.writeFileSync(path.join(src, "legal.json"), JSON.stringify(legal));
   const env = { ...process.env, PIXCAR_API_BASE: "" };
   if (ga === undefined) delete env.PIXCAR_GA_ID;
   else env.PIXCAR_GA_ID = ga;
+  if (cs === undefined) delete env.PIXCAR_CS_ID;
+  else env.PIXCAR_CS_ID = cs;
   const args = [BUILD, "--only", "single", "--src", src, "--out", path.join(OUT, name)];
   if (pages) args.push("--pages", pages);
   return spawnSync(process.execPath, args, { encoding: "utf8", env });
 };
 
-const MOCK = () => ({ elements: buildElements(), google: true });
+const MOCK = () => ({ elements: buildElements(), google: true, contentsquare: true });
 const snap = (page) =>
   page.evaluate((id) => {
     const b = document.getElementById("consent");
@@ -77,6 +84,9 @@ const snap = (page) =>
       state: document.documentElement.dataset.analytics,
       disabled: window["ga-disable-" + id],
       loaded: window.__gtagLoaded || 0,
+      csLoaded: window.__csLoaded || 0,
+      csCommands: window.__csCommands ? window.__csCommands.slice() : null,
+      uxa: typeof window._uxa,
       scripts: [...document.scripts].map((s) => s.src).filter(Boolean),
     };
   }, ID);
@@ -88,6 +98,8 @@ const axeOf = async (page) => {
 const norm = (t) => String(t).replace(/[  ]/g, " ").replace(/\s+/g, " ").trim();
 // Attentes qui ne plantent pas la suite : une condition qui n'arrive pas fait échouer le contrôle qui suit (avec son nom), pas toute la suite.
 const loaded = (page) => page.waitForFunction(() => window.__gtagLoaded === 1, null, { timeout: 4000 }).then(() => true, () => false);
+const csLoaded = (page) => page.waitForFunction(() => window.__csLoaded === 1, null, { timeout: 4000 }).then(() => true, () => false);
+const csCookies = (cookie) => String(cookie).split(";").map((c) => c.split("=")[0].trim()).filter((n) => /^_cs_/.test(n)).sort();
 const opened = (page) => page.waitForFunction(() => document.getElementById("legalDlg").open, null, { timeout: 4000 }).then(() => true, () => false);
 const appears = (page, selector) => page.waitForSelector(selector, { timeout: 4000 }).then(() => true, () => false);
 
@@ -130,13 +142,38 @@ const appears = (page, selector) => page.waitForSelector(selector, { timeout: 40
     const rest = (p) => p.split("; ").filter((d) => !/^(script-src|connect-src)/.test(d)).join("; ");
     return JSON.stringify(addedS) === JSON.stringify(["https://www.googletagmanager.com"]) && JSON.stringify(addedC) === JSON.stringify(["https://*.google-analytics.com", "https://analytics.google.com", "https://*.analytics.google.com", "https://*.googletagmanager.com"]) && rest(pubPolicy) === rest(offPolicy);
   })(), pubPolicy);
-  check("M08 …and still no inline script, no eval, no wildcard in script-src", !/unsafe-eval/.test(pubPolicy) && !/script-src[^;]*unsafe-inline/.test(pubPolicy) && !/script-src[^;]*\*/.test(pubPolicy), pubPolicy);
+  check("M08 …and still no inline script, no eval, no wildcard in script-src but Contentsquare's own (*.contentsquare.net, from its documented policy)", !/unsafe-eval/.test(pubPolicy) && !/script-src[^;]*unsafe-inline/.test(pubPolicy) && dirv(pubPolicy, "script-src").filter((x) => x.includes("*")).join() === "https://*.contentsquare.net", pubPolicy);
   const regular = site("dist-headers", { only: "dist", ga: "" });
   const headers = fs.readFileSync(path.join(regular, "_headers"), "utf8");
   check("M09 a build without an identifier keeps Google out of the policy (headers file included)", !/google/.test(headers) && !/google/.test(offPolicy), headers.slice(0, 300));
 
+  // ---- Contentsquare : même consentement, branché seul ou avec Google Analytics
+  const csOnly = site("cs-only", { ga: "", cs: CSID });
+  const both = site("both", { ga: ID, cs: CSID });
+  const csHtml = fs.readFileSync(path.join(csOnly, "index.html"), "utf8");
+  const bothHtml = fs.readFileSync(path.join(both, "index.html"), "utf8");
+  const visible = (html) => html.replace(/<script>[\s\S]*<\/script>/, "").replace(/<meta[^>]*>/g, "");
+  check("M120 Contentsquare alone: the banner, its identifier in its meta, an empty Google meta, and no Contentsquare address in the HTML (the tag is added by the script, after consent)", /id="consent"/.test(csHtml) && csHtml.includes(`<meta name="pixcar-contentsquare" content="${CSID}">`) && /<meta name="pixcar-analytics" content="">/.test(csHtml) && !/contentsquare\.(net|com)/.test(visible(csHtml)), "");
+  check("M121 without a Contentsquare identifier its meta is empty and the page text never names it", /<meta name="pixcar-contentsquare" content="">/.test(noneHtml) && /<meta name="pixcar-contentsquare" content="">/.test(gaHtml) && !/Contentsquare/.test(visible(gaHtml)) && !/Contentsquare/.test(visible(noneHtml)));
+  const bannerOf = (html) => norm((/<section id="consent"[\s\S]*?<\/section>/.exec(html) || [""])[0].replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&#39;/g, "'"));
+  check("M122 the banner names the tools really there: Google Analytics alone, Contentsquare alone (with clicks and scrolls), or both", bannerOf(gaHtml).includes("compter ses visites avec Google Analytics") && bannerOf(gaHtml).includes("transmises à Google, seulement si vous acceptez") && !/Contentsquare|clics/.test(bannerOf(gaHtml)) && bannerOf(csHtml).includes("compter ses visites et voir comment ses pages sont utilisées avec Contentsquare") && bannerOf(csHtml).includes("pages vues, clics et défilements") && bannerOf(csHtml).includes("transmises à Contentsquare, seulement si vous acceptez") && !/Google/.test(bannerOf(csHtml)) && bannerOf(bothHtml).includes("avec Google Analytics et Contentsquare") && bannerOf(bothHtml).includes("transmises à Google et Contentsquare, seulement si vous acceptez"), JSON.stringify([bannerOf(gaHtml), bannerOf(csHtml), bannerOf(bothHtml)]));
+  const badCs = attempt("bad-cs", { ga: "", cs: "abc/../x" });
+  check("M123 a malformed Contentsquare identifier stops the build, with a message that says why", badCs.status !== 0 && /identifiant de tag Contentsquare invalide/.test(badCs.stderr), badCs.stderr.slice(0, 300));
+  const bareCs = attempt("bare-cs", { ga: "", cs: CSID, legal: { ...LEGAL, editorLine: "", contact: "", repairRetentionMonths: "", updated: "" } });
+  check("M124 Contentsquare alone needs the privacy window too: the build refuses when src/legal.json is incomplete", bareCs.status !== 0 && /mesure d'audience/.test(bareCs.stderr), bareCs.stderr.slice(0, 300));
+  const csOffDir = site("pages-cs-off", { pages: "pixcar.fr", only: "dist", cs: "" });
+  const csOffPolicy = policyOf(csOffDir);
+  check("M125 the published build takes contentsquareId of src/analytics.json; PIXCAR_CS_ID empty switches Contentsquare off", fs.readFileSync(path.join(pubDir, "index.html"), "utf8").includes(`<meta name="pixcar-contentsquare" content="${REAL.contentsquareId}">`) && fs.readFileSync(path.join(csOffDir, "index.html"), "utf8").includes('<meta name="pixcar-contentsquare" content="">'));
+  check("M126 the policy adds Contentsquare only where its documentation says: scripts (*.contentsquare.net, app.contentsquare.com), the app's stylesheet, connections (*.contentsquare.net, *.contentsquare.com), workers from blob:; nothing else, and nothing at all once switched off", (() => {
+    const diff = (d) => dirv(pubPolicy, d).filter((x) => !dirv(csOffPolicy, d).includes(x));
+    const same = (p) => p.split("; ").filter((d) => !/^(script-src|style-src |connect-src|worker-src)/.test(d)).join("; ");
+    return JSON.stringify(diff("script-src")) === JSON.stringify(["https://*.contentsquare.net", "https://app.contentsquare.com"]) && JSON.stringify(diff("style-src ")) === JSON.stringify(["https://app.contentsquare.com"]) && JSON.stringify(diff("connect-src")) === JSON.stringify(["https://*.contentsquare.net", "https://*.contentsquare.com"]) && JSON.stringify(diff("worker-src")) === JSON.stringify(["blob:"]) && same(pubPolicy) === same(csOffPolicy) && !/contentsquare/.test(csOffPolicy) && dirv(csOffPolicy, "worker-src").join() === "'self'";
+  })(), pubPolicy + " || " + csOffPolicy);
+
   const dflt = await serve(withGa);
   const plain = await serve(none);
+  const bothSrv = await serve(both);
+  const csSrv = await serve(csOnly);
   const browser = await launch();
   try {
     // ============ A. version sans mesure d'audience : rien ne change ============
@@ -379,10 +416,116 @@ const appears = (page, selector) => page.waitForSelector(selector, { timeout: 40
       check("M103 the privacy window with the audience section: no accessibility violation", viol.length === 0, JSON.stringify(viol));
       await ctx.close();
     }
+
+    // ============ Q. Contentsquare : le même choix, la même rigueur ============
+    {
+      const { page, ctx, logs } = await open(browser, bothSrv, "index.html", { width: 1440, height: 900, mock: MOCK() });
+      let s = await snap(page);
+      check("M130 both tools, first visit: a single banner, and before any answer no request to Contentsquare, no _uxa queue, no _cs_ cookie", s.banner === true && csOf(logs.requests).length === 0 && ctx.__counters.contentsquare.length === 0 && s.uxa === "undefined" && csCookies(s.cookie).length === 0, JSON.stringify(s));
+      await page.click('#consent [data-consent="grant"]');
+      await loaded(page);
+      await csLoaded(page);
+      await page.waitForFunction(() => window.__csWorker === 1 && window.__csModule === 1, null, { timeout: 4000 }).catch(() => {});
+      s = await snap(page);
+      const tags = ctx.__counters.contentsquare.filter((u) => /^https:\/\/t\.contentsquare\.net\/uxa\//.test(u));
+      check("M131 one « Accepter » starts both: Google's library and the Contentsquare tag, requested once from t.contentsquare.net/uxa/<identifier>.js as an asynchronous script", s.loaded === 1 && s.csLoaded === 1 && tags.length === 1 && tags[0] === `https://t.contentsquare.net/uxa/${CSID}.js` && (await page.evaluate(() => [...document.scripts].find((e) => /t\.contentsquare\.net/.test(e.src)).async === true)), JSON.stringify(tags));
+      check("M132 the tag is told the visitor agreed (« trackConsentGranted », nothing before it), and its cookies appear only now", JSON.stringify(s.csCommands) === JSON.stringify(["trackConsentGranted"]) && JSON.stringify(csCookies(s.cookie)) === JSON.stringify(["_cs_c", "_cs_id", "_cs_s"]), JSON.stringify([s.csCommands, s.cookie]));
+      check("M133 nothing else leaves because of it (contentsquare.net and contentsquare.com only), no script error", csOf(logs.requests).length > 0 && csOf(logs.requests).every((u) => /^https:\/\/(t|c\.ba|k\.ba|srm\.ba)\.contentsquare\.net\/|^https:\/\/q-aeu1\.contentsquare\.com\//.test(u)) && logs.errors.length === 0, JSON.stringify([csOf(logs.requests), logs.errors]));
+      await appears(page, ".legal-foot:not([hidden]) [data-open-legal]");
+      await page.click(".legal-foot [data-open-legal]");
+      await opened(page);
+      await page.click('#legalDlg .legal-choice [data-consent="deny"]');
+      await page.waitForTimeout(250);
+      s = await snap(page);
+      check("M134 withdrawal stops both: « optout » sent to Contentsquare, its cookies deleted but _cs_optout (it only keeps the refusal), Google's cookies deleted, ga-disable set", s.csCommands[s.csCommands.length - 1] === "optout" && JSON.stringify(csCookies(s.cookie)) === JSON.stringify(["_cs_optout"]) && !/_ga/.test(s.cookie) && s.disabled === true, JSON.stringify([s.csCommands, s.cookie]));
+      await page.click('#legalDlg .legal-choice [data-consent="grant"]');
+      await page.waitForTimeout(250);
+      s = await snap(page);
+      check("M135 accepting again in the same page restarts it (« optin » then « trackConsentGranted ») without loading the tag twice", JSON.stringify(s.csCommands.slice(-2)) === JSON.stringify(["optin", "trackConsentGranted"]) && s.csLoaded === 1 && ctx.__counters.contentsquare.filter((u) => /\/uxa\//.test(u)).length === 1 && csCookies(s.cookie).includes("_cs_id") && !csCookies(s.cookie).includes("_cs_optout"), JSON.stringify([s.csCommands, s.cookie]));
+      await page.click('#legalDlg .legal-choice [data-consent="deny"]');
+      await page.keyboard.press("Escape");
+      const sent = ctx.__counters.contentsquare.length;
+      await page.reload();
+      await page.waitForLoadState("load");
+      await page.waitForTimeout(300);
+      s = await snap(page);
+      check("M136 after a refusal, the next visit loads no tag, sends nothing to Contentsquare, and only _cs_optout is left", s.csLoaded === 0 && s.uxa === "undefined" && ctx.__counters.contentsquare.length === sent && JSON.stringify(csCookies(s.cookie)) === JSON.stringify(["_cs_optout"]), JSON.stringify([s, ctx.__counters.contentsquare.slice(sent)]));
+      await appears(page, ".legal-foot:not([hidden]) [data-consent-open]");
+      await page.click(".legal-foot [data-consent-open]");
+      await page.click('#consent [data-consent="grant"]');
+      await csLoaded(page);
+      await page.waitForTimeout(250);
+      s = await snap(page);
+      check("M137 a later acceptance, with the _cs_optout of the earlier refusal still there: « optin » goes first, the tag loads and measures again", JSON.stringify(s.csCommands) === JSON.stringify(["optin", "trackConsentGranted"]) && s.csLoaded === 1 && csCookies(s.cookie).includes("_cs_id") && !csCookies(s.cookie).includes("_cs_optout"), JSON.stringify([s.csCommands, s.cookie]));
+      await ctx.close();
+    }
+    {
+      const { page, ctx } = await open(browser, bothSrv, "index.html", { width: 1440, height: 900, mock: MOCK() });
+      await search(page, { service: "vidange" });
+      await page.click("#list > li:nth-child(1) .g-main");
+      await appears(page, "#list > li:nth-child(1) .r-from .r-val");
+      const masks = await page.evaluate(() => ["#sumWhere", "#address", "#addrList", "#repairForm", "#rPlate", "#list > li:nth-child(1) .r-from .r-val"].map((sel) => { const el = document.querySelector(sel); return sel + "=" + !!(el && el.closest("[data-cs-mask]")); }));
+      check("M138 what could identify the visitor is masked in Contentsquare's recordings (data-cs-mask): the address typed, proposed or shown, the declaration form with the plate", masks.every((m) => m.endsWith("=true")), JSON.stringify(masks));
+      await page.click(".legal-foot [data-open-legal]");
+      await opened(page);
+      const text = norm(await page.evaluate(() => document.getElementById("legalDlg").innerText));
+      const want = ["Mesure d'audience (Google Analytics et Contentsquare)", "rien n'est envoyé à Google et Contentsquare", "Un seul choix vaut pour les deux", "Google Ireland Limited", "_ga_TEST123456", "Contentsquare SAS", "vos clics, défilements et mouvements", "rejouer la visite", "sont masqués", "_cs_id, _cs_s et _cs_c", `Contentsquare garde ces données ${REAL.contentsquareRetentionMonths} mois au plus`, "refuser arrête Contentsquare et supprime ses cookies", "l'identifiant de votre cookie _cs_id"];
+      check("M139 privacy text with both tools: one section, one choice for both, Google's part kept, Contentsquare's: who, what (clicks, scrolls, replay), masking, cookies, retention of src/analytics.json, consent and withdrawal, rights", want.every((w) => text.includes(w)), JSON.stringify(want.filter((w) => !text.includes(w))));
+      check("M140 Contentsquare is in the list of services the browser contacts, only if the visitor accepts", /Contentsquare, seulement si vous acceptez la mesure d'audience/.test(text));
+      const html = await page.evaluate(() => document.getElementById("legalDlg").innerHTML + document.getElementById("consent").innerHTML);
+      check("M141 no template marker left in the window or the banner (AU, GA, CS markers, {{au.*}}, {{cs.*}})", !/(AU|GA|CS):(on|off)|\{\{/.test(html), html.match(/(AU|GA|CS):(on|off)|\{\{[^}]*\}\}/g)?.join());
+      await ctx.close();
+    }
+    {
+      const { page, ctx, logs } = await open(browser, csSrv, "index.html", { width: 1440, height: 900, mock: MOCK() });
+      check("M142 Contentsquare alone: the banner is shown on the first visit", (await snap(page)).banner === true);
+      await page.click('#consent [data-consent="grant"]');
+      await csLoaded(page);
+      await page.waitForTimeout(250);
+      let s = await snap(page);
+      check("M143 …accepting loads its tag and nothing from Google (no gtag, no data layer, no Google request)", s.csLoaded === 1 && s.loaded === 0 && s.layer === null && s.gtag === "undefined" && googleOf(logs.requests).length === 0 && ctx.__counters.google.length === 0, JSON.stringify(s));
+      await appears(page, ".legal-foot:not([hidden]) [data-open-legal]");
+      await page.click(".legal-foot [data-open-legal]");
+      await opened(page);
+      const text = norm(await page.evaluate(() => document.getElementById("legalDlg").innerText));
+      check("M144 …its privacy text has no Google Analytics part: « Mesure d'audience (Contentsquare) », nothing sent « à Contentsquare », no _ga, no « les deux »", text.includes("Mesure d'audience (Contentsquare)") && text.includes("rien n'est envoyé à Contentsquare.") && !/Google Analytics|_ga|Un seul choix/.test(text) && text.includes("Pixcar ne dépose lui-même aucun cookie") && text.includes("dont votre choix sur la mesure d'audience"), text.slice(0, 200));
+      await page.click('#legalDlg .legal-choice [data-consent="deny"]');
+      await page.waitForTimeout(250);
+      s = await snap(page);
+      check("M145 …and refusing stops it and deletes its cookies (only _cs_optout is left)", s.csCommands[s.csCommands.length - 1] === "optout" && JSON.stringify(csCookies(s.cookie)) === JSON.stringify(["_cs_optout"]) && choiceOf(s).analytics === false, JSON.stringify([s.csCommands, s.cookie]));
+      await ctx.close();
+    }
+    {
+      // choix expiré (six mois) alors que les cookies de Contentsquare (13 mois) sont encore là : un refus les efface, sans charger le tag
+      const { page, ctx } = await open(browser, bothSrv, "index.html", { width: 1440, height: 900, mock: MOCK() });
+      await page.evaluate(() => { document.cookie = "_cs_id=1.1600000000.1; Max-Age=3600; Path=/"; document.cookie = "_cs_s=1.0.0.1600000000; Max-Age=1800; Path=/"; document.cookie = "_cs_c=1; Max-Age=3600; Path=/"; });
+      await page.reload();
+      await page.waitForLoadState("load");
+      let s = await snap(page);
+      const before = csCookies(s.cookie);
+      await page.click('#consent [data-consent="deny"]');
+      await page.waitForTimeout(250);
+      s = await snap(page);
+      check("M147 leftover Contentsquare cookies of an earlier visit (choice expired, cookies still there) are deleted by a refusal, without loading the tag", s.banner === false && JSON.stringify(before) === JSON.stringify(["_cs_c", "_cs_id", "_cs_s"]) && csCookies(s.cookie).length === 0 && s.csLoaded === 0 && ctx.__counters.contentsquare.length === 0, JSON.stringify([before, s.cookie, s.csLoaded]));
+      await ctx.close();
+    }
+    for (const [label, o] of [["desktop", { width: 1440, height: 900 }], ["mobile 390", { width: 390, height: 844, dpr: 2, touch: true }], ["mobile 360", { width: 360, height: 640, dpr: 2, touch: true }]]) {
+      const { page, ctx } = await open(browser, bothSrv, "index.html", { ...o, mock: MOCK() });
+      await search(page, { service: "vidange" });
+      const viol = await axeOf(page);
+      const geo = await page.evaluate(() => {
+        const b = document.getElementById("consent").getBoundingClientRect(), text = document.querySelector("#consent p"), c = getComputedStyle(text);
+        return { l: b.left, r: b.right, t: b.top, b: b.bottom, w: innerWidth, h: innerHeight, overflow: document.documentElement.scrollWidth > innerWidth, clipped: text.scrollHeight > text.clientHeight + 1, font: parseFloat(c.fontSize) };
+      });
+      check(`M146 ${label}, both tools: the longer banner is entirely on screen, unclipped, at least 13 px, and passes axe`, viol.length === 0 && geo.l >= 0 && geo.r <= geo.w && geo.t >= 0 && geo.b <= geo.h && !geo.overflow && !geo.clipped && geo.font >= 13, JSON.stringify({ geo, viol }));
+      await ctx.close();
+    }
   } finally {
     await browser.close();
     plain.close();
     dflt.close();
+    bothSrv.close();
+    csSrv.close();
   }
 
   // ============ P. la version publiée (GitHub Pages : politique en <meta>, aucun en-tête) ============
@@ -402,6 +545,12 @@ const appears = (page, selector) => page.waitForSelector(selector, { timeout: 40
       csp = await page.evaluate(() => window.__csp.slice());
       const urls = ctx.__counters.google;
       check("M112 under the real policy (a <meta>, no header), accepting loads the library AND lets its measures through: script, fetch, beacon and image to the three kinds of host, not one violation", urls.some((u) => /googletagmanager\.com\/gtag\/js/.test(u)) && urls.some((u) => /region1\.google-analytics\.com/.test(u)) && urls.some((u) => /^https:\/\/www\.google-analytics\.com.*img=1/.test(u)) && urls.some((u) => /^https:\/\/analytics\.google\.com/.test(u)) && csp.length === 0, JSON.stringify({ urls, csp }));
+      await csLoaded(page);
+      await page.waitForFunction(() => window.__csWorker === 1 && window.__csModule === 1, null, { timeout: 4000 }).catch(() => {});
+      await page.waitForTimeout(300);
+      const csInfo = await page.evaluate(() => ({ worker: window.__csWorker, err: window.__csWorkerError || "", module: window.__csModule, csp: window.__csp.slice() }));
+      const csUrls = ctx.__counters.contentsquare;
+      check("M115 published site: under the real policy, the Contentsquare tag of src/analytics.json loads with its module from another subdomain, its blob: worker, its data to .net and .com, without one violation", csUrls.includes(`https://t.contentsquare.net/uxa/${REAL.contentsquareId}.js`) && csInfo.worker === 1 && csInfo.module === 1 && csUrls.some((u) => /^https:\/\/c\.ba\.contentsquare\.net\//.test(u)) && csUrls.some((u) => /^https:\/\/k\.ba\.contentsquare\.net\//.test(u)) && csUrls.some((u) => /contentsquare\.com\//.test(u)) && csInfo.csp.length === 0, JSON.stringify({ csUrls, csInfo }));
       const probe = await page.evaluate(async () => {
         const ok = (src) => new Promise((r) => { const s = document.createElement("script"); s.src = src; s.onload = () => r("ran"); s.onerror = () => r("blocked"); document.head.appendChild(s); });
         const first = await ok("https://www.google-analytics.com/analytics.js"); // un hôte de mesure n'est pas un hôte de scripts

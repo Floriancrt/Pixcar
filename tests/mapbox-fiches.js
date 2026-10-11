@@ -43,7 +43,7 @@ function prepare(name, file) {
   return src;
 }
 const envOf = ({ token, enrich }) => {
-  const env = { ...process.env, PIXCAR_API_BASE: "", PIXCAR_GA_ID: "" };
+  const env = { ...process.env, PIXCAR_API_BASE: "", PIXCAR_GA_ID: "", PIXCAR_CS_ID: "" };
   delete env.PIXCAR_MAPBOX_STYLE;
   if (token === undefined) delete env.PIXCAR_MAPBOX_TOKEN;
   else env.PIXCAR_MAPBOX_TOKEN = token;

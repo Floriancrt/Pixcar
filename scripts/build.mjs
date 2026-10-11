@@ -16,6 +16,9 @@
 //                            PIXCAR_GA_ID = identifiant de mesure Google Analytics (« G-… ») : bandeau de consentement, texte de confidentialité
 //                            et politique de sécurité en tiennent compte. Sans cette variable, la version publiée (--pages) prend celui de
 //                            src/analytics.json ; les autres sorties n'en ont aucun. PIXCAR_GA_ID= (vide) le désactive même avec --pages.
+//                            PIXCAR_CS_ID = identifiant du tag Contentsquare (le nom du fichier de t.contentsquare.net/uxa/<identifiant>.js) : chargé
+//                            après le même accord que Google Analytics (un seul choix « mesure d'audience »). Sans cette variable, la version publiée
+//                            (--pages) prend contentsquareId de src/analytics.json ; les autres sorties n'en ont aucun. PIXCAR_CS_ID= (vide) le désactive.
 //                            PIXCAR_MAPBOX_TOKEN = jeton PUBLIC Mapbox (« pk.… ») : fond de carte Mapbox. Sans cette variable, la version publiée (--pages)
 //                            prend celui de src/mapbox.json (vide tant qu'il n'est pas renseigné : fond de l'IGN) ; les autres sorties n'en ont aucun.
 //                            PIXCAR_MAPBOX_TOKEN= (vide) le désactive même avec --pages. PIXCAR_MAPBOX_STYLE = style (« mapbox/light-v11 »).
@@ -69,6 +72,25 @@ const analytics = await (async () => {
   const months = Number.isInteger(config.retentionMonths) && config.retentionMonths > 0 ? config.retentionMonths : 14;
   return { id, cookie: id.slice(2), retentionMonths: months };
 })();
+// Contentsquare (analyse de l'utilisation des pages : clics, défilements, enregistrement des sessions) : même règle que Google Analytics,
+// contentsquareId de src/analytics.json pour la version publiée seulement, ou PIXCAR_CS_ID (qui l'emporte ; vide : désactivé). Le tag n'est
+// chargé qu'après l'accord du visiteur, par modules/analytics.js, sous le même choix « mesure d'audience ».
+const contentsquare = await (async () => {
+  let config = {};
+  try {
+    config = JSON.parse(await read(SRC, "analytics.json"));
+  } catch {
+    /* pas de fichier : pas de Contentsquare */
+  }
+  const fromEnv = process.env.PIXCAR_CS_ID;
+  const id = String(fromEnv !== undefined ? fromEnv : pages !== undefined ? config.contentsquareId ?? "" : "").trim();
+  if (!id) return null;
+  if (!/^[0-9a-f]{8,20}$/.test(id)) throw new Error(`identifiant de tag Contentsquare invalide (celui de t.contentsquare.net/uxa/<identifiant>.js attendu) : ${id}`);
+  const months = Number.isInteger(config.contentsquareRetentionMonths) && config.contentsquareRetentionMonths > 0 ? config.contentsquareRetentionMonths : 13;
+  return { id, retentionMonths: months };
+})();
+// Mesure d'audience au sens large : au moins un outil soumis au consentement (bandeau, choix, lien « Mesure d'audience »).
+const audience = !!(analytics || contentsquare);
 
 // Table de garages : tuiles de scripts/garages/build.py. Contrôle minimal ici (la construction a déjà contrôlé la sortie : tests/garages.js le vérifie aussi) : un
 // index que la page ne saurait pas lire ne doit jamais être publié.
@@ -189,8 +211,25 @@ function optionsHtml(list, extra = "") {
 }
 // Variantes du texte selon ce que la page contient : <!--GA:on-->…<!--/GA:on--> (avec Google Analytics) et <!--GA:off-->…<!--/GA:off--> (sans) ;
 // de même <!--MB:on--> et <!--MB:off--> pour le fond de carte Mapbox, <!--MX:on--> et <!--MX:off--> pour les fiches complétées par Mapbox. Pas d'imbrication.
-const variantOn = { GA: () => !!analytics, MB: () => !!mapbox, MX: () => !!mapbox && mapbox.enrich !== "off" }; // MX : fiches complétées par Mapbox
-const variants = (html) => html.replace(/<!--(GA|MB|MX):(on|off)-->([\s\S]*?)<!--\/\1:\2-->/g, (m, flag, mode, text) => ((mode === "on") === variantOn[flag]() ? text : ""));
+// AU : au moins un outil de mesure d'audience (Google Analytics ou Contentsquare) ; GA, CS : chacun ; MX : fiches complétées par Mapbox
+const variantOn = { AU: () => audience, GA: () => !!analytics, CS: () => !!contentsquare, MB: () => !!mapbox, MX: () => !!mapbox && mapbox.enrich !== "off" };
+const variantOnce = (html) => html.replace(/<!--(AU|GA|CS|MB|MX):(on|off)-->([\s\S]*?)<!--\/\1:\2-->/g, (m, flag, mode, text) => ((mode === "on") === variantOn[flag]() ? text : ""));
+// Les blocs s'imbriquent (un bloc GA dans un bloc AU) : on recommence jusqu'à ce qu'il n'en reste aucun.
+const variants = (html) => {
+  for (let prev = null; prev !== html; ) [prev, html] = [html, variantOnce(html)];
+  return html;
+};
+// Les outils de mesure d'audience branchés, nommés dans le bandeau et le texte de confidentialité : {{au.tools}}, {{au.recipients}}
+const audienceFields = () => ({
+  tools: [analytics && "Google Analytics", contentsquare && "Contentsquare"].filter(Boolean).join(" et "),
+  recipients: [analytics && "Google", contentsquare && "Contentsquare"].filter(Boolean).join(" et "),
+});
+const fillAudience = (html, where) =>
+  html.replace(/\{\{au\.([A-Za-z]+)\}\}/g, (m, k) => {
+    const v = audience ? audienceFields()[k] : undefined;
+    if (v === undefined) throw new Error(`${where} : {{au.${k}}} inconnu, ou hors d'un bloc <!--AU:on-->`);
+    return esc(v);
+  });
 // Mentions légales et politique de confidentialité : src/legal.json (ce qui dépend de l'éditeur) + src/partials/legal.html (le texte).
 // Complet : la fenêtre « Confidentialité et mentions légales » et ses liens sont dans la page. Incomplet : ni fenêtre ni liens, SAUF si
 // l'API est branchée (PIXCAR_API_BASE) : le build échoue alors, on n'ouvre pas au public des déclarations sans informer les visiteurs.
@@ -203,12 +242,12 @@ async function legalParts(withGarages) {
   if (filled("contact") && !/^[^\s@<>"]+@[^\s@<>"]+\.[A-Za-z]{2,}$/.test(String(config.contact).trim())) problems.push("contact : une adresse électronique est attendue");
   if (filled("repairRetentionMonths") && !(Number.isInteger(config.repairRetentionMonths) && config.repairRetentionMonths > 0)) problems.push("repairRetentionMonths : un nombre entier de mois est attendu");
   if (problems.length) {
-    if ((apiBase || analytics || mapbox) && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1")
-      throw new Error(`mentions légales incomplètes dans src/legal.json (${problems.join(" ; ")}) : ${analytics ? "la mesure d'audience est branchée (PIXCAR_GA_ID, src/analytics.json) : le bandeau de consentement renvoie à cette fenêtre" : mapbox ? "le fond de carte Mapbox est branché (PIXCAR_MAPBOX_TOKEN, src/mapbox.json) : Mapbox verrait l'adresse IP des visiteurs sans que le texte de confidentialité le dise" : "l'API est branchée (PIXCAR_API_BASE), des visiteurs y déposeraient des données sans en être informés"}. Complétez ce fichier (docs/exploitation.md, section 6) ; PIXCAR_ALLOW_NO_LEGAL=1 le permet pour un simple essai.`);
+    if ((apiBase || audience || mapbox) && process.env.PIXCAR_ALLOW_NO_LEGAL !== "1")
+      throw new Error(`mentions légales incomplètes dans src/legal.json (${problems.join(" ; ")}) : ${audience ? "la mesure d'audience est branchée (PIXCAR_GA_ID, PIXCAR_CS_ID, src/analytics.json) : le bandeau de consentement renvoie à cette fenêtre" : mapbox ? "le fond de carte Mapbox est branché (PIXCAR_MAPBOX_TOKEN, src/mapbox.json) : Mapbox verrait l'adresse IP des visiteurs sans que le texte de confidentialité le dise" : "l'API est branchée (PIXCAR_API_BASE), des visiteurs y déposeraient des données sans en être informés"}. Complétez ce fichier (docs/exploitation.md, section 6) ; PIXCAR_ALLOW_NO_LEGAL=1 le permet pour un simple essai.`);
     return { dialog: "", linkPanel: "", linkSources: "", linkDialog: "" };
   }
   const gaFields = { cookie: analytics && analytics.cookie, retentionMonths: analytics && analytics.retentionMonths };
-  const dialog = garagesVariants(variants(await read(SRC, "partials/legal.html")), withGarages)
+  const dialog = fillAudience(garagesVariants(variants(await read(SRC, "partials/legal.html")), withGarages), "partials/legal.html")
     .replace(/\{\{legal\.([A-Za-z]+)\}\}/g, (m, k) => {
       if (!LEGAL_FIELDS.includes(k)) throw new Error(`partials/legal.html : {{legal.${k}}} n'existe pas dans src/legal.json`);
       return esc(String(config[k]).trim());
@@ -216,12 +255,16 @@ async function legalParts(withGarages) {
     .replace(/\{\{ga\.([A-Za-z]+)\}\}/g, (m, k) => {
       if (!analytics || gaFields[k] === undefined) throw new Error(`partials/legal.html : {{ga.${k}}} inconnu, ou hors d'un bloc <!--GA:on-->`);
       return esc(String(gaFields[k]));
+    })
+    .replace(/\{\{cs\.([A-Za-z]+)\}\}/g, (m, k) => {
+      if (!contentsquare || k !== "retentionMonths") throw new Error(`partials/legal.html : {{cs.${k}}} inconnu, ou hors d'un bloc <!--CS:on-->`);
+      return esc(String(contentsquare.retentionMonths));
     });
   return {
     dialog,
     // Masqué dans le HTML, montré par modules/legal.js une fois la page construite : sous le panneau des résultats, que le script remplit, il
     // descendrait de plusieurs lignes au démarrage (décalage de mise en page). Avec la mesure d'audience : un second lien rouvre le choix.
-    linkPanel: `<p class="legal-foot" hidden><button type="button" class="link-btn" data-open-legal>Confidentialité et mentions légales</button>${analytics ? '<span aria-hidden="true"> · </span><button type="button" class="link-btn" data-consent-open>Mesure d\'audience</button>' : ""}</p>`,
+    linkPanel: `<p class="legal-foot" hidden><button type="button" class="link-btn" data-open-legal>Confidentialité et mentions légales</button>${audience ? '<span aria-hidden="true"> · </span><button type="button" class="link-btn" data-consent-open>Mesure d\'audience</button>' : ""}</p>`,
     linkSources: '<p><b>Confidentialité et mentions légales.</b> <button type="button" class="link-btn" data-open-legal>Lire la politique de confidentialité</button></p>',
     linkDialog: '<p class="dlg-note" data-store-only="remote"><button type="button" class="link-btn" data-open-legal>Comment Pixcar traite vos données</button></p>',
   };
@@ -252,7 +295,7 @@ async function pageParts(withGarages) {
     ["<!--REPAIR_OPTIONS-->", optionsHtml(SERVICES.filter((s) => s.kind !== "ct"), `<optgroup label="Autre"><option value="${OTHER_SERVICE}">Autre réparation (précisez en commentaire)</option></optgroup>`)],
     ["<!--LEGAL_LINK_DIALOG-->", legal.linkDialog],
   ]);
-  return { body, sprite: await read(SRC, "partials/sprite.html"), dialog, legal: legal.dialog, consent: analytics ? await read(SRC, "partials/consent.html") : "" };
+  return { body, sprite: await read(SRC, "partials/sprite.html"), dialog, legal: legal.dialog, consent: audience ? fillAudience(variants(await read(SRC, "partials/consent.html")), "partials/consent.html") : "" };
 }
 function squeeze(html) {
   if (dev) return html;
@@ -261,7 +304,7 @@ function squeeze(html) {
 }
 async function render(parts, { headAssets, scripts, garagesBase = "" }) {
   const tpl = await read(SRC, "index.html");
-  const fill = { API_BASE: apiBase, GA_ID: analytics ? analytics.id : "", GARAGES_BASE: garagesBase, MAPBOX_TOKEN: mapbox ? mapbox.token : "", MAPBOX_STYLE: mapbox ? mapbox.style : "", MAPBOX_ENRICH: mapbox ? mapbox.enrich : "", PRECONNECT: preconnect(), HEAD_ASSETS: headAssets, SPRITE: parts.sprite, CONSENT: parts.consent, BODY: parts.body, DIALOG: parts.dialog, LEGAL: parts.legal, SCRIPTS: scripts };
+  const fill = { API_BASE: apiBase, GA_ID: analytics ? analytics.id : "", CS_ID: contentsquare ? contentsquare.id : "", GARAGES_BASE: garagesBase, MAPBOX_TOKEN: mapbox ? mapbox.token : "", MAPBOX_STYLE: mapbox ? mapbox.style : "", MAPBOX_ENRICH: mapbox ? mapbox.enrich : "", PRECONNECT: preconnect(), HEAD_ASSETS: headAssets, SPRITE: parts.sprite, CONSENT: parts.consent, BODY: parts.body, DIALOG: parts.dialog, LEGAL: parts.legal, SCRIPTS: scripts };
   return squeeze(tpl.replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => (k in fill ? fill[k] : m)));
 }
 
@@ -291,18 +334,25 @@ const CONNECT = ["https://data.geopf.fr", "https://overpass-api.de", "https://ov
 // partent vers *.google-analytics.com (adresses régionales comprises) et analytics.google.com. Les images, déjà permises en https, couvrent les pixels.
 const GOOGLE_SCRIPT = ["https://www.googletagmanager.com"];
 const GOOGLE_CONNECT = ["https://*.google-analytics.com", "https://analytics.google.com", "https://*.analytics.google.com", "https://*.googletagmanager.com"]; // un joker ne couvre pas le domaine lui-même : analytics.google.com est donc nommé
+// Contentsquare (seulement si la page est construite avec un identifiant), d'après sa documentation (« Content Security Policy », web) : le tag
+// et ses modules viennent de *.contentsquare.net, les données partent vers *.contentsquare.net et *.contentsquare.com, app.contentsquare.com
+// sert au zoning et aux captures faits depuis l'application Contentsquare (script et feuille de style), l'enregistrement des sessions
+// travaille dans des workers créés depuis des blob:. Pas de 'unsafe-inline' : le tag est ajouté par le script de la page, pas par un extrait en ligne.
+const CS_SCRIPT = ["https://*.contentsquare.net", "https://app.contentsquare.com"];
+const CS_STYLE = ["https://app.contentsquare.com"];
+const CS_CONNECT = ["https://*.contentsquare.net", "https://*.contentsquare.com"];
 // Fiches complétées par Mapbox : la page interroge api.mapbox.com (Search Box) à l'ouverture d'une fiche. Les tuiles sont des images (img-src https: les couvre).
 const MAPBOX_CONNECT = ["https://api.mapbox.com"];
-export function contentSecurityPolicy(origin = apiOrigin, styleHash = "", ga = !!analytics, mbx = !!mapbox && mapbox.enrich !== "off") {
+export function contentSecurityPolicy(origin = apiOrigin, styleHash = "", ga = !!analytics, mbx = !!mapbox && mapbox.enrich !== "off", cs = !!contentsquare) {
   return [
     "default-src 'self'",
-    `script-src ${["'self'", "https://cdnjs.cloudflare.com", ...(ga ? GOOGLE_SCRIPT : [])].join(" ")}`, // le CDN ne sert que de secours à la copie locale de Leaflet
-    `style-src 'self'${styleHash ? ` 'sha256-${styleHash}'` : ""}`, // la feuille de style est dans la page : autorisée par son empreinte
+    `script-src ${["'self'", "https://cdnjs.cloudflare.com", ...(ga ? GOOGLE_SCRIPT : []), ...(cs ? CS_SCRIPT : [])].join(" ")}`, // le CDN ne sert que de secours à la copie locale de Leaflet
+    `style-src ${["'self'", styleHash && `'sha256-${styleHash}'`, ...(cs ? CS_STYLE : [])].filter(Boolean).join(" ")}`, // la feuille de style est dans la page : autorisée par son empreinte
     "style-src-attr 'unsafe-inline'", // quelques positions calculées (repères de l'échelle de prix, marqueurs)
     "img-src 'self' data: blob: https:", // tuiles de la carte (Mapbox, IGN, CARTO), logos (Wikimedia Commons), icônes des sites d'enseignes
     "font-src 'self'",
-    `connect-src ${["'self'", origin, ...CONNECT, ...(ga ? GOOGLE_CONNECT : []), ...(mbx ? MAPBOX_CONNECT : [])].filter(Boolean).join(" ")}`,
-    "worker-src 'self'",
+    `connect-src ${["'self'", origin, ...CONNECT, ...(ga ? GOOGLE_CONNECT : []), ...(cs ? CS_CONNECT : []), ...(mbx ? MAPBOX_CONNECT : [])].filter(Boolean).join(" ")}`,
+    `worker-src 'self'${cs ? " blob:" : ""}`,
     "manifest-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",
@@ -347,6 +397,8 @@ function headersFile(styleHash) {
 # Icônes : nom fixe, un jour.
 /favicon.svg
   Cache-Control: public, max-age=86400
+/favicon.ico
+  Cache-Control: public, max-age=86400
 /apple-touch-icon.png
   Cache-Control: public, max-age=86400
 ${garagesRule}`;
@@ -378,8 +430,12 @@ async function buildDist(parts) {
   await writeFile(join(DIST, "assets", jsName), js);
 
   await copyFile(join(SRC, "assets/favicon.svg"), join(DIST, "favicon.svg"));
+  await copyFile(join(SRC, "assets/favicon.ico"), join(DIST, "favicon.ico"));
   await copyFile(join(SRC, "assets/apple-touch-icon.png"), join(DIST, "apple-touch-icon.png"));
   const headAssets = [
+    // favicon.ico (16, 32, 48 px, fabriqué par scripts/favicon-ico.mjs) pour les robots et navigateurs qui ne lisent pas le SVG ;
+    // sa taille déclarée laisse le SVG gagner chez les navigateurs qui le savent afficher.
+    `<link rel="icon" href="favicon.ico" sizes="48x48">`,
     `<link rel="icon" type="image/svg+xml" href="favicon.svg">`,
     `<link rel="apple-touch-icon" href="apple-touch-icon.png">`,
     `<link rel="preload" href="${fontUrls[0]}" as="font" type="font/woff2" crossorigin>`,

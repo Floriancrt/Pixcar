@@ -43,6 +43,11 @@ M = [
  ("scrollbar arrow buttons back", 'display: none;\n    width: 0;\n    height: 0;', 'display: block;\n    width: 15px;\n    height: 15px;', "B", "B2"),
  ("custom scrollbar on touch screens too", '@media (hover: hover) and (pointer: fine) {\n  .dlg::-webkit-scrollbar,', '@media all {\n  .dlg::-webkit-scrollbar,', "B", "B8"),
  ("scrollbar not inset from the curve", '--sb-inset: 18px;', '--sb-inset: 0px;', "B", "B4"),
+ ("header search back to a fixed 581 px box (the address cut short)", "    left: 203px;\n    right: var(--hs-right, 493px);\n    width: auto;", "    left: calc(50% - 386px);\n    right: auto;\n    width: 581px;", "H", "H16"),
+ ("the address gets a small share of the header search", "    order: 1;\n    flex: 380 1 0;", "    order: 1;\n    flex: 122 1 0;", "H", "H16"),
+ ("narrow desktop keeps the long labels (the search runs under « Promos »)", "  :root {\n    --hs-right: 330px;\n  }", "  :root {\n    --hs-right: 200px;\n  }", "H", "H16"),
+ ("mobile: the detail's line continues the gauge again, against « Appeler »", "@media (max-width: 1023px) {\n  .g-more {\n    margin-top: 18px;\n  }\n}", "", "H", "H17"),
+ ("meta description not the one asked for search engines", "1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto.", "Trouvez les garages autour de votre adresse et comparez le prix d'une prestation.", "T", "T6"),
  ("standard scrollbar properties for every browser", '@supports not selector(::-webkit-scrollbar) {', '@media all {', "B", "B3"),
  ("forced-colors markers not coloured", '  .scale-ref,\n  .k-ref {\n    background: CanvasText;', '  .scale-refx,\n  .k-refx {\n    background: CanvasText;', "F", "F2"),
 ]
