@@ -241,15 +241,15 @@ describe("migrate on DSQL", () => {
     expected.forEach((re, i) => assert.match(steps[i], re, `étape ${i + 1}`));
   });
 
-  test("a migration already recorded is skipped; the real migrations produce 7 tables and 15 index jobs", async () => {
-    const { s, db } = dsqlSession({ applied: ["001_init.sql", "002_pro.sql"] });
+  test("a migration already recorded is skipped; the real migrations produce 9 tables and 18 index jobs", async () => {
+    const { s, db } = dsqlSession({ applied: ["001_init.sql", "002_pro.sql", "003_pro_prices.sql"] });
     assert.deepEqual(await migrate(db, MIGRATIONS_DIR, () => {}, fast), []);
     assert.ok(!s.log.some((l) => /CREATE TABLE IF NOT EXISTS (garages|repairs)/.test(l)));
 
     const fresh = dsqlSession();
-    assert.deepEqual(await migrate(fresh.db, MIGRATIONS_DIR, () => {}, fast), ["001_init.sql", "002_pro.sql"]);
-    assert.equal(fresh.s.log.filter((l) => /^exec: CREATE TABLE IF NOT EXISTS (garages|repairs|write_log|upstream_cache|garage_contacts|pro_claims|pro_events) /.test(l)).length, 7);
-    assert.equal(fresh.s.log.filter((l) => /^query: CREATE (UNIQUE )?INDEX ASYNC IF NOT EXISTS/.test(l)).length, 15);
+    assert.deepEqual(await migrate(fresh.db, MIGRATIONS_DIR, () => {}, fast), ["001_init.sql", "002_pro.sql", "003_pro_prices.sql"]);
+    assert.equal(fresh.s.log.filter((l) => /^exec: CREATE TABLE IF NOT EXISTS (garages|repairs|write_log|upstream_cache|garage_contacts|pro_claims|pro_events|pro_prices|pro_visits) /.test(l)).length, 9);
+    assert.equal(fresh.s.log.filter((l) => /^query: CREATE (UNIQUE )?INDEX ASYNC IF NOT EXISTS/.test(l)).length, 18);
   });
 
   test("a failed index build stops the migration with the reason, and nothing is recorded", async () => {
@@ -298,7 +298,7 @@ describe("ensureRuntimeRole", () => {
     assert.deepEqual(log, [
       "CREATE ROLE pixcar_api WITH LOGIN",
       `AWS IAM GRANT pixcar_api TO '${ARN}'`,
-      "GRANT SELECT, INSERT, UPDATE, DELETE ON garages, repairs, write_log, upstream_cache, garage_contacts, pro_claims, pro_events TO pixcar_api",
+      "GRANT SELECT, INSERT, UPDATE, DELETE ON garages, repairs, write_log, upstream_cache, garage_contacts, pro_claims, pro_events, pro_prices, pro_visits TO pixcar_api",
     ]);
     assert.equal(steps.length, 3);
     assert.deepEqual(queries.map((q) => [q.sql, q.params]), [["SELECT 1 AS ok FROM sys.iam_pg_role_mappings WHERE pg_role_name = $1 AND arn = $2", ["pixcar_api", ARN]]]);

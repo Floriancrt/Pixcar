@@ -141,6 +141,28 @@ describe("docs/openapi.yaml ↔ API", () => {
       await call("POST", "/v1/pro/claims/{id}/code", `/v1/pro/claims/${id}/code`, { headers: me, body: { code }, status: 200 });
       await call("POST", "/v1/pro/claims/{id}/resend", `/v1/pro/claims/${id}/resend`, { headers: me, status: 409 });
       await call("POST", "/v1/pro/claims", "/v1/pro/claims", { headers: { "x-pro-dev-account": "other" }, body: { siret, garageId: g.id, option: "sms:0", holder }, status: 409 });
+      // « Vos premiers prix » : le garage est maintenant rattaché au compte « doc »
+      const G = `/v1/pro/garages/${g.id}`;
+      await call("GET", "/v1/pro/garages/{id}", G, { status: 401 });
+      await call("GET", "/v1/pro/garages/{id}", G, { headers: { "x-pro-dev-account": "other" }, status: 404 });
+      await call("PUT", "/v1/pro/garages/{id}/prices/{service}", `${G}/prices/vidange`, { headers: me, body: { kind: "fixed", price: 89, vehicles: ["city"], includes: ["parts", "labour"] }, status: 200 });
+      await call("PUT", "/v1/pro/garages/{id}/prices/{service}", `${G}/prices/diag`, { headers: me, body: { kind: "quote" }, status: 200 });
+      await call("PUT", "/v1/pro/garages/{id}/prices/{service}", `${G}/prices/ct`, { headers: me, body: { kind: "fixed", price: 70 }, status: 422 });
+      await call("PUT", "/v1/pro/garages/{id}/prices/{service}", `${G}/prices/vidange`, { headers: me, body: "{", status: 400 });
+      await call("PUT", "/v1/pro/garages/{id}/prices/{service}", `${G}/prices/vidange`, { headers: { "x-pro-dev-account": "other" }, body: { kind: "quote" }, status: 404 });
+      await call("PUT", "/v1/pro/garages/{id}/prices/{service}", `${G}/prices/vidange`, { status: 401, body: { kind: "quote" } });
+      await call("POST", "/v1/pro/public/visits", "/v1/pro/public/visits", { body: { garageId: g.id, kind: "view" }, status: 204 });
+      await call("POST", "/v1/pro/public/visits", "/v1/pro/public/visits", { body: { garageId: g.id, kind: "like" }, status: 422 });
+      await call("POST", "/v1/pro/public/visits", "/v1/pro/public/visits", { body: "{", status: 400 });
+      await call("GET", "/v1/pro/garages/{id}", G, { headers: me, status: 200 });
+      await call("POST", "/v1/pro/garages/{id}/confirm", `${G}/confirm`, { headers: me, status: 200 });
+      await call("POST", "/v1/pro/garages/{id}/confirm", `${G}/confirm`, { status: 401 });
+      await call("POST", "/v1/pro/garages/{id}/confirm", `${G}/confirm`, { headers: { "x-pro-dev-account": "other" }, status: 404 });
+      await call("GET", "/v1/pro/public/garages", `/v1/pro/public/garages?ids=${g.id}`, { status: 200 });
+      await call("GET", "/v1/pro/public/garages", "/v1/pro/public/garages?ids=x!", { status: 400 });
+      await call("DELETE", "/v1/pro/garages/{id}/prices/{service}", `${G}/prices/diag`, { headers: me, status: 204 });
+      await call("DELETE", "/v1/pro/garages/{id}/prices/{service}", `${G}/prices/diag`, { headers: me, status: 404 });
+      await call("DELETE", "/v1/pro/garages/{id}/prices/{service}", `${G}/prices/diag`, { status: 401 });
     } finally {
       t = keep;
       await pro.close();
@@ -157,8 +179,10 @@ describe("docs/openapi.yaml ↔ API", () => {
   test("no route exists that the document does not mention", async () => {
     const documented = new Set(Object.entries(doc.paths).flatMap(([p, ops]) => Object.keys(ops).map((m) => `${m.toUpperCase()} ${p}`)));
     assert.deepEqual([...documented].sort(), [
-      "DELETE /v1/repairs/{id}", "GET /healthz", "GET /readyz", "GET /v1/overpass", "GET /v1/pro/claims/{id}", "GET /v1/pro/me", "GET /v1/pro/siret/{siret}", "GET /v1/repairs",
-      "POST /v1/pro/claims", "POST /v1/pro/claims/{id}/code", "POST /v1/pro/claims/{id}/resend", "POST /v1/repairs",
+      "DELETE /v1/pro/garages/{id}/prices/{service}", "DELETE /v1/repairs/{id}", "GET /healthz", "GET /readyz", "GET /v1/overpass", "GET /v1/pro/claims/{id}",
+      "GET /v1/pro/garages/{id}", "GET /v1/pro/me", "GET /v1/pro/public/garages", "GET /v1/pro/siret/{siret}", "GET /v1/repairs", "POST /v1/pro/claims",
+      "POST /v1/pro/claims/{id}/code", "POST /v1/pro/claims/{id}/resend", "POST /v1/pro/garages/{id}/confirm", "POST /v1/pro/public/visits", "POST /v1/repairs",
+      "PUT /v1/pro/garages/{id}/prices/{service}",
     ]);
     // et chaque méthode non documentée d'une route documentée est refusée en 405
     for (const [method, path] of [["PUT", "/v1/repairs"], ["DELETE", "/v1/repairs"], ["POST", "/v1/overpass"], ["POST", "/healthz"], ["GET", `/v1/repairs/${repair().id}`]]) {

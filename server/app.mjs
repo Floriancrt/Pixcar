@@ -256,7 +256,7 @@ export function createApp({ db, config, services, fetchImpl = globalThis.fetch, 
       return limited(readLimiter.check(ip)) || deleteRepair(request, id);
     }
     if (path === "/v1/overpass") return method === "GET" ? limited(readLimiter.check(ip)) || getOverpass(request, url, ip) : methodNotAllowed("GET");
-    if (path === "/v1/pro" || path.startsWith("/v1/pro/")) return limited(readLimiter.check(ip)) || pro.handle(request, path);
+    if (path === "/v1/pro" || path.startsWith("/v1/pro/")) return limited(readLimiter.check(ip)) || pro.handle(request, path, { ip });
     return apiError(404, "not_found", "Route inconnue.");
   }
   const methodNotAllowed = (allow) => apiError(405, "method_not_allowed", "Méthode non autorisée.", {}, { allow });

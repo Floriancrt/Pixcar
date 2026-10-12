@@ -26,7 +26,7 @@ describe("Lambda package", () => {
   });
 
   test("it holds both functions, the migrations and the module type — and nothing that must not travel", () => {
-    assert.deepEqual(info.files, ["api.mjs", "ops.mjs", "package.json", "db/migrations/001_init.sql", "db/migrations/002_pro.sql"]);
+    assert.deepEqual(info.files, ["api.mjs", "ops.mjs", "package.json", "db/migrations/001_init.sql", "db/migrations/002_pro.sql", "db/migrations/003_pro_prices.sql"]);
     const listing = execFileSync("unzip", ["-Z1", info.zip], { encoding: "utf8" });
     assert.ok(!/node_modules|\.env|pglite|\.pem|\.key/i.test(listing), listing);
   });

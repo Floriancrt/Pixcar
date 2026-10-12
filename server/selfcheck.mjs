@@ -13,7 +13,8 @@ const LON = -20.5;
 const INDEXES = [
   "garages_area_idx", "repairs_garage_service_idx", "repairs_no_duplicate_idx", "repairs_pending_idx", "write_log_ip_idx", "write_log_at_idx",
   "garage_contacts_area_idx", "garage_contacts_domain_idx", "garage_contacts_import_idx", "pro_claims_account_idx", "pro_claims_garage_idx",
-  "pro_claims_one_owner_idx", "pro_events_garage_idx", "pro_events_account_idx", "pro_events_at_idx",
+  "pro_claims_one_owner_idx", "pro_events_garage_idx", "pro_events_account_idx", "pro_events_at_idx", "pro_prices_status_idx", "pro_visits_once_idx",
+  "pro_visits_day_idx",
 ];
 
 export async function selfcheck(db, { log = () => {} } = {}) {
@@ -217,15 +218,67 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     expect((await pro.revoke(proGarage)) === 1 && !(await pro.verifiedOwner(proGarage)), "rattachement retiré");
   });
 
+  // ---- Espace Pro, « Vos premiers prix » : un garage vérifié (proGarage2) annonce ses prix ; ses visites sont comptées
+  const ovt = "custom:ovt-" + proGarage2.replace(/-/g, "");
+  const area = (await db.query("SELECT area_y, area_x FROM garage_contacts WHERE garage_id = $1", [proGarage2])).rows[0] || {};
+  const price = (serviceId, kind, priceCents) => pro.savePrice({ garageId: proGarage2, serviceId, kind, priceCents, vehicles: ["city"], includes: ["parts", "labour"], accountId: acc("c"), area: { y: area.area_y, x: area.area_x } });
+  await check("Espace Pro : prix annoncé enregistré puis remplacé (clé double, jsonb), « sur devis » sans prix, prix très éloigné mis en relecture, prix payés du garage retrouvés", async () => {
+    await db.query(
+      "INSERT INTO pro_claims (id, account_id, garage_id, siret, status, channel, holder_name, holder_role, target_hash, target_hint, verified_at) VALUES ($1, $2, $3, '73282932000074', 'verified', 'email', 'Auto Contrôle', 'other', $4, 'x', now())",
+      [crypto.randomUUID(), acc("c"), proGarage2, randomHex(32)],
+    );
+    expect((await price("vidange", "fixed", 8900)).status === "published", "prix publié");
+    const again = await price("vidange", "from", 9900);
+    expect(again.kind === "from" && again.price_cents === 9900 && Array.isArray(again.vehicles) && again.vehicles[0] === "city", "prix remplacé");
+    expect((await count("SELECT count(*) AS n FROM pro_prices WHERE garage_id = $1", [proGarage2])) === 1, "une seule ligne par prestation");
+    expect((await price("diag", "quote", null)).price_cents === null, "sur devis, sans prix");
+    for (let i = 0; i < 5; i++) await repo.insertRepair(repair({ garage: garage(ovt), serviceId: "clim", priceCents: 7000 + i * 100 }), ctx());
+    expect((await price("clim", "fixed", 70000)).status === "review", "700 € contre une médiane de 72 € : relecture");
+    const paid = await pro.paidPrices((await pro.ownedGarage(proGarage2, acc("c"))).contact);
+    expect(paid.clim && paid.clim.n === 5 && paid.clim.median === 72, "médiane payée du garage : " + JSON.stringify(paid));
+    expect((await pro.confirmPrices(proGarage2)) === 3, "trois prix confirmés");
+  });
+  await check("Espace Pro : lecture publique (garages vérifiés, prix publiés seulement) et visites comptées une fois par visiteur, jour et garage", async () => {
+    const pub = await pro.publicGarages([proGarage2, proGarage]);
+    expect(pub.length === 1 && pub[0].garage_id === proGarage2, "seul le garage vérifié");
+    expect(pub[0].prices.map((p) => p.service_id).sort().join() === "diag,vidange", "sans le prix en relecture");
+    const day = new Date().toISOString().slice(0, 10);
+    const v1 = randomHex(32), v2 = randomHex(32);
+    expect((await pro.recordVisit({ garageId: proGarage2, day, kind: "view", visitor: v1 })) === true, "visite comptée");
+    expect((await pro.recordVisit({ garageId: proGarage2, day, kind: "view", visitor: v1 })) === false, "même visiteur le même jour : une fois");
+    await pro.recordVisit({ garageId: proGarage2, day, kind: "view", visitor: v2 });
+    await pro.recordVisit({ garageId: proGarage2, day, kind: "call", visitor: v1 });
+    expect((await pro.recordVisit({ garageId: proGarage, day, kind: "view", visitor: v1 })) === false, "garage non vérifié : rien");
+    const old = new Date(Date.now() - 45 * 864e5).toISOString().slice(0, 10);
+    await pro.recordVisit({ garageId: proGarage2, day: old, kind: "view", visitor: v1 });
+    const since = (d) => new Date(Date.now() - d * 864e5).toISOString().slice(0, 10);
+    const st = await pro.visitStats(proGarage2, { since30: since(30), since60: since(60) });
+    expect(st.view.recent === 2 && st.view.previous === 1 && st.call.recent === 1, "statistiques : " + JSON.stringify(st));
+  });
+  await check("Espace Pro : purge des visites de plus de 60 jours ; retrait d'un rattachement : ses prix partent avec lui", async () => {
+    await pro.recordVisit({ garageId: proGarage2, day: new Date(Date.now() - 70 * 864e5).toISOString().slice(0, 10), kind: "view", visitor: randomHex(32) });
+    await pro.purge();
+    expect((await count("SELECT count(*) AS n FROM pro_visits WHERE garage_id = $1", [proGarage2])) === 4, "les 4 visites de moins de 60 jours restent");
+    expect((await pro.revoke(proGarage2)) === 1 && (await count("SELECT count(*) AS n FROM pro_prices WHERE garage_id = $1", [proGarage2])) === 0, "prix retirés");
+  });
+
   await check("nettoyage : plus aucune donnée d'essai", async () => {
     await db.query("DELETE FROM pro_claims WHERE account_id LIKE $1", [`selfcheck-${tag}-%`]);
     await db.query("DELETE FROM pro_events WHERE account_id LIKE $1", [`selfcheck-${tag}-%`]);
     await db.query("DELETE FROM garage_contacts WHERE import_id = $1", [`selfcheck-${tag}`]);
+    await db.query("DELETE FROM pro_prices WHERE garage_id IN ($1, $2)", [proGarage, proGarage2]);
+    await db.query("DELETE FROM pro_visits WHERE garage_id IN ($1, $2)", [proGarage, proGarage2]);
+    await db.query("DELETE FROM repairs WHERE garage_id = $1", [ovt]);
+    await db.query("DELETE FROM garages WHERE id = $1", [ovt]);
     await db.query("DELETE FROM repairs WHERE garage_id LIKE 'custom:selfcheck-%'");
     await db.query("DELETE FROM garages WHERE id LIKE 'custom:selfcheck-%'");
     await db.query("DELETE FROM write_log WHERE ip_hash = $1", [TEST_IP]);
     await db.query("DELETE FROM upstream_cache WHERE key LIKE 'selfcheck:%'");
-    const left = (await count("SELECT count(*) AS n FROM garages WHERE id LIKE 'custom:selfcheck-%'")) + (await count("SELECT count(*) AS n FROM write_log WHERE ip_hash = $1", [TEST_IP]));
+    const left =
+      (await count("SELECT count(*) AS n FROM garages WHERE id LIKE 'custom:selfcheck-%' OR id = $1", [ovt])) +
+      (await count("SELECT count(*) AS n FROM write_log WHERE ip_hash = $1", [TEST_IP])) +
+      (await count("SELECT count(*) AS n FROM pro_prices WHERE garage_id IN ($1, $2)", [proGarage, proGarage2])) +
+      (await count("SELECT count(*) AS n FROM pro_visits WHERE garage_id IN ($1, $2)", [proGarage, proGarage2]));
     expect(left === 0, "reste " + left);
   });
 

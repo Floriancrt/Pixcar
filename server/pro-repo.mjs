@@ -1,10 +1,20 @@
 // Espace Pro : tout le SQL de la vérification des garagistes (même règles que server/repo.mjs : paramètres à part, SQL portable
 // PostgreSQL / PGlite / Aurora DSQL, fonctions passées à tx() rejouables sans effet hors de la base).
 import { cellOf, cellsAround } from "./lib/geo.mjs";
+import { decideStatus } from "./repo.mjs";
+import { NEAR_M, pickRec } from "../src/js/modules/garages-table.js";
 
 export const IMPORT_BATCH_MAX = 500; // lignes de contacts par appel de l'op « import-contacts » (DSQL : 3 000 lignes au plus par transaction)
 const PURGE_BATCH = 1000;
 const ROW_PARAMS = 13;
+
+// « IN ($2, $3, …) » pour une liste de valeurs passées à part (pas de tableau en paramètre : DSQL n'en garde pas)
+const placeholders = (n, from = 1) => Array.from({ length: n }, (_, i) => `$${i + from}`).join(", ");
+const median = (values) => {
+  const v = values.slice().sort((a, b) => a - b);
+  const m = v.length >> 1;
+  return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+};
 
 const meters = (a, b) => {
   const r = Math.PI / 180;
@@ -14,6 +24,7 @@ const meters = (a, b) => {
 export { meters };
 
 const CONTACT_COLUMNS = "garage_id, name, addr, pc, lat, lon, brand, emails, phones, web_domain";
+const PRICE_COLUMNS = "garage_id, service_id, kind, price_cents, vehicles, includes, status, confirmed_at, updated_at";
 const CLAIM_COLUMNS = "c.id, c.garage_id, c.siret, c.status, c.channel, c.holder_name, c.holder_role, c.target_hint, c.code_expires_at, c.attempts, c.sends, c.last_sent_at, c.created_at, c.verified_at";
 
 export function createProRepo(db) {
@@ -46,24 +57,26 @@ export function createProRepo(db) {
   const accountsOnGarage = async (t, garageId) =>
     (await t.query("SELECT count(DISTINCT account_id)::int AS n FROM pro_events WHERE kind = 'send' AND garage_id = $1 AND at > now() - interval '24 hours'", [garageId])).rows[0].n;
 
+  // garages à moins de radiusM du point, du plus proche au plus loin
+  async function contactsNear({ lat, lon, radiusM }) {
+    const box = cellsAround(lat, lon, radiusM / 1000);
+    // les cases (index) puis le carré du rayon : même en ville dense, seuls les garages du carré sont lus
+    const dLat = radiusM / 111_320, dLon = radiusM / (111_320 * Math.max(0.05, Math.cos((lat * Math.PI) / 180)));
+    const { rows } = await db.query(
+      `SELECT ${CONTACT_COLUMNS} FROM garage_contacts
+       WHERE area_y BETWEEN $1 AND $2 AND area_x BETWEEN $3 AND $4 AND lat BETWEEN $5 AND $6 AND lon BETWEEN $7 AND $8 LIMIT 500`,
+      [box.y0, box.y1, box.x0, box.x1, lat - dLat, lat + dLat, lon - dLon, lon + dLon],
+    );
+    return rows
+      .map((r) => ({ ...r, distanceM: Math.round(meters({ lat, lon }, r)) }))
+      .filter((r) => r.distanceM <= radiusM)
+      .sort((a, b) => a.distanceM - b.distanceM || (a.garage_id < b.garage_id ? -1 : 1));
+  }
+
   return {
     // ---- contacts
     getContact: (garageId) => one(`SELECT ${CONTACT_COLUMNS} FROM garage_contacts WHERE garage_id = $1`, [garageId]),
-    // garages à moins de radiusM du point, du plus proche au plus loin
-    async contactsNear({ lat, lon, radiusM }) {
-      const box = cellsAround(lat, lon, radiusM / 1000);
-      // les cases (index) puis le carré du rayon : même en ville dense, seuls les garages du carré sont lus
-      const dLat = radiusM / 111_320, dLon = radiusM / (111_320 * Math.max(0.05, Math.cos((lat * Math.PI) / 180)));
-      const { rows } = await db.query(
-        `SELECT ${CONTACT_COLUMNS} FROM garage_contacts
-         WHERE area_y BETWEEN $1 AND $2 AND area_x BETWEEN $3 AND $4 AND lat BETWEEN $5 AND $6 AND lon BETWEEN $7 AND $8 LIMIT 500`,
-        [box.y0, box.y1, box.x0, box.x1, lat - dLat, lat + dLat, lon - dLon, lon + dLon],
-      );
-      return rows
-        .map((r) => ({ ...r, distanceM: Math.round(meters({ lat, lon }, r)) }))
-        .filter((r) => r.distanceM <= radiusM)
-        .sort((a, b) => a.distanceM - b.distanceM || (a.garage_id < b.garage_id ? -1 : 1));
-    },
+    contactsNear,
     contactsByPostcode: (pc) => db.query(`SELECT ${CONTACT_COLUMNS} FROM garage_contacts WHERE pc = $1 ORDER BY garage_id LIMIT 300`, [pc]).then((r) => r.rows),
     domainCount: (domain) => one("SELECT count(*)::int AS n FROM garage_contacts WHERE web_domain = $1", [domain]).then((r) => r.n),
 
@@ -229,7 +242,11 @@ export function createProRepo(db) {
     async revoke(garageId) {
       return db.tx(async (t) => {
         const r = await t.query("UPDATE pro_claims SET status = 'revoked' WHERE garage_id = $1 AND status = 'verified' RETURNING account_id", [garageId]);
-        if (r.rowCount) await t.query("INSERT INTO pro_events (kind, account_id, garage_id) VALUES ('revoked', $1, $2)", [r.rows[0].account_id, garageId]);
+        if (r.rowCount) {
+          await t.query("INSERT INTO pro_events (kind, account_id, garage_id) VALUES ('revoked', $1, $2)", [r.rows[0].account_id, garageId]);
+          // les prix annoncés étaient sous la responsabilité de ce compte : ils partent avec lui (un nouveau titulaire repart de zéro)
+          await t.query("DELETE FROM pro_prices WHERE garage_id = $1", [garageId]);
+        }
         return r.rowCount;
       });
     },
@@ -238,7 +255,109 @@ export function createProRepo(db) {
         .query("SELECT status, count(*)::int AS n FROM pro_claims GROUP BY status ORDER BY status")
         .then(async (r) => ({ claims: Object.fromEntries(r.rows.map((x) => [x.status, x.n])), contacts: (await one("SELECT count(*)::int AS n FROM garage_contacts")).n })),
 
-    // Entretien : journal de plus de 90 jours, demandes non abouties de plus de 30 jours.
+    // ---- prix annoncés (le garage est rattaché au compte : c'est à l'appelant de l'avoir vérifié)
+    // Le rattachement vérifié d'un garage à ce compte : { claim, contact } ou null.
+    async ownedGarage(garageId, accountId) {
+      const claim = await one("SELECT id, holder_name, verified_at FROM pro_claims WHERE garage_id = $1 AND account_id = $2 AND status = 'verified'", [garageId, accountId]);
+      if (!claim) return null;
+      return { claim, contact: await one(`SELECT ${CONTACT_COLUMNS}, area_y, area_x FROM garage_contacts WHERE garage_id = $1`, [garageId]) };
+    },
+    listPrices: (garageId) => db.query(`SELECT ${PRICE_COLUMNS}, now() AS db_now FROM pro_prices WHERE garage_id = $1 ORDER BY service_id`, [garageId]).then((r) => r.rows),
+    // Enregistre (ou remplace) un prix ; un prix très éloigné des prix payés du secteur attend une relecture (« review »), comme une déclaration.
+    // p : { garageId, serviceId, kind, priceCents, vehicles, includes, accountId, area: { y, x } | null }. Renvoie la ligne enregistrée.
+    savePrice(p) {
+      return db.tx(async (t) => {
+        const status = p.priceCents !== null && p.area ? ((await decideStatus(t, p.serviceId, p.priceCents, p.area.y, p.area.x)) === "pending" ? "review" : "published") : "published";
+        const r = await t.query(
+          `INSERT INTO pro_prices (garage_id, service_id, kind, price_cents, vehicles, includes, status, account_id, confirmed_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, now(), now())
+           ON CONFLICT (garage_id, service_id) DO UPDATE SET kind = EXCLUDED.kind, price_cents = EXCLUDED.price_cents, vehicles = EXCLUDED.vehicles,
+             includes = EXCLUDED.includes, status = EXCLUDED.status, account_id = EXCLUDED.account_id, confirmed_at = now(), updated_at = now()
+           RETURNING ${PRICE_COLUMNS}, now() AS db_now`,
+          [p.garageId, p.serviceId, p.kind, p.priceCents, JSON.stringify(p.vehicles), JSON.stringify(p.includes), status, p.accountId],
+        );
+        return r.rows[0];
+      });
+    },
+    deletePrice: (garageId, serviceId) => db.query("DELETE FROM pro_prices WHERE garage_id = $1 AND service_id = $2", [garageId, serviceId]).then((r) => r.rowCount > 0),
+    // « Tout confirmer » : les prix publiés ou en relecture repartent pour 6 mois (un prix refusé reste refusé).
+    confirmPrices: (garageId) =>
+      db.query("UPDATE pro_prices SET confirmed_at = now() WHERE garage_id = $1 AND status IN ('published', 'review')", [garageId]).then((r) => r.rowCount),
+
+    // Prix payés (déclarations approuvées) de ce garage, par prestation : { serviceId: { median (€), n } }. Les déclarations sont rangées sous
+    // l'identifiant du garage dans la page (OpenStreetMap le plus souvent) : on retrouve ces garages par la règle de rapprochement de la page
+    // (src/js/modules/garages-table.js : même nom à moins de 150 m, ou seul lieu à moins de 40 m), plus l'identifiant que la page donne à un
+    // lieu de la table qu'OpenStreetMap n'a pas (custom:ovt-…).
+    async paidPrices(contact) {
+      if (!contact) return {};
+      const own = "custom:ovt-" + contact.garage_id.replace(/-/g, "");
+      const box = cellsAround(contact.lat, contact.lon, (NEAR_M + 50) / 1000);
+      const dLat = (NEAR_M + 50) / 111_320, dLon = (NEAR_M + 50) / (111_320 * Math.max(0.05, Math.cos((contact.lat * Math.PI) / 180)));
+      const near = (
+        await db.query(
+          `SELECT id, name, lat, lon FROM garages
+           WHERE id = $9 OR (area_y BETWEEN $1 AND $2 AND area_x BETWEEN $3 AND $4 AND lat BETWEEN $5 AND $6 AND lon BETWEEN $7 AND $8) LIMIT 200`,
+          [box.y0, box.y1, box.x0, box.x1, contact.lat - dLat, contact.lat + dLat, contact.lon - dLon, contact.lon + dLon, own],
+        )
+      ).rows;
+      if (!near.length) return {};
+      // les lieux de la table autour : un garage se rapproche du plus proche de même nom, pas forcément de celui-ci
+      const recs = (await contactsNear({ lat: contact.lat, lon: contact.lon, radiusM: 2 * NEAR_M + 50 })).map((r) => ({ id: r.garage_id, name: r.name, lat: r.lat, lon: r.lon }));
+      if (!recs.some((r) => r.id === contact.garage_id)) recs.push({ id: contact.garage_id, name: contact.name, lat: contact.lat, lon: contact.lon });
+      const ids = near.filter((g) => g.id === own || (g.lat !== null && g.lon !== null && (pickRec(g, recs) || {}).id === contact.garage_id)).map((g) => g.id);
+      if (!ids.length) return {};
+      const rows = (
+        await db.query(`SELECT service_id, price_cents FROM repairs WHERE status = 'approved' AND garage_id IN (${placeholders(ids.length)})`, ids)
+      ).rows;
+      const by = new Map();
+      for (const r of rows) (by.get(r.service_id) || by.set(r.service_id, []).get(r.service_id)).push(Number(r.price_cents));
+      return Object.fromEntries([...by].map(([k, v]) => [k, { median: Math.round(median(v)) / 100, n: v.length }]));
+    },
+
+    // ---- visites des fiches (tableau de bord)
+    // Compte une visite si le garage est rattaché à un compte vérifié ; une seule par visiteur, jour, garage et type. Renvoie true si comptée.
+    async recordVisit({ garageId, day, kind, visitor }) {
+      if (!(await one("SELECT 1 AS ok FROM pro_claims WHERE garage_id = $1 AND status = 'verified'", [garageId]))) return false;
+      const r = await db.query("INSERT INTO pro_visits (garage_id, day, kind, visitor) VALUES ($1, $2::date, $3, $4) ON CONFLICT DO NOTHING", [garageId, day, kind, visitor]);
+      return r.rowCount > 0;
+    },
+    // { view: { recent, previous }, call: { … } } : visiteurs des 30 derniers jours (recent, jour même compris) et des 30 d'avant.
+    // since30 / since60 : dates ISO (AAAA-MM-JJ) des jours qui précèdent chaque période.
+    async visitStats(garageId, { since30, since60 }) {
+      const { rows } = await db.query(
+        `SELECT kind, sum(CASE WHEN day > $2::date THEN 1 ELSE 0 END)::int AS recent, sum(CASE WHEN day <= $2::date THEN 1 ELSE 0 END)::int AS previous
+         FROM pro_visits WHERE garage_id = $1 AND day > $3::date GROUP BY kind`,
+        [garageId, since30, since60],
+      );
+      const out = { view: { recent: 0, previous: 0 }, call: { recent: 0, previous: 0 } };
+      for (const r of rows) out[r.kind] = { recent: r.recent || 0, previous: r.previous || 0 };
+      return out;
+    },
+
+    // ---- lecture publique : garages vérifiés parmi ces identifiants, et leurs prix publiés
+    async publicGarages(garageIds) {
+      if (!garageIds.length) return [];
+      const claims = (
+        await db.query(`SELECT garage_id, verified_at FROM pro_claims WHERE status = 'verified' AND garage_id IN (${placeholders(garageIds.length)})`, garageIds)
+      ).rows;
+      if (!claims.length) return [];
+      const ids = claims.map((c) => c.garage_id);
+      const prices = (
+        await db.query(`SELECT ${PRICE_COLUMNS} FROM pro_prices WHERE status = 'published' AND garage_id IN (${placeholders(ids.length)}) ORDER BY garage_id, service_id`, ids)
+      ).rows;
+      return claims.map((c) => ({ ...c, prices: prices.filter((p) => p.garage_id === c.garage_id) }));
+    },
+
+    // ---- relecture des prix très éloignés (op « pro-prices », « pro-price »)
+    pricesToReview: () =>
+      db
+        .query(`SELECT p.garage_id, p.service_id, p.kind, p.price_cents, p.updated_at, g.name AS garage_name FROM pro_prices p LEFT JOIN garage_contacts g ON g.garage_id = p.garage_id
+                WHERE p.status = 'review' ORDER BY p.updated_at LIMIT 50`)
+        .then((r) => r.rows),
+    setPriceStatus: (garageId, serviceId, status) =>
+      db.query("UPDATE pro_prices SET status = $3 WHERE garage_id = $1 AND service_id = $2", [garageId, serviceId, status]).then((r) => r.rowCount > 0),
+
+    // Entretien : journal de plus de 90 jours, demandes non abouties de plus de 30 jours, visites de plus de 60 jours.
     async purge() {
       const run = async (sql) => {
         let total = 0;
@@ -252,6 +371,7 @@ export function createProRepo(db) {
       return {
         proEvents: await run("DELETE FROM pro_events WHERE id IN (SELECT id FROM pro_events WHERE at < now() - interval '90 days' LIMIT $1)"),
         proClaims: await run("DELETE FROM pro_claims WHERE id IN (SELECT id FROM pro_claims WHERE status IN ('pending', 'failed') AND created_at < now() - interval '30 days' LIMIT $1)"),
+        proVisits: await run("DELETE FROM pro_visits WHERE id IN (SELECT id FROM pro_visits WHERE day < (now() - interval '60 days')::date LIMIT $1)"),
       };
     },
   };

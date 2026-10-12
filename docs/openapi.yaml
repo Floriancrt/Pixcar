@@ -331,6 +331,144 @@ paths:
         "409": { description: "Demande close (`claim_closed`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "429": { description: "Trop tôt (`resend_too_soon`, avec `retryAfter`) ou limite d'envois (`send_limited`).", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "502": { description: "Le code n'a pas pu partir (`send_failed`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}:
+    get:
+      tags: [Espace Pro]
+      summary: Tableau de bord d'un garage rattaché au compte (prix annoncés, prix payés par ses clients, visites de sa fiche)
+      description: |
+        Seulement pour un garage rattaché (vérifié) à CE compte : sinon 404, sans dire si le garage existe. « Payé par vos clients » :
+        médiane et nombre des déclarations approuvées sur ce garage, retrouvé comme la page le montre (garage OpenStreetMap de même nom à
+        moins de 150 m, ou seul lieu à moins de 40 m, ou lieu de la table lui-même). Visites : visiteurs distincts par jour des 30 derniers
+        jours (`recent`) et des 30 précédents (`previous`).
+      operationId: proGarage
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string }, description: Identifiant du garage (celui des tuiles de la carte). }
+      responses:
+        "200":
+          description: Le tableau de bord.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [garage, prices, paid, visits]
+                properties:
+                  garage:
+                    type: object
+                    required: [id, name, addr, verifiedAt, holderName]
+                    properties:
+                      id: { type: string }
+                      name: { type: string }
+                      addr: { type: string }
+                      verifiedAt: { type: string, format: date-time }
+                      holderName: { type: string }
+                  prices: { type: array, items: { $ref: "#/components/schemas/ProPrice" } }
+                  paid: { type: object, description: "Par prestation : `{ median (€), n }`." }
+                  visits:
+                    type: object
+                    required: [views, calls]
+                    properties:
+                      views: { $ref: "#/components/schemas/ProVisitCounts" }
+                      calls: { $ref: "#/components/schemas/ProVisitCounts" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Garage introuvable ou pas rattaché à ce compte (`not_found`), ou Espace Pro fermé (`pro_disabled`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/prices/{service}:
+    put:
+      tags: [Espace Pro]
+      summary: Annoncer (ou remplacer) le prix d'une prestation
+      description: |
+        Prestations du comparateur (`src/js/shared/services.js`), contrôle technique et « autre » exclus. Prix TTC en euros (1 à 20 000,
+        deux décimales au plus), absent pour « sur devis ». Un prix à plus de 3 fois (ou moins du tiers de) la médiane des prix payés du
+        secteur pour cette prestation (5 déclarations au moins) attend une relecture (`status: review`) et n'est pas public. Enregistrer
+        vaut confirmation : le prix est marqué « ancien » 6 mois plus tard.
+      operationId: proPutPrice
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: service, in: path, required: true, schema: { type: string, example: vidange } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ProPriceInput" } } }
+      responses:
+        "200": { description: Le prix enregistré., content: { application/json: { schema: { $ref: "#/components/schemas/ProPrice" } } } }
+        "400": { description: "JSON illisible (`bad_json`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Garage introuvable ou pas rattaché à ce compte.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "Champ invalide (`validation`, avec `field` : service, kind, price, vehicles, includes).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    delete:
+      tags: [Espace Pro]
+      summary: Retirer le prix d'une prestation
+      operationId: proDeletePrice
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: service, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Retiré. }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Garage pas rattaché à ce compte, ou aucun prix pour cette prestation.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/confirm:
+    post:
+      tags: [Espace Pro]
+      summary: « Tout confirmer » — les prix publiés ou en relecture repartent pour 6 mois
+      operationId: proConfirm
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Nombre de prix confirmés., content: { application/json: { schema: { type: object, required: [confirmed], properties: { confirmed: { type: integer, minimum: 0 } } } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Garage pas rattaché à ce compte.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/public/garages:
+    get:
+      tags: [Espace Pro]
+      summary: Garages vérifiés parmi une liste, et leurs prix annoncés publiés (pour le comparateur, sans compte)
+      description: |
+        Ni compte, ni nom, ni contact : seulement le fait que le garage est vérifié et ses prix publiés. Les garages non vérifiés sont
+        absents de la réponse. `stale` : prix non confirmé depuis 6 mois (« ancien »). Les prix annoncés ne se mélangent jamais aux prix
+        payés (`GET /v1/repairs`).
+      operationId: proPublicGarages
+      parameters:
+        - { name: ids, in: query, required: true, schema: { type: string }, description: "1 à 100 identifiants de garages (ceux des tuiles), séparés par des virgules." }
+      responses:
+        "200":
+          description: Les garages vérifiés de la liste.
+          headers: { Cache-Control: { schema: { type: string }, description: "public, max-age=60" } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [garages]
+                properties:
+                  garages: { type: array, items: { $ref: "#/components/schemas/ProPublicGarage" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/ProDisabled" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/pro/public/visits:
+    post:
+      tags: [Espace Pro]
+      summary: Une visite de la fiche d'un garage vérifié (`view`) ou une touche « Appeler » (`call`)
+      description: |
+        Compté une fois par visiteur, jour, garage et type, et seulement pour un garage vérifié ; la réponse est la même dans tous les cas.
+        Le visiteur n'est gardé que sous forme d'empreinte de son adresse IP propre au jour et au garage (deux jours ou deux garages ne se
+        relient pas), 60 jours au plus ; le garagiste ne voit que des totaux.
+      operationId: proVisit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [garageId, kind]
+              properties:
+                garageId: { type: string }
+                kind: { type: string, enum: [view, call] }
+      responses:
+        "204": { description: Reçu. }
+        "400": { description: "JSON illisible (`bad_json`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { $ref: "#/components/responses/ProDisabled" }
+        "422": { description: "Champ invalide (`validation`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /healthz:
     get:
       tags: [Exploitation]
@@ -375,6 +513,53 @@ components:
       headers: { Retry-After: { schema: { type: integer } } }
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
   schemas:
+    ProPriceInput:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [fixed, from, quote], description: "Forfait, « à partir de », sur devis." }
+        price: { type: number, minimum: 1, maximum: 20000, description: "TTC, en euros ; absent pour « sur devis »." }
+        vehicles: { type: array, items: { type: string, enum: [city, compact, sedan, suv, van] }, description: "Vide ou absent : tous les véhicules." }
+        includes: { type: array, items: { type: string, enum: [parts, labour, extras] } }
+    ProPrice:
+      type: object
+      required: [service, kind, price, vehicles, includes, status, state, confirmedAt, staleAt, updatedAt]
+      properties:
+        service: { type: string }
+        kind: { type: string, enum: [fixed, from, quote] }
+        price: { type: number, nullable: true }
+        vehicles: { type: array, items: { type: string } }
+        includes: { type: array, items: { type: string } }
+        status: { type: string, enum: [published, review, rejected] }
+        state: { type: string, enum: [ok, due, stale, review, rejected], description: "due : à confirmer dans les 30 jours ; stale : ancien." }
+        confirmedAt: { type: string, format: date-time }
+        staleAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProVisitCounts:
+      type: object
+      required: [recent, previous]
+      properties:
+        recent: { type: integer, minimum: 0 }
+        previous: { type: integer, minimum: 0 }
+    ProPublicGarage:
+      type: object
+      required: [id, verified, prices]
+      properties:
+        id: { type: string }
+        verified: { type: boolean, enum: [true] }
+        prices:
+          type: array
+          items:
+            type: object
+            required: [service, kind, price, vehicles, includes, updated, stale]
+            properties:
+              service: { type: string }
+              kind: { type: string, enum: [fixed, from, quote] }
+              price: { type: number, nullable: true }
+              vehicles: { type: array, items: { type: string } }
+              includes: { type: array, items: { type: string } }
+              updated: { type: string, format: date, description: Dernière confirmation. }
+              stale: { type: boolean }
     ProGarage:
       type: object
       required: [id, name, addr, distanceM, status, options]

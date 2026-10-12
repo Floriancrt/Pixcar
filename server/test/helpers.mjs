@@ -32,7 +32,7 @@ export async function makeApp({ config = {}, env = {}, fetchImpl, now, log, over
       }),
       { remoteIp: ip },
     );
-  const reset = () => db.exec("TRUNCATE repairs, garages, write_log, upstream_cache, garage_contacts, pro_claims, pro_events CASCADE");
+  const reset = () => db.exec("TRUNCATE repairs, garages, write_log, upstream_cache, garage_contacts, pro_claims, pro_events, pro_prices, pro_visits CASCADE");
   return { app, db, config: cfg, call, reset, close: () => app.close() };
 }
 

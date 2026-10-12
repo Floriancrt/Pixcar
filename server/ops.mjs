@@ -17,7 +17,9 @@
 //                                                                        (refusé si ce chargement compte moins de la moitié des lignes)
 //   {"op":"pro-stats"}                                                  demandes par état, nombre de garages avec contacts
 //   {"op":"pro-claims","garageId":"…"}                                  demandes et rattachement d'un garage (jamais la cible en clair)
-//   {"op":"pro-revoke","garageId":"…"}                                  retire le rattachement vérifié d'un garage (vérification contestée)
+//   {"op":"pro-revoke","garageId":"…"}                                  retire le rattachement vérifié d'un garage (vérification contestée) et ses prix
+//   {"op":"pro-prices"}                                                 prix annoncés en attente de relecture (très éloignés des prix payés du secteur)
+//   {"op":"pro-price","garageId":"…","serviceId":"…","status":"published"}  publie (« published ») ou refuse (« rejected ») un prix relu
 import { repairRetentionMonths } from "./config.mjs";
 import { createDb } from "./db.mjs";
 import { jsonLog } from "./lib/log.mjs";
@@ -100,6 +102,16 @@ export function createOps({ openDb, env = process.env, log = () => {} }) {
     "pro-stats": () => withDb((db) => createProRepo(db).proStats()),
     "pro-claims": (e) => withDb(async (db) => ({ claims: await createProRepo(db).claimsOfGarage(garageIdOf(e.garageId)) })),
     "pro-revoke": (e) => withDb(async (db) => ({ revoked: await createProRepo(db).revoke(garageIdOf(e.garageId)) })),
+    "pro-prices": () =>
+      withDb(async (db) => ({
+        review: (await createProRepo(db).pricesToReview()).map((p) => ({ garageId: p.garage_id, garageName: p.garage_name || "", serviceId: p.service_id, kind: p.kind, price: p.price_cents === null ? null : p.price_cents / 100, updatedAt: p.updated_at })),
+      })),
+    "pro-price": (e) => {
+      const garageId = garageIdOf(e.garageId);
+      if (typeof e.serviceId !== "string" || !/^[a-z0-9_]{2,40}$/.test(e.serviceId)) throw new Error("« serviceId » : identifiant de prestation attendu");
+      if (e.status !== "published" && e.status !== "rejected") throw new Error("« status » : « published » ou « rejected »");
+      return withDb(async (db) => ({ updated: await createProRepo(db).setPriceStatus(garageId, e.serviceId, e.status) }));
+    },
   };
 
   return async (event) => {

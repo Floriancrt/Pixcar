@@ -8,6 +8,16 @@
 //   POST /v1/pro/claims/:id/code         { code } : essai du code (5 au plus) ; le bon code rattache le garage au compte
 //   POST /v1/pro/claims/:id/resend       nouveau code (60 s après le précédent ; 3 envois par demande)
 //
+// Une fois le garage rattaché (« Vos premiers prix ») :
+//   GET    /v1/pro/garages/:id                    tableau de bord : prix annoncés, prix payés par ses clients (médianes), visites de sa fiche
+//   PUT    /v1/pro/garages/:id/prices/:service    { kind, price, vehicles, includes } : annonce (ou remplace) un prix ; un prix très éloigné des
+//                                                 prix payés du secteur attend une relecture avant publication
+//   DELETE /v1/pro/garages/:id/prices/:service    retire un prix
+//   POST   /v1/pro/garages/:id/confirm            « Tout confirmer » : les prix repartent pour 6 mois
+// Sans compte (le comparateur) :
+//   GET    /v1/pro/public/garages?ids=a,b,…       garages vérifiés parmi ces identifiants (100 au plus) et leurs prix publiés
+//   POST   /v1/pro/public/visits                  { garageId, kind: view | call } : une visite de fiche ou une touche « Appeler » (garage vérifié)
+//
 // Règles : SIRET valide, actif, d'une activité de garage, et situé à moins de 300 m du garage (ou même code postal et même nom quand le
 // registre n'a pas de position) ; le code part UNIQUEMENT vers un contact connu du garage par nos données (jamais saisi par le demandeur,
 // sauf la partie locale d'une adresse sur le domaine propre au garage) ; code à 6 chiffres valable 10 minutes, gardé en empreinte ;
@@ -23,10 +33,17 @@ import { GARAGE_NAF, isSiret, lookupSiret, normalizeSiret } from "./lib/sirene.m
 import { AuthError, createCognitoVerifier } from "./lib/jwt.mjs";
 import { createSenders } from "./lib/senders.mjs";
 import { createProRepo } from "./pro-repo.mjs";
+import { freshness, parseProPrice, staleAt } from "../src/js/shared/pro-prices.js";
 
 const NO_STORE = { "cache-control": "no-store" };
 const SIRENE_TTL_MS = 10 * 60_000;
 const ACCOUNT_RE = /^[\w-]{1,128}$/;
+const GARAGE_RE = /^[0-9a-f-]{8,40}$/; // identifiant Overture d'un lieu (celui des tuiles et de garage_contacts)
+const PUBLIC_MAX_IDS = 100;
+const DAY_MS = 864e5;
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+const isoOf = (v) => (v ? new Date(v).toISOString() : null);
+const msOf = (v) => new Date(v).getTime();
 
 // Code à 6 chiffres, uniforme (tirage rejeté au-dessus du plus grand multiple de 10⁶ représentable).
 export function newCode() {
@@ -56,6 +73,23 @@ function sameText(a, b) {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
+}
+
+// Un prix annoncé tel que le tableau de bord le montre. state : « ok », « due » (à confirmer bientôt), « stale » (ancien), « review », « rejected ».
+function priceView(p, nowMs) {
+  const confirmed = msOf(p.confirmed_at);
+  return {
+    service: p.service_id,
+    kind: p.kind,
+    price: p.price_cents === null ? null : p.price_cents / 100,
+    vehicles: p.vehicles || [],
+    includes: p.includes || [],
+    status: p.status,
+    state: p.status === "published" ? freshness(confirmed, nowMs) : p.status,
+    confirmedAt: isoOf(p.confirmed_at),
+    staleAt: new Date(staleAt(confirmed)).toISOString(),
+    updatedAt: isoOf(p.updated_at),
+  };
 }
 
 export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date.now, log = () => {}, senders, verifier, sirene } = {}) {
@@ -315,10 +349,10 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
 
   return {
     // Réponse pour un chemin /v1/pro/…, ou null si le chemin n'est pas de l'Espace Pro.
-    async handle(request, path) {
+    async handle(request, path, ctx = {}) {
       if (path !== "/v1/pro" && !path.startsWith("/v1/pro/")) return null;
       try {
-        return await route(request, path);
+        return await route(request, path, ctx);
       } catch (e) {
         // base ou registre injoignable : on échoue vite et proprement, comme le reste de l'API
         log({ level: "error", msg: "Espace Pro indisponible", error: e && e.message });
@@ -330,8 +364,9 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
     senders: send,
   };
 
-  async function route(request, path) {
+  async function route(request, path, ctx) {
     if (!pro.enabled) return apiError(404, "pro_disabled", "L'Espace Pro n'est pas encore ouvert.");
+    if (path.startsWith("/v1/pro/public/")) return publicRoute(request, path, ctx);
     let me;
     try {
       me = await account(request);
@@ -369,6 +404,118 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
       }
       if (method !== "POST") return apiError(405, "method_not_allowed", "Méthode non autorisée.", {}, { allow: "POST" });
       return m[2] === "/code" ? postCode(request, sub, id) : postResend(sub, id);
+    }
+    if ((m = /^\/v1\/pro\/garages\/([^/]+)(?:\/(confirm)|\/prices\/([^/]+))?$/.exec(path))) {
+      const id = m[1].toLowerCase();
+      if (!GARAGE_RE.test(id)) return noGarage();
+      if (m[2]) return method === "POST" ? postConfirm(sub, id) : apiError(405, "method_not_allowed", "Méthode non autorisée.", {}, { allow: "POST" });
+      if (m[3]) {
+        if (method === "PUT") return putPrice(request, sub, id, m[3]);
+        if (method === "DELETE") return deletePrice(sub, id, m[3]);
+        return apiError(405, "method_not_allowed", "Méthode non autorisée.", {}, { allow: "PUT, DELETE" });
+      }
+      if (method !== "GET") return apiError(405, "method_not_allowed", "Méthode non autorisée.", {}, { allow: "GET" });
+      return getGarage(sub, id);
+    }
+    return apiError(404, "not_found", "Route inconnue.");
+  }
+
+  // ---- « Vos premiers prix » : seulement sur un garage rattaché à CE compte (sinon : introuvable, sans dire s'il existe)
+  function noGarage() {
+    return apiError(404, "not_found", "Garage introuvable, ou pas rattaché à ce compte.");
+  }
+
+  async function getGarage(sub, id) {
+    const owned = await repo.ownedGarage(id, sub);
+    if (!owned) return noGarage();
+    const nowMs = now();
+    const [prices, paid, visits] = await Promise.all([
+      repo.listPrices(id),
+      repo.paidPrices(owned.contact),
+      repo.visitStats(id, { since30: isoDay(nowMs - 30 * DAY_MS), since60: isoDay(nowMs - 60 * DAY_MS) }),
+    ]);
+    const c = owned.contact || {};
+    return json(
+      200,
+      {
+        garage: { id, name: c.name || "", addr: c.addr || "", verifiedAt: isoOf(owned.claim.verified_at), holderName: owned.claim.holder_name },
+        prices: prices.map((p) => priceView(p, nowMs)),
+        paid,
+        visits: { views: visits.view, calls: visits.call },
+      },
+      NO_STORE,
+    );
+  }
+
+  async function putPrice(request, sub, id, rawService) {
+    const body = await readJson(request, 1024);
+    if (body.error) return apiError(400, "bad_json", "JSON attendu (1 Ko au plus).");
+    let serviceId = "";
+    try {
+      serviceId = decodeURIComponent(rawService);
+    } catch {} // pourcentage mal formé : prestation inconnue
+    const parsed = parseProPrice(serviceId, body.value);
+    if (parsed.error) return apiError(422, "validation", parsed.error, { field: parsed.field });
+    const owned = await repo.ownedGarage(id, sub);
+    if (!owned) return noGarage();
+    const v = parsed.value;
+    const area = owned.contact ? { y: owned.contact.area_y, x: owned.contact.area_x } : null;
+    const row = await repo.savePrice({ garageId: id, serviceId: v.serviceId, kind: v.kind, priceCents: v.priceCents, vehicles: v.vehicles, includes: v.includes, accountId: sub, area });
+    if (row.status === "review") log({ level: "info", msg: "prix annoncé à relire", event: "pro_price_review", garageId: id, serviceId: v.serviceId });
+    return json(200, priceView(row, now()), NO_STORE);
+  }
+
+  async function deletePrice(sub, id, rawService) {
+    let serviceId = "";
+    try {
+      serviceId = decodeURIComponent(rawService);
+    } catch {}
+    if (!(await repo.ownedGarage(id, sub))) return noGarage();
+    return (await repo.deletePrice(id, serviceId)) ? new Response(null, { status: 204, headers: NO_STORE }) : apiError(404, "not_found", "Aucun prix pour cette prestation.");
+  }
+
+  async function postConfirm(sub, id) {
+    if (!(await repo.ownedGarage(id, sub))) return noGarage();
+    return json(200, { confirmed: await repo.confirmPrices(id) }, NO_STORE);
+  }
+
+  // ---- sans compte : ce que le comparateur montre (badge, prix annoncés) et ce qu'il compte (visites des fiches)
+  async function publicRoute(request, path, ctx) {
+    const method = request.method;
+    if (path === "/v1/pro/public/garages") {
+      if (method !== "GET") return apiError(405, "method_not_allowed", "Méthode non autorisée.", {}, { allow: "GET" });
+      const raw = new URL(request.url).searchParams.get("ids") || "";
+      const ids = [...new Set(raw.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean))];
+      if (!ids.length || ids.length > PUBLIC_MAX_IDS || !ids.every((x) => GARAGE_RE.test(x)))
+        return apiError(400, "bad_request", `ids : de 1 à ${PUBLIC_MAX_IDS} identifiants de garages, séparés par des virgules.`);
+      const nowMs = now();
+      const garages = (await repo.publicGarages(ids)).map((g) => ({
+        id: g.garage_id,
+        verified: true,
+        prices: g.prices.map((p) => ({
+          service: p.service_id,
+          kind: p.kind,
+          price: p.price_cents === null ? null : p.price_cents / 100,
+          vehicles: p.vehicles || [],
+          includes: p.includes || [],
+          updated: isoDay(msOf(p.confirmed_at)),
+          stale: freshness(msOf(p.confirmed_at), nowMs) === "stale",
+        })),
+      }));
+      return json(200, { garages }, { "cache-control": "public, max-age=60" });
+    }
+    if (path === "/v1/pro/public/visits") {
+      if (method !== "POST") return apiError(405, "method_not_allowed", "Méthode non autorisée.", {}, { allow: "POST" });
+      const body = await readJson(request, 256);
+      if (body.error) return apiError(400, "bad_json", "JSON attendu.");
+      const { garageId, kind } = body.value || {};
+      if (typeof garageId !== "string" || !GARAGE_RE.test(garageId.toLowerCase()) || (kind !== "view" && kind !== "call"))
+        return apiError(422, "validation", "garageId (identifiant du garage) et kind (view ou call) requis.");
+      const id = garageId.toLowerCase();
+      const day = isoDay(now());
+      // un visiteur compte une fois par jour, par garage et par type ; l'empreinte change chaque jour et pour chaque garage
+      await repo.recordVisit({ garageId: id, day, kind, visitor: await digest(`visit:${ctx.ip || "unknown"}:${id}:${day}`) });
+      return new Response(null, { status: 204, headers: NO_STORE });
     }
     return apiError(404, "not_found", "Route inconnue.");
   }

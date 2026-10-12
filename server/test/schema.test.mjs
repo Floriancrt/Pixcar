@@ -12,10 +12,10 @@ describe("migrations", () => {
   test("applied once, in order; running again does nothing", async () => {
     const db = await freshDb();
     try {
-      assert.deepEqual(await migrate(db), ["001_init.sql", "002_pro.sql"]);
+      assert.deepEqual(await migrate(db), ["001_init.sql", "002_pro.sql", "003_pro_prices.sql"]);
       assert.deepEqual(await migrate(db), []);
       const done = (await db.query("SELECT version FROM schema_migrations ORDER BY version")).rows.map((r) => r.version);
-      assert.deepEqual(done, ["001_init.sql", "002_pro.sql"]);
+      assert.deepEqual(done, ["001_init.sql", "002_pro.sql", "003_pro_prices.sql"]);
     } finally {
       await db.close();
     }

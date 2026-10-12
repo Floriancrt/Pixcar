@@ -47,7 +47,7 @@ export function corsHeaders(origin, allowed) {
   if (origin && (allowed.includes("*") || allowed.includes(origin))) {
     h["access-control-allow-origin"] = allowed.includes("*") ? "*" : origin;
     h["access-control-expose-headers"] = "retry-after, x-pixcar-stale, x-request-id"; // sans cela la page ne peut pas lire Retry-After
-    h["access-control-allow-methods"] = "GET, POST, DELETE, OPTIONS";
+    h["access-control-allow-methods"] = "GET, POST, PUT, DELETE, OPTIONS";
     h["access-control-allow-headers"] = "content-type, x-delete-token, x-turnstile-token, authorization, x-pro-dev-account";
     h["access-control-max-age"] = "86400";
   }

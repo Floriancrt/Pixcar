@@ -13,7 +13,7 @@ import { createDb, withRetry } from "./db.mjs";
 import { isIndexStatement, splitStatements, toDsqlStatement } from "./lib/sql.mjs";
 
 export const MIGRATIONS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../db/migrations");
-export const APP_TABLES = ["garages", "repairs", "write_log", "upstream_cache", "garage_contacts", "pro_claims", "pro_events"];
+export const APP_TABLES = ["garages", "repairs", "write_log", "upstream_cache", "garage_contacts", "pro_claims", "pro_events", "pro_prices", "pro_visits"];
 
 export async function migrate(db, dir = MIGRATIONS_DIR, log = () => {}, { pollMs = 1000, timeoutMs = 600_000 } = {}) {
   // une session dédiée : le verrou est pris et rendu sur la même connexion, et aucun délai de requête ne coupe une migration longue
