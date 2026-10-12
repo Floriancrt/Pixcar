@@ -573,6 +573,45 @@ Resources:
       TreatMissingData: notBreaching
       AlarmActions: [!Ref AlarmTopic]
 
+  # Espace Pro : réputation d'envoi du compte SES (codes de vérification et codes Cognito). AWS met un compte en examen vers 5 % de
+  # rebonds ou 0,1 % de plaintes : ces alarmes préviennent bien avant, pour couper l'envoi par e-mail (PRO_CHANNELS) si besoin.
+  SesBounceRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasProAlarm
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "métrique du compte SES entier, publiée par AWS sans dimension ; pas de données tant que rien ne part : non déclenchée"
+        must: ["seuil sous le niveau d'examen d'AWS (5 %)"]
+    Properties:
+      AlarmDescription: "Espace Pro : taux de rebond des e-mails au-dessus de 2 % (AWS examine le compte vers 5 %) : vérifier les envois, couper l'e-mail (PRO_CHANNELS) si besoin"
+      Namespace: AWS/SES
+      MetricName: Reputation.BounceRate
+      Statistic: Maximum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 0.02
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+
+  SesComplaintRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasProAlarm
+    Metadata:
+      com.aws.cloudformation.Context:
+        must: ["seuil sous le niveau d'examen d'AWS (0,1 %)"]
+    Properties:
+      AlarmDescription: "Espace Pro : taux de plaintes des e-mails au-dessus de 0,05 % (AWS examine le compte vers 0,1 %) : vérifier les envois, couper l'e-mail (PRO_CHANNELS) si besoin"
+      Namespace: AWS/SES
+      MetricName: Reputation.ComplaintRate
+      Statistic: Maximum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 0.0005
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+
 Outputs:
   ApiUrl:
     Description: Adresse de l'API tant que le domaine personnalisé n'est pas en place

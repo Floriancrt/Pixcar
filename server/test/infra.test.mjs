@@ -315,6 +315,14 @@ describe("Espace Pro in the templates (infra/pixcar-api.yaml, infra/pixcar-pro.y
     assert.deepEqual(t.Conditions.HasProAlarm, { "Fn::And": [{ Condition: "HasPro" }, { Condition: "HasAlarmEmail" }] });
     const m = R.ProContestedMetric.Properties.MetricTransformations[0];
     assert.deepEqual([R.ProContestedAlarm.Properties.Namespace, R.ProContestedAlarm.Properties.MetricName], [m.MetricNamespace, m.MetricName]);
+    // réputation d'envoi SES (dossier de sortie du mode test) : seuils sous les niveaux d'examen d'AWS (5 % de rebonds, 0,1 % de plaintes)
+    for (const [id, metric, max] of [["SesBounceRateAlarm", "Reputation.BounceRate", 0.05], ["SesComplaintRateAlarm", "Reputation.ComplaintRate", 0.001]]) {
+      const a = R[id].Properties;
+      assert.equal(R[id].Condition, "HasProAlarm", id);
+      assert.deepEqual([a.Namespace, a.MetricName, a.ComparisonOperator, a.TreatMissingData], ["AWS/SES", metric, "GreaterThanThreshold", "notBreaching"], id);
+      assert.ok(a.Threshold > 0 && a.Threshold < max, id);
+      assert.equal(a.Dimensions, undefined, id);
+    }
   });
 
   test("the Pro stack: passwordless accounts (Essentials, e-mail code sent through SES), a public client with two flows, nothing deleted with the stack", () => {
