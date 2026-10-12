@@ -149,6 +149,10 @@ function fakeCognito() {
   // sans identifiants Cognito, ou sans API : pas de page pro (et une configuration incohérente arrête le build)
   build("plain", [], { ...env, PIXCAR_PRO_POOL: "", PIXCAR_PRO_CLIENT: "" });
   check("without Cognito settings the site has no pro/ page and no trace of Cognito", !fs.existsSync(path.join(OUT, "plain/dist/pro")) && !/cognito/.test(fs.readFileSync(path.join(OUT, "plain/dist/_headers"), "utf8")));
+  // texte de confidentialité : la section « Espace Pro » n'existe que dans le site qui a la page pro/, jamais dans la page tout-en-un
+  const legalPro = (file) => /id="lg-pro"/.test(fs.readFileSync(file, "utf8"));
+  execFileSync(process.execPath, [BUILD, "--only", "single", "--src", src, "--out", path.join(OUT, "single")], { stdio: "pipe", env });
+  check("privacy text: an « Espace Pro » section in the site that has the pro page, none without it, none in the all-in-one page", legalPro(path.join(dist, "index.html")) && !legalPro(path.join(OUT, "plain/dist/index.html")) && !legalPro(path.join(OUT, "single/index.html")));
   let refused = "";
   try {
     build("noapi", [], { ...env, PIXCAR_API_BASE: "" });

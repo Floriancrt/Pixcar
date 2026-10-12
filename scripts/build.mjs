@@ -115,6 +115,8 @@ const garages = await (async () => {
 // Variantes du texte selon la table : <!--GT:on-->…<!--/GT:on--> (avec les tuiles) et <!--GT:off-->…<!--/GT:off--> (sans). La page tout-en-un n'a jamais les
 // tuiles : ses textes sont toujours ceux « sans », même quand le site (dist/) est construit avec.
 const garagesVariants = (html, on) => html.replace(/<!--GT:(on|off)-->([\s\S]*?)<!--\/GT:\1-->/g, (m, mode, text) => ((mode === "on") === !!on ? text : ""));
+// De même <!--PRO:on-->…<!--/PRO:on--> : texte qui n'existe qu'avec la page pro/ (site dist/ construit avec l'Espace Pro ; jamais la page tout-en-un).
+const proVariants = (html, on) => html.replace(/<!--PRO:(on|off)-->([\s\S]*?)<!--\/PRO:\1-->/g, (m, mode, text) => ((mode === "on") === !!on ? text : ""));
 // Fond de carte Mapbox : le jeton vient de src/mapbox.json pour la version publiée (--pages) seulement, ou de PIXCAR_MAPBOX_TOKEN (qui l'emporte ;
 // vide : désactivé). Sans jeton, la carte garde le fond de l'IGN (puis CARTO) : rien n'est demandé à Mapbox, ni par la page tout-en-un, ni en
 // développement, ni dans les tests. Seul un jeton PUBLIC (« pk.… ») est accepté : il finit dans la page, donc dans le dépôt et chez tout visiteur ;
@@ -258,7 +260,7 @@ const fillAudience = (html, where) =>
 // l'API est branchée (PIXCAR_API_BASE) : le build échoue alors, on n'ouvre pas au public des déclarations sans informer les visiteurs.
 // PIXCAR_ALLOW_NO_LEGAL=1 lève cette garde pour un essai.
 const LEGAL_FIELDS = ["editorLine", "contact", "hostPages", "hostApi", "repairRetentionMonths", "updated"];
-async function legalParts(withGarages) {
+async function legalParts(withGarages, withPro) {
   const config = JSON.parse(await read(SRC, "legal.json"));
   const filled = (k) => String(config[k] ?? "").trim() !== "";
   const problems = LEGAL_FIELDS.filter((k) => !filled(k)).map((k) => `${k} : à renseigner`);
@@ -270,7 +272,7 @@ async function legalParts(withGarages) {
     return { dialog: "", linkPanel: "", linkSources: "", linkDialog: "" };
   }
   const gaFields = { cookie: analytics && analytics.cookie, retentionMonths: analytics && analytics.retentionMonths };
-  const dialog = fillAudience(garagesVariants(variants(await read(SRC, "partials/legal.html")), withGarages), "partials/legal.html")
+  const dialog = fillAudience(proVariants(garagesVariants(variants(await read(SRC, "partials/legal.html")), withGarages), withPro), "partials/legal.html")
     .replace(/\{\{legal\.([A-Za-z]+)\}\}/g, (m, k) => {
       if (!LEGAL_FIELDS.includes(k)) throw new Error(`partials/legal.html : {{legal.${k}}} n'existe pas dans src/legal.json`);
       return esc(String(config[k]).trim());
@@ -292,7 +294,7 @@ async function legalParts(withGarages) {
     linkDialog: '<p class="dlg-note" data-store-only="remote"><button type="button" class="link-btn" data-open-legal>Comment Pixcar traite vos données</button></p>',
   };
 }
-async function pageParts(withGarages) {
+async function pageParts(withGarages, withPro = false) {
   const road = oneLine(await read(SRC, "partials/ld-road.svg"));
   const car = oneLine(await read(SRC, "partials/ld-car.svg"));
   let body = garagesVariants(variants(await read(SRC, "partials/body.html")), withGarages);
@@ -304,7 +306,7 @@ async function pageParts(withGarages) {
     }
     return text;
   };
-  const legal = await legalParts(withGarages);
+  const legal = await legalParts(withGarages, withPro);
   body = fill(body, [
     ["<!--LD_ROAD-->", road],
     ["<!--LD_CAR-->", car],
@@ -534,7 +536,7 @@ async function buildPro(fonts) {
 
 // ------------------------------------------------------------------------------------------------
 const parts = await pageParts(false);
-const distParts = garages ? await pageParts(true) : parts;
+const distParts = garages || pro ? await pageParts(!!garages, !!pro) : parts;
 await mkdir(OUT, { recursive: true });
 const single = only === "dist" ? null : await buildSingle(parts);
 const dist = only === "single" ? null : await buildDist(distParts);
