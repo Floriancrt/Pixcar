@@ -146,7 +146,8 @@ async function submitOtp(ev) {
   ev.preventDefault();
   const input = $("otp");
   const code = input.value.replace(/\D/g, "");
-  if (code.length !== 6) return fieldError(input, "otpErr", "Le code compte 6 chiffres.");
+  // Cognito : 6 chiffres pour confirmer une inscription, 8 pour se connecter (constaté le 12 octobre 2026) ; il vérifie lui-même le code
+  if (code.length < 6 || code.length > 8) return fieldError(input, "otpErr", "Recopiez le code reçu par e-mail (6 à 8 chiffres).");
   await busy(ev.submitter || input.form.querySelector("button"), async () => {
     try {
       const r = state.flow === "signup" ? await auth.answerSignUp(state.email, code) : await auth.answerSignIn(state.email, state.session, code);

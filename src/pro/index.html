@@ -64,8 +64,8 @@
   <section class="card narrow" data-screen="login" hidden aria-labelledby="loginTitle">
     <h1 id="loginTitle" tabindex="-1" data-when="login">Connexion</h1>
     <h1 id="signupTitle" tabindex="-1" data-when="signup">Créer mon accès</h1>
-    <p class="lead" data-when="login">Sans mot de passe : un code à 6 chiffres reçu par e-mail.</p>
-    <p class="lead" data-when="signup">Pour gérer la fiche de votre garage sur Pixcar. Sans mot de passe : un code à 6 chiffres reçu par e-mail.</p>
+    <p class="lead" data-when="login">Sans mot de passe : un code reçu par e-mail.</p>
+    <p class="lead" data-when="signup">Pour gérer la fiche de votre garage sur Pixcar. Sans mot de passe : un code reçu par e-mail.</p>
     <form id="loginForm" novalidate>
       <label for="email">E-mail professionnel</label>
       <input id="email" type="email" autocomplete="email" inputmode="email" spellcheck="false" aria-describedby="emailErr" required>
@@ -80,10 +80,10 @@
   <section class="card narrow" data-screen="otp" hidden aria-labelledby="otpTitle">
     <button type="button" class="back" data-go="login"><svg class="ic" aria-hidden="true"><use href="#i-back" /></svg><span id="otpEmail"></span></button>
     <h1 id="otpTitle" tabindex="-1">Votre code</h1>
-    <p class="lead">Nous venons d'envoyer un code à 6 chiffres à <b id="otpTo"></b>. Pensez à regarder dans les courriers indésirables.</p>
+    <p class="lead">Nous venons d'envoyer un code par e-mail à <b id="otpTo"></b>. Pensez à regarder dans les courriers indésirables.</p>
     <form id="otpForm" novalidate>
       <label for="otp">Code reçu par e-mail</label>
-      <input id="otp" class="code-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" spellcheck="false" aria-describedby="otpErr" required>
+      <input id="otp" class="code-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="11" spellcheck="false" aria-describedby="otpErr" required>
       <p class="field-err" id="otpErr" hidden></p>
       <button class="btn primary" type="submit">Se connecter</button>
     </form>

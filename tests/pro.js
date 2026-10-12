@@ -58,7 +58,9 @@ function fakeCognito() {
   let n = 0;
   const err = (type, message) => ({ status: 400, body: { __type: type, message } });
   const tokens = (email) => ({ AuthenticationResult: { AccessToken: `tok.${users.get(email).sub}.${++n}`, IdToken: "id." + n, RefreshToken: "ref." + users.get(email).sub, ExpiresIn: 3600, TokenType: "Bearer" } });
+  // comme le vrai Cognito (constaté le 12 octobre 2026) : code d'inscription à 6 chiffres, code de connexion (EMAIL_OTP) à 8 chiffres
   const code = () => String(100000 + ((n++ * 7919) % 900000));
+  const signinCode = () => String(10000000 + ((n++ * 7919) % 90000000));
   function handle(action, b) {
     calls.push(action);
     if (b.ClientId !== CLIENT) return err("ResourceNotFoundException", "client inconnu");
@@ -93,7 +95,7 @@ function fakeCognito() {
         if (!u || !u.confirmed) return err("UserNotFoundException", "User does not exist.");
         if (b.AuthParameters.PREFERRED_CHALLENGE !== "EMAIL_OTP") return err("InvalidParameterException", "challenge");
         const s = "otp-" + ++n;
-        sessions.set(s, { email, code: code() });
+        sessions.set(s, { email, code: signinCode() });
         mail.push({ email, code: sessions.get(s).code, kind: "signin" });
         return { status: 200, body: { ChallengeName: "EMAIL_OTP", Session: s, ChallengeParameters: { CODE_DELIVERY_DESTINATION: "c***@g***" } } };
       }
@@ -392,7 +394,11 @@ function fakeCognito() {
   await page.fill("#email", EMAIL);
   await page.click("#loginBtn");
   await page.waitForSelector('[data-screen="otp"]:not([hidden])');
-  await page.fill("#otp", cognito.last(EMAIL));
+  // le code de connexion de Cognito compte 8 chiffres (6 pour l'inscription) : la page l'accepte, tapé avec une espace, et l'affiche en entier
+  const signin = cognito.last(EMAIL);
+  await page.fill("#otp", signin.slice(0, 4) + " " + signin.slice(4));
+  const fit = await page.$eval("#otp", (el) => ({ value: el.value, clipped: el.scrollWidth > el.clientWidth + 1, lead: el.closest("section").querySelector(".lead").textContent }));
+  check("sign-in code: 8 digits (Cognito), typed with a space, kept whole and fully visible; the screen does not promise 6 digits", signin.length === 8 && fit.value.replace(/\D/g, "") === signin && !fit.clipped && !/6 chiffres/.test(fit.lead), JSON.stringify(fit));
   await page.click('#otpForm button[type="submit"]');
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
   check("sign in again by e-mail code: an account with one verified garage lands on its dashboard", (await page.textContent("#dashGarage")).startsWith("Garage Démo Centre"));

@@ -332,7 +332,7 @@ input[aria-invalid="true"] {
   border-color: var(--red);
 }
 .code-input {
-  max-width: 220px;
+  max-width: 280px; /* 8 chiffres espacés (code de connexion Cognito) */
   font-size: 1.6rem !important;
   font-weight: 800;
   letter-spacing: 0.35em;

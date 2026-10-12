@@ -1,5 +1,5 @@
 // Espace Pro : connexion SANS MOT DE PASSE au groupe d'utilisateurs Amazon Cognito, par l'API publique de Cognito (aucune bibliothèque) :
-//  - connexion : InitiateAuth (USER_AUTH, défi préféré EMAIL_OTP) → code à 6 chiffres reçu par e-mail → RespondToAuthChallenge ;
+//  - connexion : InitiateAuth (USER_AUTH, défi préféré EMAIL_OTP) → code reçu par e-mail (8 chiffres ; 6 pour la confirmation d'inscription) → RespondToAuthChallenge ;
 //  - inscription : SignUp (e-mail seul) → code reçu → ConfirmSignUp → connexion immédiate avec la session rendue par ConfirmSignUp ;
 //  - jetons : jeton d'accès (1 h) envoyé à l'API Pixcar, renouvelé avec le jeton de rafraîchissement ; déconnexion : RevokeToken.
 // Les jetons restent dans sessionStorage (fermer l'onglet déconnecte) ; jamais dans un cookie ni dans localStorage.
