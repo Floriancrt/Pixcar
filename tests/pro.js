@@ -309,12 +309,79 @@ function fakeCognito() {
   check("in the database: verified, with the person's name and role, under the Cognito account", row && row.status === "verified" && row.holder_name === "Camille Durand" && row.holder_role === "manager", JSON.stringify(row));
   await axe(page, "garage vérifié");
   await shot(page, "5-fait");
-  await page.click('[data-screen="done"] [data-go="home"]');
+  // ---- « Vos premiers prix » : tableau de bord du garage
+  await page.click("#doneDash");
+  await page.waitForSelector('[data-screen="dash"]:not([hidden])');
+  const today = new Date().toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", day: "numeric", month: "long", year: "numeric" });
+  check(
+    "dashboard: hello by first name, the garage, verified today, no price yet, zero visits",
+    (await page.textContent("#dashTitle")) === "Bonjour Camille" && (await page.textContent("#dashGarage")).startsWith("Garage Démo Centre") && (await page.textContent("#dashVerified")).includes(today) &&
+      (await page.locator("#noPrice").isVisible()) && (await page.textContent("#statViews")) === "0" && (await page.textContent("#statFresh")) === "—" && (await page.locator("#dashDue").isHidden()),
+    [await page.textContent("#dashTitle"), await page.textContent("#dashVerified")].join(" | "),
+  );
+  check("the steps are gone on the dashboard", await page.locator("#steps").isHidden());
+  await axe(page, "tableau de bord vide (garage)");
+  // ajout d'un prix : le formulaire contrôle avant l'API, l'aperçu suit la saisie
+  await page.click("#addPrice");
+  await page.waitForSelector("#priceDlg[open]");
+  check("add: the first service of the catalogue, all vehicles, parts and labour ticked", (await page.inputValue("#priceService")) === "geo_av" && (await page.$$eval('#priceVehicles input', (els) => els.every((e) => e.checked))) && (await page.$$eval('#priceIncludes input:checked', (els) => els.map((e) => e.value).join())) === "parts,labour");
+  await page.selectOption("#priceService", "vidange");
+  await page.click("#priceSave");
+  check("a missing price is refused on the page, in French", (await page.textContent("#priceErr")).includes("Prix TTC") && (await page.getAttribute("#priceValue", "aria-invalid")) === "true");
+  await page.fill("#priceValue", "89,5");
+  check("preview: « 89,50 € Annoncé forfait, pièces et main-d'œuvre »", (await page.textContent("#previewPrice")) === "89,50\u00a0€" && (await page.textContent("#previewDetail")) === "forfait, pièces et main-d'œuvre", await page.textContent("#previewPrice"));
+  await page.click('#priceForm .seg label:has(input[value="quote"])');
+  check("« sur devis » hides the price field", (await page.locator("#priceBox").isHidden()) && (await page.textContent("#previewPrice")) === "Sur devis");
+  await page.click('#priceForm .seg label:has(input[value="fixed"])');
+  await page.click('#priceVehicles label:has(input[value="van"])');
+  await axe(page, "saisie d'un prix");
+  await shot(page, "6-saisie");
+  await page.click("#priceSave");
+  await page.waitForFunction(() => !document.getElementById("priceDlg").open);
+  const saved = (await api.db.query("SELECT service_id, kind, price_cents, vehicles, includes, status FROM pro_prices")).rows;
+  check("saved in the database: the service, 89.50 €, four vehicles, parts and labour, published", saved.length === 1 && saved[0].service_id === "vidange" && saved[0].price_cents === 8950 && saved[0].vehicles.join() === "city,compact,sedan,suv" && saved[0].includes.join() === "parts,labour" && saved[0].status === "published", JSON.stringify(saved));
+  const rowText = (await page.textContent("#priceRows tr")).replace(/\s+/g, " ");
+  check("the price is listed: service, type, price, up to date today", /Vidange \(huile \+ filtre\).*Forfait.*89,50.*Pièces \+ main-d'œuvre.*Pas encore de déclaration/.test(rowText) && (await page.textContent("#statFresh")) === "1\u00a0/\u00a01" && (await page.textContent("#alert")).includes("visible sur Pixcar"), rowText);
+  // un prix « sur devis », puis retiré (deux clics)
+  await page.click("#addPrice");
+  await page.selectOption("#priceService", "diag");
+  check("a service that already has a price is not offered again", await page.isDisabled('#priceService option[value="vidange"]'));
+  await page.click('#priceForm .seg label:has(input[value="quote"])');
+  await page.click("#priceSave");
+  await page.waitForFunction(() => !document.getElementById("priceDlg").open);
+  await page.click('#priceRows button[aria-label="Modifier : Diagnostic électronique (voyant allumé)"]');
+  check("edit: the service is fixed, the kind is kept", (await page.locator("#pickService").isHidden()) && (await page.isChecked('#priceForm input[name="kind"][value="quote"]')) && (await page.textContent("#priceDlgTitle")) === "Diagnostic électronique (voyant allumé)");
+  await page.click("#priceDelete");
+  check("removing asks for a second click", (await page.textContent("#priceDelete")).includes("Confirmer") && (await page.locator("#priceDlg[open]").count()) === 1);
+  await page.click("#priceDelete");
+  await page.waitForFunction(() => !document.getElementById("priceDlg").open);
+  check("removed: one price left", (await page.$$eval("#priceRows tr", (els) => els.length)) === 1 && (await api.db.query("SELECT count(*)::int AS n FROM pro_prices")).rows[0].n === 1);
+  // prix à confirmer, visites et prix payés : tableau de bord rechargé
+  const garageId = CONTACTS[0].id;
+  await api.db.query("UPDATE pro_prices SET confirmed_at = now() - interval '170 days'");
+  // l'horloge de l'API de test part du 1er octobre 2026 (tests/api-harness.js) : les jours des visites se comptent depuis elle
+  const apiDay = (ago) => new Date(Date.parse("2026-10-01T12:00:00Z") - ago * 864e5).toISOString().slice(0, 10);
+  await api.db.query("INSERT INTO pro_visits (garage_id, day, kind, visitor) VALUES ($1, $4::date, 'view', $2), ($1, $4::date, 'view', $3), ($1, $4::date, 'call', $2), ($1, $5::date, 'view', $2)", [garageId, "1".repeat(64), "2".repeat(64), apiDay(0), apiDay(40)]);
+  await api.db.query("INSERT INTO garages (id, name, addr, lat, lon, chain_id, area_y, area_x) VALUES ($1, 'Garage Démo Centre', '', $2, $3, '', 0, 0)", ["custom:ovt-" + garageId.replace(/-/g, ""), HERE.lat, HERE.lon]);
+  await api.db.query("INSERT INTO repairs (id, garage_id, service_id, price_cents, repaired_on, rating, vehicle_model, vehicle_year, plate_hmac, status, delete_token_hash) VALUES (gen_random_uuid(), $1, 'vidange', 9800, current_date, 4, 'Clio', 2018, $2, 'approved', $3)", ["custom:ovt-" + garageId.replace(/-/g, ""), "3".repeat(64), "4".repeat(64)]);
+  await page.click('.dash-link[data-go="home"]');
   await page.waitForSelector('[data-screen="home"]:not([hidden])');
   const items = await page.$$eval("#garageList li", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").trim()));
-  check("dashboard lists the garage as verified", items.length === 1 && /Garage Démo Centre.*Vérifié/.test(items[0]), items.join(" / "));
-  await axe(page, "tableau de bord");
-  await shot(page, "6-tableau");
+  check("« Mes garages » lists the garage as verified, with « Mes prix »", items.length === 1 && /Garage Démo Centre.*Vérifié.*Mes prix/.test(items[0]), items.join(" / "));
+  await axe(page, "mes garages");
+  await page.click("#garageList button");
+  await page.waitForSelector('[data-screen="dash"]:not([hidden])');
+  check(
+    "reloaded: « 1 prix à confirmer », 2 views (+100 %), 1 call, customers paid +9 % over the announced price (98 € against 89.50 €), the row « À confirmer »",
+    (await page.textContent("#dashDueTitle")).startsWith("1 prix à confirmer avant le") && (await page.textContent("#dashDueCount")) === "1" && (await page.textContent("#statViews")) === "2" && (await page.textContent("#statViewsDelta")) === "+100\u00a0%" &&
+      (await page.textContent("#statCalls")) === "1" && (await page.textContent("#statPaid")) === "+9\u00a0%" && (await page.textContent("#priceRows .state")) === "À confirmer" && /98\u00a0€ médiane · 1/.test(await page.textContent("#priceRows .c-paid")),
+    [await page.textContent("#dashDueTitle"), await page.textContent("#statViewsDelta"), await page.textContent("#statPaid"), await page.textContent("#priceRows .c-paid")].join(" | "),
+  );
+  await axe(page, "tableau de bord (prix à confirmer)");
+  await shot(page, "7-tableau");
+  await page.click("#confirmAll");
+  await page.waitForFunction(() => document.getElementById("dashDue").hidden);
+  check("« Tout confirmer »: nothing left to confirm, the row is up to date again", (await page.textContent("#alert")).includes("confirmé") && (await page.textContent("#priceRows .state")) !== "À confirmer");
 
   // déconnexion, puis reconnexion (compte existant : code de connexion)
   await page.click("#signOut");
@@ -325,8 +392,8 @@ function fakeCognito() {
   await page.waitForSelector('[data-screen="otp"]:not([hidden])');
   await page.fill("#otp", cognito.last(EMAIL));
   await page.click('#otpForm button[type="submit"]');
-  await page.waitForSelector('[data-screen="home"]:not([hidden])');
-  check("sign in again by e-mail code: the garage is still there", (await page.$$eval("#garageList li", (els) => els.length)) === 1);
+  await page.waitForSelector('[data-screen="dash"]:not([hidden])');
+  check("sign in again by e-mail code: an account with one verified garage lands on its dashboard", (await page.textContent("#dashGarage")).startsWith("Garage Démo Centre"));
 
   // « Gérer mon garage » avec une adresse déjà inscrite : on bascule sur la connexion
   await page.click("#signOut");
@@ -338,7 +405,7 @@ function fakeCognito() {
   check("signing up with an address that already has an account turns into a sign-in", cognito.calls.slice(before).join() === "SignUp,InitiateAuth", cognito.calls.slice(before).join());
   await page.fill("#otp", cognito.last(EMAIL));
   await page.click('#otpForm button[type="submit"]');
-  await page.waitForSelector('[data-screen="home"]:not([hidden])');
+  await page.waitForSelector('[data-screen="dash"]:not([hidden])');
 
   // session refusée par l'API (jeton révoqué côté serveur) : retour propre à la connexion
   await page.evaluate(() => {
@@ -359,7 +426,21 @@ function fakeCognito() {
     await m.page.waitForSelector('[data-screen="login"]:not([hidden])');
     const overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     check("mobile (390 px): no horizontal scroll", overflow <= 0, overflow);
-    await shot(m.page, "7-mobile-connexion");
+    await shot(m.page, "8-mobile-connexion");
+    await m.page.fill("#email", EMAIL);
+    await m.page.click("#loginBtn");
+    await m.page.waitForSelector('[data-screen="otp"]:not([hidden])');
+    await m.page.fill("#otp", cognito.last(EMAIL));
+    await m.page.click('#otpForm button[type="submit"]');
+    await m.page.waitForSelector('[data-screen="dash"]:not([hidden])');
+    const dashOverflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    const nav = await m.page.$eval(".dash-nav", (n) => ({ position: getComputedStyle(n).position, bottom: Math.round(n.getBoundingClientRect().bottom) }));
+    check("mobile dashboard: no horizontal scroll, the navigation sits at the bottom of the screen", dashOverflow <= 0 && nav.position === "fixed" && nav.bottom === 844, JSON.stringify({ dashOverflow, nav }));
+    await axe(m.page, "tableau de bord (mobile)");
+    await shot(m.page, "9-mobile-tableau");
+    await m.page.click("#priceRows button");
+    await m.page.waitForSelector("#priceDlg[open]");
+    await shot(m.page, "10-mobile-saisie");
     await m.ctx.close();
   }
   check("nothing but the site, the API and Cognito was contacted", !outside.length, outside.join("\n"));

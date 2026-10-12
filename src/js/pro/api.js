@@ -34,5 +34,9 @@ export function createProApi({ base, token, fetchImpl = (...a) => fetch(...a) })
     getClaim: (id) => call("GET", `/v1/pro/claims/${encodeURIComponent(id)}`),
     code: (id, code) => call("POST", `/v1/pro/claims/${encodeURIComponent(id)}/code`, { code }),
     resend: (id) => call("POST", `/v1/pro/claims/${encodeURIComponent(id)}/resend`),
+    garage: (id) => call("GET", `/v1/pro/garages/${encodeURIComponent(id)}`),
+    putPrice: (id, service, body) => call("PUT", `/v1/pro/garages/${encodeURIComponent(id)}/prices/${encodeURIComponent(service)}`, body),
+    deletePrice: (id, service) => call("DELETE", `/v1/pro/garages/${encodeURIComponent(id)}/prices/${encodeURIComponent(service)}`),
+    confirm: (id) => call("POST", `/v1/pro/garages/${encodeURIComponent(id)}/confirm`),
   };
 }

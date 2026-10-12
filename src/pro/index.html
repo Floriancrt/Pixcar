@@ -24,6 +24,14 @@
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5m6-6-6 6 6 6" /></symbol>
   <symbol id="i-next" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6" /></symbol>
   <symbol id="i-garage" viewBox="0 0 24 24"><path d="M3 10.5 12 4l9 6.5V20H3z" /><path d="M7 20v-6h10v6M7 17h10" /></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7" /><path d="M6 9.5V20h12V9.5" /></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.5 12.5 12 4h7.5v7.5L11 20z" /><circle cx="15.5" cy="8" r="1.4" /></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" /></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></symbol>
 </svg>
 <a class="skip" href="#main">Aller au contenu</a>
 
@@ -180,8 +188,45 @@
     <p class="ok-badge"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>Garage vérifié</p>
     <h1 id="doneTitle" tabindex="-1">C'est fait</h1>
     <p class="lead"><b id="doneGarage"></b> est rattaché à votre compte.</p>
-    <p>Prochaine étape : vos premiers prix. Cette partie de l'Espace Pro arrive bientôt ; nous vous écrirons dès qu'elle sera ouverte.</p>
-    <button type="button" class="btn primary" data-go="home">Mes garages</button>
+    <p>Prochaine étape : vos premiers prix. Les automobilistes les verront sur Pixcar avec la mention « Annoncé », à côté des prix payés par vos clients, qui restent la référence.</p>
+    <button type="button" class="btn primary" id="doneDash">Annoncer mes prix<svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></button>
+  </section>
+
+  <!-- Tableau de bord d'un garage rattaché : prix annoncés, prix payés par ses clients, visites de sa fiche -->
+  <section class="dash" data-screen="dash" hidden aria-labelledby="dashTitle">
+    <nav class="dash-nav" aria-label="Espace Pro">
+      <a href="#dash-top" class="dash-link" aria-current="true"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg><span>Tableau de bord</span></a>
+      <a href="#dash-prices" class="dash-link"><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg><span>Mes prix</span><span class="dash-count" id="dashDueCount" hidden></span></a>
+      <a href="../" class="dash-link" id="dashSite"><svg class="ic" aria-hidden="true"><use href="#i-eye" /></svg><span>Voir Pixcar</span></a>
+      <button type="button" class="dash-link" data-go="home"><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg><span>Mes garages</span></button>
+    </nav>
+    <div class="dash-body" id="dash-top">
+      <p class="ok-badge small" id="dashVerified"></p>
+      <h1 id="dashTitle" tabindex="-1"></h1>
+      <p class="lead dash-garage" id="dashGarage"></p>
+      <div class="due" id="dashDue" role="status" hidden>
+        <svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg>
+        <div><b id="dashDueTitle"></b><span id="dashDueText"></span></div>
+        <button type="button" class="btn small dark" id="confirmAll">Tout confirmer</button>
+      </div>
+      <ul class="stats" aria-label="En chiffres">
+        <li><span class="stat-l">Vues de la fiche · 30 j</span><b class="stat-v" id="statViews"></b><span class="stat-d" id="statViewsDelta"></span></li>
+        <li><span class="stat-l">Clics « Appeler » · 30 j</span><b class="stat-v" id="statCalls"></b><span class="stat-d" id="statCallsDelta"></span></li>
+        <li><span class="stat-l">Prix à jour</span><b class="stat-v" id="statFresh"></b></li>
+        <li><span class="stat-l">Payé par vos clients</span><b class="stat-v" id="statPaid"></b><span class="stat-d" id="statPaidNote"></span></li>
+      </ul>
+      <div class="dash-head" id="dash-prices">
+        <h2>Mes prix</h2>
+        <button type="button" class="btn primary small" id="addPrice" aria-label="Ajouter une prestation"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter<span class="wide-only">&nbsp;une prestation</span></button>
+      </div>
+      <p class="empty" id="noPrice" hidden>Aucun prix annoncé pour l'instant. Ajoutez une première prestation : les automobilistes verront « Annoncé » à côté des prix payés par vos clients.</p>
+      <table class="prices" id="priceTable" hidden>
+        <caption class="sr-only">Vos prix annoncés</caption>
+        <thead><tr><th scope="col">Prestation</th><th scope="col">Type</th><th scope="col">Prix TTC</th><th scope="col">Inclus</th><th scope="col">Payé par vos clients</th><th scope="col">Mis à jour</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
+        <tbody id="priceRows"></tbody>
+      </table>
+      <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>« Payé par vos clients » vient des factures que vos clients déclarent sur Pixcar : vous ne pouvez ni le modifier ni le retirer. Vos prix annoncés restent à part et n'entrent pas dans les moyennes.</span></p>
+    </div>
   </section>
 
   <!-- Vérification impossible en ligne -->
@@ -193,6 +238,46 @@
   </section>
 </main>
 
+<dialog class="sheet" id="priceDlg" aria-labelledby="priceDlgTitle">
+  <form id="priceForm" novalidate>
+    <div class="sheet-head">
+      <div>
+        <p class="eyebrow" id="priceDlgKind">Modifier un prix</p>
+        <h2 id="priceDlgTitle"></h2>
+      </div>
+      <button type="button" class="icon-btn" id="priceClose" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button>
+    </div>
+    <div id="pickService">
+      <label for="priceService">Prestation</label>
+      <select id="priceService"></select>
+    </div>
+    <fieldset class="seg">
+      <legend class="sr-only">Type de prix</legend>
+      <label><input type="radio" name="kind" value="fixed" checked><span>Forfait</span></label>
+      <label><input type="radio" name="kind" value="from"><span>À partir de</span></label>
+      <label><input type="radio" name="kind" value="quote"><span>Sur devis</span></label>
+    </fieldset>
+    <div id="priceBox">
+      <label for="priceValue">Prix TTC</label>
+      <div class="money"><input id="priceValue" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-describedby="priceErr"><span aria-hidden="true">€</span></div>
+    </div>
+    <fieldset class="chips" id="priceVehicles">
+      <legend>Pour quels véhicules ?</legend>
+    </fieldset>
+    <fieldset class="ticks" id="priceIncludes">
+      <legend>Ce qui est compris</legend>
+    </fieldset>
+    <p class="field-err" id="priceErr" hidden></p>
+    <div class="preview" aria-live="polite">
+      <span class="eyebrow">Aperçu sur Pixcar</span>
+      <p><b id="previewPrice"></b> <span class="annonce">Annoncé</span> <span class="muted" id="previewDetail"></span></p>
+    </div>
+    <button class="btn primary" type="submit" id="priceSave">Enregistrer</button>
+    <p class="switch"><button type="button" class="link-btn danger" id="priceDelete">Retirer ce prix</button></p>
+    <p class="help center">Publié aussitôt. Un prix très éloigné de ceux payés dans le secteur est relu avant publication.</p>
+  </form>
+</dialog>
+
 <footer class="pro-foot">
   <details class="pro-privacy">
     <summary>Vos données dans l'Espace Pro</summary>
@@ -200,6 +285,7 @@
       <li><b>Votre compte</b> : votre adresse e-mail, gérée par Amazon Cognito (Amazon Web Services, région Europe, Stockholm). Pas de mot de passe : un code à usage unique vous est envoyé à chaque connexion.</li>
       <li><b>Le rattachement d'un garage</b> : le SIRET, le garage, vos prénom, nom et fonction, la case de certification cochée, le moyen de vérification choisi (montré masqué) et les dates. Ils prouvent que vous gérez le garage et servent en cas de contestation ; ils sont gardés tant que le garage est rattaché à votre compte. Une demande qui n'aboutit pas est effacée après 30 jours, le journal des envois après 90 jours.</li>
       <li><b>Les coordonnées des garages</b> (e-mail public, site, portable) viennent de données publiques (Overture Maps) ; elles ne servent qu'à envoyer le code de vérification et ne sont jamais affichées en clair.</li>
+      <li><b>Vos prix annoncés</b> : publiés sur Pixcar avec la mention « Annoncé », sous votre responsabilité, avec leur date de mise à jour. Les statistiques de votre fiche (visites, clics « Appeler ») ne sont que des totaux : vous ne voyez jamais qui a consulté votre fiche.</li>
       <li>Accès, rectification, effacement : <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>.</li>
     </ul>
   </details>

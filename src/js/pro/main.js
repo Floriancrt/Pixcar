@@ -1,7 +1,9 @@
 // Espace Pro (pro/index.html) : connexion sans mot de passe, puis rattachement d'un garage en quatre étapes (SIRET, la personne, le code,
-// les premiers prix). Les écrans sont dans le HTML ; ce script ne fait que les montrer et y écrire du TEXTE (jamais de HTML venu d'ailleurs).
+// les premiers prix), puis le tableau de bord du garage (dashboard.js). Les écrans sont dans le HTML ; ce script ne fait que les montrer et y
+// écrire du TEXTE (jamais de HTML venu d'ailleurs).
 import { createCognito, explain } from "./cognito.js";
 import { createProApi } from "./api.js";
+import { createDashboard } from "./dashboard.js";
 
 const $ = (id) => document.getElementById(id);
 const meta = document.querySelector('meta[name="pixcar-pro"]');
@@ -125,7 +127,7 @@ async function submitLogin(ev) {
         }
       } else {
         const r = await auth.startSignIn(email);
-        if (r.done) return home();
+        if (r.done) return home({ auto: true });
         state.flow = "signin";
         state.session = r.session;
       }
@@ -148,7 +150,7 @@ async function submitOtp(ev) {
   await busy(ev.submitter || input.form.querySelector("button"), async () => {
     try {
       const r = state.flow === "signup" ? await auth.answerSignUp(state.email, code) : await auth.answerSignIn(state.email, state.session, code);
-      if (r.done) return home();
+      if (r.done) return home({ auto: true });
       // inscription confirmée sur un groupe qui demande un code de connexion en plus : un second code arrive
       state.flow = "signin";
       state.session = r.session;
@@ -176,8 +178,9 @@ async function resendOtp() {
   });
 }
 
-// ---- tableau de bord
-async function home() {
+// ---- mes garages
+// auto : juste après la connexion, un compte qui n'a qu'un garage vérifié (et rien en cours) arrive directement sur son tableau de bord
+async function home({ auto = false } = {}) {
   alertBox("");
   show("loading", { focus: false });
   let me;
@@ -187,6 +190,8 @@ async function home() {
     if (!apiProblem(e)) show("home");
     return;
   }
+  const verified = me.claims.filter((c) => c.status === "verified");
+  if (auto && verified.length === 1 && verified.length === me.claims.length) return dashboard.open(verified[0].garageId);
   const list = $("garageList");
   list.replaceChildren();
   for (const c of me.claims) {
@@ -196,7 +201,7 @@ async function home() {
       { class: "garage-item" + (verified ? " ok" : "") },
       el("div", { class: "gi-main" }, el("b", { text: c.garageName || "Garage" }), c.garageAddr ? el("span", { class: "muted", text: c.garageAddr }) : null),
       verified
-        ? el("span", { class: "pill ok" }, icon("i-check"), "Vérifié")
+        ? el("span", { class: "gi-act" }, el("span", { class: "pill ok" }, icon("i-check"), "Vérifié"), el("button", { type: "button", class: "btn small", onclick: () => dashboard.open(c.garageId) }, icon("i-tag"), "Mes prix"))
         : el("button", { type: "button", class: "btn small", onclick: () => resumeClaim(c) }, "Saisir le code"),
     );
     list.append(item);
@@ -439,6 +444,8 @@ async function resendCode() {
 }
 
 // ---- branchements
+const dashboard = createDashboard({ api, $, el, icon, alertBox, busy, show, apiProblem, home });
+$("doneDash").addEventListener("click", () => dashboard.open(state.claim.garageId));
 $("loginForm").addEventListener("submit", submitLogin);
 $("otpForm").addEventListener("submit", submitOtp);
 $("otpResend").addEventListener("click", resendOtp);
@@ -469,5 +476,5 @@ for (const b of document.querySelectorAll("[data-go]"))
 for (const id of ["otp", "code", "siret"]) $(id).addEventListener("input", (e) => (e.target.value = e.target.value.replace(/[^\d\s.]/g, "")));
 
 setMode(location.hash === "#inscription" ? "signup" : "login");
-if (auth.signedIn) home();
+if (auth.signedIn) home({ auto: true });
 else show("login", { focus: false });
