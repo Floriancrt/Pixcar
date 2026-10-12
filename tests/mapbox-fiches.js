@@ -43,7 +43,7 @@ function prepare(name, file) {
   return src;
 }
 const envOf = ({ token, enrich }) => {
-  const env = { ...process.env, PIXCAR_API_BASE: "", PIXCAR_GA_ID: "", PIXCAR_CS_ID: "" };
+  const env = { ...process.env, PIXCAR_API_BASE: "", PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_PRO_POOL: "", PIXCAR_PRO_CLIENT: "" }; // pas d'Espace Pro (src/pro.json, que --pages prend, l'exige avec l'API)
   delete env.PIXCAR_MAPBOX_STYLE;
   if (token === undefined) delete env.PIXCAR_MAPBOX_TOKEN;
   else env.PIXCAR_MAPBOX_TOKEN = token;

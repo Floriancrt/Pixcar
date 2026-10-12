@@ -47,7 +47,7 @@ function site(name, { ga, cs, legal = LEGAL, only = "single", pages, api = "" } 
   const src = path.join(OUT, name + "-src");
   fs.cpSync(SRC, src, { recursive: true });
   fs.writeFileSync(path.join(src, "legal.json"), JSON.stringify(legal));
-  const env = { ...process.env, PIXCAR_API_BASE: api };
+  const env = { ...process.env, PIXCAR_API_BASE: api, PIXCAR_PRO_POOL: "", PIXCAR_PRO_CLIENT: "" }; // pas d'Espace Pro : src/pro.json, que --pages prend, l'exige avec l'API
   if (ga === undefined) delete env.PIXCAR_GA_ID;
   else env.PIXCAR_GA_ID = ga;
   if (cs === undefined) delete env.PIXCAR_CS_ID;
@@ -61,7 +61,7 @@ const attempt = (name, { ga, cs, legal = LEGAL, pages } = {}) => {
   const src = path.join(OUT, name + "-src");
   fs.cpSync(SRC, src, { recursive: true });
   fs.writeFileSync(path.join(src, "legal.json"), JSON.stringify(legal));
-  const env = { ...process.env, PIXCAR_API_BASE: "" };
+  const env = { ...process.env, PIXCAR_API_BASE: "", PIXCAR_PRO_POOL: "", PIXCAR_PRO_CLIENT: "" };
   if (ga === undefined) delete env.PIXCAR_GA_ID;
   else env.PIXCAR_GA_ID = ga;
   if (cs === undefined) delete env.PIXCAR_CS_ID;

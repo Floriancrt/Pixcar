@@ -8,6 +8,8 @@
 // Le fond et les fiches de Mapbox sont coupés de même (PIXCAR_MAPBOX_TOKEN vide : src/mapbox.json porte un jeton depuis le 6 octobre 2026 et une construction
 // --pages le prend) : ces contrôles ne simulent pas Mapbox, et ses requêtes refusées feraient des erreurs de console ; la version publiée avec Mapbox
 // (politique, tuiles, fiches) est dans tests/mapbox.js et tests/mapbox-fiches.js.
+// L'Espace Pro aussi (PIXCAR_PRO_POOL / PIXCAR_PRO_CLIENT vides : src/pro.json porte ses identifiants depuis le 12 octobre 2026) : sa page
+// publiée est dans tests/pro.js.
 //   node tests/pages.js
 const { execFileSync } = require("child_process");
 const crypto = require("crypto");
@@ -31,7 +33,7 @@ const DOMAIN = "pixcar.fr";
 
 (async () => {
   fs.rmSync(OUT, { recursive: true, force: true });
-  execFileSync(process.execPath, [path.join(ROOT, "scripts/build.mjs"), "--only", "dist", "--out", OUT, "--pages", DOMAIN], { stdio: "ignore", env: { ...process.env, PIXCAR_API_BASE: "", PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "" } });
+  execFileSync(process.execPath, [path.join(ROOT, "scripts/build.mjs"), "--only", "dist", "--out", OUT, "--pages", DOMAIN], { stdio: "ignore", env: { ...process.env, PIXCAR_API_BASE: "", PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "", PIXCAR_PRO_POOL: "", PIXCAR_PRO_CLIENT: "" } });
 
   // ---- ce que la construction produit
   const html = fs.readFileSync(path.join(SITE, "index.html"), "utf8");
@@ -91,7 +93,7 @@ const DOMAIN = "pixcar.fr";
     {
       const API = "https://api.exemple.test";
       fs.rmSync(OUT_API, { recursive: true, force: true });
-      execFileSync(process.execPath, [path.join(ROOT, "scripts/build.mjs"), "--only", "dist", "--out", OUT_API, "--pages", DOMAIN], { stdio: "pipe", env: { ...process.env, PIXCAR_API_BASE: API, PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "" } });
+      execFileSync(process.execPath, [path.join(ROOT, "scripts/build.mjs"), "--only", "dist", "--out", OUT_API, "--pages", DOMAIN], { stdio: "pipe", env: { ...process.env, PIXCAR_API_BASE: API, PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "", PIXCAR_PRO_POOL: "", PIXCAR_PRO_CLIENT: "" } });
       const htmlApi = fs.readFileSync(path.join(SITE_API, "index.html"), "utf8");
       const policyApi = (/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/.exec(htmlApi) || [])[1] || "";
       const connect = ((/connect-src([^;]*)/.exec(policyApi) || [])[1] || "").trim().split(/\s+/);
