@@ -114,6 +114,11 @@ Parameters:
     Default: ""
     Description: Espace Pro — ARN de la configuration AWS End User Messaging Notify (codes par SMS). Vide = pas de SMS (e-mail seulement).
     AllowedPattern: '^(arn:aws[a-z-]*:sms-voice:[a-z0-9-]+:\d{12}:\S+)?$'
+  ProSesSandbox:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Espace Pro — « true » tant que SES est en mode test (sandbox) ; SES y contrôle aussi le droit d'envoi sur l'identité de chaque destinataire. Remettre à « false » une fois l'accès production accordé.
 
 Conditions:
   HasDomain: !And [!Not [!Equals [!Ref ApiDomainName, ""]], !Not [!Equals [!Ref ApiCertificateArn, ""]]]
@@ -122,6 +127,7 @@ Conditions:
   HasBackup: !Not [!Equals [!Ref BackupRetentionDays, "0"]]
   HasPro: !And [!Not [!Equals [!Ref ProUserPoolId, ""]], !Not [!Equals [!Ref ProClientId, ""]]]
   HasProSms: !And [!Condition HasPro, !Not [!Equals [!Ref ProNotifyConfigurationArn, ""]]]
+  HasProSesSandbox: !And [!Condition HasPro, !Equals [!Ref ProSesSandbox, "true"]]
   HasProAlarm: !And [!Condition HasPro, !Condition HasAlarmEmail]
 
 Resources:
@@ -221,14 +227,14 @@ Resources:
           PRO_TEST_ESTABLISHMENTS: !Ref ProTestEstablishments
       Tags: [{ Key: Project, Value: pixcar }]
 
-  # Espace Pro : droit d'envoyer les codes de vérification, et rien d'autre (une identité SES, une configuration Notify)
+  # Espace Pro : droit d'envoyer les codes de vérification, et rien d'autre (une identité SES — les identités vérifiées en mode test de SES —, une configuration Notify)
   ApiProSendPolicy:
     Type: AWS::IAM::RolePolicy
     Condition: HasPro
     Metadata:
       com.aws.cloudformation.Context:
         why: "politique à part, présente seulement quand l'Espace Pro est ouvert : le rôle de l'API n'a ce droit que si nécessaire"
-        must: ["ses:SendEmail sur l'identité du domaine seulement", "sms-voice:SendNotifyTextMessage sur la configuration Notify seulement"]
+        must: ["ses:SendEmail sur l'identité du domaine seulement (hors mode test de SES)", "en mode test de SES seulement (ProSesSandbox) : ses:SendEmail sur les identités vérifiées du compte, car SES contrôle aussi celle du destinataire", "sms-voice:SendNotifyTextMessage sur la configuration Notify seulement"]
     Properties:
       RoleName: !Ref ApiRole
       PolicyName: pro-send
@@ -239,6 +245,11 @@ Resources:
             Effect: Allow
             Action: "ses:SendEmail"
             Resource: !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${ProEmailDomain}"
+          # mode test de SES : seuls des destinataires vérifiés reçoivent, et SES vérifie le droit d'envoi sur leur identité aussi
+          - !If
+            - HasProSesSandbox
+            - { Sid: ProEmailSandboxRecipients, Effect: Allow, Action: "ses:SendEmail", Resource: !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/*" }
+            - !Ref AWS::NoValue
           - !If
             - HasProSms
             - { Sid: ProSms, Effect: Allow, Action: "sms-voice:SendNotifyTextMessage", Resource: !Ref ProNotifyConfigurationArn }

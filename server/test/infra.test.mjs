@@ -294,8 +294,13 @@ describe("Espace Pro in the templates (infra/pixcar-api.yaml, infra/pixcar-pro.y
     const p = R.ApiProSendPolicy;
     assert.equal(p.Condition, "HasPro");
     assert.deepEqual(p.Properties.RoleName, { Ref: "ApiRole" });
-    const [mail, sms] = p.Properties.PolicyDocument.Statement;
+    const [mail, sandbox, sms] = p.Properties.PolicyDocument.Statement;
     assert.deepEqual([mail.Action, mail.Resource], ["ses:SendEmail", { "Fn::Sub": "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${ProEmailDomain}" }]);
+    // mode test de SES seulement : les identités vérifiées du compte (destinataires), rien hors de SES, rien hors du compte
+    assert.equal(sandbox["Fn::If"][0], "HasProSesSandbox");
+    assert.deepEqual([sandbox["Fn::If"][1].Action, sandbox["Fn::If"][1].Resource, sandbox["Fn::If"][2]], ["ses:SendEmail", { "Fn::Sub": "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/*" }, { Ref: "AWS::NoValue" }]);
+    assert.deepEqual(t.Conditions.HasProSesSandbox, { "Fn::And": [{ Condition: "HasPro" }, { "Fn::Equals": [{ Ref: "ProSesSandbox" }, "true"] }] });
+    assert.equal(t.Parameters.ProSesSandbox.Default, "false", "hors mode test par défaut : le droit élargi est un choix explicite");
     assert.equal(sms["Fn::If"][0], "HasProSms");
     assert.deepEqual([sms["Fn::If"][1].Action, sms["Fn::If"][1].Resource, sms["Fn::If"][2]], ["sms-voice:SendNotifyTextMessage", { Ref: "ProNotifyConfigurationArn" }, { Ref: "AWS::NoValue" }]);
     assert.ok(!actions("ApiRole").has("ses:SendEmail"), "pas dans la politique permanente du rôle");
