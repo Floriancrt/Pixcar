@@ -333,7 +333,9 @@ describe("GET /v1/repairs", () => {
       },
     ]);
     for (const secret of ["Très bien", r.vehicle.plate, r.deleteToken, "comment", "plate", "deleteToken", "created"]) assert.ok(!out.text.includes(secret), `« ${secret} » ne doit jamais sortir`);
-    assert.ok(!out.text.includes(r.date), "seul le mois est public");
+    // les réparations seulement : l'horloge figée de ces tests (generatedAt, 2 octobre 2026) tombe 10 jours avant le 12 octobre, jour où la
+    // date de la déclaration d'essai (il y a 10 jours) devient la même chaîne ; elle n'a rien à voir avec la réparation
+    assert.ok(!JSON.stringify(out.json.garages).includes(r.date), "seul le mois est public");
   });
 
   test("is cacheable by the CDN and revalidated cheaply", async () => {

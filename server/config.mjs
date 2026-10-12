@@ -1,6 +1,7 @@
 // Configuration par variables d'environnement. En production, un secret manquant ou faible est une erreur de démarrage :
 // mieux vaut ne pas démarrer que tourner avec une empreinte de plaques ou d'adresses IP devinable.
 import { randomHex } from "./lib/crypto.mjs";
+import { isSiret } from "./lib/sirene.mjs";
 
 const int = (v, d, min = 0) => {
   const n = v === undefined || v === "" ? d : Number(v);
@@ -42,6 +43,7 @@ export function loadConfig(env = process.env) {
     if (proChannels.includes("sms") && !env.PRO_NOTIFY_CONFIGURATION_ID) problems.push("PRO_NOTIFY_CONFIGURATION_ID : configuration AWS End User Messaging Notify (SMS), ou retirer « sms » de PRO_CHANNELS");
     if (env.PRO_DEV_AUTH === "1") problems.push("PRO_DEV_AUTH : interdit en production");
   }
+  const testEstablishments = parseTestEstablishments(env.PRO_TEST_ESTABLISHMENTS, problems);
   if (problems.length) throw new Error("Configuration incomplète :\n  - " + problems.join("\n  - "));
 
   const trust = (env.TRUST_PROXY || "0").toLowerCase();
@@ -84,11 +86,42 @@ export function loadConfig(env = process.env) {
       resendAfterSeconds: int(env.PRO_RESEND_AFTER_SECONDS, 60, 10),
       maxSendsPerClaim: int(env.PRO_MAX_SENDS_PER_CLAIM, 3, 1),
       maxPendingPerAccount: int(env.PRO_MAX_PENDING_PER_ACCOUNT, 3, 1),
-      sendsPerGaragePerDay: int(env.PRO_SENDS_PER_GARAGE_PER_DAY, 3, 1),
+      sendsPerGarageAccountPerDay: int(env.PRO_SENDS_PER_GARAGE_ACCOUNT_PER_DAY, 3, 1), // un compte vers un garage
+      sendsPerGaragePerDay: int(env.PRO_SENDS_PER_GARAGE_PER_DAY, 10, 1), // tous comptes vers un garage
       sendsPerAccountPerDay: int(env.PRO_SENDS_PER_ACCOUNT_PER_DAY, 5, 1),
       sendsGlobalPerHour: int(env.PRO_SENDS_GLOBAL_PER_HOUR, 30, 1),
       lookupsPerAccountPerHour: int(env.PRO_LOOKUPS_PER_ACCOUNT_PER_HOUR, 30, 1),
       maxDistanceM: int(env.PRO_MAX_DISTANCE_M, 300, 50),
+      testEstablishments,
     },
   };
+}
+
+// Établissements d'ESSAI de l'Espace Pro (PRO_TEST_ESTABLISHMENTS, JSON) : des SIRET inventés que l'API reconnaît sans interroger le registre,
+// pour vérifier le parcours de bout en bout avec un garage d'essai dont les contacts sont ceux de l'exploitant. Vide en temps normal.
+//   [{"siret":"…14 chiffres…","name":"Garage Essai Pixcar","addr":"…","lat":0.5,"lon":-20.5,"pc":""}]
+// Un établissement d'essai ne rattache que les garages à moins de 300 m de sa position : la placer loin de tout garage réel (en mer).
+function parseTestEstablishments(raw, problems) {
+  const out = new Map();
+  if (!raw) return out;
+  let list;
+  try {
+    list = JSON.parse(raw);
+  } catch {
+    problems.push("PRO_TEST_ESTABLISHMENTS : JSON illisible");
+    return out;
+  }
+  if (!Array.isArray(list) || list.length > 5) {
+    problems.push("PRO_TEST_ESTABLISHMENTS : une liste de 5 établissements au plus est attendue");
+    return out;
+  }
+  for (const e of list) {
+    const ok = e && isSiret(String(e.siret)) && typeof e.name === "string" && e.name.length >= 2 && Number.isFinite(e.lat) && Number.isFinite(e.lon) && Math.abs(e.lat) <= 90 && Math.abs(e.lon) <= 180;
+    if (!ok) {
+      problems.push("PRO_TEST_ESTABLISHMENTS : chaque entrée demande siret (clé juste), name, lat et lon");
+      continue;
+    }
+    out.set(String(e.siret), { siret: String(e.siret), name: e.name.slice(0, 120), company: e.name.slice(0, 120), addr: String(e.addr || "").slice(0, 200), naf: "45.20A", active: true, lat: e.lat, lon: e.lon, pc: /^\d{5}$/.test(String(e.pc || "")) ? String(e.pc) : "" });
+  }
+  return out;
 }

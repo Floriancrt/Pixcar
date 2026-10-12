@@ -178,7 +178,7 @@ export async function selfcheck(db, { log = () => {} } = {}) {
   const proGarage = `5e1fc4ec-0000-4000-8000-0000${tag}`;
   const proGarage2 = `5e1fc4ec-0000-4000-8001-0000${tag}`;
   const acc = (x) => `selfcheck-${tag}-${x}`;
-  const proLimits = { perGaragePerDay: 1000, perAccountPerDay: 1000, globalPerHour: 1_000_000 };
+  const proLimits = { perGarageAccountPerDay: 1000, perGaragePerDay: 1000, perAccountPerDay: 1000, globalPerHour: 1_000_000 };
   const claimA = crypto.randomUUID();
   const claimB = crypto.randomUUID();
   const newClaim = (id, who, codeHash) =>

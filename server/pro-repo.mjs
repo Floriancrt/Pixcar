@@ -19,17 +19,32 @@ const CLAIM_COLUMNS = "c.id, c.garage_id, c.siret, c.status, c.channel, c.holder
 export function createProRepo(db) {
   const one = async (sql, params) => (await db.query(sql, params)).rows[0] || null;
 
-  // Compteurs des limites d'envoi : par garage et par compte sur 24 h glissantes, tous comptes sur 1 h.
+  // Compteurs des limites d'envoi, sur 24 h glissantes (1 h pour le plafond du service) :
+  //  - « garage » : ce compte, vers ce garage. Chaque demandeur a ses propres envois : un tiers ne peut pas épuiser ceux du vrai garagiste ;
+  //  - « garage_total » : tous comptes, vers ce garage (plafond plus haut : le garage n'est pas harcelé, et le bloquer demande plusieurs comptes) ;
+  //  - « account » : ce compte, tous garages ; « global » : tout le service.
   async function sendCounts(t, { garageId, accountId }) {
     const n = async (sql, params) => (await t.query(sql, params)).rows[0].n;
     return {
-      garage: await n("SELECT count(*)::int AS n FROM pro_events WHERE kind = 'send' AND garage_id = $1 AND at > now() - interval '24 hours'", [garageId]),
+      garage: await n("SELECT count(*)::int AS n FROM pro_events WHERE kind = 'send' AND garage_id = $1 AND account_id = $2 AND at > now() - interval '24 hours'", [garageId, accountId]),
+      garageTotal: await n("SELECT count(*)::int AS n FROM pro_events WHERE kind = 'send' AND garage_id = $1 AND at > now() - interval '24 hours'", [garageId]),
       account: await n("SELECT count(*)::int AS n FROM pro_events WHERE kind = 'send' AND account_id = $1 AND at > now() - interval '24 hours'", [accountId]),
       global: await n("SELECT count(*)::int AS n FROM pro_events WHERE kind = 'send' AND at > now() - interval '1 hour'", []),
     };
   }
   const overLimit = (n, limits) =>
-    n.garage >= limits.perGaragePerDay ? "garage" : n.account >= limits.perAccountPerDay ? "account" : n.global >= limits.globalPerHour ? "global" : "";
+    n.garage >= limits.perGarageAccountPerDay
+      ? "garage"
+      : n.garageTotal >= limits.perGaragePerDay
+        ? "garage_total"
+        : n.account >= limits.perAccountPerDay
+          ? "account"
+          : n.global >= limits.globalPerHour
+            ? "global"
+            : "";
+  // Nombre de comptes distincts qui ont fait envoyer un code vers ce garage sur 24 h (deux ou plus : litige ou abus, à regarder)
+  const accountsOnGarage = async (t, garageId) =>
+    (await t.query("SELECT count(DISTINCT account_id)::int AS n FROM pro_events WHERE kind = 'send' AND garage_id = $1 AND at > now() - interval '24 hours'", [garageId])).rows[0].n;
 
   return {
     // ---- contacts
@@ -110,7 +125,7 @@ export function createProRepo(db) {
         .then((r) => r.rows),
 
     // Nouvelle demande et son premier code. c : { id, accountId, garageId, siret, channel, holderName, holderRole, target, targetHash,
-    // targetHint, codeHash, ttlSeconds, maxPending, limits }. Résultat : { kind: "created" } | { kind: "owned" } | { kind: "mine" } | { kind: "limited", scope }
+    // targetHint, codeHash, ttlSeconds, maxPending, limits }. Résultat : { kind: "created", accounts } | { kind: "owned" } | { kind: "mine" } | { kind: "limited", scope }
     // | { kind: "too_many" }. Rien n'est envoyé ici : l'envoi suit la transaction (elle peut être rejouée).
     createClaim(c) {
       return db.tx(async (t) => {
@@ -130,7 +145,7 @@ export function createProRepo(db) {
           [c.id, c.accountId, c.garageId, c.siret, c.channel, c.target, c.targetHash, c.targetHint, c.codeHash, c.ttlSeconds, c.holderName, c.holderRole],
         );
         await t.query("INSERT INTO pro_events (kind, account_id, garage_id, channel) VALUES ('send', $1, $2, $3)", [c.accountId, c.garageId, c.channel]);
-        return { kind: "created" };
+        return { kind: "created", accounts: await accountsOnGarage(t, c.garageId) };
       });
     },
 
@@ -156,7 +171,7 @@ export function createProRepo(db) {
           [id, accountId, codeHash, ttlSeconds],
         );
         await t.query("INSERT INTO pro_events (kind, account_id, garage_id, channel) VALUES ('send', $1, $2, $3)", [accountId, c.garage_id, c.channel]);
-        return { kind: "sent", target: c.target, channel: c.channel, garageId: c.garage_id };
+        return { kind: "sent", target: c.target, channel: c.channel, garageId: c.garage_id, accounts: await accountsOnGarage(t, c.garage_id) };
       });
     },
 

@@ -222,6 +222,6 @@ describe("SIRET, codes and configuration", () => {
     assert.throws(() => loadConfig({ ...prod, PRO_ENABLED: "1", COGNITO_USER_POOL_ID: POOL, COGNITO_CLIENT_ID: CLIENT, PRO_NOTIFY_CONFIGURATION_ID: "nc-1", PRO_SENDER: "memory" }), /PRO_SENDER/);
     assert.throws(() => loadConfig({ ...prod, PRO_ENABLED: "1", COGNITO_USER_POOL_ID: POOL, COGNITO_CLIENT_ID: CLIENT, PRO_NOTIFY_CONFIGURATION_ID: "nc-1", PRO_DEV_AUTH: "1" }), /PRO_DEV_AUTH/);
     const ok = loadConfig({ ...prod, PRO_ENABLED: "1", COGNITO_USER_POOL_ID: POOL, COGNITO_CLIENT_ID: CLIENT, PRO_NOTIFY_CONFIGURATION_ID: "nc-1" });
-    assert.deepEqual([ok.pro.enabled, ok.pro.sender, ok.pro.devAuth, ok.pro.codeTtlSeconds, ok.pro.maxAttempts, ok.pro.sendsPerGaragePerDay], [true, "aws", false, 600, 5, 3]);
+    assert.deepEqual([ok.pro.enabled, ok.pro.sender, ok.pro.devAuth, ok.pro.codeTtlSeconds, ok.pro.maxAttempts, ok.pro.sendsPerGarageAccountPerDay, ok.pro.sendsPerGaragePerDay], [true, "aws", false, 600, 5, 3, 10]);
   });
 });

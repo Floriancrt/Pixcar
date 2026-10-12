@@ -118,11 +118,13 @@ describe("CloudFormation template (infra/pixcar-api.yaml)", () => {
       for (const ref of found.refs) used.add(ref);
     }
     for (const p of Object.keys(t.Parameters)) assert.ok(used.has(p), `paramètre « ${p} » inutilisé`);
+    // une condition en implique une autre si c'est la même, ou une conjonction (Fn::And) qui la contient
+    const implies = (c, needed) => c === needed || (!!c && !!t.Conditions[c]["Fn::And"] && t.Conditions[c]["Fn::And"].some((x) => x.Condition && implies(x.Condition, needed)));
     const elements = [...Object.entries(R), ...Object.entries(t.Outputs)];
     for (const [id, el] of elements) {
       const found = scan(el);
       for (const ref of [...found.refs, ...found.attrs, ...[].concat(el.DependsOn || [])]) {
-        if (R[ref] && R[ref].Condition) assert.equal(el.Condition, R[ref].Condition, `« ${id} » dépend de « ${ref} » (conditionnelle) sans la même condition`);
+        if (R[ref] && R[ref].Condition) assert.ok(implies(el.Condition, R[ref].Condition), `« ${id} » dépend de « ${ref} » (conditionnelle) sans une condition qui l'implique`);
       }
     }
   });
@@ -257,7 +259,12 @@ describe("CloudFormation template (infra/pixcar-api.yaml)", () => {
     assert.equal(R.OpsLogGroup.Properties.LogGroupName["Fn::Sub"], "/aws/lambda/" + R.OpsFunction.Properties.FunctionName["Fn::Sub"]);
     const alarms = Object.entries(R).filter(([, r]) => r.Type === "AWS::CloudWatch::Alarm");
     assert.ok(alarms.length >= 3);
-    for (const [id, a] of alarms) assert.deepEqual([a.Condition, a.Properties.AlarmActions], ["HasAlarmEmail", [{ Ref: "AlarmTopic" }]], id);
+    // chaque alarme n'existe qu'avec le courriel d'alarme (HasAlarmEmail, ou une conjonction qui le contient) et prévient le sujet
+    const withEmail = (c) => c === "HasAlarmEmail" || (!!t.Conditions[c]["Fn::And"] && t.Conditions[c]["Fn::And"].some((x) => x.Condition === "HasAlarmEmail"));
+    for (const [id, a] of alarms) {
+      assert.ok(withEmail(a.Condition), id);
+      assert.deepEqual(a.Properties.AlarmActions, [{ Ref: "AlarmTopic" }], id);
+    }
   });
 });
 
@@ -292,6 +299,17 @@ describe("Espace Pro in the templates (infra/pixcar-api.yaml, infra/pixcar-pro.y
     assert.equal(sms["Fn::If"][0], "HasProSms");
     assert.deepEqual([sms["Fn::If"][1].Action, sms["Fn::If"][1].Resource, sms["Fn::If"][2]], ["sms-voice:SendNotifyTextMessage", { Ref: "ProNotifyConfigurationArn" }, { Ref: "AWS::NoValue" }]);
     assert.ok(!actions("ApiRole").has("ses:SendEmail"), "pas dans la politique permanente du rôle");
+  });
+
+  test("the contested-garage alarm counts exactly the log line the API writes, and only exists when the Pro space and alarm e-mails do", async () => {
+    const pro = readFileSync(join(ROOT, "server/pro.mjs"), "utf8");
+    assert.match(pro, /event: "pro_contested"/);
+    assert.equal(R.ProContestedMetric.Properties.FilterPattern, '"pro_contested"');
+    assert.deepEqual(R.ProContestedMetric.Properties.LogGroupName, { Ref: "ApiLogGroup" });
+    assert.deepEqual([R.ProContestedMetric.Condition, R.ProContestedAlarm.Condition], ["HasPro", "HasProAlarm"]);
+    assert.deepEqual(t.Conditions.HasProAlarm, { "Fn::And": [{ Condition: "HasPro" }, { Condition: "HasAlarmEmail" }] });
+    const m = R.ProContestedMetric.Properties.MetricTransformations[0];
+    assert.deepEqual([R.ProContestedAlarm.Properties.Namespace, R.ProContestedAlarm.Properties.MetricName], [m.MetricNamespace, m.MetricName]);
   });
 
   test("the Pro stack: passwordless accounts (Essentials, e-mail code sent through SES), a public client with two flows, nothing deleted with the stack", () => {

@@ -363,16 +363,47 @@ describe("Espace Pro : vérification d'un garagiste", () => {
     assert.equal(outbox().length, 0);
   });
 
-  test("limits: 3 codes per garage and 5 per account over 24 h, 3 requests in progress per account", async () => {
-    // trois comptes, trois envois vers le même garage : le quatrième est refusé
-    for (const who of ["a1", "a2", "a3"]) assert.equal((await claim(who)).status, 201);
-    const fourth = await claim("a4");
+  test("nobody can use up the real garagiste's codes: 3 per account and per garage, 10 per garage for all accounts together", async () => {
+    // un tiers (le SIRET du garage est public) épuise SES envois vers le garage A…
+    for (let i = 0; i < 3; i++) assert.equal((await claim("mallory")).status, 201);
+    const fourth = await claim("mallory");
     assert.equal(fourth.status, 429);
     assert.equal(fourth.body.error.scope, "garage");
     assert.equal(fourth.headers.get("retry-after"), "86400");
-    assert.equal(outbox().length, 3);
+    // … le vrai garagiste reçoit quand même son code et rattache son garage
+    const real = await claim("alice", { option: "sms:1" });
+    assert.equal(real.status, 201);
+    assert.equal((await json(await call("alice", "POST", `/v1/pro/claims/${real.body.id}/code`, { code: lastCode() }))).body.status, "verified");
+    assert.equal(outbox().length, 4);
 
+    // plafond du garage, tous comptes confondus : 10 envois sur 24 h
     await t.db.exec("TRUNCATE pro_claims, pro_events");
+    await t.db.query("INSERT INTO pro_events (kind, account_id, garage_id, channel) SELECT 'send', 'dev-x' || g, $1, 'email' FROM generate_series(1, 10) AS g", [A]);
+    const full = await claim("zoe");
+    assert.equal(full.status, 429);
+    assert.equal(full.body.error.scope, "garage_total");
+    assert.match(full.body.error.message, /Ce garage a reçu trop de codes/);
+  });
+
+  test("a garage asked for by several accounts within 24 h leaves a dedicated log line (event « pro_contested »), turned into an alarm by the stack", async () => {
+    const lines = [];
+    const watched = await makeApp({ env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1" }, log: (l) => lines.push(l), proOptions: { sirene: async (s) => REGISTRY[s] || null } });
+    try {
+      await watched.app.pro.repo.upsertContacts(parseContactRows(CONTACTS).rows, "t");
+      const ask = (who) => watched.call("POST", "/v1/pro/claims", { headers: as(who), body: { siret: S.dupont, garageId: A, option: "email:0", holder: HOLDER } });
+      assert.equal((await ask("alice")).status, 201);
+      assert.ok(!lines.some((l) => l.event === "pro_contested"), "un seul compte : rien à signaler");
+      assert.equal((await ask("bob")).status, 201);
+      const flagged = lines.filter((l) => l.event === "pro_contested");
+      assert.equal(flagged.length, 1);
+      assert.deepEqual([flagged[0].level, flagged[0].garageId, flagged[0].accounts], ["warn", A, 2]);
+      assert.ok(!JSON.stringify(flagged[0]).includes("dev-"), "ni compte ni cible dans le journal");
+    } finally {
+      await watched.close();
+    }
+  });
+
+  test("limits: 3 requests in progress and 5 codes per account over 24 h", async () => {
     // un compte : 3 demandes en cours au plus
     assert.equal((await claim("eve", { option: "email:0" })).status, 201);
     assert.equal((await claim("eve", { garageId: C, option: "sms:0" })).status, 201);
@@ -429,6 +460,32 @@ describe("Espace Pro : vérification d'un garagiste", () => {
     } finally {
       await few.close();
     }
+  });
+
+  test("test establishments (PRO_TEST_ESTABLISHMENTS): an invented SIRET leads to the test garage without asking the registry", async () => {
+    const fake = siretOf("0000000000001");
+    const sea = { lat: 0.5, lon: -20.5 };
+    const lines = [];
+    const app = await makeApp({
+      env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1", PRO_TEST_ESTABLISHMENTS: JSON.stringify([{ siret: fake, name: "Garage Essai Pixcar", ...sea }]) },
+      log: (l) => lines.push(l),
+      proOptions: { sirene: async () => { throw new Error("le registre ne doit pas être interrogé"); } },
+    });
+    try {
+      assert.ok(lines.some((l) => /établissements d'essai actifs/.test(l.msg) && l.count === 1), "signalé au démarrage");
+      await app.app.pro.repo.upsertContacts(parseContactRows([{ id: "f0000000-0000-4000-8000-000000000001", name: "Garage Essai Pixcar", ...sea, emails: ["essai@exemple.fr"], phones: ["+33612345678"] }]).rows, "essai");
+      const r = await json(await app.call("GET", `/v1/pro/siret/${fake}`, { headers: as("me") }));
+      assert.equal(r.status, 200);
+      assert.deepEqual(r.body.garages.map((g) => [g.name, g.options.map((o) => o.id)]), [["Garage Essai Pixcar", ["email:0", "sms:0"]]]);
+      const c = await json(await app.call("POST", "/v1/pro/claims", { headers: as("me"), body: { siret: fake, garageId: "f0000000-0000-4000-8000-000000000001", option: "sms:0", holder: HOLDER } }));
+      assert.equal(c.status, 201);
+    } finally {
+      await app.close();
+    }
+    const { loadConfig } = await import("../config.mjs");
+    assert.throws(() => loadConfig({ NODE_ENV: "test", PRO_TEST_ESTABLISHMENTS: "pas du json" }), /JSON illisible/);
+    assert.throws(() => loadConfig({ NODE_ENV: "test", PRO_TEST_ESTABLISHMENTS: JSON.stringify([{ siret: "12345678901234", name: "X", lat: 0, lon: 0 }]) }), /clé juste/);
+    assert.equal(loadConfig({ NODE_ENV: "test" }).pro.testEstablishments.size, 0);
   });
 
   test("the registry is asked once per SIRET for 10 minutes", async () => {

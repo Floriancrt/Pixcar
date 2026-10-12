@@ -104,6 +104,11 @@ Parameters:
     Type: String
     Default: pixcar.fr
     Description: Espace Pro — domaine de l'identité SES qui envoie les codes de vérification (verification@<domaine>).
+  ProTestEstablishments:
+    Type: String
+    Default: ""
+    Description: Espace Pro — établissements d'ESSAI (JSON, SIRET inventés reconnus sans le registre), le temps d'un essai de bout en bout. Vide en temps normal ; voir docs/exploitation.md, 10.8.
+    MaxLength: 1500
   ProNotifyConfigurationArn:
     Type: String
     Default: ""
@@ -117,6 +122,7 @@ Conditions:
   HasBackup: !Not [!Equals [!Ref BackupRetentionDays, "0"]]
   HasPro: !And [!Not [!Equals [!Ref ProUserPoolId, ""]], !Not [!Equals [!Ref ProClientId, ""]]]
   HasProSms: !And [!Condition HasPro, !Not [!Equals [!Ref ProNotifyConfigurationArn, ""]]]
+  HasProAlarm: !And [!Condition HasPro, !Condition HasAlarmEmail]
 
 Resources:
   # ---- base de données
@@ -212,6 +218,7 @@ Resources:
           PRO_EMAIL_FROM: !Sub "Pixcar <verification@${ProEmailDomain}>"
           PRO_NOTIFY_CONFIGURATION_ID: !Ref ProNotifyConfigurationArn
           PRO_CHANNELS: !If [HasProSms, "email,email_domain,sms", "email,email_domain"]
+          PRO_TEST_ESTABLISHMENTS: !Ref ProTestEstablishments
       Tags: [{ Key: Project, Value: pixcar }]
 
   # Espace Pro : droit d'envoyer les codes de vérification, et rien d'autre (une identité SES, une configuration Notify)
@@ -519,6 +526,36 @@ Resources:
       Dimensions: [{ Name: FunctionName, Value: !Ref OpsFunction }]
       Statistic: Sum
       Period: 86400
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+
+  # Espace Pro : un garage demandé par plusieurs comptes en 24 h (litige ou tentative de blocage), d'après la ligne de journal de l'API
+  ProContestedMetric:
+    Type: AWS::Logs::MetricFilter
+    Condition: HasPro
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "le journal des fonctions est au format texte (horodatage et identifiant de requête devant le JSON) : filtre par terme, pas par champ JSON"
+        must: ["le terme est celui que server/pro.mjs écrit (event « pro_contested »)"]
+    Properties:
+      LogGroupName: !Ref ApiLogGroup
+      FilterPattern: '"pro_contested"'
+      MetricTransformations:
+        - { MetricNamespace: Pixcar, MetricName: ProContestedGarages, MetricValue: "1", DefaultValue: 0, Unit: Count }
+
+  ProContestedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasProAlarm
+    DependsOn: ProContestedMetric
+    Properties:
+      AlarmDescription: "Espace Pro : un garage a été demandé par plusieurs comptes en 24 h (op pro-claims pour voir qui, puis vérification manuelle)"
+      Namespace: Pixcar
+      MetricName: ProContestedGarages
+      Statistic: Sum
+      Period: 3600
       EvaluationPeriods: 1
       Threshold: 1
       ComparisonOperator: GreaterThanOrEqualToThreshold

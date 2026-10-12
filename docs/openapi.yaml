@@ -249,7 +249,8 @@ paths:
       description: |
         Le SIRET est contrôlé à nouveau ; le garage doit être l'un des candidats de `GET /v1/pro/siret/{siret}`. Le code (6 chiffres,
         valable 10 minutes, 5 essais) part vers la cible connue du garage ; pour l'option `domain`, vers `localPart@domaine-du-garage`.
-        Limites : 3 envois par garage et 5 par compte sur 24 h, 30 par heure pour tout le service, 3 demandes en cours par compte.
+        Limites sur 24 h : 3 envois par compte vers un même garage, 10 vers un garage tous comptes confondus, 5 par compte ; 30 par heure
+        pour tout le service ; 3 demandes en cours par compte.
         Une nouvelle demande du même compte pour le même garage remplace la précédente.
       operationId: proClaim
       security: [{ cognito: [] }]
@@ -280,7 +281,7 @@ paths:
         "404": { description: "SIRET inconnu du registre (`siret_not_found`), ou Espace Pro fermé (`pro_disabled`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "409": { description: "Garage déjà rattaché à un autre compte (`already_claimed`, avec `contact`) ou au vôtre (`already_yours`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { description: "Champ invalide (`validation`, `holder`, `local_part`), option inconnue (`option`), garage pas à l'adresse de l'établissement (`siret_far`), SIRET refusé (`siret_closed`, `siret_activity`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
-        "429": { description: "Limite d'envois (`send_limited`, avec `scope` : garage, account, global), trop de demandes en cours (`too_many_pending`) ou trop d'interrogations du registre par ce compte (`rate_limited`).", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { description: "Limite d'envois (`send_limited`, avec `scope` : garage (ce compte vers ce garage), garage_total, account, global), trop de demandes en cours (`too_many_pending`) ou trop d'interrogations du registre par ce compte (`rate_limited`).", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "502": { description: "Le code n'a pas pu partir (`send_failed`) : la demande est close.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "503": { description: "Registre des entreprises injoignable (`sirene_unavailable`) ou base indisponible.", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   /v1/pro/claims/{id}:

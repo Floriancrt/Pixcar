@@ -11,7 +11,8 @@
 // Règles : SIRET valide, actif, d'une activité de garage, et situé à moins de 300 m du garage (ou même code postal et même nom quand le
 // registre n'a pas de position) ; le code part UNIQUEMENT vers un contact connu du garage par nos données (jamais saisi par le demandeur,
 // sauf la partie locale d'une adresse sur le domaine propre au garage) ; code à 6 chiffres valable 10 minutes, gardé en empreinte ;
-// au plus 3 envois par garage et 5 par compte sur 24 h, 30 envois par heure pour tout le service ; un garage n'a qu'un compte vérifié.
+// sur 24 h, au plus 3 envois par compte vers un même garage, 10 vers un garage tous comptes confondus, 5 par compte ; 30 envois par heure pour
+// tout le service ; un garage n'a qu'un compte vérifié.
 // Quand un garage offre plusieurs moyens, c'est le demandeur qui choisit.
 import { apiError, json, readJson } from "./lib/http.mjs";
 import { hmac, toHex } from "./lib/crypto.mjs";
@@ -62,14 +63,23 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
   const repo = createProRepo(db);
   const send = senders || createSenders(pro, { production: config.production, log });
   const verify = verifier || (pro.userPoolId && pro.clientId ? createCognitoVerifier({ userPoolId: pro.userPoolId, clientId: pro.clientId, fetchImpl, now }) : null);
-  const lookup = sirene || ((siret) => lookupSiret(siret, { fetchImpl }));
+  // établissements d'essai d'abord (PRO_TEST_ESTABLISHMENTS, vide en temps normal), puis le registre public
+  const registry = sirene || ((siret) => lookupSiret(siret, { fetchImpl }));
+  const tests = pro.testEstablishments || new Map();
+  const lookup = async (siret) => (tests.has(siret) ? tests.get(siret) : registry(siret));
+  if (tests.size) log({ level: "warn", msg: "Espace Pro : établissements d'essai actifs (PRO_TEST_ESTABLISHMENTS)", count: tests.size });
   const lookups = createMemoryLimiter({ limit: pro.lookupsPerAccountPerHour, windowMs: 3600_000, now });
   const sireneCache = new Map(); // siret → { at, value }
   // secret des codes et des cibles : dérivé du secret des adresses IP (aucun nouveau secret à gérer), distinct de lui
   let secret = null;
   const proSecret = () => (secret ||= hmac(config.ipSecret, "pixcar/pro/v1").then(toHex));
   const digest = async (text) => toHex(await hmac(await proSecret(), text));
-  const limits = { perGaragePerDay: pro.sendsPerGaragePerDay, perAccountPerDay: pro.sendsPerAccountPerDay, globalPerHour: pro.sendsGlobalPerHour };
+  const limits = { perGarageAccountPerDay: pro.sendsPerGarageAccountPerDay, perGaragePerDay: pro.sendsPerGaragePerDay, perAccountPerDay: pro.sendsPerAccountPerDay, globalPerHour: pro.sendsGlobalPerHour };
+  // Plusieurs comptes demandent des codes pour un même garage en 24 h : litige ou tentative de blocage. Une ligne de journal dédiée
+  // (event « pro_contested ») que la pile transforme en alarme par courriel ; la vérification manuelle tranche.
+  const watch = (garageId, accounts) => {
+    if (accounts >= 2) log({ level: "warn", msg: "garage demandé par plusieurs comptes", event: "pro_contested", garageId, accounts });
+  };
 
   // ---- compte
   async function account(request) {
@@ -175,7 +185,9 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
         ? "Trop de codes envoyés en ce moment. Réessayez dans une heure."
         : scope === "claim"
           ? "Plus de nouvel envoi possible pour cette demande. Recommencez la vérification ou choisissez un autre moyen."
-          : "Limite de codes atteinte pour aujourd'hui. Réessayez demain ou demandez une vérification manuelle.",
+          : scope === "garage_total"
+            ? "Ce garage a reçu trop de codes aujourd'hui. Réessayez demain ou écrivez-nous pour une vérification manuelle."
+            : "Limite de codes atteinte pour aujourd'hui. Réessayez demain ou demandez une vérification manuelle.",
       { scope },
       { "retry-after": scope === "global" ? "3600" : "86400" },
     );
@@ -233,6 +245,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
     if (!(await deliver({ claimId: id, channel: chosen.channel, target: chosen.target, code, garageName: g.name })))
       return apiError(502, "send_failed", "Le code n'a pas pu être envoyé. Réessayez ou choisissez un autre moyen.");
     log({ level: "info", msg: "demande pro créée", channel: chosen.channel });
+    watch(garageId, out.accounts);
     return json(201, claimView(await repo.getClaim(id, sub)), NO_STORE);
   }
 
@@ -279,6 +292,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
     if (out.kind === "closed") return apiError(409, "claim_closed", "Cette demande est close. Recommencez la vérification.");
     if (out.kind === "wait") return apiError(429, "resend_too_soon", `Attendez ${out.retryAfter} s avant de redemander un code.`, { retryAfter: out.retryAfter }, { "retry-after": String(out.retryAfter) });
     if (out.kind === "limited") return limitedSend(out.scope);
+    watch(out.garageId, out.accounts);
     const c = await repo.getClaim(id, sub);
     if (!(await deliver({ claimId: id, channel: out.channel, target: out.target, code, garageName: (c && c.garage_name) || "" })))
       return apiError(502, "send_failed", "Le code n'a pas pu être envoyé. Recommencez la vérification ou choisissez un autre moyen.");
