@@ -99,15 +99,30 @@
               code de vérification qu'à un moyen de contact connu du garage (par e-mail, ou par SMS avec AWS End User
               Messaging quand ce moyen est proposé).
             </li>
+            <li>
+              <b>Les prix annoncés</b>&nbsp;: les prix qu'un garage vérifié publie sur Pixcar, le compte qui les a saisis
+              et les dates de saisie et de confirmation. Ils sont affichés à part, avec la mention «&nbsp;Annoncé&nbsp;», et
+              n'entrent pas dans les prix médians.
+            </li>
           </ul>
           <p>
+            <b>Statistiques des garages vérifiés</b>&nbsp;: quand un visiteur ouvre la fiche d'un garage vérifié ou
+            touche «&nbsp;Appeler&nbsp;», la page le signale à l'API de Pixcar. Pour ne compter chaque visiteur qu'une fois
+            par jour, l'API calcule, avec une clé secrète, une empreinte de son adresse IP liée au garage et au
+            jour&nbsp;: l'adresse IP n'est pas enregistrée, et l'empreinte change d'un jour et d'un garage à l'autre, ce
+            qui empêche de suivre un visiteur. Le garage ne voit que des totaux (vues de sa fiche et appels sur 30 jours).
+            Aucun cookie ni stockage dans le navigateur.
+          </p>
+          <p>
             Pourquoi&nbsp;: fournir le compte demandé et vérifier que son titulaire gère bien le garage, pour qu'un tiers
-            ne puisse pas se l'approprier (RGPD, article 6, paragraphe 1, points b et f).
+            ne puisse pas se l'approprier (RGPD, article 6, paragraphe 1, points b et f)&nbsp;; montrer au garage vérifié
+            l'audience de sa fiche, sans identifier les visiteurs (intérêt légitime, point f).
           </p>
           <p>
             Combien de temps&nbsp;: le compte, jusqu'à ce que son titulaire en demande la suppression&nbsp;; le
             rattachement, tant que le garage est rattaché au compte&nbsp;; une demande qui n'aboutit pas, 30 jours&nbsp;;
-            le journal des envois de codes, 90 jours&nbsp;; les coordonnées d'un garage, tant qu'il figure dans les
+            le journal des envois de codes, 90 jours&nbsp;; les prix annoncés, jusqu'à leur retrait ou celui du
+            rattachement&nbsp;; les empreintes des visites, 60 jours&nbsp;; les coordonnées d'un garage, tant qu'il figure dans les
             données de Pixcar ou jusqu'à ce que le professionnel en demande le retrait&nbsp;; les sauvegardes de la base,
             30 jours.
           </p>

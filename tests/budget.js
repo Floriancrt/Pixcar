@@ -26,7 +26,10 @@ const KB = 1024;
 // Outfit (31,5 Ko) ; accueil, tableau, faces de repli aux mesures de Manrope (mesuré : page 34,5 dont feuille de style 23,0 · js 59,3 · police
 // 24,3 · première visite 118,0 · tout-en-un 120,5, soit 6,8 et 7,4 Ko de moins qu'avant) : aucun budget ne bouge. Retrait du mode sombre (même jour) :
 // page 34,0 dont feuille de style 22,5 · première visite 117,6 · tout-en-un 120,0.
-const BUDGET = { page: 32, html: 10, js: 61, css: 23.5, font: 34, critical: 123, sw: 3, single: 127, icon: 20 };
+// Espace Pro côté comparateur (branche pro-prix, 12 octobre 2026) : badge « Garage vérifié », étiquette « Annoncé », bloc de la fiche et comptage des
+// visites (modules/pro-public.js et src/js/shared/pro-prices.js : +1,5 Ko gzip, mesuré js 61,2 contre 59,7) ; budget du script +1,5, les autres ne bougent pas.
+// Pour le rabaisser : ne charger ce module qu'avec une API (il ne fait rien sans elle).
+const BUDGET = { page: 32, html: 10, js: 62.5, css: 23.5, font: 34, critical: 123, sw: 3, single: 127, icon: 20 };
 
 const results = [];
 const check = (name, cond, detail = "") => {

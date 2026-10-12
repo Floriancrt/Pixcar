@@ -153,6 +153,8 @@ function fakeCognito() {
   const legalPro = (file) => /id="lg-pro"/.test(fs.readFileSync(file, "utf8"));
   execFileSync(process.execPath, [BUILD, "--only", "single", "--src", src, "--out", path.join(OUT, "single")], { stdio: "pipe", env });
   check("privacy text: an « Espace Pro » section in the site that has the pro page, none without it, none in the all-in-one page", legalPro(path.join(dist, "index.html")) && !legalPro(path.join(OUT, "plain/dist/index.html")) && !legalPro(path.join(OUT, "single/index.html")));
+  const proText = (/<section aria-labelledby="lg-pro"[\s\S]*?<\/section>/.exec(fs.readFileSync(path.join(dist, "index.html"), "utf8")) || [""])[0].replace(/<[^>]+>/g, " ").replace(/&nbsp;|\s+/g, " ");
+  check("privacy text: announced prices, the visit counting (daily keyed IP fingerprint, no IP kept, totals only) and its 60-day retention", /Les prix annoncés/.test(proText) && /empreinte de son adresse IP liée au garage et au jour/.test(proText) && /l'adresse IP n'est pas enregistrée/.test(proText) && /que des totaux/.test(proText) && /les empreintes des visites, 60 jours/.test(proText), proText.slice(0, 300));
   let refused = "";
   try {
     build("noapi", [], { ...env, PIXCAR_API_BASE: "" });

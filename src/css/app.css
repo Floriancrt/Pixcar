@@ -2179,6 +2179,96 @@ select {
 .p-tag.warn {
   color: var(--amber-ink);
 }
+/* Espace Pro (modules/pro-public.js) : badge « Garage vérifié », étiquette « Annoncé 89 € » à part de l'échelle des prix payés,
+   bloc « Prix annoncés par le garage » dans la fiche (maquette 6 du 11 octobre 2026) */
+.v-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  margin: 2px 0 0;
+  padding: 2px 8px 2px 6px;
+  border-radius: 999px;
+  background: var(--promo-soft);
+  color: var(--promo-ink);
+  font: 700 0.72rem/1.4 var(--font);
+  white-space: nowrap;
+}
+.v-badge .ic {
+  width: 12px;
+  height: 12px;
+  stroke-width: 3;
+}
+.g-price .tag.annonce,
+.tag.annonce {
+  height: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+  color: var(--ink);
+  font: 700 0.72rem/1.4 var(--font);
+}
+.tag.annonce::before {
+  display: none;
+}
+.no-paid {
+  display: block;
+  color: var(--ink-3);
+  font-size: 0.78rem;
+}
+.pro-ann {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1.5px solid var(--ink);
+  border-radius: 14px;
+  background: var(--card);
+}
+.pa-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pa-head h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+.pa-head .v-badge {
+  margin: 0;
+}
+.pa-list {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+.pa-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-2);
+}
+.pa-list li.is-cur {
+  color: var(--ink);
+  font-weight: 700;
+}
+.pa-list b {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pa-old {
+  color: var(--amber-ink);
+  font-weight: 700;
+}
+.pa-note {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.78rem;
+}
 .no-price {
   color: var(--ink-3);
   font: 400 0.98rem/1.2 var(--font);

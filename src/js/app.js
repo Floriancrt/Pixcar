@@ -6,6 +6,7 @@ import { loadScript } from "./modules/load-script.js";
 import { MAPBOX_OPTIONS, mapboxConfig, mapboxTileUrl } from "./modules/mapbox.js";
 import { createEnricher, missingOf } from "./modules/mapbox-fiches.js";
 import { phoneList, phoneParse } from "./modules/phone.js";
+import { createProPublic } from "./modules/pro-public.js";
 import { SVC_MAX, initServicePicker } from "./modules/service-picker.js";
 import { comboOffer, comboPrice, comboPromos, comboTag } from "./modules/svc-combo.js";
 import { createStore, jsonStorage } from "./modules/repair-store.js";
@@ -1734,6 +1735,10 @@ import { SERVICES } from "./shared/services.js";
   }
   // Les réparations : celles de ce navigateur et, si une API est configurée, celles de la zone (shared: true). Le tableau Ze
   // est vivant (jamais remplacé) ; tout ce qui s'écrit passe par RS (modules/repair-store.js).
+  // Espace Pro : badge « Garage vérifié » et prix annoncés (modules/pro-public.js) ; une réponse qui en apporte refait la liste
+  const proPub = createProPublic({ base: apiBase(), onUpdate: () => me.searched && ht() }),
+    // la prestation des prix annoncés : une seule prestation choisie, hors contrôle technique (sinon : badge seulement)
+    proSvc = () => ("ct" !== me.kind && 1 === selSvcs().length ? fe().id : "");
   const RS = createStore({ apiBase: apiBase(), storage: jsonStorage() }),
     Ye = RS.storageWorks(),
     Ze = RS.rows();
@@ -2370,9 +2375,16 @@ import { SERVICES } from "./shared/services.js";
               e(a) - e(t) || (a.rating ? a.rating.n : 0) - (t.rating ? t.rating.n : 0) || t.dist - a.dist,
           );
         }
-        const a = (e) => (mt(e) ? 0 : e.price && isFinite(e.price.amount) ? 1 : 2);
+        // par prix : d'abord les prix complets, puis partiels ; un garage qui n'a qu'un prix annoncé (Espace Pro) vient après tous ceux qui
+        // ont un prix payé ou publié, rangé par ce prix annoncé ; enfin les garages sans aucun prix. Un prix d'appel ne fait pas passer premier.
+        const svc = proSvc(),
+          ann = (e) => {
+            const p = svc ? proPub.price(e, svc) : null;
+            return p && "number" == typeof p.price ? p.price : 1 / 0;
+          },
+          a = (e) => (mt(e) ? 0 : e.price && isFinite(e.price.amount) ? 1 : isFinite(ann(e)) ? 2 : 3);
         return t.sort(
-          (e, t) => a(e) - a(t) || (a(e) < 2 ? e.price.amount - t.price.amount : 0) || e.dist - t.dist,
+          (e, t) => a(e) - a(t) || (a(e) < 2 ? e.price.amount - t.price.amount : 2 === a(e) ? ann(e) - ann(t) : 0) || e.dist - t.dist,
         );
       })(
         applyFilters(r),
@@ -2442,6 +2454,7 @@ import { SERVICES } from "./shared/services.js";
       renderRepairNote());
   }
   function ft() {
+    proPub.need(me.view);
     const e = fe(),
       t = me.view.slice(0, me.shown),
       // échelle : du moins cher au plus cher des garages listés qui ont un prix complet (tous, pas seulement ceux affichés)
@@ -2485,6 +2498,12 @@ import { SERVICES } from "./shared/services.js";
               // une promotion en cours : une pastille à côté du prix (les offres et leurs conditions sont dans la fiche)
               d.length &&
                 (o = o.replace("</span><span class=\"bar\"", `<span class="tag promo" title="${y(d.map((x) => x.label).join(" · "))}">${se}Promo</span></span><span class="bar"`));
+              // prix annoncé par le garage (Espace Pro) : une étiquette à côté du prix payé, jamais dans l'échelle ; seul quand aucun prix n'est connu
+              const ap = proPub.price(e, proSvc());
+              ap &&
+                (o = o.includes('class="no-price"')
+                  ? `<span class="p-line">${proPub.chipHtml(ap)}</span><span class="no-paid">Pas encore de prix payé déclaré</span>${barHtml(NaN)}`
+                  : o.replace("</span><span class=\"bar\"", `${proPub.chipHtml(ap)}</span><span class="bar"`));
               return bt(e, t, s, c, o, {
                 dot: `<span class="dot lvl-${e.offer.lvl}" aria-hidden="true"></span>`,
                 why: whyShort(e.offer.why),
@@ -2829,7 +2848,7 @@ import { SERVICES } from "./shared/services.js";
     <div class="g-main" data-act="more">
       ${av(e.name, e.chain, e.network)}
       <div class="g-id">
-        <h3><button type="button" class="g-name linkless" data-act="more" aria-expanded="${i}" aria-controls="m-${t}">${y(e.name)}</button>${n}</h3>
+        <h3><button type="button" class="g-name linkless" data-act="more" aria-expanded="${i}" aria-controls="m-${t}">${y(e.name)}</button>${n}</h3>${"ct" === me.kind ? "" : proPub.badgeHtml(e, he("check"))}
         <p class="g-addr${e.addr ? "" : " is-none"}" data-ad="${y(e.id)}"${adTitleAttr(e)}>${adHtml(e)}</p>
       </div>
       <div class="g-type"><span class="k-cell"><span class="kind"${s.why ? ` title="${y(s.why)}"` : ""}>${s.dot || ""}<span class="k-txt">${y(a)}</span>${s.why ? `<span class="sr-only"> · ${y(s.why)}</span>` : ""}</span>${s.part ? `<span class="k-part" aria-hidden="true">${y(s.part)}</span>` : ""}</span><span class="dist" data-dist="${y(e.id)}">${distHtml(e)}</span></div>
@@ -2932,7 +2951,7 @@ import { SERVICES } from "./shared/services.js";
             : "center" === a.kind
               ? "L'enseigne ne publie pas de prix national pour cette prestation : demandez un devis au centre."
               : "Ce garage ne publie pas ses prix : demandez un devis, puis déclarez le prix payé."),
-      `${wt(e)}\n      <p class="svc-why"><span class="dot lvl-${e.offer.lvl}" aria-hidden="true"></span>${y(e.offer.why)}</p>\n      ${multi ? comboHtml(a) : ""}<p class="price-note">${r}</p>\n      ${n.length ? ue(n, t.id) : ""}\n      ${multi ? a.parts.filter((p) => !p.no && "declared" === p.price.kind).map((p) => it(p.price.mine, p.id, !0)).join("") : "declared" === a.kind ? it(a.mine, t.id, !1) : ""}\n      ${(function (
+      `${wt(e)}\n      ${proPub.ficheHtml(e, proSvc(), he("check"))}\n      <p class="svc-why"><span class="dot lvl-${e.offer.lvl}" aria-hidden="true"></span>${y(e.offer.why)}</p>\n      ${multi ? comboHtml(a) : ""}<p class="price-note">${r}</p>\n      ${n.length ? ue(n, t.id) : ""}\n      ${multi ? a.parts.filter((p) => !p.no && "declared" === p.price.kind).map((p) => it(p.price.mine, p.id, !0)).join("") : "declared" === a.kind ? it(a.mine, t.id, !1) : ""}\n      ${(function (
         e,
         t,
       ) {
@@ -3005,7 +3024,7 @@ import { SERVICES } from "./shared/services.js";
       (s.hidden = !r),
       e.classList.toggle("is-open", r),
       e.querySelector(".g-name").setAttribute("aria-expanded", String(r)));
-    r && n && (adEnsure(n), mbxEnsure(n));
+    r && n && (adEnsure(n), mbxEnsure(n), proPub.visit(n, "view"));
   }
   // Une seule fiche ouverte à la fois : l'ouvrir la sélectionne (carte + barre récapitulative)
   function kt(e, t) {
@@ -3204,6 +3223,12 @@ import { SERVICES } from "./shared/services.js";
         mapRefit());
     }),
     pe.mapFab.addEventListener("click", () => St("map" === me.viewMode ? "list" : "map")),
+    // « Appeler » (bouton de la ligne ou numéro de la fiche) d'un garage vérifié : compté pour son tableau de bord (Espace Pro)
+    pe.list.addEventListener("click", (e) => {
+      const t = e.target.closest('a[href^="tel:"]'),
+        a = t && t.closest(".card");
+      a && proPub.visit(me.view.find((x) => x.id === a.dataset.id), "call");
+    }),
     pe.list.addEventListener("click", async (e) => {
       const t = e.target.closest("[data-act]");
       if (!t) return;
