@@ -56,6 +56,11 @@ Parameters:
     Default: 30
     AllowedValues: [7, 14, 30, 60, 90]
     Description: Durée de conservation des journaux de la fonction d'envoi.
+  AlarmTopicArn:
+    Type: String
+    Default: ""
+    Description: Sujet SNS des alarmes (pixcar-alarms, créé par la pile pixcar) ; vide = pas d'alarme sur la fonction d'envoi.
+    AllowedPattern: '^(arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+)?$'
 
 Rules:
   SenderNeedsCode:
@@ -67,6 +72,7 @@ Rules:
 Conditions:
   HasAccounts: !Equals [!Ref CreateAccounts, "true"]
   HasCustomSender: !And [!Condition HasAccounts, !Not [!Equals [!Ref CodeKey, ""]], !Not [!Equals [!Ref ScwProjectId, ""]]]
+  HasSenderAlarm: !And [!Condition HasCustomSender, !Not [!Equals [!Ref AlarmTopicArn, ""]]]
 
 Resources:
   EmailIdentity:
@@ -251,6 +257,36 @@ Resources:
       Principal: cognito-idp.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !GetAtt UserPool.Arn
+
+  # Cognito appelle la fonction de façon asynchrone : Lambda retente un envoi échoué, mais un code de plus de 5 minutes ne sert plus
+  CognitoEmailInvokeConfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    Condition: HasCustomSender
+    Properties:
+      FunctionName: !Ref CognitoEmailFunction
+      Qualifier: $LATEST
+      MaximumRetryAttempts: 2
+      MaximumEventAgeInSeconds: 300
+
+  CognitoEmailErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasSenderAlarm
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "appel asynchrone : une panne ne s'affiche pas sur la page (le code n'arrive pas) ; cette alarme est le seul signal"
+        must: ["dès la première erreur"]
+    Properties:
+      AlarmDescription: "Espace Pro : l'envoi d'un code de connexion ou d'inscription par Scaleway a échoué (journal de la fonction cognito-email) ; si cela dure : retour arrière, docs/exploitation.md 10.10"
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{ Name: FunctionName, Value: !Ref CognitoEmailFunction }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopicArn]
 
 Outputs:
   DkimRecord1:

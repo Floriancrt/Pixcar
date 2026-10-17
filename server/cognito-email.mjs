@@ -2,7 +2,8 @@
 // SES, dont le compte reste en mode test ; il appelle cette fonction avec le code CHIFFRÉ par la clé KMS de la pile pixcar-pro, et elle
 // l'envoie par Scaleway Transactional Email depuis connexion@pixcar.fr.
 //   événement : { triggerSource: "CustomEmailSender_…", request: { type: "customEmailSenderRequestV1", code: <base64>, userAttributes: { email } } }
-//   rien à renvoyer ; une exception fait échouer l'action côté Cognito (la page affiche une erreur, la personne peut réessayer).
+//   rien à renvoyer. Cognito appelle cette fonction de façon ASYNCHRONE : une exception ne s'affiche pas sur la page (le code n'arrive
+//   pas) ; Lambda retente deux fois en 5 minutes au plus (pile pixcar-pro), et l'alarme CognitoEmailErrorsAlarm prévient.
 // Jamais de code ni d'adresse dans les journaux : seulement le type d'événement et l'identifiant d'envoi de Scaleway.
 // Variables : KEY_ARN (clé KMS), SSM_PREFIX (+ SCW_SECRET_KEY lu dans SSM), SCW_PROJECT_ID, SCW_REGION, EMAIL_FROM, CONTACT, LOG_LEVEL.
 import { buildDecrypt } from "@aws-crypto/decrypt-node";

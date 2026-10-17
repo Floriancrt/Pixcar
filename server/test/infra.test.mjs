@@ -374,7 +374,7 @@ describe("Espace Pro in the templates (infra/pixcar-api.yaml, infra/pixcar-pro.y
     const text = readFileSync(join(ROOT, "infra/pixcar-pro.yaml"), "utf8");
     const p = parse(text, { customTags });
     const P = p.Resources;
-    for (const id of ["CognitoEmailKey", "CognitoEmailLogGroup", "CognitoEmailRole", "CognitoEmailFunction", "CognitoEmailPermission"]) assert.equal(P[id].Condition, "HasCustomSender", id);
+    for (const id of ["CognitoEmailKey", "CognitoEmailLogGroup", "CognitoEmailRole", "CognitoEmailFunction", "CognitoEmailPermission", "CognitoEmailInvokeConfig"]) assert.equal(P[id].Condition, "HasCustomSender", id);
     assert.deepEqual([p.Parameters.CodeKey.Default, p.Parameters.ScwProjectId.Default], ["", ""], "sans paramètres, Cognito envoie par SES comme avant");
     const set = (ref) => ({ "Fn::Not": [{ "Fn::Equals": [{ Ref: ref }, ""] }] });
     assert.deepEqual(p.Conditions.HasCustomSender, { "Fn::And": [{ Condition: "HasAccounts" }, set("CodeKey"), set("ScwProjectId")] });
@@ -410,5 +410,19 @@ describe("Espace Pro in the templates (infra/pixcar-api.yaml, infra/pixcar-pro.y
     // seul le groupe d'utilisateurs de la pile peut appeler la fonction
     const perm = P.CognitoEmailPermission.Properties;
     assert.deepEqual([perm.Principal, perm.SourceArn, perm.SourceAccount], ["cognito-idp.amazonaws.com", { "Fn::GetAtt": ["UserPool", "Arn"] }, { Ref: "AWS::AccountId" }]);
+    // appel asynchrone : deux nouvelles tentatives au plus, jamais un code de plus de 5 minutes
+    const retry = P.CognitoEmailInvokeConfig;
+    assert.equal(retry.Condition, "HasCustomSender");
+    assert.deepEqual([retry.Properties.FunctionName, retry.Properties.Qualifier, retry.Properties.MaximumRetryAttempts], [{ Ref: "CognitoEmailFunction" }, "$LATEST", 2]);
+    assert.ok(retry.Properties.MaximumEventAgeInSeconds >= 60 && retry.Properties.MaximumEventAgeInSeconds <= 300);
+    // une panne ne s'affiche pas sur la page : alarme dès la première erreur de la fonction, vers le sujet donné ; rien sans sujet
+    const alarm = P.CognitoEmailErrorsAlarm;
+    assert.equal(alarm.Condition, "HasSenderAlarm");
+    assert.deepEqual(p.Conditions.HasSenderAlarm, { "Fn::And": [{ Condition: "HasCustomSender" }, set("AlarmTopicArn")] });
+    assert.equal(p.Parameters.AlarmTopicArn.Default, "");
+    const a = alarm.Properties;
+    assert.deepEqual([a.Namespace, a.MetricName, a.Dimensions, a.Statistic], ["AWS/Lambda", "Errors", [{ Name: "FunctionName", Value: { Ref: "CognitoEmailFunction" } }], "Sum"]);
+    assert.deepEqual([a.Threshold, a.ComparisonOperator, a.TreatMissingData, a.AlarmActions], [1, "GreaterThanOrEqualToThreshold", "notBreaching", [{ Ref: "AlarmTopicArn" }]]);
+    assert.match("arn:aws:sns:eu-north-1:123456789012:pixcar-alarms", new RegExp(p.Parameters.AlarmTopicArn.AllowedPattern));
   });
 });
