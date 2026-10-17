@@ -109,7 +109,9 @@ async function tiles(ctx) {
   await page.click(`#list [data-id="${oid(1)}"] .g-main`);
   await page.waitForSelector(`#list [data-id="${oid(1)}"] .pro-ann`);
   const block = norm(await page.textContent(`#list [data-id="${oid(1)}"] .pro-ann`));
-  check("the fiche shows « Prix annoncés par le garage », the searched service first, an old price marked, the responsibility note", /^Prix annoncés par le garage ?Vérifié ?Vidange \(huile \+ filtre\) ?89 € ?Recharge de climatisation ancien ?69 € ?Mis à jour le 12 oct\. 2026\. Communiqués par le garage, sous sa responsabilité/.test(block), block);
+  // le prix de la vidange est saisi à now() : « mis à jour » aujourd'hui (jour UTC de la base, formaté comme la page)
+  const today = new Date().toLocaleDateString("fr-FR", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).replace(/[.]/g, "\\.");
+  check("the fiche shows « Prix annoncés par le garage », the searched service first, an old price marked, the responsibility note", new RegExp(`^Prix annoncés par le garage ?Vérifié ?Vidange \\(huile \\+ filtre\\) ?89 € ?Recharge de climatisation ancien ?69 € ?Mis à jour le ${today}\\. Communiqués par le garage, sous sa responsabilité`).test(block), block);
   // la fiche s'ouvre en fondu (0,24 s) : axe mesurerait le contraste en cours d'animation
   await page.$eval(`#list [data-id="${oid(1)}"] .g-more`, (el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
   await page.evaluate(AXE);

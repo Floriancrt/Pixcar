@@ -2,10 +2,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { isToken, isUuid, parseRepair } from "../lib/validate.mjs";
-import { repair } from "./helpers.mjs";
+import { repair as declared } from "./helpers.mjs";
 
 const services = new Set(["vidange", "revision"]);
 const today = "2026-10-02";
+// date par défaut tirée du même jour figé (la déclaration d'essai des helpers est datée d'il y a 10 jours, en temps réel)
+const repair = (over = {}) => declared({ date: "2026-09-22", ...over });
 const parse = (body) => parseRepair(body, { services, today });
 
 describe("parseRepair", () => {
