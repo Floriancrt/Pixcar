@@ -43,7 +43,7 @@ async function startApi({ origin, writeLimit = 1000, env = {}, proOptions } = {}
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const url = `http://127.0.0.1:${server.address().port}`;
   return {
-    url, app, db, chaos, clock, upstream,
+    url, app, db, chaos, clock, now, upstream,
     // dépose une déclaration comme le ferait un autre visiteur
     async post(body) {
       const res = await fetch(url + "/v1/repairs", { method: "POST", headers: { "content-type": "application/json", origin }, body: JSON.stringify(body) });

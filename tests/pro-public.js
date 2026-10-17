@@ -54,12 +54,13 @@ async function tiles(ctx) {
       "INSERT INTO pro_claims (id, account_id, garage_id, siret, status, channel, holder_name, holder_role, target_hash, target_hint, verified_at) VALUES (gen_random_uuid(), $1, $2, '73282932000074', 'verified', 'email', 'Camille Durand', 'manager', $3, 'x', now())",
       ["acc-" + garageId.slice(-2), garageId, "a".repeat(64)],
     );
-  const announce = (garageId, service, kind, cents, over = "now()") =>
-    api.db.query(`INSERT INTO pro_prices (garage_id, service_id, kind, price_cents, vehicles, includes, status, account_id, confirmed_at) VALUES ($1, $2, $3, $4, '[]', '["parts","labour"]', 'published', 'acc', ${over})`, [garageId, service, kind, cents]);
+  // dates tirées de l'horloge de l'API (pas de now() de la base, à l'heure réelle) : « ancien » ne dépend ni du jour ni de l'heure du test
+  const announce = (garageId, service, kind, cents, daysAgo = 0) =>
+    api.db.query(`INSERT INTO pro_prices (garage_id, service_id, kind, price_cents, vehicles, includes, status, account_id, confirmed_at) VALUES ($1, $2, $3, $4, '[]', '["parts","labour"]', 'published', 'acc', to_timestamp($5::double precision / 1000))`, [garageId, service, kind, cents, api.now() - daysAgo * 864e5]);
   await verify(uid(1));
   await verify(uid(5));
   await announce(uid(1), "vidange", "fixed", 8900);
-  await announce(uid(1), "clim", "fixed", 6900, "now() - interval '200 days'");
+  await announce(uid(1), "clim", "fixed", 6900, 200);
   await announce(uid(5), "vidange", "from", 7500);
   const osmOf = (n) => OSM.find((e) => e.id === 9300 + n);
   const declare = (n, price) => api.post(repair({ price, date: isoDay(20), garage: { id: oid(n), name: osmOf(n).tags.name, addr: "", lat: osmOf(n).lat, lon: osmOf(n).lon, chainId: "" }, area: { lat: osmOf(n).lat, lon: osmOf(n).lon } }));
@@ -109,8 +110,8 @@ async function tiles(ctx) {
   await page.click(`#list [data-id="${oid(1)}"] .g-main`);
   await page.waitForSelector(`#list [data-id="${oid(1)}"] .pro-ann`);
   const block = norm(await page.textContent(`#list [data-id="${oid(1)}"] .pro-ann`));
-  // le prix de la vidange est saisi à now() : « mis à jour » aujourd'hui (jour UTC de la base, formaté comme la page)
-  const today = new Date().toLocaleDateString("fr-FR", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).replace(/[.]/g, "\\.");
+  // le prix de la vidange est saisi au jour de l'horloge de l'API, formaté comme la page
+  const today = new Date(api.now()).toLocaleDateString("fr-FR", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).replace(/[.]/g, "\\.");
   check("the fiche shows « Prix annoncés par le garage », the searched service first, an old price marked, the responsibility note", new RegExp(`^Prix annoncés par le garage ?Vérifié ?Vidange \\(huile \\+ filtre\\) ?89 € ?Recharge de climatisation ancien ?69 € ?Mis à jour le ${today}\\. Communiqués par le garage, sous sa responsabilité`).test(block), block);
   // la fiche s'ouvre en fondu (0,24 s) : axe mesurerait le contraste en cours d'animation
   await page.$eval(`#list [data-id="${oid(1)}"] .g-more`, (el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
