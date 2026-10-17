@@ -100,6 +100,7 @@ describe("legal notice and privacy window: the text", () => {
     assert.ok(text.includes("Scaleway Transactional Email (Scaleway SAS, France"), "fournisseur et pays nommés");
     assert.ok(!text.includes("Amazon SES") && !text.includes("ne voit jamais ce code"), "la fonction de Pixcar déchiffre le code pour l'envoyer");
     assert.ok(/sans le garder ni l'écrire dans ses journaux/.test(text));
+    assert.ok(!read("src/pro/index.html").includes("ne voit jamais"), "la page pro/ ne le promet pas non plus");
   });
 });
 
