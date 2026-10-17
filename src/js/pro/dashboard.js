@@ -1,6 +1,8 @@
 // Espace Pro, tableau de bord d'un garage rattaché (maquette 5 du 11 octobre 2026) : prix annoncés, prix payés par ses clients (lecture
-// seule), visites de sa fiche, prix à confirmer, saisie d'un prix avec son aperçu sur Pixcar. Que du TEXTE écrit dans la page.
+// seule), visites de sa fiche, prix à confirmer, saisie d'un prix avec son aperçu sur Pixcar ; et l'onglet « Mon garage » (garage.js).
+// Que du TEXTE écrit dans la page.
 import { INCLUDES, PRICE_KINDS, PRO_SERVICES, VEHICLES, announcedDetail, announcedText, parseProPrice, serviceLabel } from "../shared/pro-prices.js";
+import { createGarageView } from "./garage.js";
 
 const LONG = { day: "numeric", month: "long", year: "numeric" };
 const DAY_MONTH = { day: "numeric", month: "long" };
@@ -24,6 +26,15 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
   let editing = null; // prestation en cours de modification (null : ajout)
   let removeArmed = false;
   const dlg = $("priceDlg");
+  const garage = createGarageView({
+    api, $, el, icon, alertBox, busy, apiProblem,
+    prices: () => (data ? data.prices : []),
+    openPrice: (service) => openEditor(service),
+    onPricesChanged: async () => {
+      data = await api.garage(data.garage.id);
+      render();
+    },
+  });
 
   // ---- chargement et rendu
   async function open(garageId, { focus = true } = {}) {
@@ -36,7 +47,35 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
       return;
     }
     render();
+    await panel("top", { focus: false });
     show("dash", { focus });
+  }
+
+  // ---- onglets du tableau de bord : « Tableau de bord » (et « Mes prix », plus bas sur le même écran) ou « Mon garage »
+  async function panel(name, { focus = true } = {}) {
+    const mine = name === "garage";
+    if (mine) {
+      alertBox("");
+      try {
+        await garage.open(data.garage.id, { verifiedAt: data.garage.verifiedAt });
+      } catch (e) {
+        if (!apiProblem(e)) alertBox(e.message);
+        return;
+      }
+    }
+    $("dash-top").hidden = mine;
+    $("dash-garage").hidden = !mine;
+    for (const b of document.querySelectorAll(".dash-link[data-panel]")) {
+      if (b.dataset.panel === name) b.setAttribute("aria-current", "true");
+      else b.removeAttribute("aria-current");
+    }
+    if (name === "prices") {
+      $("dash-prices").scrollIntoView({ block: "start" });
+      if (focus) $("pricesTitle").focus({ preventScroll: true });
+      return;
+    }
+    window.scrollTo(0, 0);
+    if (focus) (mine ? $("mgTitle") : $("dashTitle")).focus();
   }
 
   function render() {
@@ -160,15 +199,16 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     for (const [g, list] of groups) sel.append(el("optgroup", { label: g }, ...list.map((s) => el("option", { value: s.id, text: s.label }))));
   }
 
+  // serviceId : prix à modifier, ou prestation choisie d'avance (« Annoncer un prix » dans Mon garage) ; null : ajout libre
   function openEditor(serviceId) {
     alertBox("");
     editing = serviceId;
     removeArmed = false;
     const p = serviceId ? data.prices.find((x) => x.service === serviceId) : null;
-    $("priceDlgKind").textContent = p ? "Modifier un prix" : "Ajouter une prestation";
-    $("priceDlgTitle").textContent = p ? serviceLabel(serviceId) : "Nouvelle prestation";
-    $("pickService").hidden = !!p;
-    if (!p) {
+    $("priceDlgKind").textContent = p ? "Modifier un prix" : serviceId ? "Annoncer un prix" : "Ajouter une prestation";
+    $("priceDlgTitle").textContent = serviceId ? serviceLabel(serviceId) : "Nouvelle prestation";
+    $("pickService").hidden = !!serviceId;
+    if (!serviceId) {
       const taken = new Set(data.prices.map((x) => x.service));
       let first = null;
       for (const o of $("priceService").querySelectorAll("option")) {
@@ -187,7 +227,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     $("priceValue").removeAttribute("aria-invalid");
     updatePreview();
     dlg.showModal();
-    (p ? $("priceValue") : $("priceService")).focus();
+    (serviceId ? $("priceValue") : $("priceService")).focus();
   }
 
   async function savePrice(ev) {
@@ -213,6 +253,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
         data.prices = data.prices.filter((x) => x.service !== service).concat(saved);
         dlg.close();
         render();
+        garage.refresh(); // la prestation est maintenant cochée dans « Mon garage »
         alertBox(
           saved.status === "review"
             ? `${serviceLabel(service)} : prix enregistré. Il est très éloigné des prix payés dans le secteur ; nous le relisons avant de le publier.`
@@ -243,6 +284,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
         data.prices = data.prices.filter((x) => x.service !== editing);
         dlg.close();
         render();
+        garage.refresh();
         alertBox(`${serviceLabel(editing)} : prix retiré.`, "info");
       } catch (e) {
         if (e.status === 401) {
@@ -264,6 +306,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
   $("priceDelete").addEventListener("click", removePrice);
   $("addPrice").addEventListener("click", () => openEditor(null));
   $("confirmAll").addEventListener("click", confirmAll);
+  for (const b of document.querySelectorAll(".dash-link[data-panel]")) b.addEventListener("click", () => panel(b.dataset.panel));
   $("priceValue").addEventListener("input", (e) => {
     e.target.value = e.target.value.replace(/[^\d,.\s]/g, "");
     e.target.removeAttribute("aria-invalid"); // l'erreur affichée ne vaut plus pour ce qui est en cours de saisie

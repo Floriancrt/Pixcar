@@ -163,6 +163,39 @@ describe("docs/openapi.yaml ↔ API", () => {
       await call("DELETE", "/v1/pro/garages/{id}/prices/{service}", `${G}/prices/diag`, { headers: me, status: 204 });
       await call("DELETE", "/v1/pro/garages/{id}/prices/{service}", `${G}/prices/diag`, { headers: me, status: 404 });
       await call("DELETE", "/v1/pro/garages/{id}/prices/{service}", `${G}/prices/diag`, { status: 401 });
+      // « Mon garage »
+      const P = "/v1/pro/garages/{id}/profile";
+      await call("GET", P, `${G}/profile`, { headers: me, status: 200 });
+      await call("GET", P, `${G}/profile`, { status: 401 });
+      await call("GET", P, `${G}/profile`, { headers: { "x-pro-dev-account": "other" }, status: 404 });
+      await call("PUT", P, `${G}/profile`, { headers: me, body: { website: "garage-dupont.fr", hours: { mo: [["08:00", "12:00"], ["14:00", "18:30"]] } }, status: 200 });
+      await call("PUT", P, `${G}/profile`, { headers: me, body: { website: "javascript:x" }, status: 422 });
+      await call("PUT", P, `${G}/profile`, { headers: me, body: "{", status: 400 });
+      await call("PUT", P, `${G}/profile`, { body: { email: "" }, status: 401 });
+      await call("PUT", P, `${G}/profile`, { headers: { "x-pro-dev-account": "other" }, body: { email: "" }, status: 404 });
+      const C = "/v1/pro/garages/{id}/changes";
+      const change = await call("POST", C, `${G}/changes`, { headers: me, body: { field: "addr", value: { street: "2 rue X", pc: "31220", city: "Cazères" } }, status: 201 });
+      await call("POST", C, `${G}/changes`, { headers: me, body: { field: "phone", value: "12" }, status: 422 });
+      await call("POST", C, `${G}/changes`, { headers: me, body: "{", status: 400 });
+      await call("POST", C, `${G}/changes`, { body: { field: "name", value: "Dupont" }, status: 401 });
+      await call("POST", C, `${G}/changes`, { headers: { "x-pro-dev-account": "other" }, body: { field: "name", value: "Dupont" }, status: 404 });
+      await call("GET", P, `${G}/profile`, { headers: me, status: 200 }); // avec un changement en attente
+      const D = "/v1/pro/garages/{id}/changes/{change}";
+      await call("DELETE", D, `${G}/changes/${JSON.parse(change.text).id}`, { headers: me, status: 204 });
+      await call("DELETE", D, `${G}/changes/${JSON.parse(change.text).id}`, { headers: me, status: 404 });
+      await call("DELETE", D, `${G}/changes/${JSON.parse(change.text).id}`, { status: 401 });
+      const S = "/v1/pro/garages/{id}/services/{service}";
+      await call("PUT", S, `${G}/services/vidange`, { headers: me, body: { offered: false }, status: 200 });
+      await call("PUT", S, `${G}/services/vidange`, { headers: me, body: { offered: true, minutes: 45 }, status: 200 });
+      await call("PUT", S, `${G}/services/ct`, { headers: me, body: { offered: true }, status: 422 });
+      await call("PUT", S, `${G}/services/vidange`, { headers: me, body: "{", status: 400 });
+      await call("PUT", S, `${G}/services/vidange`, { body: { offered: true }, status: 401 });
+      await call("PUT", S, `${G}/services/vidange`, { headers: { "x-pro-dev-account": "other" }, body: { offered: true }, status: 404 });
+      const R = "/v1/pro/garages/{id}/registry";
+      await call("GET", R, `${G}/registry`, { headers: me, status: 200 });
+      await call("GET", R, `${G}/registry`, { status: 401 });
+      await call("GET", R, `${G}/registry`, { headers: { "x-pro-dev-account": "other" }, status: 404 });
+      await call("GET", "/v1/pro/public/garages", `/v1/pro/public/garages?ids=${g.id}`, { status: 200 }); // avec fiche et prestations
     } finally {
       t = keep;
       await pro.close();
@@ -183,7 +216,10 @@ describe("docs/openapi.yaml ↔ API", () => {
       "GET /v1/pro/garages/{id}", "GET /v1/pro/me", "GET /v1/pro/public/garages", "GET /v1/pro/siret/{siret}", "GET /v1/repairs", "POST /v1/pro/claims",
       "POST /v1/pro/claims/{id}/code", "POST /v1/pro/claims/{id}/resend", "POST /v1/pro/garages/{id}/confirm", "POST /v1/pro/public/visits", "POST /v1/repairs",
       "PUT /v1/pro/garages/{id}/prices/{service}",
-    ]);
+    ].concat([
+      "DELETE /v1/pro/garages/{id}/changes/{change}", "GET /v1/pro/garages/{id}/profile", "GET /v1/pro/garages/{id}/registry", "POST /v1/pro/garages/{id}/changes",
+      "PUT /v1/pro/garages/{id}/profile", "PUT /v1/pro/garages/{id}/services/{service}",
+    ]).sort());
     // et chaque méthode non documentée d'une route documentée est refusée en 405
     for (const [method, path] of [["PUT", "/v1/repairs"], ["DELETE", "/v1/repairs"], ["POST", "/v1/overpass"], ["POST", "/healthz"], ["GET", `/v1/repairs/${repair().id}`]]) {
       const res = await t.call(method, path, {});

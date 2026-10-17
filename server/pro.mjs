@@ -14,8 +14,16 @@
 //                                                 prix payés du secteur attend une relecture avant publication
 //   DELETE /v1/pro/garages/:id/prices/:service    retire un prix
 //   POST   /v1/pro/garages/:id/confirm            « Tout confirmer » : les prix repartent pour 6 mois
+// « Mon garage » (docs/rendez-vous.md, lot 1) :
+//   GET    /v1/pro/garages/:id/profile            coordonnées connues, fiche déclarée, changements à relire ou décidés, prestations et temps moyens
+//   PUT    /v1/pro/garages/:id/profile            { website?, email?, hours? } : publiés tout de suite
+//   POST   /v1/pro/garages/:id/changes            { field: name | addr | phone, value } : changement relu par Pixcar avant publication
+//   DELETE /v1/pro/garages/:id/changes/:change    annule un changement en attente
+//   PUT    /v1/pro/garages/:id/services/:service  { offered, minutes } : prestation faite ou non, temps moyen ; décocher retire le prix annoncé
+//   GET    /v1/pro/garages/:id/registry           l'établissement rattaché dans le registre public (lecture seule)
 // Sans compte (le comparateur) :
-//   GET    /v1/pro/public/garages?ids=a,b,…       garages vérifiés parmi ces identifiants (100 au plus) et leurs prix publiés
+//   GET    /v1/pro/public/garages?ids=a,b,…       garages vérifiés parmi ces identifiants (100 au plus), leurs prix publiés, leur fiche déclarée
+//                                                 et les prestations qu'ils disent faire ou non (jamais les temps moyens)
 //   POST   /v1/pro/public/visits                  { garageId, kind: view | call } : une visite de fiche ou une touche « Appeler » (garage vérifié)
 //
 // Règles : SIRET valide, actif, d'une activité de garage, et situé à moins de 300 m du garage (ou même code postal et même nom quand le
@@ -29,11 +37,12 @@ import { hmac, toHex } from "./lib/crypto.mjs";
 import { isUuid } from "./lib/validate.mjs";
 import { createMemoryLimiter } from "./lib/ratelimit.mjs";
 import { resolveOption, sameName, verificationOptions } from "./lib/contact.mjs";
-import { GARAGE_NAF, isSiret, lookupSiret, normalizeSiret } from "./lib/sirene.mjs";
+import { GARAGE_NAF, NAF_LABELS, isSiret, lookupSiret, normalizeSiret } from "./lib/sirene.mjs";
 import { AuthError, createCognitoVerifier } from "./lib/jwt.mjs";
 import { createSenders } from "./lib/senders.mjs";
 import { createProRepo } from "./pro-repo.mjs";
-import { freshness, parseProPrice, staleAt } from "../src/js/shared/pro-prices.js";
+import { PRO_SERVICES, freshness, parseProPrice, staleAt } from "../src/js/shared/pro-prices.js";
+import { addrText, parseAddr, parseEmail, parseHours, parseMinutes, parseName, parsePhone, parseWebsite } from "../src/js/shared/garage-profile.js";
 
 const NO_STORE = { "cache-control": "no-store" };
 const SIRENE_TTL_MS = 10 * 60_000;
@@ -91,6 +100,38 @@ function priceView(p, nowMs) {
     updatedAt: isoOf(p.updated_at),
   };
 }
+
+// La fiche déclarée d'un garage, telle que « Mon garage » la montre (champs vides : rien de déclaré).
+function profileView(p) {
+  return {
+    name: (p && p.name) || "",
+    addr: p && p.street ? { street: p.street, pc: p.pc, city: p.city } : null,
+    phone: (p && p.phone) || "",
+    website: (p && p.website) || "",
+    email: (p && p.email) || "",
+    hours: (p && p.hours) || null,
+    updatedAt: p ? isoOf(p.updated_at) : null,
+  };
+}
+// Ce que le comparateur reçoit : seulement les champs publiés
+function publicProfile(p) {
+  if (!p) return null;
+  const v = profileView(p);
+  const out = {};
+  for (const k of ["name", "addr", "phone", "website", "email", "hours"]) if (v[k] && (k !== "hours" || Object.keys(v[k]).length)) out[k] = v[k];
+  return Object.keys(out).length ? out : null;
+}
+const changeView = (c) => ({
+  id: c.id,
+  field: c.field,
+  value: c.field === "addr" ? JSON.parse(c.value) : c.value,
+  status: c.status,
+  ...(c.status === "rejected" && c.reason ? { reason: c.reason } : {}),
+  createdAt: isoOf(c.created_at),
+  ...(c.decided_at ? { decidedAt: isoOf(c.decided_at) } : {}),
+});
+const CHANGE_PARSERS = { name: parseName, addr: parseAddr, phone: parsePhone };
+const SERVICE_IDS = new Set(PRO_SERVICES.map((x) => x.id));
 
 export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date.now, log = () => {}, senders, verifier, sirene } = {}) {
   const pro = config.pro;
@@ -405,6 +446,18 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
       if (method !== "POST") return apiError(405, "method_not_allowed", "Méthode non autorisée.", {}, { allow: "POST" });
       return m[2] === "/code" ? postCode(request, sub, id) : postResend(sub, id);
     }
+    if ((m = /^\/v1\/pro\/garages\/([^/]+)\/(profile|registry|changes|services)(?:\/([^/]+))?$/.exec(path))) {
+      const id = m[1].toLowerCase();
+      if (!GARAGE_RE.test(id)) return noGarage();
+      const [what, sub2] = [m[2], m[3]];
+      const allow = (methods) => apiError(405, "method_not_allowed", "Méthode non autorisée.", {}, { allow: methods });
+      if (what === "profile" && !sub2) return method === "GET" ? getProfile(sub, id) : method === "PUT" ? putProfile(request, sub, id) : allow("GET, PUT");
+      if (what === "registry" && !sub2) return method === "GET" ? getRegistry(sub, id) : allow("GET");
+      if (what === "changes" && !sub2) return method === "POST" ? postChange(request, sub, id) : allow("POST");
+      if (what === "changes") return method === "DELETE" ? deleteChange(sub, id, sub2) : allow("DELETE");
+      if (what === "services" && sub2) return method === "PUT" ? putService(request, sub, id, sub2) : allow("PUT");
+      return apiError(404, "not_found", "Route inconnue.");
+    }
     if ((m = /^\/v1\/pro\/garages\/([^/]+)(?:\/(confirm)|\/prices\/([^/]+))?$/.exec(path))) {
       const id = m[1].toLowerCase();
       if (!GARAGE_RE.test(id)) return noGarage();
@@ -429,16 +482,18 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
     const owned = await repo.ownedGarage(id, sub);
     if (!owned) return noGarage();
     const nowMs = now();
-    const [prices, paid, visits] = await Promise.all([
+    const [prices, paid, visits, profile] = await Promise.all([
       repo.listPrices(id),
       repo.paidPrices(owned.contact),
       repo.visitStats(id, { since30: isoDay(nowMs - 30 * DAY_MS), since60: isoDay(nowMs - 60 * DAY_MS) }),
+      repo.getProfile(id),
     ]);
     const c = owned.contact || {};
+    const p = profileView(profile); // un nom ou une adresse relus par Pixcar remplacent ceux des données
     return json(
       200,
       {
-        garage: { id, name: c.name || "", addr: c.addr || "", verifiedAt: isoOf(owned.claim.verified_at), holderName: owned.claim.holder_name },
+        garage: { id, name: p.name || c.name || "", addr: p.addr ? addrText(p.addr) : c.addr || "", verifiedAt: isoOf(owned.claim.verified_at), holderName: owned.claim.holder_name },
         prices: prices.map((p) => priceView(p, nowMs)),
         paid,
         visits: { views: visits.view, calls: visits.call },
@@ -479,6 +534,103 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
     return json(200, { confirmed: await repo.confirmPrices(id) }, NO_STORE);
   }
 
+  // ---- « Mon garage »
+  async function getProfile(sub, id) {
+    const owned = await repo.ownedGarage(id, sub);
+    if (!owned) return noGarage();
+    const [profile, changes, services] = await Promise.all([repo.getProfile(id), repo.listChanges(id), repo.listServices(id)]);
+    const c = owned.contact || {};
+    const byService = new Map(services.map((x) => [x.service_id, x]));
+    return json(
+      200,
+      {
+        // ce que les données publiques disent du garage (OpenStreetMap, Overture) ; jamais ses contacts privés (e-mails et numéros de vérification)
+        garage: { id, name: c.name || "", addr: c.addr || "", pc: c.pc || "" },
+        profile: profileView(profile),
+        changes: changes.map(changeView),
+        services: PRO_SERVICES.map((x) => {
+          const r = byService.get(x.id);
+          return { service: x.id, offered: r ? r.offered : null, minutes: r && r.minutes !== null ? r.minutes : null };
+        }),
+      },
+      NO_STORE,
+    );
+  }
+
+  async function putProfile(request, sub, id) {
+    const body = await readJson(request, 4096);
+    if (body.error) return apiError(400, "bad_json", "JSON attendu (4 Ko au plus).");
+    const b = body.value && typeof body.value === "object" && !Array.isArray(body.value) ? body.value : null;
+    if (!b) return apiError(422, "validation", "Objet attendu : { website, email, hours }.");
+    const parsers = { website: parseWebsite, email: parseEmail, hours: parseHours };
+    const fields = {};
+    for (const [k, v] of Object.entries(b)) {
+      if (!parsers[k]) return apiError(422, "validation", `Champ inconnu : ${String(k).slice(0, 20)}. Nom, adresse et téléphone passent par une demande de changement.`, { field: k });
+      const out = parsers[k](v);
+      if (out.error) return apiError(422, "validation", out.error, { field: k });
+      fields[k] = out.value;
+    }
+    if (!Object.keys(fields).length) return apiError(422, "validation", "Rien à enregistrer.");
+    if (!(await repo.ownedGarage(id, sub))) return noGarage();
+    return json(200, profileView(await repo.saveProfile(id, sub, fields)), NO_STORE);
+  }
+
+  async function postChange(request, sub, id) {
+    const body = await readJson(request, 1024);
+    if (body.error) return apiError(400, "bad_json", "JSON attendu (1 Ko au plus).");
+    const { field, value } = body.value || {};
+    const parse = Object.hasOwn(CHANGE_PARSERS, String(field)) ? CHANGE_PARSERS[field] : null;
+    if (!parse) return apiError(422, "validation", "Champ : name, addr ou phone.", { field: "field" });
+    const out = parse(value);
+    if (out.error) return apiError(422, "validation", out.error, { field });
+    if (!(await repo.ownedGarage(id, sub))) return noGarage();
+    const current = profileView(await repo.getProfile(id));
+    const same = field === "addr" ? current.addr && addrText(current.addr) === addrText(out.value) : current[field] === out.value;
+    if (same) return apiError(422, "unchanged", "C'est déjà la valeur de votre fiche.", { field });
+    const row = await repo.requestChange({ id: crypto.randomUUID(), garageId: id, field, value: field === "addr" ? JSON.stringify(out.value) : out.value, accountId: sub });
+    log({ level: "info", msg: "changement de fiche à relire", event: "pro_change_review", garageId: id, field });
+    return json(201, changeView(row), NO_STORE);
+  }
+
+  async function deleteChange(sub, id, rawChange) {
+    const changeId = String(rawChange || "").toLowerCase();
+    if (!(await repo.ownedGarage(id, sub))) return noGarage();
+    if (!isUuid(changeId) || !(await repo.cancelChange(id, changeId))) return apiError(404, "not_found", "Aucun changement en attente avec cet identifiant.");
+    return new Response(null, { status: 204, headers: NO_STORE });
+  }
+
+  async function putService(request, sub, id, rawService) {
+    const body = await readJson(request, 256);
+    if (body.error) return apiError(400, "bad_json", "JSON attendu.");
+    let serviceId = "";
+    try {
+      serviceId = decodeURIComponent(rawService);
+    } catch {} // pourcentage mal formé : prestation inconnue
+    if (!SERVICE_IDS.has(serviceId)) return apiError(422, "validation", "Prestation inconnue.", { field: "service" });
+    const { offered, minutes } = body.value || {};
+    if (typeof offered !== "boolean") return apiError(422, "validation", "offered : true (je la fais) ou false.", { field: "offered" });
+    const m = parseMinutes(minutes);
+    if (m.error) return apiError(422, "validation", m.error, { field: "minutes" });
+    if (!(await repo.ownedGarage(id, sub))) return noGarage();
+    const out = await repo.saveService({ garageId: id, serviceId, offered, minutes: m.value });
+    return json(200, { service: out.row.service_id, offered: out.row.offered, minutes: out.row.minutes, priceRemoved: out.priceRemoved }, NO_STORE);
+  }
+
+  async function getRegistry(sub, id) {
+    const owned = await repo.ownedGarage(id, sub);
+    if (!owned) return noGarage();
+    let e;
+    try {
+      e = await establishment(owned.claim.siret, sub);
+    } catch (err) {
+      if (err.limited) return apiError(429, "rate_limited", "Trop de lectures du registre. Réessayez plus tard.", {}, { "retry-after": String(err.limited) });
+      log({ level: "warn", msg: "registre des entreprises indisponible", error: err.message });
+      return apiError(503, "sirene_unavailable", "Le registre des entreprises ne répond pas. Réessayez dans quelques minutes.", {}, { "retry-after": "60" });
+    }
+    if (!e) return apiError(404, "siret_not_found", "Cet établissement n'est plus dans le registre des entreprises.");
+    return json(200, { siret: e.siret, name: e.name, company: e.company, addr: e.addr, naf: e.naf, nafLabel: NAF_LABELS[e.naf] || "", active: e.active }, NO_STORE);
+  }
+
   // ---- sans compte : ce que le comparateur montre (badge, prix annoncés) et ce qu'il compte (visites des fiches)
   async function publicRoute(request, path, ctx) {
     const method = request.method;
@@ -501,6 +653,17 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
           updated: isoDay(msOf(p.confirmed_at)),
           stale: freshness(msOf(p.confirmed_at), nowMs) === "stale",
         })),
+        ...(publicProfile(g.profile) ? { profile: publicProfile(g.profile) } : {}),
+        ...(g.services.length
+          ? {
+              services: Object.fromEntries(
+                [
+                  ["offered", g.services.filter((x) => x.offered).map((x) => x.service_id)],
+                  ["notOffered", g.services.filter((x) => !x.offered).map((x) => x.service_id)],
+                ].filter(([, list]) => list.length),
+              ),
+            }
+          : {}),
       }));
       return json(200, { garages }, { "cache-control": "public, max-age=60" });
     }

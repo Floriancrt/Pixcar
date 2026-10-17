@@ -32,7 +32,7 @@ describe("operations (Lambda « ops »)", () => {
   test("migrate applies the migrations once (nothing the second time); the database role is a DSQL matter and is skipped elsewhere", async () => {
     const first = await ops({ op: "migrate" });
     assert.equal(first.ok, true, first.error);
-    assert.deepEqual(first.applied, ["001_init.sql", "002_pro.sql", "003_pro_prices.sql"]);
+    assert.deepEqual(first.applied, ["001_init.sql", "002_pro.sql", "003_pro_prices.sql", "004_pro_garage.sql"]);
     assert.ok(first.role.skipped);
     assert.deepEqual((await ops({ op: "migrate" })).applied, []);
   });
@@ -43,7 +43,7 @@ describe("operations (Lambda « ops »)", () => {
     assert.equal(stats.code, 0);
     assert.ok(Array.isArray(stats.lines));
     assert.equal((await ops({ op: "list" })).lines[0], "Rien en attente.");
-    assert.deepEqual((await ops({ op: "purge" })).deleted, { writeLog: 0, upstreamCache: 0, repairs: 0, garages: 0, proEvents: 0, proClaims: 0, proVisits: 0 });
+    assert.deepEqual((await ops({ op: "purge" })).deleted, { writeLog: 0, upstreamCache: 0, repairs: 0, garages: 0, proEvents: 0, proClaims: 0, proVisits: 0, proChanges: 0 });
   });
 
   test("purge erases the declarations older than REPAIR_RETENTION_MONTHS (24 months when it is not set), and keeps the others", async () => {

@@ -745,8 +745,8 @@ legend {
     bottom: 0;
     z-index: 20;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    padding: 6px 6px max(6px, env(safe-area-inset-bottom));
+    grid-template-columns: repeat(5, 1fr);
+    padding: 6px 4px max(6px, env(safe-area-inset-bottom));
     border-top: 1px solid var(--line);
     background: var(--card);
   }
@@ -1628,4 +1628,436 @@ body[data-view="welcome"] .pro-main {
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* ---------- Mon garage (docs/rendez-vous.md, lot 1) ---------- */
+.mg-grid {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+  align-items: start;
+}
+@media (min-width: 1000px) {
+  .mg-grid {
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  }
+}
+.mg-panel {
+  margin-bottom: 16px;
+  padding: 16px 20px 18px;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+.mg-grid .mg-panel {
+  margin-bottom: 0;
+}
+.mg-panel.soft {
+  background: var(--card-2);
+  box-shadow: none;
+}
+.mg-panel h2 {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+.mg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.mg-head h2 {
+  margin: 0;
+}
+.mg-kv {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mg-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 0 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.mg-row:first-child {
+  border-top: 0;
+}
+.mg-row > .ic {
+  align-self: start;
+  margin-top: 2px;
+  color: var(--ink-3);
+}
+.mg-main {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-width: 0;
+}
+.mg-main .k {
+  color: var(--ink-3);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.mg-main .v {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.mg-main .v.none {
+  color: var(--ink-3);
+  font-weight: 600;
+}
+.mg-main .hint {
+  color: var(--ink-3);
+  font-size: 0.82rem;
+}
+.src {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--card-2);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.src .ic {
+  width: 14px;
+  height: 14px;
+}
+.src.reviewed {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.src.pending {
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+}
+.src.refused {
+  background: #fde4e2;
+  color: var(--red);
+}
+.mg-reg {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.mg-reg div {
+  display: grid;
+  gap: 1px;
+}
+.mg-reg dt {
+  color: var(--ink-3);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.mg-reg dd {
+  margin: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.mg-note {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 0;
+  color: var(--ink-2);
+  font-size: 0.85rem;
+}
+.mg-note .ic {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--ink-3);
+}
+.mg-week {
+  display: grid;
+  gap: 0 36px;
+  margin: 0;
+}
+@media (min-width: 700px) {
+  .mg-week {
+    grid-auto-flow: column;
+    grid-template-rows: repeat(4, auto);
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.mg-week div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+.mg-week dt {
+  color: var(--ink-2);
+  font-weight: 700;
+}
+.mg-week dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.mg-week .closed dd {
+  color: var(--ink-3);
+  font-weight: 600;
+}
+.sub {
+  margin: 2px 0 0;
+  color: var(--ink-3);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+/* interrupteur « Je la fais » */
+.tgl {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #868b98; /* contraste 3,4:1 sur blanc (composant d'interface) */
+  cursor: pointer;
+}
+.tgl::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: left 0.15s;
+}
+.tgl[aria-checked="true"] {
+  background: var(--ok);
+}
+.tgl[aria-checked="true"]::after {
+  left: 23px;
+}
+.tgl[disabled] {
+  opacity: 0.6;
+  cursor: progress;
+}
+/* tableau des prestations ; sur téléphone, chaque ligne devient une carte */
+.svc {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+  font-size: 0.95rem;
+}
+.svc th,
+.svc td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+.svc thead th {
+  color: var(--ink-3);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.svc tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.svc tbody th {
+  font-weight: 700;
+}
+.svc tr.cat th {
+  padding: 14px 14px 6px;
+  background: var(--card-2);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.svc tr.off th {
+  color: var(--ink-3);
+  font-weight: 600;
+}
+.svc select {
+  width: auto;
+  min-width: 112px;
+  min-height: 40px;
+  padding: 6px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.svc select:disabled {
+  border-color: var(--line);
+  background: var(--card-2);
+  color: var(--ink-3);
+}
+.svc tr.todo select {
+  border-color: var(--warn-ink);
+  background: var(--warn-soft);
+}
+.svc .unit {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.svc .warnline {
+  display: block;
+  color: var(--warn-ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.svc .c-pp b {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (max-width: 759px) {
+  .svc,
+  .svc tbody,
+  .svc tr,
+  .svc th,
+  .svc td {
+    display: block;
+  }
+  .svc thead {
+    display: none;
+  }
+  .svc tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    align-items: center;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .svc tr.cat {
+    display: block;
+    padding: 0;
+  }
+  .svc tr.cat th {
+    padding: 12px 14px 6px;
+  }
+  .svc th,
+  .svc td {
+    padding: 0;
+    border: 0;
+  }
+  .svc tbody th {
+    grid-column: 1;
+  }
+  .svc .c-on {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .svc tr.off .c-min,
+  .svc tr.off .c-pp {
+    display: none;
+  }
+  .svc .c-min,
+  .svc .c-pp {
+    color: var(--ink-3);
+    font-size: 0.85rem;
+  }
+  .svc .c-min::before,
+  .svc .c-pp::before {
+    content: attr(data-l);
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+  .svc .c-pp {
+    grid-column: 2;
+    text-align: right;
+  }
+  .svc .c-pp b {
+    color: var(--ink);
+  }
+}
+/* fenêtres : coordonnée, horaires */
+.mg-field {
+  display: grid;
+  gap: 6px;
+}
+.mg-row2 {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 10px;
+}
+.mg-row2 span {
+  display: grid;
+  gap: 6px;
+}
+input[type="tel"],
+input[type="url"],
+input[type="time"] {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--card);
+  font-variant-numeric: tabular-nums;
+}
+.mg-days {
+  display: grid;
+  gap: 6px;
+}
+.mg-day {
+  display: grid;
+  grid-template-columns: 96px auto;
+  gap: 6px 12px;
+  align-items: center;
+  margin: 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.mg-day legend {
+  float: left; /* la légende prend sa place dans la grille */
+  margin: 0;
+  padding: 0;
+}
+.mg-day .check {
+  margin: 0;
+  font-weight: 600;
+}
+.mg-slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  grid-column: 1 / -1;
+  color: var(--ink-3);
+}
+/* une ligne par jour (jour, « Ouvert », matin, après-midi) seulement quand la boîte, élargie, a la place pour les quatre heures */
+@media (min-width: 820px) {
+  #hoursDlg {
+    width: 800px;
+  }
+  .mg-day {
+    grid-template-columns: 84px 84px 1fr 1fr;
+  }
+  .mg-slot {
+    grid-column: auto;
+  }
+}
+.mg-slot input[type="time"] {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 40px;
+  padding: 6px 8px;
+}
+/* jour fermé : les plages restent lisibles (contraste AA), seulement en pointillé ; saisir une heure rouvre le jour */
+.mg-day:has(input[data-open]:not(:checked)) .mg-slot input[type="time"] {
+  border-style: dashed;
+  background: transparent;
+  color: var(--ink-3);
 }

@@ -33,6 +33,10 @@
   <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" /></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 4v16h16" /><path d="M8 16v-4M12 16V8M16 16v-6" /></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" /></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" /></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M21 16.5v3a2 2 0 0 1-2.2 2A18 18 0 0 1 2.5 5.2 2 2 0 0 1 4.5 3h3a2 2 0 0 1 2 1.7l.5 2.6a2 2 0 0 1-.6 1.8L8 10.5a15 15 0 0 0 5.5 5.5l1.4-1.4a2 2 0 0 1 1.8-.6l2.6.5a2 2 0 0 1 1.7 2z" /></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></symbol>
 </svg>
 <a class="skip" href="#main">Aller au contenu</a>
 
@@ -297,10 +301,11 @@
   <!-- Tableau de bord d'un garage rattaché : prix annoncés, prix payés par ses clients, visites de sa fiche -->
   <section class="dash" data-screen="dash" hidden aria-labelledby="dashTitle">
     <nav class="dash-nav" aria-label="Espace Pro">
-      <a href="#dash-top" class="dash-link" aria-current="true"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg><span>Tableau de bord</span></a>
-      <a href="#dash-prices" class="dash-link"><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg><span>Mes prix</span><span class="dash-count" id="dashDueCount" hidden></span></a>
+      <button type="button" class="dash-link" data-panel="top" aria-current="true"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg><span>Tableau de bord</span></button>
+      <button type="button" class="dash-link" data-panel="garage"><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg><span>Mon garage</span></button>
+      <button type="button" class="dash-link" data-panel="prices"><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg><span>Mes prix</span><span class="dash-count" id="dashDueCount" hidden></span></button>
       <a href="../" class="dash-link" id="dashSite"><svg class="ic" aria-hidden="true"><use href="#i-eye" /></svg><span>Voir Pixcar</span></a>
-      <button type="button" class="dash-link" data-go="home"><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg><span>Mes garages</span></button>
+      <button type="button" class="dash-link" data-go="home"><svg class="ic" aria-hidden="true"><use href="#i-list" /></svg><span>Mes garages</span></button>
     </nav>
     <div class="dash-body" id="dash-top">
       <p class="ok-badge small" id="dashVerified"></p>
@@ -318,7 +323,7 @@
         <li><span class="stat-l">Payé par vos clients</span><b class="stat-v" id="statPaid"></b><span class="stat-d" id="statPaidNote"></span></li>
       </ul>
       <div class="dash-head" id="dash-prices">
-        <h2>Mes prix</h2>
+        <h2 id="pricesTitle" tabindex="-1">Mes prix</h2>
         <button type="button" class="btn primary small" id="addPrice" aria-label="Ajouter une prestation"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter<span class="wide-only">&nbsp;une prestation</span></button>
       </div>
       <p class="empty" id="noPrice" hidden>Aucun prix annoncé pour l'instant. Ajoutez une première prestation : les automobilistes verront « Annoncé » à côté des prix payés par vos clients.</p>
@@ -328,6 +333,44 @@
         <tbody id="priceRows"></tbody>
       </table>
       <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>« Payé par vos clients » vient des factures que vos clients déclarent sur Pixcar : vous ne pouvez ni le modifier ni le retirer. Vos prix annoncés restent à part et n'entrent pas dans les moyennes.</span></p>
+    </div>
+    <!-- Mon garage (docs/rendez-vous.md, lot 1) : coordonnées, registre officiel, horaires, prestations et temps moyens -->
+    <div class="dash-body" id="dash-garage" hidden>
+      <p class="ok-badge small" id="mgVerified"></p>
+      <h1 id="mgTitle" tabindex="-1">Mon garage</h1>
+      <p class="lead">Les informations de votre fiche Pixcar et les prestations que vous faites.</p>
+      <div class="mg-grid">
+        <section class="mg-panel" aria-labelledby="mgCoordTitle">
+          <h2 id="mgCoordTitle">Coordonnées</h2>
+          <ul class="mg-kv" id="mgCoords"></ul>
+        </section>
+        <section class="mg-panel soft" aria-labelledby="mgRegTitle">
+          <h2 id="mgRegTitle">Registre officiel</h2>
+          <dl class="mg-reg" id="mgRegistry"></dl>
+          <p class="mg-note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>Répertoire SIRENE de l'Insee. Ces informations ne se modifient pas ici.</span></p>
+        </section>
+      </div>
+      <section class="mg-panel" aria-labelledby="mgHoursTitle">
+        <div class="mg-head">
+          <h2 id="mgHoursTitle">Horaires d'ouverture</h2>
+          <button type="button" class="btn small" id="mgHoursEdit"><svg class="ic" aria-hidden="true"><use href="#i-edit" /></svg>Modifier</button>
+        </div>
+        <div class="mg-hours" id="mgHours"></div>
+        <p class="mg-note"><svg class="ic" aria-hidden="true"><use href="#i-info" /></svg><span>Publiés tout de suite sur votre fiche Pixcar, avec la mention « Communiqué par le garage ».</span></p>
+      </section>
+      <div class="dash-head">
+        <div>
+          <h2 id="mgSvcTitle">Prestations effectuées</h2>
+          <p class="sub" id="mgSvcSummary"></p>
+        </div>
+      </div>
+      <table class="svc" id="mgServices">
+        <caption class="sr-only">Les prestations que vous faites, leur temps moyen et votre prix annoncé</caption>
+        <thead><tr><th scope="col">Prestation</th><th scope="col">Je la fais</th><th scope="col">Temps moyen</th><th scope="col">Prix annoncé</th></tr></thead>
+        <tbody id="mgSvcRows"></tbody>
+      </table>
+      <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg><span><b>Temps moyen</b> : le temps pendant lequel la voiture occupe votre atelier, pour une voiture courante. Il servira à proposer des horaires de rendez-vous ; les automobilistes ne le voient pas.</span></p>
+      <p class="sr-only" id="mgLive" role="status" aria-live="polite"></p>
     </div>
   </section>
 
@@ -380,6 +423,60 @@
   </form>
 </dialog>
 
+<dialog class="sheet" id="fieldDlg" aria-labelledby="fieldDlgTitle">
+  <form id="fieldForm" novalidate>
+    <div class="sheet-head">
+      <div>
+        <p class="eyebrow">Modifier</p>
+        <h2 id="fieldDlgTitle"></h2>
+      </div>
+      <button type="button" class="icon-btn" id="fieldClose" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button>
+    </div>
+    <div class="mg-field" id="fieldOne">
+      <label for="fieldValue" id="fieldLabel"></label>
+      <input id="fieldValue" type="text" autocomplete="off" spellcheck="false" aria-describedby="fieldHelp fieldErr">
+    </div>
+    <div class="mg-field" id="fieldAddr" hidden>
+      <label for="addrStreet">Numéro et rue</label>
+      <input id="addrStreet" type="text" autocomplete="off" aria-describedby="fieldHelp fieldErr">
+      <div class="mg-row2">
+        <span><label for="addrPc">Code postal</label><input id="addrPc" type="text" inputmode="numeric" maxlength="5" autocomplete="off"></span>
+        <span><label for="addrCity">Ville</label><input id="addrCity" type="text" autocomplete="off"></span>
+      </div>
+    </div>
+    <p class="help" id="fieldHelp"></p>
+    <p class="field-err" id="fieldErr" hidden></p>
+    <button class="btn primary" type="submit" id="fieldSave">Enregistrer</button>
+    <p class="switch" id="fieldClearBox"><button type="button" class="link-btn danger" id="fieldClear">Effacer</button></p>
+  </form>
+</dialog>
+
+<dialog class="sheet" id="hoursDlg" aria-labelledby="hoursDlgTitle">
+  <form id="hoursForm" novalidate>
+    <div class="sheet-head">
+      <div>
+        <p class="eyebrow">Modifier</p>
+        <h2 id="hoursDlgTitle">Horaires d'ouverture</h2>
+      </div>
+      <button type="button" class="icon-btn" id="hoursClose" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button>
+    </div>
+    <p class="help">Deux plages au plus par jour, au quart d'heure. Laissez la seconde vide si vous ne fermez pas à midi.</p>
+    <div class="mg-days" id="hoursDays"></div>
+    <p class="switch"><button type="button" class="link-btn" id="hoursCopy">Copier les horaires du lundi sur les jours de mardi à vendredi</button></p>
+    <p class="field-err" id="hoursErr" hidden></p>
+    <button class="btn primary" type="submit" id="hoursSave">Enregistrer</button>
+  </form>
+</dialog>
+
+<dialog class="sheet" id="untickDlg" aria-labelledby="untickTitle">
+  <form method="dialog" id="untickForm">
+    <div class="sheet-head"><h2 id="untickTitle">Retirer aussi votre prix annoncé ?</h2></div>
+    <p id="untickText"></p>
+    <button class="btn primary" value="yes" id="untickYes">Décocher et retirer le prix</button>
+    <p class="switch"><button class="link-btn" value="no" id="untickNo">Garder la prestation</button></p>
+  </form>
+</dialog>
+
 <footer class="pro-foot">
   <details class="pro-privacy">
     <summary>Vos données dans l'Espace Pro</summary>
@@ -388,6 +485,7 @@
       <li><b>Le rattachement d'un garage</b> : le SIRET, le garage, vos prénom, nom et fonction, la case de certification cochée, le moyen de vérification choisi (montré masqué) et les dates. Ils prouvent que vous gérez le garage et servent en cas de contestation ; ils sont gardés tant que le garage est rattaché à votre compte. Une demande qui n'aboutit pas est effacée après 30 jours, le journal des envois après 90 jours.</li>
       <li><b>Les coordonnées des garages</b> (e-mail public, site, portable) viennent de données publiques (Overture Maps) ; elles ne servent qu'à envoyer le code de vérification et ne sont jamais affichées en clair.</li>
       <li><b>Vos prix annoncés</b> : publiés sur Pixcar avec la mention « Annoncé », sous votre responsabilité, avec leur date de mise à jour. Les statistiques de votre fiche (visites, clics « Appeler ») ne sont que des totaux : vous ne voyez jamais qui a consulté votre fiche.</li>
+      <li><b>Votre fiche</b> (« Mon garage ») : les coordonnées et horaires que vous déclarez sont publiés sur Pixcar avec la mention « communiqués par le garage » ; un changement du nom, de l'adresse ou du téléphone est d'abord relu par Pixcar. Les temps moyens de vos prestations ne sont jamais montrés aux automobilistes. Tout est effacé quand le garage n'est plus rattaché à votre compte ; une demande de changement relue ou annulée, après 90 jours.</li>
       <li>Accès, rectification, effacement : <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>.</li>
     </ul>
   </details>

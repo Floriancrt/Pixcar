@@ -38,5 +38,12 @@ export function createProApi({ base, token, fetchImpl = (...a) => fetch(...a) })
     putPrice: (id, service, body) => call("PUT", `/v1/pro/garages/${encodeURIComponent(id)}/prices/${encodeURIComponent(service)}`, body),
     deletePrice: (id, service) => call("DELETE", `/v1/pro/garages/${encodeURIComponent(id)}/prices/${encodeURIComponent(service)}`),
     confirm: (id) => call("POST", `/v1/pro/garages/${encodeURIComponent(id)}/confirm`),
+    // « Mon garage »
+    profile: (id) => call("GET", `/v1/pro/garages/${encodeURIComponent(id)}/profile`),
+    putProfile: (id, body) => call("PUT", `/v1/pro/garages/${encodeURIComponent(id)}/profile`, body),
+    requestChange: (id, body) => call("POST", `/v1/pro/garages/${encodeURIComponent(id)}/changes`, body),
+    cancelChange: (id, change) => call("DELETE", `/v1/pro/garages/${encodeURIComponent(id)}/changes/${encodeURIComponent(change)}`),
+    putService: (id, service, body) => call("PUT", `/v1/pro/garages/${encodeURIComponent(id)}/services/${encodeURIComponent(service)}`, body),
+    registry: (id) => call("GET", `/v1/pro/garages/${encodeURIComponent(id)}/registry`),
   };
 }

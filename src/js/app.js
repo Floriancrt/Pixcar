@@ -7,6 +7,7 @@ import { MAPBOX_OPTIONS, mapboxConfig, mapboxTileUrl } from "./modules/mapbox.js
 import { createEnricher, missingOf } from "./modules/mapbox-fiches.js";
 import { phoneList, phoneParse } from "./modules/phone.js";
 import { createProPublic } from "./modules/pro-public.js";
+import { addrText, hoursText } from "./shared/garage-profile.js";
 import { SVC_MAX, initServicePicker } from "./modules/service-picker.js";
 import { comboOffer, comboPrice, comboPromos, comboTag } from "./modules/svc-combo.js";
 import { createStore, jsonStorage } from "./modules/repair-store.js";
@@ -1245,6 +1246,7 @@ import { SERVICES } from "./shared/services.js";
     P.set(adKey, adMem);
   }
   function adApply(g, e) {
+    if (g.pro && g.pro.addr) return; // adresse déclarée par le garage vérifié : elle reste
     ((g.addr = e.a), (g.addrApprox = !0), (g.addrDist = e.d));
   }
   // à la création d'un garage OSM sans rue : reprend une réponse déjà obtenue
@@ -1376,7 +1378,8 @@ import { SERVICES } from "./shared/services.js";
       if (!r) g.mbxTry = (g.mbxTry || 0) + 1;
       else {
         g.mbxDone = !0;
-        const f = r.fields;
+        const f = { ...r.fields };
+        for (const k of Object.keys(f)) g.pro && g.pro[k] && delete f[k]; // déclaré entre-temps par le garage vérifié : il prime
         (f.phone && (g.phone = f.phone), f.hours && (g.hours = f.hours), f.web && (g.web = f.web));
         g.mbx = Object.fromEntries(Object.keys(f).map((k) => [k, !0]));
       }
@@ -1668,11 +1671,20 @@ import { SERVICES } from "./shared/services.js";
     };
   GT.enabled && setTimeout(() => GT.ready(), 1500); // l'index se charge avant la première recherche, pas pendant
   window.jgGarages = () => ({ ...GT.stats(), ...(me.tableInfo || {}) });
+  // Mention sous les lignes de la fiche : ce que le garage vérifié a déclaré (« Mon garage »), une seule ligne pour tous ses champs
+  const PRO_FIELDS = [["addr", "adresse", "communiquée"], ["phone", "téléphone", "communiqué"], ["hours", "horaires", "communiqués"], ["web", "site", "communiqué"], ["email", "e-mail", "communiqué"]];
+  function proNote(e) {
+    const f = PRO_FIELDS.filter(([k]) => e.pro && e.pro[k]);
+    if (!f.length) return "";
+    const w = f.map((x) => x[1]),
+      list = w.length > 1 ? `${w.slice(0, -1).join(", ")} et ${w[w.length - 1]}` : w[0];
+    return `<p class="fact-note is-pro">${he("check")}<span>${y(list.charAt(0).toUpperCase() + list.slice(1))} ${f.length > 1 ? "communiqués" : f[0][2]} par le garage, sous sa responsabilité.</span></p>`;
+  }
   // Mention sous les lignes de la fiche : d'où viennent le garage, ou ce qui a été complété
   function tableNote(e) {
     if ("ovt" === e.src)
       return '<p class="fact-note">Garage référencé par la base Overture Maps (Meta, Foursquare…), à titre indicatif : appelez avant de vous déplacer.</p>';
-    const f = fieldLabels(e.tableFields);
+    const f = fieldLabels((e.tableFields || []).filter((k) => !(e.pro && e.pro[k])));
     return f.length ? `<p class="fact-note">Complété par la base Overture Maps, à titre indicatif : ${y(f.join(", "))}.</p>` : "";
   }
   // Prix du contrôle technique (jeu « prix-controle-technique » de la DGCCRF, une ligne par centre, catégorie et énergie). Seules les
@@ -1736,9 +1748,27 @@ import { SERVICES } from "./shared/services.js";
   // Les réparations : celles de ce navigateur et, si une API est configurée, celles de la zone (shared: true). Le tableau Ze
   // est vivant (jamais remplacé) ; tout ce qui s'écrit passe par RS (modules/repair-store.js).
   // Espace Pro : badge « Garage vérifié » et prix annoncés (modules/pro-public.js) ; une réponse qui en apporte refait la liste
-  const proPub = createProPublic({ base: apiBase(), onUpdate: () => me.searched && ht() }),
+  const proPub = createProPublic({ base: apiBase(), onUpdate: () => (proApply(me.view), me.searched && ht()) }),
     // la prestation des prix annoncés : une seule prestation choisie, hors contrôle technique (sinon : badge seulement)
     proSvc = () => ("ct" !== me.kind && 1 === selSvcs().length ? fe().id : "");
+  // Garage vérifié (« Mon garage ») : ses coordonnées déclarées remplacent celles des données publiques partout où il s'affiche (liste,
+  // fiche, carte). g.pro garde les champs déclarés, pour la mention sous la fiche (proNote) ; Mapbox et l'adresse approchée n'y
+  // touchent plus. L'adresse déclarée ne déplace pas le garage sur la carte (docs/rendez-vous.md).
+  function proApply(list) {
+    for (const g of list || []) {
+      const p = proPub.profile(g);
+      if (!p || g.proFor === p) continue;
+      g.proFor = p;
+      g.pro = {};
+      p.name && (g.name = p.name);
+      p.addr && ((g.addr = addrText(p.addr)), (g.addrApprox = !1), (g.addrGap = !1), (g.pro.addr = !0));
+      p.phone && ((g.phone = p.phone), (g.pro.phone = !0));
+      p.website && ((g.web = p.website), (g.pro.web = !0));
+      p.hours && ((g.hours = hoursText(p.hours)), (g.pro.hours = !0));
+      p.email && (g.pro.email = p.email);
+      if (g.mbx) for (const k of Object.keys(g.pro)) delete g.mbx[k];
+    }
+  }
   const RS = createStore({ apiBase: apiBase(), storage: jsonStorage() }),
     Ye = RS.storageWorks(),
     Ze = RS.rows();
@@ -2364,6 +2394,7 @@ import { SERVICES } from "./shared/services.js";
       }
       return n;
     })();
+    proApply(r); // avant les marqueurs et la liste
     ((me.flt.chains = me.flt.chains.filter((id) => r.some((e) => e.chain && e.chain.id === id))),
       (me.view = (function (e) {
         const t = e.slice();
@@ -2897,18 +2928,32 @@ import { SERVICES } from "./shared/services.js";
                 .join("")}</span>`
             : `${none(wait ? "Recherche…" : "Non renseigné")} · <a href="${y(adGoogle(e))}" target="_blank" rel="noopener">chercher sur Google Maps</a>`,
         ],
-        ["Horaires", e.hours ? y(I(e.hours)) + src("hours") : none(wait ? "Recherche…" : "Non renseignés")],
+        // horaires déclarés par le garage : déjà écrits en français (hoursText), pas au format OpenStreetMap
+        ["Horaires", e.hours ? y(e.pro && e.pro.hours ? e.hours : I(e.hours)) + src("hours") : none(wait ? "Recherche…" : "Non renseignés")],
         [
           "Site",
           e.web
             ? `<a href="${y(e.web)}" target="_blank" rel="noopener">${y(R(e.web))}</a>${src("web")}`
             : none(wait ? "Recherche…" : "Non renseigné"),
         ],
+        e.pro && e.pro.email ? ["E-mail", `<a href="mailto:${y(e.pro.email)}">${y(e.pro.email)}</a>`] : null,
         ["Avis", `<a class="act-reviews" href="${y(adGoogle(e))}" target="_blank" rel="noopener">Voir les avis sur Google Maps</a>`],
       ]
         .concat(t || [])
         .filter(Boolean);
-    return `${n}${r.length ? `<dl class="facts" data-facts="${y(e.id)}">${r.map(([e, t]) => `<dt>${e}</dt><dd${/^(Téléphone|Horaires|Site)$/.test(e) ? ' aria-live="polite"' : ""}>${t}</dd>`).join("")}</dl>` : ""}${tableNote(e)}`;
+    return `${n}${r.length ? `<dl class="facts" data-facts="${y(e.id)}">${r.map(([e, t]) => `<dt>${e}</dt><dd${/^(Téléphone|Horaires|Site)$/.test(e) ? ' aria-live="polite"' : ""}>${t}</dd>`).join("")}</dl>` : ""}${proNote(e)}${tableNote(e)}`;
+  }
+  // Ligne de la fiche sur la prestation cherchée : ce qu'en dit le garage vérifié (« Mon garage ») prime sur ce qu'on en devine ; le tri et
+  // les filtres n'en tiennent pas compte (docs/rendez-vous.md)
+  function whyHtml(e) {
+    const said = proPub.offers(e, proSvc()),
+      o =
+        true === said
+          ? { lvl: "yes", why: "Le garage indique faire cette prestation" }
+          : false === said
+            ? { lvl: "no", why: "Le garage indique ne pas faire cette prestation" }
+            : e.offer;
+    return `<p class="svc-why"><span class="dot lvl-${o.lvl}" aria-hidden="true"></span>${y(o.why)}</p>`;
   }
   // Détail d'un prix combiné (plusieurs prestations) : une ligne par prestation, son prix et d'où il vient, puis le total
   function comboHtml(a) {
@@ -2951,7 +2996,7 @@ import { SERVICES } from "./shared/services.js";
             : "center" === a.kind
               ? "L'enseigne ne publie pas de prix national pour cette prestation : demandez un devis au centre."
               : "Ce garage ne publie pas ses prix : demandez un devis, puis déclarez le prix payé."),
-      `${wt(e)}\n      ${proPub.ficheHtml(e, proSvc(), he("check"))}\n      <p class="svc-why"><span class="dot lvl-${e.offer.lvl}" aria-hidden="true"></span>${y(e.offer.why)}</p>\n      ${multi ? comboHtml(a) : ""}<p class="price-note">${r}</p>\n      ${n.length ? ue(n, t.id) : ""}\n      ${multi ? a.parts.filter((p) => !p.no && "declared" === p.price.kind).map((p) => it(p.price.mine, p.id, !0)).join("") : "declared" === a.kind ? it(a.mine, t.id, !1) : ""}\n      ${(function (
+      `${wt(e)}\n      ${proPub.ficheHtml(e, proSvc(), he("check"))}\n      ${whyHtml(e)}\n      ${multi ? comboHtml(a) : ""}<p class="price-note">${r}</p>\n      ${n.length ? ue(n, t.id) : ""}\n      ${multi ? a.parts.filter((p) => !p.no && "declared" === p.price.kind).map((p) => it(p.price.mine, p.id, !0)).join("") : "declared" === a.kind ? it(a.mine, t.id, !1) : ""}\n      ${(function (
         e,
         t,
       ) {

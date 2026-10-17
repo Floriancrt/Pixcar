@@ -157,6 +157,7 @@ function fakeCognito() {
   check("privacy text: an « Espace Pro » section in the site that has the pro page, none without it, none in the all-in-one page", legalPro(path.join(dist, "index.html")) && !legalPro(path.join(OUT, "plain/dist/index.html")) && !legalPro(path.join(OUT, "single/index.html")));
   const proText = (/<section aria-labelledby="lg-pro"[\s\S]*?<\/section>/.exec(fs.readFileSync(path.join(dist, "index.html"), "utf8")) || [""])[0].replace(/<[^>]+>/g, " ").replace(/&nbsp;|\s+/g, " ");
   check("privacy text: announced prices, the visit counting (daily keyed IP fingerprint, no IP kept, totals only) and its 60-day retention", /Les prix annoncés/.test(proText) && /empreinte de son adresse IP liée au garage et au jour/.test(proText) && /l'adresse IP n'est pas enregistrée/.test(proText) && /que des totaux/.test(proText) && /les empreintes des visites, 60 jours/.test(proText), proText.slice(0, 300));
+  check("privacy text: the garage's fiche (declared details published, average times never shown, change requests reviewed) and its retention", /La fiche du garage/.test(proText) && /temps moyen, qui n'est pas publié/.test(proText) && /relues par Pixcar avant publication/.test(proText) && /la fiche du garage, tant que le garage est rattaché au compte/.test(proText) && /relue ou annulée, 90 jours/.test(proText), proText.slice(0, 300));
   let refused = "";
   try {
     build("noapi", [], { ...env, PIXCAR_API_BASE: "" });
@@ -416,6 +417,196 @@ function fakeCognito() {
   await page.waitForFunction(() => document.getElementById("dashDue").hidden);
   check("« Tout confirmer »: nothing left to confirm, the row is up to date again", (await page.textContent("#alert")).includes("confirmé") && (await page.textContent("#priceRows .state")) !== "À confirmer");
 
+  // ---- « Mon garage » : coordonnées (contacts privés jamais montrés), registre, horaires, changements relus, prestations et temps moyens
+  await page.click('.dash-link[data-panel="garage"]');
+  await page.waitForSelector("#dash-garage:not([hidden])");
+  const coords = async () => Object.fromEntries(await page.$$eval("#mgCoords li", (els) => els.map((e) => [e.dataset.field, e.querySelector(".mg-main").textContent.replace(/\s+/g, " ").trim()])));
+  let c0 = await coords();
+  check(
+    "« Mon garage »: the dashboard gives way, the menu says where we are, the title has the focus",
+    (await page.locator("#dash-top").isHidden()) && (await page.getAttribute('.dash-link[data-panel="garage"]', "aria-current")) === "true" && (await page.getAttribute('.dash-link[data-panel="top"]', "aria-current")) === null && (await page.evaluate(() => document.activeElement.id)) === "mgTitle",
+  );
+  check(
+    "coordinates: name and address from the public data, the rest not filled in yet",
+    /Garage Démo Centre.*Données publiques/.test(c0.name) && /12 rue de l'Exemple, 31220 Cazères.*Données publiques/.test(c0.addr) && /Pas encore renseigné ici/.test(c0.phone) && /Pas encore renseigné ici/.test(c0.website) && /Aucun \(facultatif\)/.test(c0.email),
+    JSON.stringify(c0),
+  );
+  check("the garage's private contacts (verification e-mail and numbers) appear nowhere in the page", !/contact@garage-demo|561000001|612345678|61 00 00 01|12 34 56 78/.test(await page.content()));
+  const reg = (await page.textContent("#mgRegistry")).replace(/\s+/g, " ");
+  check(
+    "official registry, read-only: company, SIRET in groups, activity code and label, address, state",
+    reg.includes("DEMO SARL") && reg.includes(`${SIRET.slice(0, 3)} ${SIRET.slice(3, 6)} ${SIRET.slice(6, 9)} ${SIRET.slice(9)}`) && reg.includes("45.20A · Entretien et réparation de véhicules automobiles légers") && reg.includes("12 RUE DE L'EXEMPLE") && reg.includes("Actif") && !(await page.locator("#mgRegistry button").count()),
+    reg,
+  );
+  const svcRow = (id) => page.$eval(`#mgSvcRows tr[data-svc="${id}"]`, (tr) => ({ on: tr.querySelector(".tgl").getAttribute("aria-checked"), sel: tr.querySelector("select").disabled, min: tr.querySelector("select").value, text: tr.textContent.replace(/\s+/g, " ").trim(), cls: tr.className }));
+  const v0 = await svcRow("vidange"), d0 = await svcRow("diag"), g0 = await svcRow("geo_av");
+  check(
+    "services: the two that got a price are ticked (the price removed later does not untick it), time to enter; the rest unticked",
+    v0.on === "true" && /Temps moyen à saisir/.test(v0.text) && /89,50/.test(v0.text) && d0.on === "true" && /Annoncer un prix/.test(d0.text) && g0.on === "false" && g0.sel && (await page.$$eval("#mgSvcRows tr[data-svc]", (els) => els.length)) === 17 && (await page.textContent("#mgSvcSummary")) === "2 sur 17 · temps moyen renseigné pour 0",
+    JSON.stringify([v0, d0, g0, await page.textContent("#mgSvcSummary")]),
+  );
+  await axe(page, "Mon garage");
+  await shot(page, "7b-mon-garage");
+
+  // site internet : publié tout de suite ; une adresse refusée d'abord
+  await page.click('#mgCoords li[data-field="website"] button');
+  await page.waitForSelector("#fieldDlg[open]");
+  check("website: the dialog says it is published at once, focus in the field, nothing to erase yet", (await page.textContent("#fieldHelp")).includes("Publié tout de suite") && (await page.evaluate(() => document.activeElement.id)) === "fieldValue" && (await page.getAttribute("#fieldValue", "type")) === "url" && (await page.locator("#fieldClearBox").isHidden()));
+  await page.fill("#fieldValue", "javascript:alert(1)");
+  await page.click("#fieldSave");
+  check("a website that is not an http(s) address is refused on the page", (await page.textContent("#fieldErr")).includes("Site : adresse invalide") && (await page.locator("#fieldDlg[open]").count()) === 1);
+  await axe(page, "Mon garage : modifier un champ");
+  await page.fill("#fieldValue", "Garage-Demo.fr/atelier");
+  await page.click("#fieldSave");
+  await page.waitForFunction(() => !document.getElementById("fieldDlg").open);
+  const prof = async () => (await api.db.query("SELECT name, street, phone, website, email, hours FROM pro_profiles WHERE garage_id = $1", [garageId])).rows[0];
+  let p1 = await prof();
+  c0 = await coords();
+  check("website saved as a full https address, shown short with « Communiqué par le garage »", p1 && p1.website === "https://garage-demo.fr/atelier" && /garage-demo\.fr\/atelier.*Communiqué par le garage/.test(c0.website) && (await page.textContent("#alert")).includes("enregistré"), JSON.stringify([p1, c0.website]));
+  // e-mail affiché, puis effacé
+  await page.click('#mgCoords li[data-field="email"] button');
+  await page.fill("#fieldValue", "Accueil@Garage-Demo.fr");
+  await page.click("#fieldSave");
+  await page.waitForFunction(() => !document.getElementById("fieldDlg").open);
+  check("displayed e-mail saved in lower case", (await prof()).email === "accueil@garage-demo.fr" && /accueil@garage-demo\.fr/.test((await coords()).email));
+  await page.click('#mgCoords li[data-field="email"] button');
+  check("a published e-mail can be erased", await page.locator("#fieldClearBox").isVisible());
+  await page.click("#fieldClear");
+  await page.waitForFunction(() => !document.getElementById("fieldDlg").open);
+  check("erased: gone from the database and the page", (await prof()).email === "" && /Aucun \(facultatif\)/.test((await coords()).email));
+
+  // téléphone : relu par Pixcar ; la demande s'affiche, puis s'annule
+  await page.click('#mgCoords li[data-field="phone"] button');
+  check("phone: the dialog says it is reviewed by Pixcar, phone keyboard", (await page.textContent("#fieldHelp")).includes("Relu par Pixcar") && (await page.getAttribute("#fieldValue", "type")) === "tel");
+  await page.fill("#fieldValue", "05 61 00 00 01 ou 06 00 00 00 00");
+  await page.click("#fieldSave");
+  check("two numbers in the phone field are refused", (await page.textContent("#fieldErr")).includes("un numéro"));
+  await page.fill("#fieldValue", "05 61 00 00 99");
+  await page.click("#fieldSave");
+  await page.waitForFunction(() => !document.getElementById("fieldDlg").open);
+  const pending = (await api.db.query("SELECT field, value, status FROM pro_profile_changes WHERE garage_id = $1", [garageId])).rows;
+  c0 = await coords();
+  check("phone change: pending in the database (international form), shown « Changement demandé · relu par Pixcar », not published", pending.length === 1 && pending[0].value === "+33561000099" && pending[0].status === "pending" && /Changement demandé : 05 61 00 00 99 · relu par Pixcar/.test(c0.phone) && !(await prof()).phone, JSON.stringify([pending, c0.phone]));
+  await page.click('#mgCoords li[data-field="phone"] button[aria-label^="Annuler"]');
+  await page.waitForFunction(() => !/Changement demandé/.test(document.querySelector('#mgCoords li[data-field="phone"]').textContent));
+  check("the request is cancelled", (await api.db.query("SELECT status FROM pro_profile_changes WHERE garage_id = $1", [garageId])).rows[0].status === "cancelled" && (await page.textContent("#alert")).includes("demande annulée"));
+
+  // nom : approuvé par Pixcar (op « pro-change ») ; adresse : refusée avec un motif
+  await page.click('#mgCoords li[data-field="name"] button');
+  check("name: prefilled with the current name", (await page.inputValue("#fieldValue")) === "Garage Démo Centre");
+  await page.fill("#fieldValue", "Garage Démo du Centre");
+  await page.click("#fieldSave");
+  await page.waitForFunction(() => !document.getElementById("fieldDlg").open);
+  await page.click('#mgCoords li[data-field="addr"] button');
+  check("address: three fields, the postcode prefilled", (await page.locator("#fieldAddr").isVisible()) && (await page.locator("#fieldOne").isHidden()) && (await page.inputValue("#addrPc")) === "31220" && (await page.evaluate(() => document.activeElement.id)) === "addrStreet");
+  await page.fill("#addrStreet", "14 rue de l'Exemple");
+  await page.fill("#addrPc", "");
+  await page.locator("#addrPc").pressSequentially("31 22-0");
+  check("the postcode keeps digits only, typed with a space or a dash", (await page.inputValue("#addrPc")) === "31220", await page.inputValue("#addrPc"));
+  await page.fill("#addrCity", "Cazères");
+  await page.click("#fieldSave");
+  await page.waitForFunction(() => !document.getElementById("fieldDlg").open);
+  const asked = Object.fromEntries((await api.db.query("SELECT field, id FROM pro_profile_changes WHERE garage_id = $1 AND status = 'pending'", [garageId])).rows.map((r) => [r.field, r.id]));
+  await api.app.pro.repo.decideChange({ id: asked.name, decision: "approve" });
+  await api.app.pro.repo.decideChange({ id: asked.addr, decision: "reject", reason: "Adresse différente du registre" });
+  await page.click('.dash-link[data-panel="top"]');
+  await page.waitForSelector("#dash-top:not([hidden])");
+  check("« Tableau de bord » in the menu: back to the top, focus on the greeting", (await page.evaluate(() => document.activeElement.id)) === "dashTitle" && (await page.locator("#dash-garage").isHidden()));
+  await page.click('.dash-link[data-panel="garage"]');
+  await page.waitForSelector("#dash-garage:not([hidden])");
+  c0 = await coords();
+  check(
+    "reopened: the approved name « Vérifié par Pixcar », the refused address with its reason, the old address still shown",
+    /Garage Démo du Centre.*Vérifié par Pixcar/.test(c0.name) && /12 rue de l'Exemple, 31220 Cazères.*Données publiques.*Changement refusé : 14 rue de l'Exemple, 31220 Cazères · Adresse différente du registre/.test(c0.addr),
+    JSON.stringify(c0),
+  );
+
+  // horaires : copie du lundi, samedi matin, dimanche ouvert sans plage refusé
+  await page.click("#mgHoursEdit");
+  await page.waitForSelector("#hoursDlg[open]");
+  check("hours: none yet, the first time field has the focus", (await page.$$eval("#hoursDays fieldset", (els) => els.length)) === 7 && (await page.evaluate(() => document.activeElement.dataset.slot)) === "00");
+  const t = (day, slot) => `#hoursDays input[data-day="${day}"][data-slot="${slot}"]`;
+  await page.fill(t("mo", "00"), "08:00");
+  await page.fill(t("mo", "01"), "12:00");
+  await page.fill(t("mo", "10"), "14:00");
+  await page.fill(t("mo", "11"), "18:30");
+  check("typing a time ticks « Ouvert »", await page.isChecked('#hoursDays input[data-open="mo"]'));
+  await page.click("#hoursCopy");
+  check("« Copier les horaires du lundi » fills Tuesday to Friday, not the weekend", (await page.inputValue(t("fr", "11"))) === "18:30" && (await page.isChecked('#hoursDays input[data-open="th"]')) && !(await page.isChecked('#hoursDays input[data-open="sa"]')) && (await page.textContent("#mgLive")).includes("copiés"));
+  await page.fill(t("sa", "00"), "08:00");
+  await page.fill(t("sa", "01"), "12:00");
+  await page.check('#hoursDays input[data-open="su"]');
+  await page.click("#hoursSave");
+  check("a day ticked open without any time is refused", (await page.textContent("#hoursErr")).includes("Dimanche : indiquez une plage"));
+  await page.uncheck('#hoursDays input[data-open="su"]');
+  await page.fill(t("we", "10"), "11:00");
+  await page.click("#hoursSave");
+  check("overlapping slots are refused", (await page.textContent("#hoursErr")) === "Horaires du mercredi : plages dans l'ordre, sans chevauchement.", await page.textContent("#hoursErr"));
+  await page.fill(t("we", "10"), "14:00");
+  const hdDesk = await page.$eval("#hoursDlg", (d) => {
+    const box = d.getBoundingClientRect();
+    const cut = [...d.querySelectorAll("legend, input")].filter((e) => { const r = e.getBoundingClientRect(); return r.left < box.left || r.right > box.right; }).length;
+    return { over: d.scrollWidth - d.clientWidth, cut, width: Math.round(box.width) };
+  });
+  check("hours dialog (1280 px): no sideways scroll, no day or field cut off", hdDesk.over <= 0 && hdDesk.cut === 0, JSON.stringify(hdDesk));
+  await axe(page, "Mon garage : horaires");
+  await shot(page, "7c-horaires");
+  await page.click("#hoursSave");
+  await page.waitForFunction(() => !document.getElementById("hoursDlg").open);
+  const week = { mo: [["08:00", "12:00"], ["14:00", "18:30"]], tu: [["08:00", "12:00"], ["14:00", "18:30"]], we: [["08:00", "12:00"], ["14:00", "18:30"]], th: [["08:00", "12:00"], ["14:00", "18:30"]], fr: [["08:00", "12:00"], ["14:00", "18:30"]], sa: [["08:00", "12:00"]] };
+  const hours = (await prof()).hours;
+  const shown = await page.$$eval("#mgHours dl > div", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").trim()));
+  check(
+    "hours saved; the week is listed day by day, Sunday closed, with a one-line summary for screen readers",
+    JSON.stringify(Object.entries(hours).sort()) === JSON.stringify(Object.entries(week).sort()) && shown[0] === "Lundi08:00 – 12:00 · 14:00 – 18:30" && shown[6] === "DimancheFermé" && (await page.getAttribute("#mgHours dl", "aria-label")) === "lun.–ven. 8:00–12:00, 14:00–18:30 · sam. 8:00–12:00 · dim. fermé",
+    JSON.stringify([hours, shown]),
+  );
+
+  // prestations : cocher, temps moyen, « Annoncer un prix » d'ici ; décocher une prestation qui a un prix demande confirmation
+  await page.click('#mgSvcRows tr[data-svc="geo_av"] .tgl');
+  await page.waitForFunction(() => document.querySelector('#mgSvcRows tr[data-svc="geo_av"] .tgl').getAttribute("aria-checked") === "true");
+  check("ticked: the time select opens, « Temps moyen à saisir », the focus stays on the switch", !(await svcRow("geo_av")).sel && /Temps moyen à saisir/.test((await svcRow("geo_av")).text) && (await page.evaluate(() => document.activeElement.getAttribute("aria-label"))) === "Je fais : Parallélisme / géométrie avant");
+  await page.selectOption('#mgSvcRows tr[data-svc="geo_av"] select', "45");
+  await page.waitForFunction(() => /temps moyen renseigné pour 1/.test(document.getElementById("mgSvcSummary").textContent));
+  const svcDb = async () => Object.fromEntries((await api.db.query("SELECT service_id, offered, minutes FROM pro_services WHERE garage_id = $1", [garageId])).rows.map((r) => [r.service_id, [r.offered, r.minutes]]));
+  check("45 min saved, the summary counts it, the focus back on the select", JSON.stringify((await svcDb()).geo_av) === "[true,45]" && (await page.textContent("#mgSvcSummary")) === "3 sur 17 · temps moyen renseigné pour 1" && (await page.evaluate(() => document.activeElement.tagName)) === "SELECT");
+  check("per-tyre services say so next to the time", /par pneu/.test((await svcRow("montage")).text));
+  await page.click('#mgSvcRows tr[data-svc="geo_av"] button[aria-label^="Annoncer un prix"]');
+  await page.waitForSelector("#priceDlg[open]");
+  check("« Annoncer un prix » from Mon garage: the service is set, no picker, focus on the price", (await page.textContent("#priceDlgKind")) === "Annoncer un prix" && (await page.textContent("#priceDlgTitle")) === "Parallélisme / géométrie avant" && (await page.locator("#pickService").isHidden()) && (await page.evaluate(() => document.activeElement.id)) === "priceValue");
+  await page.fill("#priceValue", "79");
+  await page.click("#priceSave");
+  await page.waitForFunction(() => !document.getElementById("priceDlg").open);
+  await page.waitForFunction(() => /79\s€/.test(document.querySelector('#mgSvcRows tr[data-svc="geo_av"]').textContent));
+  check("the price is published and shown in the row; the focus comes back to the row's switch", (await api.db.query("SELECT price_cents FROM pro_prices WHERE service_id = 'geo_av'")).rows[0].price_cents === 7900 && (await page.evaluate(() => document.activeElement.getAttribute("aria-label"))) === "Je fais : Parallélisme / géométrie avant", await page.evaluate(() => document.activeElement.outerHTML.slice(0, 120)));
+  await page.click('#mgSvcRows tr[data-svc="vidange"] .tgl');
+  await page.waitForSelector("#untickDlg[open]");
+  check("unticking a service with a price asks first, naming the price", (await page.textContent("#untickText")).includes("89,50") && (await page.textContent("#untickText")).includes("Vidange"));
+  await axe(page, "Mon garage : décocher une prestation qui a un prix");
+  await page.click("#untickNo");
+  await page.waitForFunction(() => !document.getElementById("untickDlg").open);
+  check("« Garder la prestation »: nothing changes", (await svcRow("vidange")).on === "true" && (await api.db.query("SELECT count(*)::int AS n FROM pro_prices WHERE service_id = 'vidange'")).rows[0].n === 1);
+  await page.click('#mgSvcRows tr[data-svc="vidange"] .tgl');
+  await page.click("#untickYes");
+  await page.waitForFunction(() => document.querySelector('#mgSvcRows tr[data-svc="vidange"] .tgl').getAttribute("aria-checked") === "false");
+  check(
+    "« Décocher et retirer le prix »: unticked, the announced price removed from the database and from « Mes prix »",
+    JSON.stringify((await svcDb()).vidange) === "[false,null]" && (await api.db.query("SELECT count(*)::int AS n FROM pro_prices WHERE service_id = 'vidange'")).rows[0].n === 0 && (await page.textContent("#alert")).includes("son prix annoncé est retiré") && !(await page.textContent("#priceRows")).includes("Vidange"),
+    await page.textContent("#alert"),
+  );
+  await page.click('#mgSvcRows tr[data-svc="geo_av"] .tgl');
+  await page.waitForSelector("#untickDlg[open]");
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.getElementById("untickDlg").open);
+  check("closed with Escape after an earlier « yes »: the service and its price are kept", (await svcRow("geo_av")).on === "true" && (await api.db.query("SELECT count(*)::int AS n FROM pro_prices WHERE service_id = 'geo_av'")).rows[0].n === 1);
+  // une prestation sans prix se décoche sans question
+  await page.click('#mgSvcRows tr[data-svc="diag"] .tgl');
+  await page.waitForFunction(() => document.querySelector('#mgSvcRows tr[data-svc="diag"] .tgl').getAttribute("aria-checked") === "false");
+  check("a service without a price is unticked at once", (await page.locator("#untickDlg[open]").count()) === 0 && JSON.stringify((await svcDb()).diag) === "[false,null]");
+  await page.click('.dash-link[data-panel="prices"]');
+  await page.waitForSelector("#dash-top:not([hidden])");
+  check("« Mes prix » in the menu: back to the dashboard, focus on the prices heading", (await page.evaluate(() => document.activeElement.id)) === "pricesTitle" && (await page.getAttribute('.dash-link[data-panel="prices"]', "aria-current")) === "true");
+
   // déconnexion, puis reconnexion (compte existant : code de connexion)
   await page.click("#signOut");
   await page.waitForSelector('[data-screen="login"]:not([hidden])');
@@ -430,7 +621,7 @@ function fakeCognito() {
   check("sign-in code: 8 digits (Cognito), typed with a space, kept whole and fully visible; the screen does not promise 6 digits", signin.length === 8 && fit.value.replace(/\D/g, "") === signin && !fit.clipped && !/6 chiffres/.test(fit.lead), JSON.stringify(fit));
   await page.click('#otpForm button[type="submit"]');
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
-  check("sign in again by e-mail code: an account with one verified garage lands on its dashboard", (await page.textContent("#dashGarage")).startsWith("Garage Démo Centre"));
+  check("sign in again by e-mail code: an account with one verified garage lands on its dashboard, under the name Pixcar approved", (await page.textContent("#dashGarage")).startsWith("Garage Démo du Centre"), await page.textContent("#dashGarage"));
 
   // « Gérer mon garage » avec une adresse déjà inscrite : on bascule sur la connexion
   await page.click("#signOut");
@@ -484,6 +675,22 @@ function fakeCognito() {
     await m.page.click("#priceRows button");
     await m.page.waitForSelector("#priceDlg[open]");
     await shot(m.page, "10-mobile-saisie");
+    await m.page.click("#priceClose");
+    await m.page.click('.dash-link[data-panel="garage"]');
+    await m.page.waitForSelector("#dash-garage:not([hidden])");
+    const mg = await m.page.evaluate(() => {
+      const tr = document.querySelector('#mgSvcRows tr[data-svc="geo_av"]');
+      return { over: document.documentElement.scrollWidth - window.innerWidth, row: getComputedStyle(tr).display, head: getComputedStyle(document.querySelector("#mgServices thead")).display, sw: Math.round(tr.querySelector(".tgl").getBoundingClientRect().height) };
+    });
+    check("mobile « Mon garage »: no horizontal scroll, the services become cards (no table header), the switch at least 24 px tall", mg.over <= 0 && mg.row !== "table-row" && mg.head === "none" && mg.sw >= 24, JSON.stringify(mg));
+    await axe(m.page, "Mon garage (mobile)");
+    await shot(m.page, "11-mobile-mon-garage");
+    await m.page.click("#mgHoursEdit");
+    await m.page.waitForSelector("#hoursDlg[open]");
+    const hd = await m.page.$eval("#hoursDlg", (d) => ({ over: d.scrollWidth - d.clientWidth, w: Math.round(d.getBoundingClientRect().width) }));
+    check("mobile hours dialog: fits the screen, nothing cut on the side", hd.over <= 0 && hd.w <= 390, JSON.stringify(hd));
+    await shot(m.page, "12-mobile-horaires");
+    check("mobile: no console error, no page error", !m.logs.length, m.logs.join("\n"));
     await m.ctx.close();
   }
   check("nothing but the site, the API and Cognito was contacted", !outside.length, outside.join("\n"));

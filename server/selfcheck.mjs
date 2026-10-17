@@ -14,7 +14,7 @@ const INDEXES = [
   "garages_area_idx", "repairs_garage_service_idx", "repairs_no_duplicate_idx", "repairs_pending_idx", "write_log_ip_idx", "write_log_at_idx",
   "garage_contacts_area_idx", "garage_contacts_domain_idx", "garage_contacts_import_idx", "pro_claims_account_idx", "pro_claims_garage_idx",
   "pro_claims_one_owner_idx", "pro_events_garage_idx", "pro_events_account_idx", "pro_events_at_idx", "pro_prices_status_idx", "pro_visits_once_idx",
-  "pro_visits_day_idx",
+  "pro_visits_day_idx", "pro_profile_changes_one_pending_idx", "pro_profile_changes_garage_idx", "pro_profile_changes_status_idx",
 ];
 
 export async function selfcheck(db, { log = () => {} } = {}) {
@@ -255,11 +255,40 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     const st = await pro.visitStats(proGarage2, { since30: since(30), since60: since(60) });
     expect(st.view.recent === 2 && st.view.previous === 1 && st.call.recent === 1, "statistiques : " + JSON.stringify(st));
   });
-  await check("Espace Pro : purge des visites de plus de 60 jours ; retrait d'un rattachement : ses prix partent avec lui", async () => {
+  await check("Mon garage : fiche (horaires jsonb), un seul changement en attente par champ (index unique partiel), approbation, prestations (décocher retire le prix), lecture publique", async () => {
+    const hours = { mo: [["08:00", "12:00"], ["14:00", "18:30"]], sa: [["08:00", "12:00"]] };
+    const p = await pro.saveProfile(proGarage2, acc("c"), { website: "https://garage.example/", hours });
+    expect(p.website === "https://garage.example/" && p.hours && p.hours.mo[1][1] === "18:30", "fiche écrite, horaires relus : " + JSON.stringify(p.hours));
+    expect((await pro.saveProfile(proGarage2, acc("c"), { email: "atelier@garage.example" })).website === "https://garage.example/", "écriture partielle : le site reste");
+    const first = await pro.requestChange({ id: crypto.randomUUID(), garageId: proGarage2, field: "phone", value: "+33561000002", accountId: acc("c") });
+    const second = await pro.requestChange({ id: crypto.randomUUID(), garageId: proGarage2, field: "phone", value: "+33561000003", accountId: acc("c") });
+    const pending = (await db.query("SELECT id FROM pro_profile_changes WHERE garage_id = $1 AND status = 'pending'", [proGarage2])).rows;
+    expect(pending.length === 1 && pending[0].id === second.id && first.id !== second.id, "le second changement remplace le premier");
+    let refused = false;
+    try {
+      await db.query("INSERT INTO pro_profile_changes (id, garage_id, field, value, status, account_id) VALUES ($1, $2, 'phone', '+33561000004', 'pending', $3)", [crypto.randomUUID(), proGarage2, acc("c")]);
+    } catch {
+      refused = true;
+    }
+    expect(refused, "l'index unique partiel refuse un second changement en attente");
+    expect((await pro.decideChange({ id: second.id, decision: "approve" })).kind === "approved", "approuvé");
+    expect((await pro.getProfile(proGarage2)).phone === "+33561000003", "téléphone publié");
+    const s1 = await pro.saveService({ garageId: proGarage2, serviceId: "vidange", offered: false, minutes: null });
+    expect(s1.priceRemoved === true, "décocher retire le prix annoncé");
+    await pro.saveService({ garageId: proGarage2, serviceId: "montage", offered: true, minutes: 30 });
+    const pub = (await pro.publicGarages([proGarage2]))[0];
+    // vidange, diag et clim ont été cochées par l'annonce de leur prix (vérification précédente), vidange décochée ici, montage cochée
+    const offered = Object.fromEntries(pub.services.map((x) => [x.service_id, x.offered]));
+    expect(JSON.stringify(offered) === JSON.stringify({ clim: true, diag: true, montage: true, vidange: false }), "prestations : " + JSON.stringify(offered));
+    expect(pub.profile && pub.profile.phone === "+33561000003" && !pub.services.some((x) => "minutes" in x), "lecture publique sans les temps moyens");
+  });
+  await check("Espace Pro : purge des visites de plus de 60 jours ; retrait d'un rattachement : ses prix et sa fiche partent avec lui", async () => {
     await pro.recordVisit({ garageId: proGarage2, day: new Date(Date.now() - 70 * 864e5).toISOString().slice(0, 10), kind: "view", visitor: randomHex(32) });
     await pro.purge();
     expect((await count("SELECT count(*) AS n FROM pro_visits WHERE garage_id = $1", [proGarage2])) === 4, "les 4 visites de moins de 60 jours restent");
     expect((await pro.revoke(proGarage2)) === 1 && (await count("SELECT count(*) AS n FROM pro_prices WHERE garage_id = $1", [proGarage2])) === 0, "prix retirés");
+    for (const table of ["pro_profiles", "pro_profile_changes", "pro_services"])
+      expect((await count(`SELECT count(*) AS n FROM ${table} WHERE garage_id = $1`, [proGarage2])) === 0, `${table} vidée pour ce garage`);
   });
 
   await check("nettoyage : plus aucune donnée d'essai", async () => {
@@ -268,6 +297,7 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     await db.query("DELETE FROM garage_contacts WHERE import_id = $1", [`selfcheck-${tag}`]);
     await db.query("DELETE FROM pro_prices WHERE garage_id IN ($1, $2)", [proGarage, proGarage2]);
     await db.query("DELETE FROM pro_visits WHERE garage_id IN ($1, $2)", [proGarage, proGarage2]);
+    for (const table of ["pro_profiles", "pro_profile_changes", "pro_services"]) await db.query(`DELETE FROM ${table} WHERE garage_id IN ($1, $2)`, [proGarage, proGarage2]);
     await db.query("DELETE FROM repairs WHERE garage_id = $1", [ovt]);
     await db.query("DELETE FROM garages WHERE id = $1", [ovt]);
     await db.query("DELETE FROM repairs WHERE garage_id LIKE 'custom:selfcheck-%'");

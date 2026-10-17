@@ -156,7 +156,10 @@ describe("Espace Pro : prix annoncés, tableau de bord, lecture publique", () =>
     assert.equal(r.headers.get("cache-control"), "public, max-age=60");
     assert.equal(r.headers.get("access-control-allow-origin"), ORIGIN);
     const today = new Date().toISOString().slice(0, 10);
-    assert.deepEqual(r.body, { garages: [{ id: DUPONT, verified: true, prices: [{ service: "vidange", kind: "fixed", price: 89, vehicles: ["city"], includes: ["parts", "labour"], updated: today, stale: false }] }] });
+    // annoncer un prix coche la prestation dans « Mon garage » : le comparateur l'apprend aussi
+    assert.deepEqual(r.body, {
+      garages: [{ id: DUPONT, verified: true, prices: [{ service: "vidange", kind: "fixed", price: 89, vehicles: ["city"], includes: ["parts", "labour"], updated: today, stale: false }], services: { offered: ["vidange"] } }],
+    });
     assert.ok(!JSON.stringify(r.body).includes("dev-alice") && !JSON.stringify(r.body).includes("Camille"), "ni compte ni nom");
     for (const q of ["", "?ids=", "?ids=x!y", "?ids=" + Array.from({ length: 101 }, (_, i) => `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, "0")}`).join(",")])
       assert.equal((await json(await call(null, "GET", "/v1/pro/public/garages" + q))).status, 400, q);

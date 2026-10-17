@@ -1,5 +1,5 @@
 // Espace Pro côté comparateur (maquette 6) : badge « Garage vérifié », étiquette « Annoncé » à part de l'échelle des prix payés, bloc « Prix
-// annoncés par le garage » dans la fiche, tri (un prix seulement annoncé ne passe jamais devant un prix payé), visites comptées pour le tableau de
+// annoncés par le garage » dans la fiche, coordonnées déclarées dans « Mon garage » (« Communiqué par le garage »), prestation faite ou non, tri (un prix seulement annoncé ne passe jamais devant un prix payé), visites comptées pour le tableau de
 // bord du garagiste (fiche ouverte, « Appeler »), une seule lecture regroupée par recherche, rien quand l'Espace Pro est fermé.
 // Vraie API (PGlite) en mode distant, tuiles de la table simulées (tests/fixtures/garages-data.js), OpenStreetMap simulé.
 //   node tests/pro-public.js [index.html | dist/index.html]
@@ -62,6 +62,12 @@ async function tiles(ctx) {
   await announce(uid(1), "vidange", "fixed", 8900);
   await announce(uid(1), "clim", "fixed", 6900, 200);
   await announce(uid(5), "vidange", "from", 7500);
+  // « Mon garage » : Garage Martin a déclaré ses coordonnées (nom, adresse et téléphone approuvés par Pixcar ; site, e-mail, horaires) et dit
+  // faire la vidange ; Carrosserie du Soleil dit ne pas faire la recharge de climatisation ; Garage Dubois (pas vérifié) n'a rien
+  const MARTIN = "Garage Martin & Fils";
+  const WEEK = Object.fromEntries(["mo", "tu", "we", "th", "fr"].map((d) => [d, [["08:00", "12:00"], ["14:00", "18:00"]]]));
+  await api.db.query("INSERT INTO pro_profiles (garage_id, name, street, pc, city, phone, website, email, hours, account_id) VALUES ($1, $2, '5 rue Neuve', '31220', 'Cazères', '+33561000099', 'https://garage-martin.fr/', 'atelier@garage-martin.fr', $3, 'acc')", [uid(1), MARTIN, JSON.stringify(WEEK)]);
+  await api.db.query("INSERT INTO pro_services (garage_id, service_id, offered) VALUES ($1, 'vidange', true), ($2, 'clim', false)", [uid(1), uid(5)]);
   const osmOf = (n) => OSM.find((e) => e.id === 9300 + n);
   const declare = (n, price) => api.post(repair({ price, date: isoDay(20), garage: { id: oid(n), name: osmOf(n).tags.name, addr: "", lat: osmOf(n).lat, lon: osmOf(n).lon, chainId: "" }, area: { lat: osmOf(n).lat, lon: osmOf(n).lon } }));
   check("setup: paid prices declared on Garage Martin and Garage Dubois", (await declare(1, 95)).status === 201 && (await declare(3, 60)).status === 201);
@@ -92,13 +98,13 @@ async function tiles(ctx) {
     return l.some((x) => x.badge) && l;
   });
   const by = (name) => (list || []).find((x) => x.name === name) || {};
-  check("« Garage vérifié » under the name of the verified garages only", by("Garage Martin").badge && by("Carrosserie du Soleil").badge && !by("Garage Dubois").badge, JSON.stringify(list));
-  check("a paid price keeps its scale bar; the announced price sits beside it as « Annoncé 89 € »", /95\s?€/.test(by("Garage Martin").price) && /Annoncé 89 €$/.test(by("Garage Martin").price) && by("Garage Martin").bar, by("Garage Martin").price);
+  check("« Garage vérifié » under the name of the verified garages only (Garage Martin under the name it declared)", by(MARTIN).badge && by("Carrosserie du Soleil").badge && !by("Garage Dubois").badge, JSON.stringify(list));
+  check("a paid price keeps its scale bar; the announced price sits beside it as « Annoncé 89 € »", /95\s?€/.test(by(MARTIN).price) && /Annoncé 89 €$/.test(by(MARTIN).price) && by(MARTIN).bar, by(MARTIN).price);
   check("announced only: « Annoncé dès 75 € » and « Pas encore de prix payé déclaré », no bar", /^Annoncé dès 75 € ?Pas encore de prix payé déclaré$/.test(by("Carrosserie du Soleil").price) && !by("Carrosserie du Soleil").bar, by("Carrosserie du Soleil").price);
   const order = (list || []).map((x) => x.name);
   check(
     "by price: paid prices first (60, 95), then the announced-only garage, then those without any price",
-    order[0] === "Garage Dubois" && order[1] === "Garage Martin" && order[2] === "Carrosserie du Soleil" && order.slice(3).every((n) => !["Garage Dubois", "Garage Martin", "Carrosserie du Soleil"].includes(n)),
+    order[0] === "Garage Dubois" && order[1] === MARTIN && order[2] === "Carrosserie du Soleil" && order.slice(3).every((n) => !["Garage Dubois", MARTIN, "Carrosserie du Soleil"].includes(n)),
     order.join(" · "),
   );
   const stats = norm(await page.textContent("#summary"));
@@ -112,6 +118,21 @@ async function tiles(ctx) {
   const block = norm(await page.textContent(`#list [data-id="${oid(1)}"] .pro-ann`));
   // le prix de la vidange est saisi au jour de l'horloge de l'API, formaté comme la page
   const today = new Date(api.now()).toLocaleDateString("fr-FR", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).replace(/[.]/g, "\\.");
+  const card = norm(await page.textContent(`#list [data-id="${oid(1)}"] .g-addr`));
+  check("the card shows the address the garage declared", card === "5 rue Neuve, 31220 Cazères", card);
+  const facts = Object.fromEntries(await page.$$eval(`#list [data-id="${oid(1)}"] dl.facts > dt`, (dts) => dts.map((dt) => [dt.textContent, dt.nextElementSibling.textContent.replace(/\s+/g, " ").trim()])));
+  const proNote = norm(await page.textContent(`#list [data-id="${oid(1)}"] .fact-note.is-pro`));
+  check(
+    "fiche of a verified garage: its phone, hours, website and e-mail (line added), and one line saying what the garage declared",
+    facts["Téléphone"] === "05 61 00 00 99 Copier" && facts["Horaires"] === "lun.–ven. 8:00–12:00, 14:00–18:00 · sam.–dim. fermé" && facts["Site"] === "garage-martin.fr" && facts["E-mail"] === "atelier@garage-martin.fr" &&
+      proNote === "Adresse, téléphone, horaires, site et e-mail communiqués par le garage, sous sa responsabilité." &&
+      (await page.getAttribute(`#list [data-id="${oid(1)}"] dl.facts a[href^="mailto:"]`, "href")) === "mailto:atelier@garage-martin.fr" && (await page.getAttribute(`#list [data-id="${oid(1)}"] a.act-call`, "href")) === "tel:+33561000099",
+    JSON.stringify({ facts, proNote }),
+  );
+  const route = norm(await page.textContent(`#list [data-id="${oid(1)}"] .route .r-to .r-val`));
+  const why = norm(await page.textContent(`#list [data-id="${oid(1)}"] .svc-why`));
+  const note = norm(await page.$eval(`#list [data-id="${oid(1)}"] .g-more`, (el) => (el.querySelector(".fact-note:not(.is-pro)") || {}).textContent || ""));
+  check("the route shows the declared address; the service line says « Le garage indique faire cette prestation »; the table note no longer claims the phone or website", route === "5 rue Neuve, 31220 Cazères" && why === "Le garage indique faire cette prestation" && !/téléphone|site/.test(note), JSON.stringify({ route, why, note }));
   check("the fiche shows « Prix annoncés par le garage », the searched service first, an old price marked, the responsibility note", new RegExp(`^Prix annoncés par le garage ?Vérifié ?Vidange \\(huile \\+ filtre\\) ?89 € ?Recharge de climatisation ancien ?69 € ?Mis à jour le ${today}\\. Communiqués par le garage, sous sa responsabilité`).test(block), block);
   // la fiche s'ouvre en fondu (0,24 s) : axe mesurerait le contraste en cours d'animation
   await page.$eval(`#list [data-id="${oid(1)}"] .g-more`, (el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
@@ -126,6 +147,8 @@ async function tiles(ctx) {
   await page.click(`#list [data-id="${oid(1)}"] .g-main`); // refermée puis rouverte : une seule visite par visite de la page
   await page.click(`#list [data-id="${oid(3)}"] .g-main`); // garage non vérifié : rien
   await sleep(300);
+  const dubois = norm(await page.textContent(`#list [data-id="${oid(3)}"] .g-more`));
+  check("a garage that is not verified: nothing « communiqués par le garage », no e-mail line, the usual service line", !dubois.includes("par le garage, sous sa responsabilité") && !/E-mail/.test(dubois) && !/Le garage indique/.test(dubois), dubois.slice(0, 300));
   check("reopening, or opening a garage that is not verified, counts nothing more", (await visits()).join() === `view:${uid(1)}`, (await visits()).join());
   await page.evaluate((id) => {
     const a = document.querySelector(`#list [data-id="${CSS.escape(id)}"] a[href^="tel:"]`);
@@ -134,6 +157,25 @@ async function tiles(ctx) {
   }, oid(1));
   check("« Appeler » on a verified garage counts one call", await until(async () => (await visits()).includes(`call:${uid(1)}`)), (await visits()).join());
   check("no console error, no page error", !logs.errors.length && !logs.console.some((m) => /error/i.test(m.type || "")), JSON.stringify(logs.errors).slice(0, 400));
+  await ctx.close();
+
+  // ---- une prestation que le garage dit ne pas faire : la fiche le dit, la liste et le tri ne changent pas
+  ({ page, ctx } = await go());
+  await search(page, { service: "clim", km: 10 });
+  const climList = await until(async () => {
+    const l = await rows(page);
+    return l.some((x) => x.badge) && l;
+  });
+  const soleil = (climList || []).find((x) => x.name === "Carrosserie du Soleil");
+  check("a garage that says it does not do the service stays in the list", !!soleil, JSON.stringify(climList));
+  if (soleil) {
+    await page.click(`#list [data-id="${soleil.id}"] .g-main`);
+    await page.waitForSelector(`#list [data-id="${soleil.id}"] .svc-why`);
+    check("its fiche says « Le garage indique ne pas faire cette prestation »", norm(await page.textContent(`#list [data-id="${soleil.id}"] .svc-why`)) === "Le garage indique ne pas faire cette prestation");
+  }
+  await page.click(`#list [data-id="${oid(1)}"] .g-main`);
+  await page.waitForSelector(`#list [data-id="${oid(1)}"] .svc-why`);
+  check("a verified garage that said nothing about the service keeps the usual line", !/Le garage indique/.test(norm(await page.textContent(`#list [data-id="${oid(1)}"] .svc-why`))));
   await ctx.close();
 
   // ---- plusieurs prestations : badge, mais pas d'étiquette (le prix annoncé est celui d'une prestation)

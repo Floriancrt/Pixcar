@@ -419,14 +419,191 @@ paths:
         "200": { description: Nombre de prix confirmés., content: { application/json: { schema: { type: object, required: [confirmed], properties: { confirmed: { type: integer, minimum: 0 } } } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { description: "Garage pas rattaché à ce compte.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/profile:
+    get:
+      tags: [Espace Pro]
+      summary: « Mon garage » — coordonnées connues, fiche déclarée, changements à relire, prestations et temps moyens
+      description: |
+        `garage` : ce que les données publiques disent du garage (OpenStreetMap, Overture) ; jamais ses contacts privés (e-mails et numéros
+        qui servent à la vérification). `profile` : ce que le garage a déclaré et qui est publié (vide tant que rien ne l'est). `changes` :
+        changements de nom, d'adresse ou de téléphone en attente, et ceux décidés depuis moins de 30 jours (motif d'un refus compris).
+        `services` : les 17 prestations de l'Espace Pro (contrôle technique exclu), `offered` à `null` tant que le garage n'a rien dit ;
+        `minutes` : temps moyen, privé (jamais montré aux automobilistes).
+      operationId: proGetProfile
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: La fiche du garage.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [garage, profile, changes, services]
+                properties:
+                  garage:
+                    type: object
+                    required: [id, name, addr, pc]
+                    properties: { id: { type: string }, name: { type: string }, addr: { type: string }, pc: { type: string } }
+                  profile: { $ref: "#/components/schemas/ProProfile" }
+                  changes: { type: array, items: { $ref: "#/components/schemas/ProProfileChange" } }
+                  services:
+                    type: array
+                    items:
+                      type: object
+                      required: [service, offered, minutes]
+                      properties:
+                        service: { type: string }
+                        offered: { type: boolean, nullable: true }
+                        minutes: { type: integer, nullable: true, minimum: 15, maximum: 480 }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Garage introuvable ou pas rattaché à ce compte.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    put:
+      tags: [Espace Pro]
+      summary: Site, e-mail affiché aux clients, horaires — publiés tout de suite
+      description: |
+        Seuls les champs présents sont écrits ; `""` (ou `null` pour les horaires) efface. Le site devient une adresse `https://…` complète.
+        Nom, adresse et téléphone passent par `POST /v1/pro/garages/{id}/changes` (relus par Pixcar).
+      operationId: proPutProfile
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                website: { type: string, example: garage-martin.fr }
+                email: { type: string }
+                hours: { $ref: "#/components/schemas/ProHours" }
+      responses:
+        "200": { description: La fiche après l'enregistrement., content: { application/json: { schema: { $ref: "#/components/schemas/ProProfile" } } } }
+        "400": { description: "JSON illisible (`bad_json`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Garage pas rattaché à ce compte.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "Champ invalide ou inconnu (`validation`, avec `field`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/changes:
+    post:
+      tags: [Espace Pro]
+      summary: Demander un changement de nom, d'adresse ou de téléphone (relu par Pixcar avant publication)
+      description: |
+        Un seul changement en attente par champ : une nouvelle demande remplace la précédente. Rien n'est public avant l'approbation
+        (fonction d'opérations, op « pro-change »). Adresse : `{ street, pc, city }` ; téléphone : un numéro, enregistré au format
+        international.
+      operationId: proPostChange
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [field, value]
+              properties:
+                field: { type: string, enum: [name, addr, phone] }
+                value: { description: "Texte, ou `{ street, pc, city }` pour l'adresse." }
+      responses:
+        "201": { description: Le changement, en attente., content: { application/json: { schema: { $ref: "#/components/schemas/ProProfileChange" } } } }
+        "400": { description: "JSON illisible (`bad_json`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Garage pas rattaché à ce compte.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "Valeur invalide (`validation`) ou déjà celle de la fiche (`unchanged`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/changes/{change}:
+    delete:
+      tags: [Espace Pro]
+      summary: Annuler un changement en attente
+      operationId: proDeleteChange
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: change, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Annulé. }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Garage pas rattaché à ce compte, ou aucun changement en attente avec cet identifiant.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/services/{service}:
+    put:
+      tags: [Espace Pro]
+      summary: Une prestation faite ou non, et son temps moyen
+      description: |
+        Temps moyen d'atelier pour une voiture courante (par pneu ou par roue quand la prestation a une unité), de 15 à 480 minutes par
+        quart d'heure, ou `null` (à saisir) ; privé. Décocher (`offered: false`) retire le prix annoncé de la prestation
+        (`priceRemoved: true`) ; annoncer un prix la coche.
+      operationId: proPutService
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: service, in: path, required: true, schema: { type: string, example: vidange } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [offered]
+              properties:
+                offered: { type: boolean }
+                minutes: { type: integer, nullable: true, minimum: 15, maximum: 480 }
+      responses:
+        "200":
+          description: La prestation enregistrée.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [service, offered, minutes, priceRemoved]
+                properties:
+                  service: { type: string }
+                  offered: { type: boolean }
+                  minutes: { type: integer, nullable: true }
+                  priceRemoved: { type: boolean }
+        "400": { description: "JSON illisible (`bad_json`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Garage pas rattaché à ce compte.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "Prestation inconnue ou valeur invalide (`validation`, avec `field` : service, offered, minutes).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/registry:
+    get:
+      tags: [Espace Pro]
+      summary: L'établissement rattaché dans le registre public des entreprises (lecture seule)
+      description: SIRET du rattachement, lu dans « Recherche d'entreprises » (gardé 10 minutes, compté dans la limite de recherches du compte).
+      operationId: proRegistry
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: L'établissement.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [siret, name, company, addr, naf, nafLabel, active]
+                properties:
+                  siret: { type: string, pattern: "^\\d{14}$" }
+                  name: { type: string }
+                  company: { type: string }
+                  addr: { type: string }
+                  naf: { type: string, example: 45.20A }
+                  nafLabel: { type: string, description: "Libellé NAF rév. 2 (vide pour un code hors de ceux d'un garage)." }
+                  active: { type: boolean }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Garage pas rattaché à ce compte (`not_found`), ou établissement absent du registre (`siret_not_found`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { description: "Trop de lectures du registre pour ce compte (`rate_limited`).", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "503": { description: "Registre injoignable (`sirene_unavailable`).", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   /v1/pro/public/garages:
     get:
       tags: [Espace Pro]
-      summary: Garages vérifiés parmi une liste, et leurs prix annoncés publiés (pour le comparateur, sans compte)
+      summary: Garages vérifiés parmi une liste, leurs prix annoncés publiés et leur fiche déclarée (pour le comparateur, sans compte)
       description: |
-        Ni compte, ni nom, ni contact : seulement le fait que le garage est vérifié et ses prix publiés. Les garages non vérifiés sont
-        absents de la réponse. `stale` : prix non confirmé depuis 6 mois (« ancien »). Les prix annoncés ne se mélangent jamais aux prix
-        payés (`GET /v1/repairs`).
+        Ni compte ni nom de personne : le fait que le garage est vérifié, ses prix publiés, les champs publiés de sa fiche (`profile` :
+        nom et adresse relus par Pixcar, téléphone, site, e-mail, horaires) et les prestations qu'il dit faire ou non (`services`).
+        **Jamais les temps moyens.** Les garages non vérifiés sont absents de la réponse. `stale` : prix non confirmé depuis 6 mois
+        (« ancien »). Les prix annoncés ne se mélangent jamais aux prix payés (`GET /v1/repairs`).
       operationId: proPublicGarages
       parameters:
         - { name: ids, in: query, required: true, schema: { type: string }, description: "1 à 100 identifiants de garages (ceux des tuiles), séparés par des virgules." }
@@ -560,6 +737,61 @@ components:
               includes: { type: array, items: { type: string } }
               updated: { type: string, format: date, description: Dernière confirmation. }
               stale: { type: boolean }
+        profile:
+          type: object
+          description: Seulement les champs publiés (absent quand aucun ne l'est).
+          properties:
+            name: { type: string }
+            addr: { $ref: "#/components/schemas/ProAddr" }
+            phone: { type: string, description: Format international. }
+            website: { type: string }
+            email: { type: string }
+            hours: { $ref: "#/components/schemas/ProHours" }
+        services:
+          type: object
+          description: Absent quand le garage n'a rien dit de ses prestations ; une liste vide est omise.
+          properties:
+            offered: { type: array, items: { type: string } }
+            notOffered: { type: array, items: { type: string } }
+    ProAddr:
+      type: object
+      required: [street, pc, city]
+      properties:
+        street: { type: string }
+        pc: { type: string, pattern: "^\\d{5}$" }
+        city: { type: string }
+    ProHours:
+      type: object
+      nullable: true
+      description: "Par jour (mo, tu, we, th, fr, sa, su) : deux plages au plus, `[\"08:00\", \"12:00\"]`, au quart d'heure, dans l'ordre ; jour absent ou vide : fermé."
+      example: { mo: [["08:00", "12:00"], ["14:00", "18:30"]], sa: [["08:00", "12:00"]] }
+    ProProfile:
+      type: object
+      required: [name, addr, phone, website, email, hours, updatedAt]
+      properties:
+        name: { type: string, description: Vide tant qu'aucun changement de nom n'est approuvé. }
+        addr:
+          type: object
+          nullable: true
+          description: "`{ street, pc, city }`, vide (null) tant qu'aucun changement d'adresse n'est approuvé."
+          required: [street, pc, city]
+          properties: { street: { type: string }, pc: { type: string }, city: { type: string } }
+        phone: { type: string }
+        website: { type: string }
+        email: { type: string }
+        hours: { $ref: "#/components/schemas/ProHours" }
+        updatedAt: { type: string, format: date-time, nullable: true }
+    ProProfileChange:
+      type: object
+      required: [id, field, value, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        field: { type: string, enum: [name, addr, phone] }
+        value: { description: "Texte, ou `{ street, pc, city }` pour l'adresse." }
+        status: { type: string, enum: [pending, approved, rejected] }
+        reason: { type: string, description: Motif d'un refus. }
+        createdAt: { type: string, format: date-time }
+        decidedAt: { type: string, format: date-time }
     ProGarage:
       type: object
       required: [id, name, addr, distanceM, status, options]

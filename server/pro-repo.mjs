@@ -25,6 +25,9 @@ export { meters };
 
 const CONTACT_COLUMNS = "garage_id, name, addr, pc, lat, lon, brand, emails, phones, web_domain";
 const PRICE_COLUMNS = "garage_id, service_id, kind, price_cents, vehicles, includes, status, confirmed_at, updated_at";
+const PROFILE_COLUMNS = "garage_id, name, street, pc, city, phone, website, email, hours, updated_at";
+const CHANGE_COLUMNS = "id, garage_id, field, value, status, reason, created_at, decided_at";
+const PROFILE_FIELDS = { website: "website", email: "email", hours: "hours" }; // écrits directement par le garage (le reste passe par une relecture)
 const CLAIM_COLUMNS = "c.id, c.garage_id, c.siret, c.status, c.channel, c.holder_name, c.holder_role, c.target_hint, c.code_expires_at, c.attempts, c.sends, c.last_sent_at, c.created_at, c.verified_at";
 
 export function createProRepo(db) {
@@ -244,8 +247,12 @@ export function createProRepo(db) {
         const r = await t.query("UPDATE pro_claims SET status = 'revoked' WHERE garage_id = $1 AND status = 'verified' RETURNING account_id", [garageId]);
         if (r.rowCount) {
           await t.query("INSERT INTO pro_events (kind, account_id, garage_id) VALUES ('revoked', $1, $2)", [r.rows[0].account_id, garageId]);
-          // les prix annoncés étaient sous la responsabilité de ce compte : ils partent avec lui (un nouveau titulaire repart de zéro)
+          // les prix annoncés et la fiche déclarée étaient sous la responsabilité de ce compte : ils partent avec lui (un nouveau titulaire
+          // repart de zéro)
           await t.query("DELETE FROM pro_prices WHERE garage_id = $1", [garageId]);
+          await t.query("DELETE FROM pro_profiles WHERE garage_id = $1", [garageId]);
+          await t.query("DELETE FROM pro_profile_changes WHERE garage_id = $1", [garageId]);
+          await t.query("DELETE FROM pro_services WHERE garage_id = $1", [garageId]);
         }
         return r.rowCount;
       });
@@ -258,7 +265,7 @@ export function createProRepo(db) {
     // ---- prix annoncés (le garage est rattaché au compte : c'est à l'appelant de l'avoir vérifié)
     // Le rattachement vérifié d'un garage à ce compte : { claim, contact } ou null.
     async ownedGarage(garageId, accountId) {
-      const claim = await one("SELECT id, holder_name, verified_at FROM pro_claims WHERE garage_id = $1 AND account_id = $2 AND status = 'verified'", [garageId, accountId]);
+      const claim = await one("SELECT id, siret, holder_name, verified_at FROM pro_claims WHERE garage_id = $1 AND account_id = $2 AND status = 'verified'", [garageId, accountId]);
       if (!claim) return null;
       return { claim, contact: await one(`SELECT ${CONTACT_COLUMNS}, area_y, area_x FROM garage_contacts WHERE garage_id = $1`, [garageId]) };
     },
@@ -275,6 +282,12 @@ export function createProRepo(db) {
              includes = EXCLUDED.includes, status = EXCLUDED.status, account_id = EXCLUDED.account_id, confirmed_at = now(), updated_at = now()
            RETURNING ${PRICE_COLUMNS}, now() AS db_now`,
           [p.garageId, p.serviceId, p.kind, p.priceCents, JSON.stringify(p.vehicles), JSON.stringify(p.includes), status, p.accountId],
+        );
+        // annoncer un prix, c'est dire qu'on fait la prestation (« Mon garage » la coche ; son temps moyen ne change pas)
+        await t.query(
+          `INSERT INTO pro_services (garage_id, service_id, offered, updated_at) VALUES ($1, $2, true, now())
+           ON CONFLICT (garage_id, service_id) DO UPDATE SET offered = true, updated_at = now()`,
+          [p.garageId, p.serviceId],
         );
         return r.rows[0];
       });
@@ -342,10 +355,103 @@ export function createProRepo(db) {
       ).rows;
       if (!claims.length) return [];
       const ids = claims.map((c) => c.garage_id);
-      const prices = (
-        await db.query(`SELECT ${PRICE_COLUMNS} FROM pro_prices WHERE status = 'published' AND garage_id IN (${placeholders(ids.length)}) ORDER BY garage_id, service_id`, ids)
-      ).rows;
-      return claims.map((c) => ({ ...c, prices: prices.filter((p) => p.garage_id === c.garage_id) }));
+      const [prices, profiles, services] = await Promise.all([
+        db.query(`SELECT ${PRICE_COLUMNS} FROM pro_prices WHERE status = 'published' AND garage_id IN (${placeholders(ids.length)}) ORDER BY garage_id, service_id`, ids),
+        db.query(`SELECT ${PROFILE_COLUMNS} FROM pro_profiles WHERE garage_id IN (${placeholders(ids.length)})`, ids),
+        // jamais les temps moyens : ils restent privés
+        db.query(`SELECT garage_id, service_id, offered FROM pro_services WHERE garage_id IN (${placeholders(ids.length)}) ORDER BY garage_id, service_id`, ids),
+      ]).then((all) => all.map((r) => r.rows));
+      return claims.map((c) => ({
+        ...c,
+        prices: prices.filter((p) => p.garage_id === c.garage_id),
+        profile: profiles.find((p) => p.garage_id === c.garage_id) || null,
+        services: services.filter((s) => s.garage_id === c.garage_id),
+      }));
+    },
+
+    // ---- « Mon garage » : fiche déclarée, changements relus, prestations (le garage est rattaché au compte : vérifié par l'appelant)
+    getProfile: (garageId) => one(`SELECT ${PROFILE_COLUMNS} FROM pro_profiles WHERE garage_id = $1`, [garageId]),
+    // Site, e-mail affiché, horaires : seuls les champs présents dans fields sont écrits (null efface les horaires, "" le reste).
+    saveProfile(garageId, accountId, fields) {
+      const keys = Object.keys(fields).filter((k) => PROFILE_FIELDS[k]);
+      if (!keys.length) throw new Error("aucun champ à écrire");
+      const cols = keys.map((k) => PROFILE_FIELDS[k]);
+      const vals = keys.map((k) => (k === "hours" ? (fields.hours === null ? null : JSON.stringify(fields.hours)) : fields[k]));
+      const casts = keys.map((k, i) => (k === "hours" ? `$${i + 3}::jsonb` : `$${i + 3}`));
+      return db
+        .query(
+          `INSERT INTO pro_profiles (garage_id, account_id, ${cols.join(", ")}, updated_at) VALUES ($1, $2, ${casts.join(", ")}, now())
+           ON CONFLICT (garage_id) DO UPDATE SET account_id = EXCLUDED.account_id, ${cols.map((c) => `${c} = EXCLUDED.${c}`).join(", ")}, updated_at = now()
+           RETURNING ${PROFILE_COLUMNS}`,
+          [garageId, accountId, ...vals],
+        )
+        .then((r) => r.rows[0]);
+    },
+    // Changements en attente, et ceux décidés depuis moins de 30 jours (le garagiste voit la décision, et le motif d'un refus)
+    listChanges: (garageId) =>
+      db
+        .query(
+          `SELECT ${CHANGE_COLUMNS} FROM pro_profile_changes WHERE garage_id = $1
+           AND (status = 'pending' OR (status IN ('approved', 'rejected') AND decided_at > now() - interval '30 days')) ORDER BY created_at DESC LIMIT 20`,
+          [garageId],
+        )
+        .then((r) => r.rows),
+    // Nouveau changement à relire ; il remplace celui qui attendait pour le même champ.
+    requestChange({ id, garageId, field, value, accountId }) {
+      return db.tx(async (t) => {
+        await t.query("UPDATE pro_profile_changes SET status = 'cancelled', decided_at = now() WHERE garage_id = $1 AND field = $2 AND status = 'pending'", [garageId, field]);
+        const r = await t.query(
+          `INSERT INTO pro_profile_changes (id, garage_id, field, value, status, account_id, created_at) VALUES ($1, $2, $3, $4, 'pending', $5, now()) RETURNING ${CHANGE_COLUMNS}`,
+          [id, garageId, field, value, accountId],
+        );
+        return r.rows[0];
+      });
+    },
+    cancelChange: (garageId, id) =>
+      db.query("UPDATE pro_profile_changes SET status = 'cancelled', decided_at = now() WHERE id = $1 AND garage_id = $2 AND status = 'pending'", [id, garageId]).then((r) => r.rowCount > 0),
+    listServices: (garageId) => db.query("SELECT service_id, offered, minutes FROM pro_services WHERE garage_id = $1 ORDER BY service_id", [garageId]).then((r) => r.rows),
+    // Prestation faite ou non, et son temps moyen. Décocher retire le prix annoncé (une prestation qu'on ne fait pas n'a pas de prix).
+    // Renvoie { row, priceRemoved }.
+    saveService({ garageId, serviceId, offered, minutes }) {
+      return db.tx(async (t) => {
+        const r = await t.query(
+          `INSERT INTO pro_services (garage_id, service_id, offered, minutes, updated_at) VALUES ($1, $2, $3, $4, now())
+           ON CONFLICT (garage_id, service_id) DO UPDATE SET offered = EXCLUDED.offered, minutes = EXCLUDED.minutes, updated_at = now()
+           RETURNING service_id, offered, minutes`,
+          [garageId, serviceId, offered, minutes],
+        );
+        const removed = offered ? 0 : (await t.query("DELETE FROM pro_prices WHERE garage_id = $1 AND service_id = $2", [garageId, serviceId])).rowCount;
+        return { row: r.rows[0], priceRemoved: removed > 0 };
+      });
+    },
+
+    // ---- relecture des changements de fiche (op « pro-changes », « pro-change »)
+    changesToReview: () =>
+      db
+        .query(
+          `SELECT c.id, c.garage_id, c.field, c.value, c.created_at, g.name AS garage_name, g.addr AS garage_addr, p.name AS profile_name, p.street, p.pc, p.city, p.phone
+           FROM pro_profile_changes c LEFT JOIN garage_contacts g ON g.garage_id = c.garage_id LEFT JOIN pro_profiles p ON p.garage_id = c.garage_id
+           WHERE c.status = 'pending' ORDER BY c.created_at LIMIT 50`,
+        )
+        .then((r) => r.rows),
+    // Approuve (publie dans la fiche) ou refuse un changement en attente. Résultat : { kind: "approved" | "rejected" | "not_found" }.
+    decideChange({ id, decision, reason = "" }) {
+      return db.tx(async (t) => {
+        const c = (await t.query(`SELECT ${CHANGE_COLUMNS}, account_id FROM pro_profile_changes WHERE id = $1 AND status = 'pending'`, [id])).rows[0];
+        if (!c) return { kind: "not_found" };
+        if (decision === "approve") {
+          const set = c.field === "addr" ? JSON.parse(c.value) : { [c.field]: c.value };
+          const cols = c.field === "addr" ? ["street", "pc", "city"] : [c.field];
+          const vals = cols.map((k) => set[k]);
+          await t.query(
+            `INSERT INTO pro_profiles (garage_id, account_id, ${cols.join(", ")}, updated_at) VALUES ($1, $2, ${cols.map((_, i) => `$${i + 3}`).join(", ")}, now())
+             ON CONFLICT (garage_id) DO UPDATE SET ${cols.map((k) => `${k} = EXCLUDED.${k}`).join(", ")}, updated_at = now()`,
+            [c.garage_id, c.account_id, ...vals],
+          );
+        }
+        await t.query("UPDATE pro_profile_changes SET status = $2, reason = $3, decided_at = now() WHERE id = $1", [id, decision === "approve" ? "approved" : "rejected", reason]);
+        return { kind: decision === "approve" ? "approved" : "rejected" };
+      });
     },
 
     // ---- relecture des prix très éloignés (op « pro-prices », « pro-price »)
@@ -357,7 +463,8 @@ export function createProRepo(db) {
     setPriceStatus: (garageId, serviceId, status) =>
       db.query("UPDATE pro_prices SET status = $3 WHERE garage_id = $1 AND service_id = $2", [garageId, serviceId, status]).then((r) => r.rowCount > 0),
 
-    // Entretien : journal de plus de 90 jours, demandes non abouties de plus de 30 jours, visites de plus de 60 jours.
+    // Entretien : journal de plus de 90 jours, demandes non abouties de plus de 30 jours, visites de plus de 60 jours, changements de fiche
+    // décidés ou annulés depuis plus de 90 jours.
     async purge() {
       const run = async (sql) => {
         let total = 0;
@@ -372,6 +479,9 @@ export function createProRepo(db) {
         proEvents: await run("DELETE FROM pro_events WHERE id IN (SELECT id FROM pro_events WHERE at < now() - interval '90 days' LIMIT $1)"),
         proClaims: await run("DELETE FROM pro_claims WHERE id IN (SELECT id FROM pro_claims WHERE status IN ('pending', 'failed') AND created_at < now() - interval '30 days' LIMIT $1)"),
         proVisits: await run("DELETE FROM pro_visits WHERE id IN (SELECT id FROM pro_visits WHERE day < (now() - interval '60 days')::date LIMIT $1)"),
+        proChanges: await run(
+          "DELETE FROM pro_profile_changes WHERE id IN (SELECT id FROM pro_profile_changes WHERE status <> 'pending' AND coalesce(decided_at, created_at) < now() - interval '90 days' LIMIT $1)",
+        ),
       };
     },
   };

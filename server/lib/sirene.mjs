@@ -7,6 +7,13 @@
 // autres véhicules (45.20B), commerce d'équipements automobiles (45.32Z : centres pneus, montage), commerce de voitures (45.11Z : concessions
 // avec atelier). Le contrôle technique (71.20A) n'en fait pas partie : ses prix restent ceux de l'État.
 export const GARAGE_NAF = ["45.20A", "45.20B", "45.32Z", "45.11Z"];
+// Libellés de la nomenclature NAF rév. 2 pour ces codes (« Mon garage », registre officiel)
+export const NAF_LABELS = {
+  "45.20A": "Entretien et réparation de véhicules automobiles légers",
+  "45.20B": "Entretien et réparation d'autres véhicules automobiles",
+  "45.32Z": "Commerce de détail d'équipements automobiles",
+  "45.11Z": "Commerce de voitures et de véhicules automobiles légers",
+};
 
 // Clé de Luhn du SIRET ; La Poste (SIREN 356000000) suit une autre règle : la somme des chiffres est un multiple de 5.
 export function isSiret(value) {

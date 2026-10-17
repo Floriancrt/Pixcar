@@ -20,6 +20,9 @@
 //   {"op":"pro-revoke","garageId":"…"}                                  retire le rattachement vérifié d'un garage (vérification contestée) et ses prix
 //   {"op":"pro-prices"}                                                 prix annoncés en attente de relecture (très éloignés des prix payés du secteur)
 //   {"op":"pro-price","garageId":"…","serviceId":"…","status":"published"}  publie (« published ») ou refuse (« rejected ») un prix relu
+//   {"op":"pro-changes"}                                                changements de nom, d'adresse ou de téléphone en attente de relecture
+//   {"op":"pro-change","id":"…","decision":"approve"}                   publie un changement relu ; « reject » le refuse, avec « reason »
+//                                                                        (300 caractères au plus, montré au garagiste)
 import { repairRetentionMonths } from "./config.mjs";
 import { createDb } from "./db.mjs";
 import { jsonLog } from "./lib/log.mjs";
@@ -31,6 +34,7 @@ import { createRepo } from "./repo.mjs";
 import { IMPORT_BATCH_MAX, createProRepo } from "./pro-repo.mjs";
 import { parseContactRows } from "./lib/contact.mjs";
 import { selfcheck } from "./selfcheck.mjs";
+import { addrText, phoneText } from "../src/js/shared/garage-profile.js";
 
 const MAX_ITEMS = 50;
 const list = (value, what, valid) => {
@@ -106,6 +110,26 @@ export function createOps({ openDb, env = process.env, log = () => {} }) {
       withDb(async (db) => ({
         review: (await createProRepo(db).pricesToReview()).map((p) => ({ garageId: p.garage_id, garageName: p.garage_name || "", serviceId: p.service_id, kind: p.kind, price: p.price_cents === null ? null : p.price_cents / 100, updatedAt: p.updated_at })),
       })),
+    "pro-changes": () =>
+      withDb(async (db) => ({
+        review: (await createProRepo(db).changesToReview()).map((c) => {
+          const now = c.field === "addr" ? (c.street ? addrText(c) : c.garage_addr || "") : c.field === "name" ? c.profile_name || c.garage_name || "" : c.phone ? phoneText(c.phone) : "(données publiques)";
+          const asked = c.field === "addr" ? addrText(JSON.parse(c.value)) : c.field === "phone" ? phoneText(c.value) : c.value;
+          return { id: c.id, garageId: c.garage_id, garageName: c.garage_name || "", field: c.field, current: now, requested: asked, createdAt: c.created_at };
+        }),
+      })),
+    "pro-change": (e) => {
+      if (typeof e.id !== "string" || !isUuid(e.id)) throw new Error("« id » : identifiant du changement attendu (op « pro-changes »)");
+      if (e.decision !== "approve" && e.decision !== "reject") throw new Error("« decision » : « approve » ou « reject »");
+      const reason = e.reason === undefined ? "" : e.reason;
+      if (typeof reason !== "string" || reason.length > 300) throw new Error("« reason » : texte de 300 caractères au plus");
+      if (e.decision === "reject" && !reason.trim()) throw new Error("« reason » : un motif est demandé pour un refus (il est montré au garagiste)");
+      return withDb(async (db) => {
+        const out = await createProRepo(db).decideChange({ id: e.id.toLowerCase(), decision: e.decision, reason: e.decision === "reject" ? reason.trim() : "" });
+        if (out.kind === "not_found") throw new Error("aucun changement en attente avec cet identifiant");
+        return { decided: out.kind };
+      });
+    },
     "pro-price": (e) => {
       const garageId = garageIdOf(e.garageId);
       if (typeof e.serviceId !== "string" || !/^[a-z0-9_]{2,40}$/.test(e.serviceId)) throw new Error("« serviceId » : identifiant de prestation attendu");
