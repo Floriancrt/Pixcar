@@ -179,6 +179,9 @@ function fakeCognito() {
   check("published pro page: not indexed, no inline <script> or <style>", /<meta name="robots" content="noindex">/.test(pagesHtml) && !/<script>(?!<\/)/.test(pagesHtml) && !/<style>/.test(pagesHtml));
   const robots = fs.readFileSync(path.join(dist, "robots.txt"), "utf8");
   check("robots.txt keeps crawlers out of /pro/", /Disallow: \/pro\//.test(robots), robots);
+  // lien « Espace pro » de l'en-tête du comparateur : seulement dans le site qui a la page pro/
+  const proLink = (file) => /<a class="tab tab-pro" href="pro\/"/.test(fs.readFileSync(file, "utf8"));
+  check("« Espace pro » in the comparator's header only in the site that has the pro page (none without it, none in the all-in-one page)", proLink(path.join(dist, "index.html")) && !proLink(path.join(OUT, "plain/dist/index.html")) && !proLink(path.join(OUT, "single/index.html")));
 
   // ---- navigateur
   const cognito = fakeCognito();
@@ -217,9 +220,35 @@ function fakeCognito() {
   const EMAIL = "camille@garage-demo.fr";
 
   const { ctx, page, logs } = await newPage();
-  const res = await page.goto(`${srv.url}/pro/#inscription`);
+  const res = await page.goto(`${srv.url}/pro/`);
   const csp = res.headers()["content-security-policy"] || "";
   check("served with the site headers: the CSP lets the page talk to Cognito", csp.includes("https://cognito-idp.eu-north-1.amazonaws.com"), csp);
+
+  // accueil des visiteurs (maquette 2) : la promesse, l'en-tête, rien de demandé à Cognito ; il ne promet que ce qui existe
+  await page.waitForSelector('[data-screen="welcome"]:not([hidden])');
+  const w = await page.evaluate(() => ({
+    h1: document.getElementById("welcomeTitle").textContent,
+    nav: [...document.querySelectorAll("#proNav a")].map((a) => a.getAttribute("href")),
+    text: document.querySelector('[data-screen="welcome"]').textContent.replace(/\s+/g, " "),
+  }));
+  check("a visitor lands on the welcome page; the header offers the FAQ, « Se connecter », « Gérer mon garage »; nothing asked of Cognito", w.h1 === "Vos prix, à jour, là où vos clients comparent." && w.nav.join() === "#faq,#connexion,#inscription" && !cognito.calls.length && (await page.locator("#account").isHidden()), JSON.stringify(w.nav));
+  check("the welcome page promises only what exists: the sample garage says « Exemple », verification by an e-mail code (no phone call), no hourly rate", /Exemple/.test(w.text) && /un code envoyé à une adresse e-mail connue de votre garage/.test(w.text) && !/appel automatique|Décrochez|taux horaire/i.test(w.text), w.text.slice(0, 200));
+  await axe(page, "accueil");
+  await shot(page, "0-accueil");
+  await page.click('#proNav a[href="#faq"]');
+  await page.waitForFunction(() => document.activeElement && document.activeElement.id === "faq");
+  check("« Questions fréquentes » leads to the questions, on the welcome page", await visible(page, "welcome"));
+  await page.click('#proNav a[href="#connexion"]');
+  await page.waitForSelector('[data-screen="login"]:not([hidden])');
+  check("« Se connecter » opens the login form at #connexion", (await page.locator("#loginTitle").isVisible()) && new URL(page.url()).hash === "#connexion");
+  await page.goBack();
+  await page.waitForSelector('[data-screen="welcome"]:not([hidden])');
+  check("the browser's back button returns to the welcome page", await visible(page, "welcome"));
+  await page.click('#proNav a[href="#connexion"]');
+  await page.click('[data-screen="login"] a.back');
+  await page.waitForSelector('[data-screen="welcome"]:not([hidden])');
+  check("the login form's « Découvrir l'Espace Pro » returns to the welcome page", await visible(page, "welcome"));
+  await page.click('.w-cta a[href="#inscription"]');
   await page.waitForSelector('[data-screen="login"]:not([hidden])');
   check("#inscription opens the sign-up form", (await page.locator("#signupTitle").isVisible()) && !(await page.locator("#loginTitle").isVisible()));
   await axe(page, "inscription");
@@ -241,7 +270,7 @@ function fakeCognito() {
   await page.click('#otpForm button[type="submit"]');
   await page.waitForSelector('[data-screen="home"]:not([hidden])');
   check("confirmed and signed in at once (ConfirmSignUp session, no second code)", cognito.calls.slice(-2).join() === "ConfirmSignUp,InitiateAuth" && cognito.mail.length === 1, cognito.calls.join());
-  check("dashboard: no garage yet, the account is shown in the header", (await page.locator("#noGarage").isVisible()) && (await page.textContent("#accountEmail")) === EMAIL);
+  check("dashboard: no garage yet, the account is shown in the header (not the visitor's links), the address loses #inscription", (await page.locator("#noGarage").isVisible()) && (await page.textContent("#accountEmail")) === EMAIL && (await page.locator("#proNav").isHidden()) && new URL(page.url()).hash === "");
   const stored = await page.evaluate(() => [Object.keys(sessionStorage), Object.keys(localStorage), document.cookie]);
   check("tokens live in sessionStorage only (no localStorage, no cookie)", stored[0].includes("pixcar-pro-session") && !stored[1].length && !stored[2], JSON.stringify(stored));
   await axe(page, "tableau de bord vide");
@@ -431,9 +460,15 @@ function fakeCognito() {
   {
     const m = await newPage({ width: 390, height: 844 });
     await m.page.goto(`${srv.url}/pro/`);
-    await m.page.waitForSelector('[data-screen="login"]:not([hidden])');
+    await m.page.waitForSelector('[data-screen="welcome"]:not([hidden])');
     const overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    check("mobile (390 px): no horizontal scroll", overflow <= 0, overflow);
+    check("mobile (390 px): no horizontal scroll on the welcome page", overflow <= 0, overflow);
+    await axe(m.page, "accueil (mobile)");
+    await shot(m.page, "8-mobile-accueil");
+    await m.page.click('#proNav a[href="#connexion"]');
+    await m.page.waitForSelector('[data-screen="login"]:not([hidden])');
+    const loginOverflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    check("mobile (390 px): no horizontal scroll on the login form", loginOverflow <= 0, loginOverflow);
     await shot(m.page, "8-mobile-connexion");
     await m.page.fill("#email", EMAIL);
     await m.page.click("#loginBtn");
@@ -452,6 +487,23 @@ function fakeCognito() {
     await m.ctx.close();
   }
   check("nothing but the site, the API and Cognito was contacted", !outside.length, outside.join("\n"));
+
+  // en-tête du comparateur (site avec la page pro/) : « Espace pro » mène à l'accueil de l'Espace Pro ; tient sur un téléphone
+  for (const [width, height] of [[1440, 900], [390, 844], [320, 640]]) {
+    const c = await browser.newContext({ viewport: { width, height }, locale: "fr-FR", serviceWorkers: "block" });
+    await c.route("**/*", (route) => (new URL(route.request().url()).hostname === "127.0.0.1" ? route.continue() : route.abort()));
+    const p = await c.newPage();
+    await p.goto(`${srv.url}/index.html`);
+    const link = p.getByRole("link", { name: "Espace pro" });
+    const hdr = await p.evaluate(() => { const t = document.querySelector(".topbar-in"); return { over: t.scrollWidth - t.clientWidth, page: document.documentElement.scrollWidth - innerWidth }; });
+    check(`comparator header (${width} px): « Espace pro » shown, nothing pushed out of the bar`, (await link.isVisible()) && hdr.over <= 0 && hdr.page <= 0, JSON.stringify(hdr));
+    if (width === 1440) {
+      await link.click();
+      await p.waitForSelector('[data-screen="welcome"]:not([hidden])');
+      check("« Espace pro » opens the Pro space's welcome page", new URL(p.url()).pathname.endsWith("/pro/"));
+    }
+    await c.close();
+  }
 
   await browser.close();
   await api.close();

@@ -65,6 +65,7 @@ async function busy(button, fn) {
 
 function show(screen, { focus = true } = {}) {
   for (const s of document.querySelectorAll("[data-screen]")) s.hidden = s.dataset.screen !== screen;
+  document.body.dataset.view = screen; // pour la mise en page (pas data-screen : show() masque tout ce qui le porte)
   const step = STEPS[screen];
   const steps = $("steps");
   steps.hidden = !step;
@@ -78,6 +79,7 @@ function show(screen, { focus = true } = {}) {
     }
   }
   $("account").hidden = !auth.signedIn;
+  $("proNav").hidden = auth.signedIn || screen === "loading";
   $("accountEmail").textContent = auth.email;
   if (screen !== "code") stopTicker();
   if (focus) {
@@ -91,12 +93,29 @@ function setMode(mode) {
   for (const n of document.querySelectorAll("[data-when]")) n.hidden = n.dataset.when !== mode;
 }
 
+// Visiteur non connecté : l'adresse choisit l'écran (#connexion, #inscription ; sinon l'accueil), le bouton « précédent » du navigateur suit.
+const HASH = { login: "#connexion", signup: "#inscription" };
+function route({ focus = true } = {}) {
+  const h = location.hash;
+  if (h === HASH.login || h === HASH.signup) {
+    setMode(h === HASH.signup ? "signup" : "login");
+    return show("login", { focus });
+  }
+  show("welcome", { focus: focus && h !== "#faq" });
+  if (h === "#faq") $("faq").focus();
+}
+// Retour à la connexion sans nouvelle entrée d'historique (déconnexion, session expirée, bascule connexion ↔ inscription)
+function toLogin(mode = "login") {
+  history.replaceState(null, "", HASH[mode]);
+  setMode(mode);
+  show("login");
+}
+
 // Erreur de l'API → message ; renvoie true si la session est perdue (retour à la connexion)
 function apiProblem(e) {
   if (e.status === 401) {
     auth.forget();
-    setMode("login");
-    show("login");
+    toLogin();
     alertBox("Votre session a expiré. Reconnectez-vous.");
     return true;
   }
@@ -183,6 +202,7 @@ async function resendOtp() {
 // auto : juste après la connexion, un compte qui n'a qu'un garage vérifié (et rien en cours) arrive directement sur son tableau de bord
 async function home({ auto = false } = {}) {
   alertBox("");
+  if (location.hash) history.replaceState(null, "", location.pathname + location.search); // connecté : #connexion, #inscription ne servent plus
   show("loading", { focus: false });
   let me;
   try {
@@ -462,10 +482,14 @@ $("codeForm").addEventListener("submit", submitCode);
 $("resend").addEventListener("click", resendCode);
 $("signOut").addEventListener("click", async () => {
   await auth.signOut();
-  setMode("login");
-  show("login");
+  toLogin();
 });
-for (const b of document.querySelectorAll("[data-mode]")) b.addEventListener("click", () => (setMode(b.dataset.mode), show("login")));
+for (const b of document.querySelectorAll("[data-mode]")) b.addEventListener("click", () => toLogin(b.dataset.mode));
+window.addEventListener("hashchange", () => {
+  if (auth.signedIn) return;
+  alertBox("");
+  route();
+});
 for (const b of document.querySelectorAll("[data-go]"))
   b.addEventListener("click", () => {
     alertBox("");
@@ -476,6 +500,5 @@ for (const b of document.querySelectorAll("[data-go]"))
   });
 for (const id of ["otp", "code", "siret"]) $(id).addEventListener("input", (e) => (e.target.value = e.target.value.replace(/[^\d\s.]/g, "")));
 
-setMode(location.hash === "#inscription" ? "signup" : "login");
 if (auth.signedIn) home({ auto: true });
-else show("login", { focus: false });
+else route({ focus: false });

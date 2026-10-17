@@ -115,7 +115,8 @@ const garages = await (async () => {
 // Variantes du texte selon la table : <!--GT:on-->…<!--/GT:on--> (avec les tuiles) et <!--GT:off-->…<!--/GT:off--> (sans). La page tout-en-un n'a jamais les
 // tuiles : ses textes sont toujours ceux « sans », même quand le site (dist/) est construit avec.
 const garagesVariants = (html, on) => html.replace(/<!--GT:(on|off)-->([\s\S]*?)<!--\/GT:\1-->/g, (m, mode, text) => ((mode === "on") === !!on ? text : ""));
-// De même <!--PRO:on-->…<!--/PRO:on--> : texte qui n'existe qu'avec la page pro/ (site dist/ construit avec l'Espace Pro ; jamais la page tout-en-un).
+// De même <!--PRO:on-->…<!--/PRO:on--> : texte (et lien « Espace pro » de l'en-tête) qui n'existe qu'avec la page pro/ (site dist/ construit avec
+// l'Espace Pro ; jamais la page tout-en-un).
 const proVariants = (html, on) => html.replace(/<!--PRO:(on|off)-->([\s\S]*?)<!--\/PRO:\1-->/g, (m, mode, text) => ((mode === "on") === !!on ? text : ""));
 // Fond de carte Mapbox : le jeton vient de src/mapbox.json pour la version publiée (--pages) seulement, ou de PIXCAR_MAPBOX_TOKEN (qui l'emporte ;
 // vide : désactivé). Sans jeton, la carte garde le fond de l'IGN (puis CARTO) : rien n'est demandé à Mapbox, ni par la page tout-en-un, ni en
@@ -297,7 +298,7 @@ async function legalParts(withGarages, withPro) {
 async function pageParts(withGarages, withPro = false) {
   const road = oneLine(await read(SRC, "partials/ld-road.svg"));
   const car = oneLine(await read(SRC, "partials/ld-car.svg"));
-  let body = garagesVariants(variants(await read(SRC, "partials/body.html")), withGarages);
+  let body = proVariants(garagesVariants(variants(await read(SRC, "partials/body.html")), withGarages), withPro);
   let dialog = await read(SRC, "partials/dialog.html");
   const fill = (text, pairs) => {
     for (const [mark, value, times = 1] of pairs) {

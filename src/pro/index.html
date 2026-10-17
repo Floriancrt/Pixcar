@@ -32,6 +32,7 @@
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></symbol>
   <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" /></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 4v16h16" /><path d="M8 16v-4M12 16V8M16 16v-6" /></symbol>
 </svg>
 <a class="skip" href="#main">Aller au contenu</a>
 
@@ -41,6 +42,11 @@
     <span class="px-word brand-word" aria-hidden="true"></span>
   </a>
   <span class="pro-badge">Espace Pro</span>
+  <nav class="pro-nav" id="proNav" aria-label="Espace Pro" hidden>
+    <a class="pro-faq-link" href="#faq">Questions fréquentes</a>
+    <a class="btn small on-dark" href="#connexion">Se connecter</a>
+    <a class="btn primary top-cta" href="#inscription">Gérer mon garage</a>
+  </nav>
   <div class="pro-account" id="account" hidden>
     <span class="pro-who" id="accountEmail"></span>
     <button type="button" class="link-btn on-dark" id="signOut">Se déconnecter</button>
@@ -60,8 +66,104 @@
 
   <p class="pro-loading" data-screen="loading">Chargement…</p>
 
+  <!-- Accueil des visiteurs non connectés (maquette 2 du 11 octobre 2026) : la promesse, un exemple de fiche, la vérification, la règle -->
+  <section class="welcome" data-screen="welcome" hidden aria-labelledby="welcomeTitle">
+    <div class="w-hero">
+      <div class="w-pitch">
+        <p class="w-pill"><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg>Gratuit pour les garages</p>
+        <h1 id="welcomeTitle" tabindex="-1">Vos prix, à jour, là où vos clients comparent.</h1>
+        <p class="w-lead">Les automobilistes de votre secteur comparent déjà les garages sur Pixcar. Affichez vos tarifs, à côté des prix que vos clients déclarent avoir payés.</p>
+        <div class="w-cta">
+          <a class="btn primary" href="#inscription">Gérer mon garage<svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></a>
+          <a class="btn" href="#connexion">Se connecter</a>
+        </div>
+        <p class="w-note"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg><span>Vérification en quelques minutes : votre SIRET, puis un code envoyé à une adresse e-mail connue de votre garage.</span></p>
+      </div>
+      <div class="w-preview" role="group" aria-label="Exemple : la fiche d'un garage vérifié sur Pixcar et ses statistiques">
+        <div class="w-fiche">
+          <div class="w-head">
+            <span class="w-avatar" aria-hidden="true">AD</span>
+            <div>
+              <p class="w-name">Atelier Démo Auto</p>
+              <p class="ok-badge w-badge"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>Garage vérifié</p>
+            </div>
+            <span class="w-ex" aria-hidden="true">Exemple</span>
+          </div>
+          <ul class="w-prices">
+            <li><span>Vidange (huile + filtre)</span><b>89 €</b></li>
+            <li><span>Plaquettes de frein avant</span><b>dès 119 €</b></li>
+            <li><span>Recharge de climatisation</span><b>69 €</b></li>
+          </ul>
+          <p class="w-foot">Prix annoncés par le garage, sous sa responsabilité</p>
+        </div>
+        <div class="w-stats">
+          <p class="w-stats-t"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg>30 derniers jours</p>
+          <dl>
+            <div><dt>vues de la fiche</dt><dd>248</dd></div>
+            <div><dt>clics « Appeler »</dt><dd>31</dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <ul class="w-feats">
+      <li>
+        <span class="w-ico is-tag" aria-hidden="true"><svg class="ic"><use href="#i-tag" /></svg></span>
+        <h2>Vos tarifs, sans intermédiaire</h2>
+        <p>Forfaits, prix « à partir de » ou sur devis : vous les modifiez depuis votre téléphone, ils sont en ligne dans la minute.</p>
+      </li>
+      <li>
+        <span class="w-ico is-ok" aria-hidden="true"><svg class="ic"><use href="#i-shield" /></svg></span>
+        <h2>Le badge « Garage vérifié »</h2>
+        <p>Il rassure : vos prix viennent de vous, et nous avons vérifié que vous représentez bien l'établissement.</p>
+      </li>
+      <li>
+        <span class="w-ico is-info" aria-hidden="true"><svg class="ic"><use href="#i-chart" /></svg></span>
+        <h2>Ce que voient vos clients</h2>
+        <p>Vues de votre fiche, clics sur « Appeler », écart entre vos prix annoncés et les prix payés par vos clients.</p>
+      </li>
+    </ul>
+
+    <div class="w-bottom">
+      <section class="w-how" aria-labelledby="howTitle">
+        <h2 class="w-kicker" id="howTitle">Comment ça marche</h2>
+        <ol>
+          <li><b>Trouvez votre garage</b><span>Par son SIRET.</span></li>
+          <li><b>Recevez un code</b><span>Par e-mail, à une adresse connue de votre garage.</span></li>
+          <li><b>Saisissez vos prix</b><span>Deux minutes, depuis votre téléphone.</span></li>
+        </ol>
+      </section>
+      <section class="w-rule" aria-labelledby="ruleTitle">
+        <h2 class="w-kicker" id="ruleTitle">Notre règle</h2>
+        <p class="w-rule-t">Les prix payés par vos clients restent les leurs.</p>
+        <p>Vous ne pouvez ni les modifier ni les supprimer. Vos prix annoncés sont affichés à part et n'entrent jamais dans les prix médians de Pixcar.</p>
+      </section>
+    </div>
+
+    <section class="w-faq" id="faq" tabindex="-1" aria-labelledby="faqTitle">
+      <h2 id="faqTitle">Questions fréquentes</h2>
+      <details>
+        <summary>Combien ça coûte ?</summary>
+        <p>Rien : l'Espace Pro est gratuit pour les garages.</p>
+      </details>
+      <details>
+        <summary>Comment savez-vous que je représente le garage ?</summary>
+        <p>Nous vérifions le SIRET dans le répertoire public des entreprises, puis nous envoyons un code à une adresse e-mail publique du garage ou à une adresse sur le domaine de son site. Nous n'écrivons jamais à une adresse saisie sur la page. Aucun moyen ne convient ? Écrivez à <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>.</p>
+      </details>
+      <details>
+        <summary>Mes prix apparaissent-ils tout de suite ?</summary>
+        <p>Oui, dans la minute, avec la mention « Annoncé ». Un prix très éloigné des prix payés dans le secteur est d'abord relu par Pixcar.</p>
+      </details>
+      <details>
+        <summary>Puis-je retirer un prix payé déclaré par un client ?</summary>
+        <p>Non : ces prix appartiennent aux automobilistes qui les déclarent. Un prix manifestement faux peut nous être signalé à <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>.</p>
+      </details>
+    </section>
+  </section>
+
   <!-- Connexion / inscription : e-mail seul, un code arrive par e-mail -->
   <section class="card narrow" data-screen="login" hidden aria-labelledby="loginTitle">
+    <a class="back" href="#accueil"><svg class="ic" aria-hidden="true"><use href="#i-back" /></svg>Découvrir l'Espace Pro</a>
     <h1 id="loginTitle" tabindex="-1" data-when="login">Connexion</h1>
     <h1 id="signupTitle" tabindex="-1" data-when="signup">Créer mon accès</h1>
     <p class="lead" data-when="login">Sans mot de passe : un code reçu par e-mail.</p>
