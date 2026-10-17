@@ -93,6 +93,14 @@ describe("legal notice and privacy window: the text", () => {
     }
     for (const name of Object.keys(NAMED)) assert.ok(hosts.includes(name), `${name} n'est plus contacté : le retirer du texte et de ce test`);
   });
+
+  test("the e-mail service of the Pro space is the one the code calls, and the text no longer promises Pixcar never sees the code", () => {
+    assert.match(read("server/lib/scaleway.mjs"), /https:\/\/api\.scaleway\.com\/transactional-email\//);
+    assert.ok(read("server/cognito-email.mjs").includes("createScalewayMailer"));
+    assert.ok(text.includes("Scaleway Transactional Email (Scaleway SAS, France"), "fournisseur et pays nommés");
+    assert.ok(!text.includes("Amazon SES") && !text.includes("ne voit jamais ce code"), "la fonction de Pixcar déchiffre le code pour l'envoyer");
+    assert.ok(/sans le garder ni l'écrire dans ses journaux/.test(text));
+  });
 });
 
 describe("legal notice and privacy window: the build", () => {

@@ -1,10 +1,13 @@
 // Espace Pro : envoi des codes de vérification.
-//  - e-mail : Amazon SES (API v2, SendEmail), depuis une adresse du domaine pixcar.fr vérifié dans SES ;
+//  - e-mail : Amazon SES (API v2, SendEmail), depuis une adresse du domaine pixcar.fr vérifié dans SES, ou Scaleway Transactional Email
+//    (PRO_EMAIL_PROVIDER=scaleway) : le compte SES de Pixcar reste en mode test (sortie refusée le 14 octobre 2026) ;
 //  - SMS : AWS End User Messaging Notify (SendNotifyTextMessage) : numéros gérés par AWS, modèle de message « code de vérification »
 //    en français fourni par AWS (variables « code » et « time »), sans numéro d'expéditeur à enregistrer ;
 //  - « memory » : rien ne part, les messages sont gardés en mémoire (tests, développement).
 // Le texte ne contient que le code, le nom du garage et la marche à suivre si l'on n'a rien demandé.
 // Les clients AWS ne sont chargés qu'au premier envoi : ils n'alourdissent pas le démarrage de l'API.
+
+import { createScalewayMailer } from "./scaleway.mjs";
 
 export function emailText({ code, minutes, garageName, contact }) {
   const subject = `Pixcar : votre code de vérification ${code}`;
@@ -24,7 +27,7 @@ export function emailText({ code, minutes, garageName, contact }) {
   return { subject, text };
 }
 
-export function createSenders(pro, { production = false, log = () => {} } = {}) {
+export function createSenders(pro, { production = false, log = () => {}, fetchImpl } = {}) {
   const minutes = Math.round(pro.codeTtlSeconds / 60);
   if (pro.sender === "memory") {
     const outbox = [];
@@ -39,7 +42,7 @@ export function createSenders(pro, { production = false, log = () => {} } = {}) 
     };
   }
   if (pro.sender !== "aws") throw new Error(`PRO_SENDER inconnu : ${pro.sender}`);
-  let ses, sms;
+  let ses, sms, scw;
   return {
     kind: "aws",
     async send({ channel, target, code, garageName }) {
@@ -57,9 +60,13 @@ export function createSenders(pro, { production = false, log = () => {} } = {}) 
         );
         return { id: out.MessageId || "" };
       }
+      const { subject, text } = emailText({ code, minutes, garageName, contact: pro.contact });
+      if (pro.emailProvider === "scaleway") {
+        scw ||= createScalewayMailer({ secretKey: pro.scwSecretKey, projectId: pro.scwProjectId, region: pro.scwRegion, ...(fetchImpl ? { fetchImpl } : {}) });
+        return scw.send({ from: pro.emailFrom, to: target, subject, text });
+      }
       const { SESv2Client, SendEmailCommand } = await import("@aws-sdk/client-sesv2");
       ses ||= new SESv2Client({ region: pro.awsRegion });
-      const { subject, text } = emailText({ code, minutes, garageName, contact: pro.contact });
       const out = await ses.send(
         new SendEmailCommand({
           FromEmailAddress: pro.emailFrom,

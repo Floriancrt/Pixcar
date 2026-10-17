@@ -82,9 +82,10 @@
           <ul>
             <li>
               <b>Le compte</b>&nbsp;: l'adresse électronique, gérée par Amazon Cognito (Amazon Web Services, région
-              Europe, à Stockholm). Pas de mot de passe&nbsp;: un code à usage unique est envoyé par e-mail (Amazon SES) à
-              chaque connexion, et Pixcar ne voit jamais ce code. La session est gardée dans l'onglet ouvert, sans
-              cookie&nbsp;: fermer l'onglet déconnecte.
+              Europe, à Stockholm). Pas de mot de passe&nbsp;: un code à usage unique est envoyé par e-mail à chaque
+              connexion. Cognito le remet chiffré à une fonction de Pixcar qui l'envoie aussitôt, sans le garder ni
+              l'écrire dans ses journaux. La session est gardée dans l'onglet ouvert, sans cookie&nbsp;: fermer l'onglet
+              déconnecte.
             </li>
             <li>
               <b>Le rattachement d'un garage</b>&nbsp;: le SIRET (vérifié par Pixcar auprès du registre public des
@@ -105,6 +106,11 @@
               n'entrent pas dans les prix médians.
             </li>
           </ul>
+          <p>
+            <b>Envoi des e-mails</b>&nbsp;: les codes d'inscription, de connexion et de vérification sont envoyés par
+            Scaleway Transactional Email (Scaleway SAS, France, centres de données de Paris), qui reçoit l'adresse du
+            destinataire et le message pour le délivrer.
+          </p>
           <p>
             <b>Statistiques des garages vérifiés</b>&nbsp;: quand un visiteur ouvre la fiche d'un garage vérifié ou
             touche «&nbsp;Appeler&nbsp;», la page le signale à l'API de Pixcar. Pour ne compter chaque visiteur qu'une fois

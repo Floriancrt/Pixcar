@@ -1,16 +1,17 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  Espace Pro de Pixcar : identité d'envoi SES du domaine (codes de vérification des garages, et codes de connexion de Cognito) puis comptes
-  sans mot de passe (Amazon Cognito, code par e-mail). Pile séparée de l'API : ses sorties deviennent des paramètres de la pile pixcar.
-  Deux temps : CreateAccounts=false (identité SES seule, DKIM à publier chez le registraire), puis true une fois l'identité vérifiée.
+  Espace Pro de Pixcar : identité d'envoi SES du domaine puis comptes sans mot de passe (Amazon Cognito, code par e-mail). Pile séparée de
+  l'API : ses sorties deviennent des paramètres de la pile pixcar. Deux temps : CreateAccounts=false (identité SES seule, DKIM à publier
+  chez le registraire), puis true. Avec CodeKey et ScwProjectId, Cognito confie ses e-mails à une fonction qui les envoie par Scaleway.
 
 Metadata:
   AWSToolsMetrics:
     AWSAgentToolkit: aws-cloudformation@3
   com.aws.cloudformation.Context:
-    arch: "page pro/ -> Cognito (InitiateAuth USER_AUTH, EMAIL_OTP) -> jeton d'accès -> API Pixcar (vérifie le jeton) ; Cognito et l'API envoient leurs e-mails par SES, domaine du paramètre EmailDomain"
+    arch: "page pro/ -> Cognito (InitiateAuth USER_AUTH, EMAIL_OTP) -> jeton d'accès -> API Pixcar (vérifie le jeton) ; Cognito et l'API envoient leurs e-mails par SES, ou par Scaleway (déclencheur Cognito de cette pile ; ProEmailProvider de la pile pixcar), domaine du paramètre EmailDomain"
     must:
-      - "connexion sans mot de passe par code e-mail : Cognito l'exige en niveau Essentials ET avec un envoi par SES (pas l'envoi par défaut de Cognito)"
+      - "connexion sans mot de passe par code e-mail : Cognito l'exige en niveau Essentials ET avec un envoi par SES (pas l'envoi par défaut de Cognito) ; la configuration SES reste en place même quand le déclencheur « custom email sender » envoie par Scaleway"
+      - "déclencheur « custom email sender » : Cognito chiffre chaque code avec la clé KMS de la pile et appelle la fonction ; jamais de code en clair hors de la fonction"
       - "client d'application public (pas de secret) : la page est statique ; seuls USER_AUTH et REFRESH_TOKEN_AUTH sont permis"
       - "le groupe d'utilisateurs contient les comptes des garagistes : conservé si la pile est supprimée"
     ref:
@@ -32,9 +33,40 @@ Parameters:
     Default: "Pixcar <connexion@pixcar.fr>"
     Description: Expéditeur des codes de connexion envoyés par Cognito (adresse du domaine ci-dessus).
     MaxLength: 200
+  CodeBucket:
+    Type: String
+    Default: ""
+    Description: Bucket S3 du paquet Lambda de Pixcar (le même que pour la pile pixcar) ; vide = pas de déclencheur d'envoi.
+  CodeKey:
+    Type: String
+    Default: ""
+    Description: Clé S3 du paquet Lambda (pixcar-lambda-<empreinte>.zip, point d'entrée cognito-email.handler) ; vide = Cognito envoie par SES.
+  ScwProjectId:
+    Type: String
+    Default: ""
+    Description: Identifiant du projet Scaleway (UUID, pas un secret) qui porte le domaine d'envoi ; vide = Cognito envoie par SES.
+    AllowedPattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$'
+  SsmPrefix:
+    Type: String
+    Default: /pixcar/prod/
+    Description: Préfixe du paramètre SSM SecureString SCW_SECRET_KEY (clé secrète Scaleway, créée à la main, jamais dans cette pile).
+    AllowedPattern: '^/[A-Za-z0-9/_.-]*/$'
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [7, 14, 30, 60, 90]
+    Description: Durée de conservation des journaux de la fonction d'envoi.
+
+Rules:
+  SenderNeedsCode:
+    RuleCondition: !Not [!Equals [!Ref ScwProjectId, ""]]
+    Assertions:
+      - Assert: !And [!Not [!Equals [!Ref CodeBucket, ""]], !Not [!Equals [!Ref CodeKey, ""]]]
+        AssertDescription: ScwProjectId exige CodeBucket et CodeKey (paquet Lambda qui contient cognito-email.handler).
 
 Conditions:
   HasAccounts: !Equals [!Ref CreateAccounts, "true"]
+  HasCustomSender: !And [!Condition HasAccounts, !Not [!Equals [!Ref CodeKey, ""]], !Not [!Equals [!Ref ScwProjectId, ""]]]
 
 Resources:
   EmailIdentity:
@@ -82,6 +114,11 @@ Resources:
         EmailSendingAccount: DEVELOPER
         From: !Ref CognitoEmailFrom
         SourceArn: !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${EmailDomain}"
+      LambdaConfig: !If
+        - HasCustomSender
+        - CustomEmailSender: { LambdaArn: !GetAtt CognitoEmailFunction.Arn, LambdaVersion: V1_0 }
+          KMSKeyID: !GetAtt CognitoEmailKey.Arn
+        - !Ref AWS::NoValue
       VerificationMessageTemplate:
         DefaultEmailOption: CONFIRM_WITH_CODE
         EmailSubject: "Pixcar : votre code de confirmation"
@@ -109,6 +146,111 @@ Resources:
       IdTokenValidity: 60
       RefreshTokenValidity: 1
       TokenValidityUnits: { AccessToken: minutes, IdToken: minutes, RefreshToken: days }
+
+  # ---- Envoi des e-mails de Cognito par Scaleway (SES reste en mode test) : clé KMS, fonction, droit d'appel de Cognito
+  CognitoEmailKey:
+    Type: AWS::KMS::Key
+    Condition: HasCustomSender
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "Cognito chiffre chaque code avec cette clé avant d'appeler la fonction (exigé par le déclencheur « custom email sender »)"
+        must: ["clé symétrique", "seule la fonction d'envoi a kms:Decrypt", "Cognito chiffre (kms:Encrypt, GenerateDataKey) pour ce compte seulement"]
+    Properties:
+      Description: Pixcar — chiffrement des codes que Cognito confie à la fonction d'envoi (Scaleway)
+      KeySpec: SYMMETRIC_DEFAULT
+      KeyUsage: ENCRYPT_DECRYPT
+      EnableKeyRotation: true
+      PendingWindowInDays: 7
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AccountAdministration
+            Effect: Allow
+            Principal: { AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root" }
+            Action: "kms:*"
+            Resource: "*"
+          - Sid: CognitoEncryptsCodes
+            Effect: Allow
+            Principal: { Service: cognito-idp.amazonaws.com }
+            Action: ["kms:Encrypt", "kms:GenerateDataKey"]
+            Resource: "*"
+            Condition: { StringEquals: { "aws:SourceAccount": !Ref AWS::AccountId } }
+      Tags: [{ Key: Project, Value: pixcar }]
+
+  CognitoEmailLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: HasCustomSender
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-cognito-email"
+      RetentionInDays: !Ref LogRetentionDays
+
+  CognitoEmailRole:
+    Type: AWS::IAM::Role
+    Condition: HasCustomSender
+    Metadata:
+      com.aws.cloudformation.Context:
+        must: ["journal de la fonction, kms:Decrypt sur la clé de la pile, ssm:GetParameters sur SCW_SECRET_KEY : rien d'autre"]
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: cognito-email
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Sid: Logs, Effect: Allow, Action: ["logs:CreateLogStream", "logs:PutLogEvents"], Resource: !GetAtt CognitoEmailLogGroup.Arn }
+              - { Sid: DecryptCodes, Effect: Allow, Action: "kms:Decrypt", Resource: !GetAtt CognitoEmailKey.Arn }
+              - Sid: ScalewayKey
+                Effect: Allow
+                Action: "ssm:GetParameters"
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}SCW_SECRET_KEY"
+      Tags: [{ Key: Project, Value: pixcar }]
+
+  CognitoEmailFunction:
+    Type: AWS::Lambda::Function
+    Condition: HasCustomSender
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "même archive que l'API (point d'entrée cognito-email.handler) ; déchiffre le code et l'envoie par Scaleway depuis l'expéditeur CognitoEmailFrom"
+        mutable: free-to-tune
+      # CodeBucket est vide par défaut ; la fonction n'existe qu'avec CodeKey, et la règle SenderNeedsCode exige alors CodeBucket
+      cfn-lint: { config: { ignore_checks: [W1030] } }
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-cognito-email"
+      Description: Envoi des codes de connexion et d'inscription de l'Espace Pro par Scaleway (déclencheur Cognito)
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      Handler: cognito-email.handler
+      Role: !GetAtt CognitoEmailRole.Arn
+      Code: { S3Bucket: !Ref CodeBucket, S3Key: !Ref CodeKey }
+      MemorySize: 256
+      Timeout: 15
+      LoggingConfig: { LogGroup: !Ref CognitoEmailLogGroup, LogFormat: Text }
+      Environment:
+        Variables:
+          NODE_ENV: production
+          KEY_ARN: !GetAtt CognitoEmailKey.Arn
+          SSM_PREFIX: !Ref SsmPrefix
+          SCW_PROJECT_ID: !Ref ScwProjectId
+          SCW_REGION: fr-par
+          EMAIL_FROM: !Ref CognitoEmailFrom
+          CONTACT: contact@pixcar.fr
+          LOG_LEVEL: info
+      Tags: [{ Key: Project, Value: pixcar }]
+
+  CognitoEmailPermission:
+    Type: AWS::Lambda::Permission
+    Condition: HasCustomSender
+    Properties:
+      FunctionName: !Ref CognitoEmailFunction
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !GetAtt UserPool.Arn
 
 Outputs:
   DkimRecord1:

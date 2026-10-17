@@ -1,6 +1,7 @@
 // Configuration par variables d'environnement. En production, un secret manquant ou faible est une erreur de démarrage :
 // mieux vaut ne pas démarrer que tourner avec une empreinte de plaques ou d'adresses IP devinable.
 import { randomHex } from "./lib/crypto.mjs";
+import { isScwProjectId } from "./lib/scaleway.mjs";
 import { isSiret } from "./lib/sirene.mjs";
 
 const int = (v, d, min = 0) => {
@@ -43,6 +44,13 @@ export function loadConfig(env = process.env) {
     if (proChannels.includes("sms") && !env.PRO_NOTIFY_CONFIGURATION_ID) problems.push("PRO_NOTIFY_CONFIGURATION_ID : configuration AWS End User Messaging Notify (SMS), ou retirer « sms » de PRO_CHANNELS");
     if (env.PRO_DEV_AUTH === "1") problems.push("PRO_DEV_AUTH : interdit en production");
   }
+  // fournisseur des e-mails de vérification : « ses » (Amazon SES) ou « scaleway » (Scaleway Transactional Email, clé SCW_SECRET_KEY lue dans SSM)
+  const proEmailProvider = env.PRO_EMAIL_PROVIDER || "ses";
+  if (!["ses", "scaleway"].includes(proEmailProvider)) problems.push(`PRO_EMAIL_PROVIDER : « ${proEmailProvider} » inconnu (ses, scaleway)`);
+  if (proEnabled && proSender === "aws" && proEmailProvider === "scaleway") {
+    if (!isScwProjectId(env.PRO_SCW_PROJECT_ID)) problems.push("PRO_SCW_PROJECT_ID : identifiant du projet Scaleway (UUID) qui porte le domaine d'envoi");
+    if (!env.SCW_SECRET_KEY) problems.push("SCW_SECRET_KEY : clé secrète Scaleway (paramètre SSM SecureString <SSM_PREFIX>SCW_SECRET_KEY)");
+  }
   const testEstablishments = parseTestEstablishments(env.PRO_TEST_ESTABLISHMENTS, problems);
   if (problems.length) throw new Error("Configuration incomplète :\n  - " + problems.join("\n  - "));
 
@@ -81,6 +89,10 @@ export function loadConfig(env = process.env) {
       notifyConfigurationId: env.PRO_NOTIFY_CONFIGURATION_ID || "",
       notifyTemplateId: env.PRO_NOTIFY_TEMPLATE_ID || "notify-code-verification-french-009",
       sesConfigurationSet: env.PRO_SES_CONFIGURATION_SET || "",
+      emailProvider: proEmailProvider,
+      scwProjectId: env.PRO_SCW_PROJECT_ID || "",
+      scwRegion: env.PRO_SCW_REGION || "fr-par",
+      scwSecretKey: env.SCW_SECRET_KEY || "",
       codeTtlSeconds: int(env.PRO_CODE_TTL_SECONDS, 600, 60),
       maxAttempts: int(env.PRO_MAX_ATTEMPTS, 5, 1),
       resendAfterSeconds: int(env.PRO_RESEND_AFTER_SECONDS, 60, 10),

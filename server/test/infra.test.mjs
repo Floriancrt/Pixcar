@@ -77,12 +77,17 @@ function valueOf(node) {
 const environment = (id) => Object.fromEntries(Object.entries(R[id].Properties.Environment.Variables).map(([k, v]) => [k, valueOf(v)]));
 const statements = (role) => R[role].Properties.Policies.flatMap((p) => p.PolicyDocument.Statement);
 const actions = (role) => new Set(statements(role).flatMap((s) => [].concat(s.Action)));
+// ressource conditionnelle (Fn::If) évaluée avec les paramètres de l'essai ; AWS::NoValue = pas de ressource
+const pick = (r) => (r && r["Fn::If"] ? (holds({ Condition: r["Fn::If"][0] }) ? r["Fn::If"][1] : r["Fn::If"][2]) : r);
 const secretNames = (role) =>
   statements(role)
     .filter((s) => s.Sid && /Secret/.test(s.Sid))
     .flatMap((s) => [].concat(s.Resource))
+    .map(pick)
+    .filter((r) => !(r && r.Ref === "AWS::NoValue"))
     .map((r) => String(r["Fn::Sub"]).replace(/^.*parameter\$\{SsmPrefix\}/, ""))
     .sort();
+const fakeSsm = (seen) => ({ SSMClient: class { send(c) { seen.names = c.input.Names; return { Parameters: seen.names.map((n) => ({ Name: n, Value: "x" })) }; } }, GetParametersCommand: class { constructor(input) { this.input = input; } } });
 const sourceNames = () => {
   const names = new Set();
   const visit = (dir) => {
@@ -135,7 +140,7 @@ describe("CloudFormation template (infra/pixcar-api.yaml)", () => {
     assert.equal(api.Runtime, `nodejs${build.match(/target: "node(\d+)"/)[1]}.x`);
     assert.equal(ops.Runtime, api.Runtime);
     assert.deepEqual([api.Architectures, ops.Architectures], [["arm64"], ["arm64"]]);
-    const handlers = build.match(/handlers: \{ api: "([^"]+)", ops: "([^"]+)" \}/);
+    const handlers = build.match(/handlers: \{ api: "([^"]+)", ops: "([^"]+)"/);
     assert.deepEqual([api.Handler, ops.Handler], [handlers[1], handlers[2]]);
     assert.deepEqual(api.Code, ops.Code);
     assert.deepEqual(api.Code, { S3Bucket: { Ref: "CodeBucket" }, S3Key: { Ref: "CodeKey" } });
@@ -306,6 +311,25 @@ describe("Espace Pro in the templates (infra/pixcar-api.yaml, infra/pixcar-pro.y
     assert.ok(!actions("ApiRole").has("ses:SendEmail"), "pas dans la politique permanente du rôle");
   });
 
+  test("e-mails through Scaleway: the function boots with the provider and the project, and may read the Scaleway key — only then", async () => {
+    const SCW = "0b2c8f4e-1a2b-4c3d-8e9f-0a1b2c3d4e5f";
+    overrides = { ProUserPoolId: POOL, ProClientId: CLIENT, ProEmailProvider: "scaleway", ProScwProjectId: SCW };
+    try {
+      const env = environment("ApiFunction");
+      const c = loadConfig({ ...env, PLATE_PEPPER: "p".repeat(20), IP_PEPPER: "i".repeat(20), SCW_SECRET_KEY: "k".repeat(30) });
+      assert.deepEqual([c.pro.enabled, c.pro.emailProvider, c.pro.scwProjectId], [true, "scaleway", SCW]);
+      const seen = {};
+      await readSecrets({ ...env, SSM_PREFIX: "/p/" }, { client: fakeSsm(seen) });
+      assert.deepEqual(secretNames("ApiRole"), seen.names.map((n) => n.slice("/p/".length)).sort(), "droits SSM = secrets que le code demande");
+      assert.ok(secretNames("ApiRole").includes("SCW_SECRET_KEY"));
+    } finally {
+      overrides = {};
+    }
+    assert.ok(!secretNames("ApiRole").includes("SCW_SECRET_KEY"), "par défaut (SES) : aucun droit sur la clé Scaleway");
+    assert.equal(t.Parameters.ProEmailProvider.Default, "ses");
+    assert.deepEqual(t.Rules.ScalewayNeedsProject.RuleCondition, { "Fn::Equals": [{ Ref: "ProEmailProvider" }, "scaleway"] });
+  });
+
   test("the contested-garage alarm counts exactly the log line the API writes, and only exists when the Pro space and alarm e-mails do", async () => {
     const pro = readFileSync(join(ROOT, "server/pro.mjs"), "utf8");
     assert.match(pro, /event: "pro_contested"/);
@@ -344,5 +368,47 @@ describe("Espace Pro in the templates (infra/pixcar-api.yaml, infra/pixcar-pro.y
     assert.equal(P.UserPoolClient.Condition, "HasAccounts");
     for (const out of ["UserPoolId", "UserPoolClientId"]) assert.equal(p.Outputs[out].Condition, "HasAccounts", out);
     assert.equal(p.Parameters.CreateAccounts.Default, "false", "premier déploiement : l'identité SES seule");
+  });
+
+  test("the Pro stack, Cognito's codes through Scaleway: off by default; then a KMS key, a function of the package, the narrowest role, only the pool may call it", () => {
+    const text = readFileSync(join(ROOT, "infra/pixcar-pro.yaml"), "utf8");
+    const p = parse(text, { customTags });
+    const P = p.Resources;
+    for (const id of ["CognitoEmailKey", "CognitoEmailLogGroup", "CognitoEmailRole", "CognitoEmailFunction", "CognitoEmailPermission"]) assert.equal(P[id].Condition, "HasCustomSender", id);
+    assert.deepEqual([p.Parameters.CodeKey.Default, p.Parameters.ScwProjectId.Default], ["", ""], "sans paramètres, Cognito envoie par SES comme avant");
+    const set = (ref) => ({ "Fn::Not": [{ "Fn::Equals": [{ Ref: ref }, ""] }] });
+    assert.deepEqual(p.Conditions.HasCustomSender, { "Fn::And": [{ Condition: "HasAccounts" }, set("CodeKey"), set("ScwProjectId")] });
+    assert.ok(p.Rules.SenderNeedsCode, "un projet Scaleway sans paquet Lambda est refusé au déploiement");
+    // le groupe : déclencheur « custom email sender » (V1_0) et clé KMS de la pile, seulement avec la condition
+    const lc = P.UserPool.Properties.LambdaConfig["Fn::If"];
+    assert.deepEqual(lc, ["HasCustomSender", { CustomEmailSender: { LambdaArn: { "Fn::GetAtt": ["CognitoEmailFunction", "Arn"] }, LambdaVersion: "V1_0" }, KMSKeyID: { "Fn::GetAtt": ["CognitoEmailKey", "Arn"] } }, { Ref: "AWS::NoValue" }]);
+    // la fonction : même archive, point d'entrée du build, variables que le code lit ; la clé Scaleway reste dans SSM
+    const fn = P.CognitoEmailFunction.Properties;
+    const build = readFileSync(join(ROOT, "scripts/build-lambda.mjs"), "utf8");
+    assert.equal(fn.Handler, build.match(/cognitoEmail: "([^"]+)"/)[1]);
+    assert.equal(fn.Runtime, `nodejs${build.match(/target: "node(\d+)"/)[1]}.x`);
+    assert.deepEqual(fn.Code, { S3Bucket: { Ref: "CodeBucket" }, S3Key: { Ref: "CodeKey" } });
+    const code = readFileSync(join(ROOT, "server/cognito-email.mjs"), "utf8") + readFileSync(join(ROOT, "server/lib/secrets.mjs"), "utf8");
+    for (const v of ["KEY_ARN", "SSM_PREFIX", "SCW_PROJECT_ID", "SCW_REGION", "EMAIL_FROM", "CONTACT", "LOG_LEVEL"]) {
+      assert.ok(Object.hasOwn(fn.Environment.Variables, v), v);
+      assert.ok(code.includes(`env.${v}`), `${v} lu par la fonction`);
+    }
+    assert.deepEqual(fn.Environment.Variables.EMAIL_FROM, { Ref: "CognitoEmailFrom" });
+    for (const name of Object.keys(fn.Environment.Variables)) assert.ok(!/PEPPER|SECRET|TOKEN|PASSWORD|ACCESS_KEY/i.test(name), name);
+    // rôle : son journal, le déchiffrement par la clé de la pile, la clé Scaleway dans SSM — rien d'autre, jamais « * »
+    const st = P.CognitoEmailRole.Properties.Policies.flatMap((x) => x.PolicyDocument.Statement);
+    assert.deepEqual(st.map((s) => [].concat(s.Action).join(",")).sort(), ["kms:Decrypt", "logs:CreateLogStream,logs:PutLogEvents", "ssm:GetParameters"]);
+    assert.deepEqual(st.find((s) => s.Action === "kms:Decrypt").Resource, { "Fn::GetAtt": ["CognitoEmailKey", "Arn"] });
+    assert.match(st.find((s) => s.Action === "ssm:GetParameters").Resource["Fn::Sub"], /:parameter\$\{SsmPrefix\}SCW_SECRET_KEY$/);
+    for (const s of st) assert.ok(s.Effect === "Allow" && ![].concat(s.Resource).includes("*"), s.Sid);
+    // clé : symétrique, rotation ; Cognito chiffre pour ce compte seulement ; sinon l'administration du compte
+    const key = P.CognitoEmailKey.Properties;
+    assert.deepEqual([key.KeySpec, key.KeyUsage, key.EnableKeyRotation], ["SYMMETRIC_DEFAULT", "ENCRYPT_DECRYPT", true]);
+    assert.equal(key.KeyPolicy.Statement.length, 2);
+    const cognito = key.KeyPolicy.Statement.find((s) => s.Principal.Service === "cognito-idp.amazonaws.com");
+    assert.deepEqual([cognito.Action, cognito.Condition], [["kms:Encrypt", "kms:GenerateDataKey"], { StringEquals: { "aws:SourceAccount": { Ref: "AWS::AccountId" } } }]);
+    // seul le groupe d'utilisateurs de la pile peut appeler la fonction
+    const perm = P.CognitoEmailPermission.Properties;
+    assert.deepEqual([perm.Principal, perm.SourceArn, perm.SourceAccount], ["cognito-idp.amazonaws.com", { "Fn::GetAtt": ["UserPool", "Arn"] }, { Ref: "AWS::AccountId" }]);
   });
 });

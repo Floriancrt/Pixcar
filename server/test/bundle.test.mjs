@@ -25,8 +25,8 @@ describe("Lambda package", () => {
     assert.ok(info.bytes < 5 * 1024 * 1024, `${info.bytes} octets`);
   });
 
-  test("it holds both functions, the migrations and the module type — and nothing that must not travel", () => {
-    assert.deepEqual(info.files, ["api.mjs", "ops.mjs", "package.json", "db/migrations/001_init.sql", "db/migrations/002_pro.sql", "db/migrations/003_pro_prices.sql"]);
+  test("it holds the three functions, the migrations and the module type — and nothing that must not travel", () => {
+    assert.deepEqual(info.files, ["api.mjs", "cognito-email.mjs", "ops.mjs", "package.json", "db/migrations/001_init.sql", "db/migrations/002_pro.sql", "db/migrations/003_pro_prices.sql"]);
     const listing = execFileSync("unzip", ["-Z1", info.zip], { encoding: "utf8" });
     assert.ok(!/node_modules|\.env|pglite|\.pem|\.key/i.test(listing), listing);
   });
@@ -55,5 +55,11 @@ describe("Lambda package", () => {
   test("ops.mjs, extracted alone, loads and refuses an unknown operation", () => {
     const out = run(`import { handler } from "./ops.mjs"; const r = await handler({ op: "sql" }); console.log(JSON.stringify([r.ok, /opération inconnue/.test(r.error)]));`, production);
     assert.deepEqual(out, [false, true]);
+  });
+
+  test("cognito-email.mjs, extracted alone, loads the AWS Encryption SDK and refuses to run without its KMS key", () => {
+    const out = run(`import { handler } from "./cognito-email.mjs"; const r = await handler({ triggerSource: "CustomEmailSender_Authentication", request: {} }).then(() => "ok", (e) => e.message); console.log(JSON.stringify([r]));`, { LOG_LEVEL: "error" });
+    assert.match(out[0], /KEY_ARN absent/);
+    assert.deepEqual(info.handlers, { api: "api.handler", ops: "ops.handler", cognitoEmail: "cognito-email.handler" });
   });
 });

@@ -24,7 +24,7 @@ export async function buildLambda({ out = OUT } = {}) {
   const work = await mkdtemp(join(tmpdir(), "pixcar-lambda-"));
   try {
     await build({
-      entryPoints: { api: join(ROOT, "server/lambda.mjs"), ops: join(ROOT, "server/ops.mjs") },
+      entryPoints: { api: join(ROOT, "server/lambda.mjs"), ops: join(ROOT, "server/ops.mjs"), "cognito-email": join(ROOT, "server/cognito-email.mjs") },
       outdir: work,
       outExtension: { ".js": ".mjs" },
       bundle: true,
@@ -42,7 +42,7 @@ export async function buildLambda({ out = OUT } = {}) {
     for (const f of (await readdir(join(ROOT, "db/migrations"))).sort()) await cp(join(ROOT, "db/migrations", f), join(work, "db/migrations", f));
 
     // archive reproductible : dates fixées, ordre alphabétique
-    const names = ["api.mjs", "ops.mjs", "package.json", ...(await readdir(join(work, "db/migrations"))).sort().map((f) => `db/migrations/${f}`)];
+    const names = ["api.mjs", "cognito-email.mjs", "ops.mjs", "package.json", ...(await readdir(join(work, "db/migrations"))).sort().map((f) => `db/migrations/${f}`)];
     const sources = createHash("sha256");
     for (const n of names) sources.update(n).update(await readFile(join(work, n)));
     const hash = sources.digest("hex").slice(0, 16);
@@ -51,7 +51,7 @@ export async function buildLambda({ out = OUT } = {}) {
     await rm(zip, { force: true });
     execFileSync("sh", ["-c", `find . -type f | sort | sed 's|^\\./||' | xargs touch -d '2020-01-01 00:00:00 UTC' && find . -type f | sort | sed 's|^\\./||' | zip -X -q "${zip}" -@`], { cwd: work });
     const bytes = (await readFile(zip)).length;
-    const info = { zip, file: `pixcar-lambda-${hash}.zip`, hash, bytes, handlers: { api: "api.handler", ops: "ops.handler" }, files: names };
+    const info = { zip, file: `pixcar-lambda-${hash}.zip`, hash, bytes, handlers: { api: "api.handler", ops: "ops.handler", cognitoEmail: "cognito-email.handler" }, files: names };
     await writeFile(join(out, "build.json"), JSON.stringify(info, null, 2) + "\n");
     return info;
   } finally {

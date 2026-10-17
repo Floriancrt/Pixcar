@@ -119,6 +119,23 @@ Parameters:
     Default: "false"
     AllowedValues: ["true", "false"]
     Description: Espace Pro — « true » tant que SES est en mode test (sandbox) ; SES y contrôle aussi le droit d'envoi sur l'identité de chaque destinataire. Remettre à « false » une fois l'accès production accordé.
+  ProEmailProvider:
+    Type: String
+    Default: ses
+    AllowedValues: [ses, scaleway]
+    Description: Espace Pro — envoi des codes de vérification par e-mail. « scaleway » (Scaleway Transactional Email, clé secrète dans le paramètre SSM <SsmPrefix>SCW_SECRET_KEY) tant que SES reste en mode test.
+  ProScwProjectId:
+    Type: String
+    Default: ""
+    Description: Espace Pro — identifiant du projet Scaleway qui porte le domaine d'envoi (UUID ; pas un secret). Exigé avec ProEmailProvider=scaleway.
+    AllowedPattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$'
+
+Rules:
+  ScalewayNeedsProject:
+    RuleCondition: !Equals [!Ref ProEmailProvider, scaleway]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ProScwProjectId, ""]]
+        AssertDescription: ProEmailProvider=scaleway exige ProScwProjectId (identifiant du projet Scaleway).
 
 Conditions:
   HasDomain: !And [!Not [!Equals [!Ref ApiDomainName, ""]], !Not [!Equals [!Ref ApiCertificateArn, ""]]]
@@ -129,6 +146,7 @@ Conditions:
   HasProSms: !And [!Condition HasPro, !Not [!Equals [!Ref ProNotifyConfigurationArn, ""]]]
   HasProSesSandbox: !And [!Condition HasPro, !Equals [!Ref ProSesSandbox, "true"]]
   HasProAlarm: !And [!Condition HasPro, !Condition HasAlarmEmail]
+  HasProScaleway: !And [!Condition HasPro, !Equals [!Ref ProEmailProvider, scaleway]]
 
 Resources:
   # ---- base de données
@@ -163,7 +181,7 @@ Resources:
     Metadata:
       com.aws.cloudformation.Context:
         why: "identité IAM de l'API ; sa base lui donne le rôle pixcar_api (lien créé par l'opération « migrate ») ; politique en ligne voulue (une par rôle, limitée à ses ressources) : cfn-guard IAM_NO_INLINE_POLICY_CHECK accepté"
-        must: ["dsql:DbConnect seulement (jamais DbConnectAdmin)", "ssm:GetParameters sur les 2 secrets seulement"]
+        must: ["dsql:DbConnect seulement (jamais DbConnectAdmin)", "ssm:GetParameters sur les 2 secrets seulement (3 avec la clé Scaleway quand l'Espace Pro envoie par Scaleway)"]
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -184,6 +202,7 @@ Resources:
                 Resource:
                   - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}PLATE_PEPPER"
                   - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}IP_PEPPER"
+                  - !If [HasProScaleway, !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}SCW_SECRET_KEY", !Ref AWS::NoValue]
       Tags: [{ Key: Project, Value: pixcar }]
 
   ApiFunction:
@@ -225,6 +244,8 @@ Resources:
           PRO_NOTIFY_CONFIGURATION_ID: !Ref ProNotifyConfigurationArn
           PRO_CHANNELS: !If [HasProSms, "email,email_domain,sms", "email,email_domain"]
           PRO_TEST_ESTABLISHMENTS: !Ref ProTestEstablishments
+          PRO_EMAIL_PROVIDER: !Ref ProEmailProvider
+          PRO_SCW_PROJECT_ID: !Ref ProScwProjectId
       Tags: [{ Key: Project, Value: pixcar }]
 
   # Espace Pro : droit d'envoyer les codes de vérification, et rien d'autre (une identité SES — les identités vérifiées en mode test de SES —, une configuration Notify)

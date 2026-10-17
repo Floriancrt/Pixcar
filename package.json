@@ -21,6 +21,9 @@
     "perf": "node tests/perf.js"
   },
   "dependencies": {
+    "@aws-crypto/decrypt-node": "5.0.2",
+    "@aws-crypto/kms-keyring-node": "5.0.2",
+    "@aws-crypto/material-management-node": "5.0.2",
     "@aws-sdk/client-pinpoint-sms-voice-v2": "^3.1149.0",
     "@aws-sdk/client-sesv2": "^3.1149.0",
     "@aws-sdk/client-ssm": "^3.1146.0",
@@ -30,6 +33,8 @@
     "pg": "^8.13.0"
   },
   "devDependencies": {
+    "@aws-crypto/encrypt-node": "5.0.2",
+    "@aws-crypto/raw-aes-keyring-node": "5.0.2",
     "@electric-sql/pglite": "^0.3.0",
     "axe-core": "^4.10.0",
     "esbuild": "^0.25.0",
