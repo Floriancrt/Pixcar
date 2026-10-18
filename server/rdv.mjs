@@ -364,6 +364,7 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     return json(
       200,
       {
+        today: t,
         enabled: !!(s && s.enabled),
         paused: !!(s && s.paused),
         open: isOpen(b),

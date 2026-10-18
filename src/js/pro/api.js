@@ -9,6 +9,8 @@ export class ProApiError extends Error {
   }
 }
 
+const rdv = (id) => `/v1/pro/garages/${encodeURIComponent(id)}/rdv`;
+
 export function createProApi({ base, token, fetchImpl = (...a) => fetch(...a) }) {
   async function call(method, path, body) {
     const access = await token();
@@ -45,5 +47,16 @@ export function createProApi({ base, token, fetchImpl = (...a) => fetch(...a) })
     cancelChange: (id, change) => call("DELETE", `/v1/pro/garages/${encodeURIComponent(id)}/changes/${encodeURIComponent(change)}`),
     putService: (id, service, body) => call("PUT", `/v1/pro/garages/${encodeURIComponent(id)}/services/${encodeURIComponent(service)}`, body),
     registry: (id) => call("GET", `/v1/pro/garages/${encodeURIComponent(id)}/registry`),
+    // rendez-vous en ligne (docs/rendez-vous.md, lot 2)
+    agenda: (id) => call("GET", `${rdv(id)}`),
+    rdvSettings: (id, body) => call("PUT", `${rdv(id)}/settings`, body),
+    saveSlot: (id, slot, body) => call(slot ? "PUT" : "POST", `${rdv(id)}/slots${slot ? "/" + encodeURIComponent(slot) : ""}`, body),
+    deleteSlot: (id, slot) => call("DELETE", `${rdv(id)}/slots/${encodeURIComponent(slot)}`),
+    saveClosure: (id, closure, body) => call(closure ? "PUT" : "POST", `${rdv(id)}/closures${closure ? "/" + encodeURIComponent(closure) : ""}`, body),
+    deleteClosure: (id, closure) => call("DELETE", `${rdv(id)}/closures/${encodeURIComponent(closure)}`),
+    notify: (id, email) => call("POST", `${rdv(id)}/notify`, { email }),
+    notifyCode: (id, code) => call("POST", `${rdv(id)}/notify/code`, { code }),
+    requests: (id, view) => call("GET", `${rdv(id)}/requests?view=${encodeURIComponent(view)}`),
+    decide: (id, request, act, body) => call("POST", `${rdv(id)}/requests/${encodeURIComponent(request)}/${act}`, body || {}),
   };
 }

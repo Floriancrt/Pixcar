@@ -1169,8 +1169,9 @@ components:
         label: { type: string, maxLength: 60 }
     RdvAgenda:
       type: object
-      required: [enabled, paused, open, missing, settings, slots, closures, holidays, hours, services, notify, garage, todo]
+      required: [today, enabled, paused, open, missing, settings, slots, closures, holidays, hours, services, notify, garage, todo]
       properties:
+        today: { type: string, format: date, description: "Aujourd'hui à Paris, selon l'horloge de l'API (aperçus de la page)." }
         enabled: { type: boolean }
         paused: { type: boolean, description: Mise en pause automatique (3 demandes sans réponse de suite). }
         open: { type: boolean, description: "Les automobilistes voient des horaires : ouvert, pas en pause, rien ne manque." }

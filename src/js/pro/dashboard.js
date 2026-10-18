@@ -3,6 +3,7 @@
 // Que du TEXTE écrit dans la page.
 import { INCLUDES, PRICE_KINDS, PRO_SERVICES, VEHICLES, announcedDetail, announcedText, parseProPrice, serviceLabel } from "../shared/pro-prices.js";
 import { createGarageView } from "./garage.js";
+import { createRdvViews } from "./rdv.js";
 
 const LONG = { day: "numeric", month: "long", year: "numeric" };
 const DAY_MONTH = { day: "numeric", month: "long" };
@@ -36,6 +37,17 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     },
   });
 
+  // rendez-vous en ligne (rdv.js) : présents seulement quand l'API les a ouverts (data.rdv)
+  const rdv = createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name) => panel(name), onTodo: setTodo });
+  function setTodo(n) {
+    const c = $("rqCount");
+    c.hidden = !n;
+    c.textContent = n ? String(n) : "";
+    c.setAttribute("aria-label", `${n} à traiter`);
+    $("dashRq").hidden = !n;
+    $("dashRqTitle").textContent = n ? `${n} demande${n > 1 ? "s" : ""} de rendez-vous à traiter` : "";
+  }
+
   // ---- chargement et rendu
   async function open(garageId, { focus = true } = {}) {
     alertBox("");
@@ -46,25 +58,35 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
       if (!apiProblem(e)) home();
       return;
     }
+    rdv.reset();
+    const on = !!data.rdv;
+    for (const b of document.querySelectorAll(".dash-link[data-rdv]")) b.hidden = !on;
+    $("dashNav").classList.toggle("has-rdv", on);
+    $("dashMore").hidden = !on;
+    setTodo(on ? data.rdv.todo : 0);
     render();
     await panel("top", { focus: false });
     show("dash", { focus });
   }
 
-  // ---- onglets du tableau de bord : « Tableau de bord » (et « Mes prix », plus bas sur le même écran) ou « Mon garage »
+  // ---- onglets du tableau de bord : « Tableau de bord » (et « Mes prix », plus bas sur le même écran), « Mon garage », « Demandes »,
+  // « Disponibilités »
+  const BODIES = { top: "dash-top", prices: "dash-top", garage: "dash-garage", requests: "dash-requests", agenda: "dash-agenda" };
+  const TITLES = { top: "dashTitle", garage: "mgTitle", requests: "rqTitle", agenda: "agTitle" };
   async function panel(name, { focus = true } = {}) {
-    const mine = name === "garage";
-    if (mine) {
+    more(false);
+    if (name !== "top" && name !== "prices") {
       alertBox("");
       try {
-        await garage.open(data.garage.id, { verifiedAt: data.garage.verifiedAt });
+        if (name === "garage") await garage.open(data.garage.id, { verifiedAt: data.garage.verifiedAt });
+        if (name === "requests") await rdv.openRequests(data.garage.id, { focus: false });
+        if (name === "agenda") await rdv.openAgenda(data.garage.id, { focus: false });
       } catch (e) {
         if (!apiProblem(e)) alertBox(e.message);
         return;
       }
     }
-    $("dash-top").hidden = mine;
-    $("dash-garage").hidden = !mine;
+    for (const id of new Set(Object.values(BODIES))) $(id).hidden = id !== BODIES[name];
     for (const b of document.querySelectorAll(".dash-link[data-panel]")) {
       if (b.dataset.panel === name) b.setAttribute("aria-current", "true");
       else b.removeAttribute("aria-current");
@@ -75,7 +97,12 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
       return;
     }
     window.scrollTo(0, 0);
-    if (focus) (mine ? $("mgTitle") : $("dashTitle")).focus();
+    if (focus) $(TITLES[name]).focus();
+  }
+  // téléphone, avec les rendez-vous : « Plus » ouvre Mon garage, Voir Pixcar et Mes garages au-dessus de la barre du bas
+  function more(open) {
+    $("dashNav").classList.toggle("more-open", open);
+    $("dashMore").setAttribute("aria-expanded", String(open));
   }
 
   function render() {
@@ -307,6 +334,9 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
   $("addPrice").addEventListener("click", () => openEditor(null));
   $("confirmAll").addEventListener("click", confirmAll);
   for (const b of document.querySelectorAll(".dash-link[data-panel]")) b.addEventListener("click", () => panel(b.dataset.panel));
+  $("dashMore").addEventListener("click", () => more($("dashMore").getAttribute("aria-expanded") !== "true"));
+  $("dashNav").addEventListener("keydown", (e) => e.key === "Escape" && more(false));
+  $("dashRqGo").addEventListener("click", () => panel("requests"));
   $("priceValue").addEventListener("input", (e) => {
     e.target.value = e.target.value.replace(/[^\d,.\s]/g, "");
     e.target.removeAttribute("aria-invalid"); // l'erreur affichée ne vaut plus pour ce qui est en cours de saisie
