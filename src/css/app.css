@@ -2647,6 +2647,25 @@ select {
     display: inline;
   }
 }
+/* Avec « Espace pro » (site qui a la page pro/) : dès que la recherche compacte est dans l'en-tête, le lien passe en icône seule (48 px) et la
+   recherche s'arrête d'autant plus tôt (lien + écart de 22 px), pour ne jamais passer dessus */
+@media (min-width: 1024px) {
+  body:has(.tab-pro) {
+    --hs-right: 563px;
+  }
+  body:is(.has-results, .in-search)[data-screen="garages"] .tab-pro .tab-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+@media (min-width: 1024px) and (max-width: 1279px) {
+  body:has(.tab-pro) {
+    --hs-right: 400px;
+  }
+}
 @media (min-width: 1024px) and (hover: hover) {
   .card:hover {
     background: var(--row-hover);

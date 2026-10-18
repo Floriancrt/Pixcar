@@ -714,6 +714,21 @@ function fakeCognito() {
     const hdr = await p.evaluate(() => { const t = document.querySelector(".topbar-in"); return { over: t.scrollWidth - t.clientWidth, page: document.documentElement.scrollWidth - innerWidth }; });
     check(`comparator header (${width} px): « Espace pro » shown, nothing pushed out of the bar`, (await link.isVisible()) && hdr.over <= 0 && hdr.page <= 0, JSON.stringify(hdr));
     if (width === 1440) {
+      // vue résultats : la recherche compacte de l'en-tête ne passe jamais sur « Prix et promos », « Espace pro » ni « Ajouter une réparation »
+      const gaps = {};
+      for (const w of [1024, 1279, 1280, 1440, 1600]) {
+        await p.setViewportSize({ width: w, height: 900 });
+        gaps[w] = await p.evaluate(() => {
+          document.body.dataset.screen = "garages";
+          document.body.classList.add("has-results");
+          const search = document.querySelector(".search").getBoundingClientRect();
+          const right = Math.min(...[".tabs", ".tab-pro", ".add-btn"].map((s) => document.querySelector(s).getBoundingClientRect().left));
+          return Math.round(right - search.right);
+        });
+      }
+      check("results view: the header search stops before the links on the right (1024 to 1600 px)", Object.values(gaps).every((g) => g >= 12), JSON.stringify(gaps));
+      await p.setViewportSize({ width, height });
+      await p.evaluate(() => document.body.classList.remove("has-results"));
       await link.click();
       await p.waitForSelector('[data-screen="welcome"]:not([hidden])');
       check("« Espace pro » opens the Pro space's welcome page", new URL(p.url()).pathname.endsWith("/pro/"));
