@@ -4,6 +4,9 @@
 // « Mon garage » (docs/rendez-vous.md) : les coordonnées que le garage vérifié a déclarées (nom, adresse, téléphone, site, e-mail, horaires),
 // et les prestations qu'il dit faire ou ne pas faire.
 //
+// Rendez-vous en ligne (lot 2) : les prestations que le garage prend en ligne avec un horaire libre dans les 14 jours (rdv.services) ;
+// l'étiquette s'ajoute au badge, la fiche a un bloc « Prendre rendez-vous » dont le bouton charge la fenêtre (rdv-book.js) à la demande.
+//
 // Lecture : GET /v1/pro/public/garages?ids=… (100 au plus par appel), une fois par garage et par visite de la page. Visites : POST
 // /v1/pro/public/visits quand la fiche d'un garage vérifié s'ouvre (« view ») et quand on touche « Appeler » (« call »), une fois par garage,
 // par type et par visite de la page (l'API, elle, ne compte qu'une fois par jour). Sans API, ou Espace Pro fermé : rien, sans erreur.
@@ -70,7 +73,7 @@ export function createProPublic({ base = "", fetchImpl = (...a) => fetch(...a), 
       const prices = {};
       for (const p of Array.isArray(g.prices) ? g.prices : []) if (p && ORDER.has(p.service) && ["fixed", "from", "quote"].includes(p.kind)) prices[p.service] = p;
       const svc = g.services && typeof g.services === "object" ? g.services : {};
-      known.set(g.id, { prices, profile: cleanProfile(g.profile), offered: serviceSet(svc.offered), notOffered: serviceSet(svc.notOffered) });
+      known.set(g.id, { prices, profile: cleanProfile(g.profile), offered: serviceSet(svc.offered), notOffered: serviceSet(svc.notOffered), rdv: serviceSet(g.rdv && g.rdv.services) });
       found = true;
     }
     if (waiting.size) timer = setTimeout(flush, 0);
@@ -101,6 +104,11 @@ export function createProPublic({ base = "", fetchImpl = (...a) => fetch(...a), 
       const i = known.get(proKey(g));
       return !i || !serviceId ? null : i.offered.has(serviceId) ? true : i.notOffered.has(serviceId) ? false : null;
     },
+    // le garage prend en ligne toutes ces prestations
+    books(g, ids) {
+      const i = known.get(proKey(g));
+      return !!(i && ids.length && ids.every((id) => i.rdv.has(id)));
+    },
     visit(g, kind) {
       const k = proKey(g);
       if (off || !k || !known.get(k) || counted.has(k + kind)) return;
@@ -108,9 +116,12 @@ export function createProPublic({ base = "", fetchImpl = (...a) => fetch(...a), 
       fetchImpl(`${base}/v1/pro/public/visits`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ garageId: k, kind }), keepalive: true }).catch(() => {});
     },
     // ---- ce que la page affiche (HTML ; tout texte venu de l'API est échappé)
-    badgeHtml(g, icon = "") {
-      return known.get(proKey(g)) ? `<p class="v-badge">${icon}Garage vérifié</p>` : "";
+    badgeHtml(g, icon = "", rdv = false) {
+      return known.get(proKey(g)) ? `<p class="v-badge">${icon}Garage vérifié</p>${rdv ? '<p class="v-badge v-rdv">Rendez-vous en ligne</p>' : ""}` : "";
     },
+    // Bloc de la fiche : le bouton ouvre la fenêtre de rendez-vous (horaire, coordonnées, code)
+    rdvHtml: (icon = "") =>
+      `<section class="rdv-box" aria-label="Rendez-vous en ligne"><div><h4>Prendre rendez-vous</h4><p>Choisissez un horaire libre. Le garage confirme au plus tard à midi le jour ouvré suivant ; sa réponse arrive par e-mail.</p></div><button type="button" class="btn dark" data-act="rdv" aria-haspopup="dialog">${icon}Choisir un horaire</button></section>`,
     // « Annoncé 89 € », à côté du prix payé (ou seul, quand aucun prix payé n'est déclaré)
     chipHtml(p) {
       return `<span class="tag annonce" title="Prix annoncé par le garage, sous sa responsabilité ; il n'entre pas dans l'échelle des prix payés${p.stale ? ". Non confirmé depuis 6 mois" : ""}">Annoncé ${esc(announcedText(p.kind, p.price))}${p.stale ? " · ancien" : ""}</span>`;

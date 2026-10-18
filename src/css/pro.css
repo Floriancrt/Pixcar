@@ -2651,6 +2651,7 @@ input[type="url"] {
   width: min(640px, calc(100vw - 24px));
 }
 .sheet textarea,
+.rv-form textarea,
 .sheet input[type="date"] {
   width: 100%;
   min-height: 48px;
@@ -2830,4 +2831,156 @@ input[type="url"] {
 }
 .rq-due {
   background: var(--accent-soft);
+}
+
+/* ---- page rendez-vous/ (suivi de l'automobiliste, réponse du garage depuis l'e-mail) */
+.rv-page {
+  max-width: 720px;
+}
+.btn.danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+.rv-status {
+  margin: 0 0 6px;
+}
+.rv-card {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+.rv-when {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: 12px;
+  border-left: 4px solid var(--btn);
+}
+.rv-when b {
+  font-size: 1.15rem;
+}
+.rv-when span {
+  color: var(--ink-2);
+}
+.rv-card .rq-facts {
+  margin: 0;
+}
+.rv-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+}
+.rv-steps:empty {
+  display: none;
+}
+.rv-steps li {
+  display: grid;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 4px solid var(--line);
+  color: var(--ink-3);
+  font-size: 0.85rem;
+}
+.rv-steps li b {
+  color: var(--ink-2);
+}
+.rv-steps li.done {
+  border-color: var(--ok);
+}
+.rv-steps li.cur {
+  border-color: var(--btn);
+}
+.rv-steps li.done b,
+.rv-steps li.cur b {
+  color: var(--ink);
+}
+.rv-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.rv-acts a.btn,
+.rv-alt a.btn {
+  text-decoration: none;
+}
+.rv-acts a.btn:not(.primary) {
+  color: var(--ink);
+}
+.rv-form {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+.rv-form h2,
+.rv-alt h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.rv-form .help {
+  margin: 0;
+}
+.rv-form > label {
+  font-weight: 700;
+}
+.rv-reasons {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.rv-reasons legend {
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+.rv-form .rv-acts {
+  margin: 4px 0 0;
+}
+.rv-alt {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.rv-alt ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rv-alt li {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+.rv-alt li span {
+  color: var(--ink-3);
+  font-size: 0.88rem;
+}
+.rv-alt .rv-first {
+  color: var(--ok);
+  font-weight: 700;
+}
+.rv-alt p {
+  margin: 0;
+}
+@media (max-width: 599px) {
+  .rv-steps {
+    grid-template-columns: 1fr;
+  }
 }

@@ -215,9 +215,12 @@ semble partir, rien n'est envoyé. Un horaire n'est retenu qu'après le code, ca
 - Espace Pro : « Demandes » (à traiter, à venir, passées ; accepter, refuser, annuler, appeler ; export vers l'agenda) juste après le
   tableau de bord, « Disponibilités » (interrupteur, semaine type, volet du créneau avec aperçu, fermetures, règles, adresse de
   notification) après « Mes prix ». Sur téléphone, la semaine type devient une liste par jour.
-- Comparateur : étiquette « Rendez-vous en ligne » dans la liste, bloc « Prendre rendez-vous » dans la fiche après les prix annoncés
-  (prochains horaires, « Choisir un horaire »). La fenêtre (horaire, coordonnées, code, envoyée) est un script et une feuille de style à
-  part, chargés au premier clic : le poids de la page ne bouge presque pas.
+- Comparateur : étiquette « Rendez-vous en ligne » sous le badge « Garage vérifié », bloc « Prendre rendez-vous » dans la fiche après
+  les prix annoncés (« Choisir un horaire »). Les prochains horaires ne sont pas montrés dans la fiche : il faudrait un appel à l'API à
+  chaque fiche ouverte et du code de plus dans le comparateur ; ils s'affichent dès l'ouverture de la fenêtre. La fenêtre (horaire,
+  coordonnées, code, envoyée) est un script et une feuille de style à part (`assets/rdv-book.*`), chargés au premier clic (+0,45 Ko gzip
+  pour le comparateur). La voiture est reprise de la mémoire du comparateur (`jg.vehicles.v1`) ; les coordonnées ne sont pas gardées
+  dans le navigateur.
 - `rendez-vous/` : page de suivi de l'automobiliste (état, frise, agenda, itinéraire, appel, annulation) et page d'action du garage.
 
 ### Avant la mise en ligne du lot 2

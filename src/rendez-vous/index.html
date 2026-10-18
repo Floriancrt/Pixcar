@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="description" content="Suivi d'une demande de rendez-vous prise sur Pixcar.">
+<meta name="theme-color" content="#111216">
+<meta name="pixcar-api" content="{{API_BASE}}">
+<title>Votre rendez-vous · Pixcar</title>
+{{HEAD_ASSETS}}
+</head>
+<body>
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  {{MARK}}
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2" /><path d="M3.5 10h17M8 3v4M16 3v4" /></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M21 16.5v3a2 2 0 0 1-2.2 2A18 18 0 0 1 2.5 5.2 2 2 0 0 1 4.5 3h3a2 2 0 0 1 2 1.7l.5 2.6a2 2 0 0 1-.6 1.8L8 10.5a15 15 0 0 0 5.5 5.5l1.4-1.4a2 2 0 0 1 1.8-.6l2.6.5a2 2 0 0 1 1.7 2z" /></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" /></symbol>
+  <symbol id="i-car" viewBox="0 0 24 24"><path d="M4 16.5V12l2-5h12l2 5v4.5M4 16.5h16M4 16.5V19h3v-2.5M17 16.5V19h3v-2.5M4 12h16" /><circle cx="7.5" cy="14" r=".6" /><circle cx="16.5" cy="14" r=".6" /></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" /></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" /></symbol>
+  <symbol id="i-garage" viewBox="0 0 24 24"><path d="M3 10.5 12 4l9 6.5V20H3z" /><path d="M7 20v-6h10v6M7 17h10" /></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.5 12.5 12 4h7.5v7.5L11 20z" /><circle cx="15.5" cy="8" r="1.4" /></symbol>
+</svg>
+<a class="skip" href="#main">Aller au contenu</a>
+
+<header class="pro-top">
+  <a class="brand" href="../" aria-label="Pixcar : retour au comparateur">
+    <span class="brand-mark"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#px-mark" /></svg></span>
+    <span class="px-word brand-word" aria-hidden="true"></span>
+  </a>
+  <span class="pro-badge">Rendez-vous</span>
+</header>
+
+<main id="main" class="pro-main rv-page" tabindex="-1">
+  <noscript><p class="pro-alert">Cette page a besoin de JavaScript.</p></noscript>
+  <p class="pro-loading" id="rvLoading">Chargement…</p>
+  <div class="pro-alert" id="rvAlert" role="alert" hidden></div>
+  <section id="rvGone" hidden aria-labelledby="rvGoneTitle">
+    <h1 id="rvGoneTitle" tabindex="-1">Ce lien ne fonctionne plus</h1>
+    <p class="lead" id="rvGoneText">Il a expiré, ou la demande a été effacée.</p>
+    <p><a class="btn primary" href="../">Comparer les garages</a></p>
+  </section>
+  <section id="rvView" hidden aria-labelledby="rvTitle">
+    <p class="rv-status" id="rvStatus"></p>
+    <h1 id="rvTitle" tabindex="-1"></h1>
+    <p class="lead" id="rvLead"></p>
+    <div class="rv-card" id="rvCard"></div>
+    <ol class="rv-steps" id="rvSteps" aria-label="Étapes de la demande"></ol>
+    <div class="rv-acts" id="rvActs"></div>
+    <div id="rvMore"></div>
+    <p class="sr-only" id="rvLive" role="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<footer class="pro-foot">
+  <details class="pro-privacy">
+    <summary>Vos données</summary>
+    <ul>
+      <li>Votre nom, votre e-mail, votre téléphone, votre voiture et votre message vont au seul garage choisi, pour ce rendez-vous. Pixcar les efface 30 jours après le rendez-vous (7 jours après un refus, une annulation ou une demande restée sans réponse).</li>
+      <li>Ce lien personnel est le seul moyen d'accéder à votre demande : ne le transmettez pas. Il cesse de fonctionner 7 jours après le rendez-vous.</li>
+      <li>Accès, rectification, effacement : <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>.</li>
+    </ul>
+  </details>
+  <p><a href="../">Pixcar, le comparateur</a></p>
+</footer>
+{{SCRIPTS}}
+</body>
+</html>

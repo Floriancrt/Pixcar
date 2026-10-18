@@ -171,6 +171,7 @@ const NOTIFY = "atelier@garage-demo.fr";
   await page.click("#agEnabled");
   await page.waitForFunction(() => document.getElementById("agEnabled").getAttribute("aria-checked") === "true");
   check("switched on: « Activés », and the API now offers times to drivers", (await text(page, "#agStateText")) === "Activés" && (await call("GET", `/v1/rdv/garages/${GARAGE}/times?services=vidange`)).status === 200);
+  await page.evaluate(() => (document.getElementById("agLive").textContent = "")); // « Enregistré. » est déjà là depuis l'ouverture
   await page.selectOption("#agDelay", "2");
   await page.waitForFunction(() => document.getElementById("agLive").textContent === "Enregistré.");
   check("a rule changes as soon as it is picked (minimum delay 2 h)", (await pro("GET", "/rdv")).body.settings.minDelayH === 2);

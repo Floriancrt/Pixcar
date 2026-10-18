@@ -6,7 +6,7 @@ import { loadScript } from "./modules/load-script.js";
 import { MAPBOX_OPTIONS, mapboxConfig, mapboxTileUrl } from "./modules/mapbox.js";
 import { createEnricher, missingOf } from "./modules/mapbox-fiches.js";
 import { phoneList, phoneParse } from "./modules/phone.js";
-import { createProPublic } from "./modules/pro-public.js";
+import { createProPublic, proKey } from "./modules/pro-public.js";
 import { addrText, hoursText } from "./shared/garage-profile.js";
 import { SVC_MAX, initServicePicker } from "./modules/service-picker.js";
 import { comboOffer, comboPrice, comboPromos, comboTag } from "./modules/svc-combo.js";
@@ -1750,7 +1750,29 @@ import { SERVICES } from "./shared/services.js";
   // Espace Pro : badge « Garage vérifié » et prix annoncés (modules/pro-public.js) ; une réponse qui en apporte refait la liste
   const proPub = createProPublic({ base: apiBase(), onUpdate: () => (proApply(me.view), me.searched && ht()) }),
     // la prestation des prix annoncés : une seule prestation choisie, hors contrôle technique (sinon : badge seulement)
-    proSvc = () => ("ct" !== me.kind && 1 === selSvcs().length ? fe().id : "");
+    proSvc = () => ("ct" !== me.kind && 1 === selSvcs().length ? fe().id : ""),
+    // rendez-vous en ligne : les prestations choisies (hors contrôle technique), si le site a la fenêtre de rendez-vous (__RDV_BOOK__)
+    rdvOk = (g) => !!__RDV_BOOK__ && "ct" !== me.kind && proPub.books(g, selSvcs().map((s) => s.id));
+  // La fenêtre de rendez-vous (script et feuille de style à part, docs/rendez-vous.md) : chargée au premier clic, gardée ensuite
+  let rdvLoad = null;
+  function rdvOpen(g, btn) {
+    rdvLoad =
+      rdvLoad ||
+      Promise.all([
+        loadScript([__RDV_BOOK__[0]]),
+        new Promise((ok, ko) => {
+          const l = document.createElement("link");
+          ((l.rel = "stylesheet"), (l.href = __RDV_BOOK__[1]), (l.onload = ok), (l.onerror = ko), document.head.append(l));
+        }),
+      ]).catch((e) => {
+        throw ((rdvLoad = null), e);
+      });
+    btn.disabled = !0;
+    rdvLoad
+      .then(() => window.PixcarRdv.open({ base: apiBase(), garage: { id: proKey(g), name: g.name }, services: selSvcs().map((s) => s.id), opener: btn }))
+      .catch(() => aa("La prise de rendez-vous ne répond pas. Réessayez dans un instant."))
+      .finally(() => (btn.disabled = !1));
+  }
   // Garage vérifié (« Mon garage ») : ses coordonnées déclarées remplacent celles des données publiques partout où il s'affiche (liste,
   // fiche, carte). g.pro garde les champs déclarés, pour la mention sous la fiche (proNote) ; Mapbox et l'adresse approchée n'y
   // touchent plus. L'adresse déclarée ne déplace pas le garage sur la carte (docs/rendez-vous.md).
@@ -2879,7 +2901,7 @@ import { SERVICES } from "./shared/services.js";
     <div class="g-main" data-act="more">
       ${av(e.name, e.chain, e.network)}
       <div class="g-id">
-        <h3><button type="button" class="g-name linkless" data-act="more" aria-expanded="${i}" aria-controls="m-${t}">${y(e.name)}</button>${n}</h3>${"ct" === me.kind ? "" : proPub.badgeHtml(e, he("check"))}
+        <h3><button type="button" class="g-name linkless" data-act="more" aria-expanded="${i}" aria-controls="m-${t}">${y(e.name)}</button>${n}</h3>${"ct" === me.kind ? "" : proPub.badgeHtml(e, he("check"), rdvOk(e))}
         <p class="g-addr${e.addr ? "" : " is-none"}" data-ad="${y(e.id)}"${adTitleAttr(e)}>${adHtml(e)}</p>
       </div>
       <div class="g-type"><span class="k-cell"><span class="kind"${s.why ? ` title="${y(s.why)}"` : ""}>${s.dot || ""}<span class="k-txt">${y(a)}</span>${s.why ? `<span class="sr-only"> · ${y(s.why)}</span>` : ""}</span>${s.part ? `<span class="k-part" aria-hidden="true">${y(s.part)}</span>` : ""}</span><span class="dist" data-dist="${y(e.id)}">${distHtml(e)}</span></div>
@@ -2996,7 +3018,7 @@ import { SERVICES } from "./shared/services.js";
             : "center" === a.kind
               ? "L'enseigne ne publie pas de prix national pour cette prestation : demandez un devis au centre."
               : "Ce garage ne publie pas ses prix : demandez un devis, puis déclarez le prix payé."),
-      `${wt(e)}\n      ${proPub.ficheHtml(e, proSvc(), he("check"))}\n      ${whyHtml(e)}\n      ${multi ? comboHtml(a) : ""}<p class="price-note">${r}</p>\n      ${n.length ? ue(n, t.id) : ""}\n      ${multi ? a.parts.filter((p) => !p.no && "declared" === p.price.kind).map((p) => it(p.price.mine, p.id, !0)).join("") : "declared" === a.kind ? it(a.mine, t.id, !1) : ""}\n      ${(function (
+      `${wt(e)}\n      ${proPub.ficheHtml(e, proSvc(), he("check"))}${rdvOk(e) ? proPub.rdvHtml() : ""}\n      ${whyHtml(e)}\n      ${multi ? comboHtml(a) : ""}<p class="price-note">${r}</p>\n      ${n.length ? ue(n, t.id) : ""}\n      ${multi ? a.parts.filter((p) => !p.no && "declared" === p.price.kind).map((p) => it(p.price.mine, p.id, !0)).join("") : "declared" === a.kind ? it(a.mine, t.id, !1) : ""}\n      ${(function (
         e,
         t,
       ) {
@@ -3299,6 +3321,9 @@ import { SERVICES } from "./shared/services.js";
         setTimeout(() => {
           t.textContent = "Copier";
         }, 1600);
+      } else if ("rdv" === n) {
+        const g = me.view.find((x) => x.id === a.dataset.id);
+        g && rdvOpen(g, t);
       } else if ("declare" === n) {
         const e = me.view.find((e) => e.id === a.dataset.id);
         e && Ot({ garage: qt(e, "search"), svcId: fe().id });

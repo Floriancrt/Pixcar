@@ -34,6 +34,7 @@ const SUITES = [
   { name: "garagesmbx", cmd: ["node", "tests/garages-mapbox.js"] }, // table de garages ET fiches complétées par Mapbox, ensemble : construit lui-même sa page
   { name: "pro", cmd: ["node", "tests/pro.js"] }, // Espace Pro (dist/pro/) : construit lui-même son site, vraie API, Cognito simulé
   { name: "prordv", cmd: ["node", "tests/pro-rdv.js"] }, // Espace Pro, rendez-vous en ligne : Disponibilités et Demandes ; construit lui-même son site, vraie API
+  { name: "rdvbook", cmd: ["node", "tests/rdv-book.js"] }, // rendez-vous en ligne côté automobiliste : fenêtre du comparateur, page rendez-vous/ ; construit lui-même son site, vraie API
   { name: "propublic", cmd: ["node", "tests/pro-public.js", FILE] }, // Espace Pro côté comparateur : badge, « Annoncé », fiche, tri, visites ; vraie API, tuiles de la table simulées
   { name: "prerender", cmd: ["node", "tests/prerender.js", FILE] },
   { name: "budget", cmd: ["node", "tests/budget.js"], distOnly: true },

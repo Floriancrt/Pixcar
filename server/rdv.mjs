@@ -781,6 +781,7 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
       decidedAt: isoOf(r.decided_at),
       decidedText: r.decided_at ? R.dayLabel(R.parisParts(r.decided_at).iso) : "",
       canCancel: (st === "pending" || st === "confirmed") && r.starts_at > nowMs,
+      past: r.ends_at < nowMs,
       remindPrice: r.remind_price,
       ...(r.reason ? { reasonText: reasonOf(r) } : {}),
       ...(r.note ? { note: r.note } : {}),

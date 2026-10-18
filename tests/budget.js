@@ -29,7 +29,10 @@ const KB = 1024;
 // Espace Pro côté comparateur (branche pro-prix, 12 octobre 2026) : badge « Garage vérifié », étiquette « Annoncé », bloc de la fiche et comptage des
 // visites (modules/pro-public.js et src/js/shared/pro-prices.js : +1,5 Ko gzip, mesuré js 61,2 contre 59,7) ; budget du script +1,5, les autres ne bougent pas.
 // Pour le rabaisser : ne charger ce module qu'avec une API (il ne fait rien sans elle).
-const BUDGET = { page: 32, html: 10, js: 62.5, css: 23.5, font: 34, critical: 123, sw: 3, single: 127, icon: 20 };
+// Rendez-vous en ligne (lot 2, branche lot2-rendez-vous, 18 octobre 2026) : étiquette « Rendez-vous en ligne », bloc « Prendre rendez-vous » de la
+// fiche et chargement au premier clic de la fenêtre (+0,45 Ko gzip, mesuré js 62,9 contre 62,4). La fenêtre elle-même (assets/rdv-book.*.js, 5 Ko
+// gzip, et sa feuille de style) et la page rendez-vous/ sont à part, hors du chemin critique ; budget du script +1, les autres ne bougent pas.
+const BUDGET = { page: 32, html: 10, js: 63.5, css: 23.5, font: 34, critical: 123, sw: 3, single: 127, icon: 20 };
 
 const results = [];
 const check = (name, cond, detail = "") => {

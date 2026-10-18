@@ -1255,7 +1255,7 @@ components:
         website: { type: string, description: "Champ piège : à laisser vide." }
     RdvClientView:
       type: object
-      required: [status, when, services, garage, car, email, deadline, deadlineText, canCancel]
+      required: [status, when, services, garage, car, email, deadline, deadlineText, canCancel, past]
       properties:
         status: { type: string, enum: [pending, confirmed, declined, expired, cancelled] }
         when: { $ref: "#/components/schemas/RdvWhen" }
@@ -1268,6 +1268,7 @@ components:
         sentText: { type: string }
         decidedText: { type: string }
         canCancel: { type: boolean }
+        past: { type: boolean, description: "Le rendez-vous est passé (horloge de l'API)." }
         reasonText: { type: string }
         note: { type: string }
         cancelledBy: { type: string, enum: [client, garage, closure] }
