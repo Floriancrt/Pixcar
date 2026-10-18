@@ -392,7 +392,8 @@ function fakeCognito() {
   check("removed: one price left", (await page.$$eval("#priceRows tr", (els) => els.length)) === 1 && (await api.db.query("SELECT count(*)::int AS n FROM pro_prices")).rows[0].n === 1);
   // prix à confirmer, visites et prix payés : tableau de bord rechargé
   const garageId = CONTACTS[0].id;
-  await api.db.query("UPDATE pro_prices SET confirmed_at = now() - interval '170 days'");
+  // daté par l'horloge de l'API (pas par now() de la base, à l'heure réelle) : « à confirmer » ne dépend pas du jour où tourne le test
+  await api.db.query("UPDATE pro_prices SET confirmed_at = to_timestamp($1::double precision / 1000) - interval '170 days'", [api.now()]);
   // l'horloge de l'API de test part du 1er octobre 2026 (tests/api-harness.js) : les jours des visites se comptent depuis elle
   const apiDay = (ago) => new Date(Date.parse("2026-10-01T12:00:00Z") - ago * 864e5).toISOString().slice(0, 10);
   await api.db.query("INSERT INTO pro_visits (garage_id, day, kind, visitor) VALUES ($1, $4::date, 'view', $2), ($1, $4::date, 'view', $3), ($1, $4::date, 'call', $2), ($1, $5::date, 'view', $2)", [garageId, "1".repeat(64), "2".repeat(64), apiDay(0), apiDay(40)]);
@@ -524,28 +525,35 @@ function fakeCognito() {
   // horaires : copie du lundi, samedi matin, dimanche ouvert sans plage refusé
   await page.click("#mgHoursEdit");
   await page.waitForSelector("#hoursDlg[open]");
-  check("hours: none yet, the first time field has the focus", (await page.$$eval("#hoursDays fieldset", (els) => els.length)) === 7 && (await page.evaluate(() => document.activeElement.dataset.slot)) === "00");
-  const t = (day, slot) => `#hoursDays input[data-day="${day}"][data-slot="${slot}"]`;
-  await page.fill(t("mo", "00"), "08:00");
-  await page.fill(t("mo", "01"), "12:00");
-  await page.fill(t("mo", "10"), "14:00");
-  await page.fill(t("mo", "11"), "18:30");
-  check("typing a time ticks « Ouvert »", await page.isChecked('#hoursDays input[data-open="mo"]'));
+  const hourOpts = await page.$$eval('#hoursDays select[data-day="mo"][data-slot="00"] option', (els) => els.map((o) => [o.value, o.textContent]));
+  check(
+    "hours: none yet, the first time list has the focus; quarter hours from 0:00 to 24:00, written without a leading zero (typing 8 picks 8:00), sent as 08:00",
+    (await page.$$eval("#hoursDays fieldset", (els) => els.length)) === 7 && (await page.evaluate(() => document.activeElement.tagName === "SELECT" && document.activeElement.dataset.slot === "00")) &&
+      hourOpts.length === 98 && hourOpts[0][0] === "" && hourOpts[1].join() === "00:00,0:00" && hourOpts.find((o) => o[0] === "08:15").join() === "08:15,8:15" && hourOpts[97].join() === "24:00,24:00" && (await page.$$eval("#hoursDays input:not([type=checkbox])", (els) => els.length)) === 0,
+    JSON.stringify(hourOpts.slice(0, 3)),
+  );
+  const t = (day, slot) => `#hoursDays select[data-day="${day}"][data-slot="${slot}"]`;
+  await page.selectOption(t("mo", "00"), "08:00");
+  await page.selectOption(t("mo", "01"), "12:00");
+  await page.selectOption(t("mo", "10"), "14:00");
+  await page.selectOption(t("mo", "11"), "18:30");
+  check("choosing a time ticks « Ouvert »", await page.isChecked('#hoursDays input[data-open="mo"]'));
   await page.click("#hoursCopy");
-  check("« Copier les horaires du lundi » fills Tuesday to Friday, not the weekend", (await page.inputValue(t("fr", "11"))) === "18:30" && (await page.isChecked('#hoursDays input[data-open="th"]')) && !(await page.isChecked('#hoursDays input[data-open="sa"]')) && (await page.textContent("#mgLive")).includes("copiés"));
-  await page.fill(t("sa", "00"), "08:00");
-  await page.fill(t("sa", "01"), "12:00");
+  const copied = await page.$$eval("#hoursDays select", (els) => els.map((e) => `${e.dataset.day}${e.dataset.slot}=${e.value}`).join(" "));
+  check("« Copier les horaires du lundi » fills the four times of Tuesday to Friday, not the weekend", ["tu", "we", "th", "fr"].every((d) => copied.includes(`${d}00=08:00 ${d}01=12:00 ${d}10=14:00 ${d}11=18:30`)) && copied.includes("sa00= ") && (await page.isChecked('#hoursDays input[data-open="th"]')) && !(await page.isChecked('#hoursDays input[data-open="sa"]')) && (await page.textContent("#mgLive")).includes("copiés"));
+  await page.selectOption(t("sa", "00"), "08:00");
+  await page.selectOption(t("sa", "01"), "12:00");
   await page.check('#hoursDays input[data-open="su"]');
   await page.click("#hoursSave");
   check("a day ticked open without any time is refused", (await page.textContent("#hoursErr")).includes("Dimanche : indiquez une plage"));
   await page.uncheck('#hoursDays input[data-open="su"]');
-  await page.fill(t("we", "10"), "11:00");
+  await page.selectOption(t("we", "10"), "11:00");
   await page.click("#hoursSave");
   check("overlapping slots are refused", (await page.textContent("#hoursErr")) === "Horaires du mercredi : plages dans l'ordre, sans chevauchement.", await page.textContent("#hoursErr"));
-  await page.fill(t("we", "10"), "14:00");
+  await page.selectOption(t("we", "10"), "14:00");
   const hdDesk = await page.$eval("#hoursDlg", (d) => {
     const box = d.getBoundingClientRect();
-    const cut = [...d.querySelectorAll("legend, input")].filter((e) => { const r = e.getBoundingClientRect(); return r.left < box.left || r.right > box.right; }).length;
+    const cut = [...d.querySelectorAll("legend, input, select")].filter((e) => { const r = e.getBoundingClientRect(); return r.left < box.left || r.right > box.right; }).length;
     return { over: d.scrollWidth - d.clientWidth, cut, width: Math.round(box.width) };
   });
   check("hours dialog (1280 px): no sideways scroll, no day or field cut off", hdDesk.over <= 0 && hdDesk.cut === 0, JSON.stringify(hdDesk));

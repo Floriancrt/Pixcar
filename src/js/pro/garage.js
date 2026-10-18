@@ -27,6 +27,11 @@ const hostOf = (url) => {
 };
 const valueText = (field, v) => (field === "addr" ? addrText(v) : field === "phone" ? phoneText(v) : field === "website" ? hostOf(v) : String(v || ""));
 const MINUTES = Array.from({ length: (MINUTES_MAX - MINUTES_MIN) / MINUTES_STEP + 1 }, (_, i) => MINUTES_MIN + i * MINUTES_STEP);
+// Heures proposées pour les horaires : 00:00 à 24:00 au quart d'heure, dans une liste plutôt qu'un champ « heure » du navigateur (une heure
+// tapée sans ses minutes y reste vide sans rien dire, et l'affichage suit la langue du navigateur : 8:00 AM). Libellé sans zéro devant :
+// taper « 8 » dans la liste choisit 8:00, « 17 » choisit 17:00.
+const TIMES = Array.from({ length: 97 }, (_, i) => `${String(Math.floor(i / 4)).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")}`);
+const timeLabel = (t) => t.replace(/^0(\d)/, "$1");
 
 export function createGarageView({ api, $, el, icon, alertBox, busy, apiProblem, prices, openPrice, onPricesChanged }) {
   let garageId = null;
@@ -240,7 +245,15 @@ export function createGarageView({ api, $, el, icon, alertBox, busy, apiProblem,
     const h = data.profile.hours || {};
     for (const [k, label] of DAYS) {
       const slots = h[k] || [];
-      const time = (i, j, what) => el("input", { type: "time", step: "900", "data-day": k, "data-slot": `${i}${j}`, value: (slots[i] && slots[i][j]) || "", "aria-label": `${label}, ${what}` });
+      const time = (i, j, what) => {
+        const cur = (slots[i] && slots[i][j]) || "";
+        return el(
+          "select",
+          { "data-day": k, "data-slot": `${i}${j}`, "aria-label": `${label}, ${what}` },
+          el("option", { value: "", text: "—", selected: !cur }),
+          ...TIMES.map((t) => el("option", { value: t, text: timeLabel(t), selected: t === cur })),
+        );
+      };
       box.append(
         el(
           "fieldset",
@@ -254,13 +267,13 @@ export function createGarageView({ api, $, el, icon, alertBox, busy, apiProblem,
     }
     $("hoursErr").hidden = true;
     $("hoursDlg").showModal();
-    box.querySelector('input[type="time"]').focus();
+    box.querySelector("select").focus();
   }
   function readHours() {
     const out = {};
     for (const [k, label] of DAYS) {
       if (!document.querySelector(`#hoursDays input[data-open="${k}"]`).checked) continue;
-      const v = (slot) => document.querySelector(`#hoursDays input[data-day="${k}"][data-slot="${slot}"]`).value;
+      const v = (slot) => document.querySelector(`#hoursDays [data-day="${k}"][data-slot="${slot}"]`).value;
       const slots = [];
       for (const i of [0, 1]) {
         const a = v(`${i}0`), b = v(`${i}1`);
@@ -274,11 +287,11 @@ export function createGarageView({ api, $, el, icon, alertBox, busy, apiProblem,
     return parseHours(out);
   }
   function copyMonday() {
-    const get = (slot) => document.querySelector(`#hoursDays input[data-day="mo"][data-slot="${slot}"]`).value;
+    const get = (slot) => document.querySelector(`#hoursDays [data-day="mo"][data-slot="${slot}"]`).value;
     const open = document.querySelector('#hoursDays input[data-open="mo"]').checked;
     for (const k of ["tu", "we", "th", "fr"]) {
       document.querySelector(`#hoursDays input[data-open="${k}"]`).checked = open;
-      for (const slot of ["00", "01", "10", "11"]) document.querySelector(`#hoursDays input[data-day="${k}"][data-slot="${slot}"]`).value = get(slot);
+      for (const slot of ["00", "01", "10", "11"]) document.querySelector(`#hoursDays [data-day="${k}"][data-slot="${slot}"]`).value = get(slot);
     }
     $("mgLive").textContent = "Horaires du lundi copiés sur les jours de mardi à vendredi.";
   }
@@ -402,8 +415,8 @@ export function createGarageView({ api, $, el, icon, alertBox, busy, apiProblem,
   $("hoursForm").addEventListener("submit", saveHours);
   $("hoursClose").addEventListener("click", () => $("hoursDlg").close());
   $("hoursCopy").addEventListener("click", copyMonday);
-  // saisir une heure ouvre le jour
-  $("hoursDays").addEventListener("input", (e) => {
+  // choisir une heure ouvre le jour
+  $("hoursDays").addEventListener("change", (e) => {
     const k = e.target.dataset.day;
     if (k && e.target.value) document.querySelector(`#hoursDays input[data-open="${k}"]`).checked = true;
   });
