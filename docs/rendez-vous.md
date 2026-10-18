@@ -227,7 +227,7 @@ semble partir, rien n'est envoyé. Un horaire n'est retenu qu'après le code, ca
 
 - Accord de l'utilisateur pour la nouvelle ressource AWS (planification horaire) et pour le déploiement ; `RdvEnabled` reste fermé tant
   que les points suivants ne sont pas faits.
-- Adresse `rendez-vous@pixcar.fr` : le domaine est vérifié chez Scaleway ; vérifier qu'un envoi depuis cette adresse part bien, et que le
-  fichier d'agenda (`text/calendar`) est accepté.
+- Adresse `rendez-vous@pixcar.fr` et fichier d'agenda (`text/calendar`) : **vérifiés le 18 octobre 2026** (envoi réel par Scaleway, reçu en
+  boîte de réception Gmail, agenda reconnu, SPF, DKIM et DMARC à PASS ; `docs/exploitation.md`, 10.12, étape 3).
 - Texte de confidentialité : section « Rendez-vous en ligne » rédigée (`src/partials/legal.html`) ; **avis d'un juriste** à obtenir (Pixcar devient intermédiaire de rendez-vous).
 - Essai de bout en bout avec le garage d'essai.
