@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /garages/
 Disallow: /pro/
+Disallow: /rendez-vous/
