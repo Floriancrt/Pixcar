@@ -112,6 +112,10 @@
               publié&nbsp;; les demandes de changement du nom, de l'adresse ou du téléphone, relues par Pixcar avant
               publication, avec le motif d'un refus&nbsp;; le compte qui les a saisies et les dates.
             </li>
+            <li>
+              <b>Les rendez-vous en ligne</b>&nbsp;: les créneaux, fermetures et règles du garage, et l'adresse
+              électronique privée qui reçoit ses demandes de rendez-vous (vérifiée par un code, jamais publiée).
+            </li>
           </ul>
           <p>
             <b>Envoi des e-mails</b>&nbsp;: les codes d'inscription, de connexion et de vérification sont envoyés par
@@ -145,6 +149,61 @@
           <p>
             Accès, rectification, effacement ou opposition&nbsp;: écrire à
             <a href="mailto:{{legal.contact}}">{{legal.contact}}</a>, de préférence depuis l'adresse du compte.
+          </p>
+        </section>
+        <section aria-labelledby="lg-rdv" data-store-only="remote">
+          <h3 id="lg-rdv">Rendez-vous en ligne</h3>
+          <p>
+            Quand un garage vérifié le propose, vous pouvez lui demander un rendez-vous depuis sa fiche. Pixcar
+            enregistre&nbsp;:
+          </p>
+          <ul>
+            <li>
+              <b>Votre demande</b>&nbsp;: le garage, les prestations, l'horaire choisi, vos nom, adresse électronique et
+              téléphone, votre voiture (modèle, année, et l'immatriculation si vous la donnez), votre message, et si vous
+              voulez être invité à déclarer le prix payé. Ces informations sont transmises au seul garage choisi, par
+              e-mail et dans son Espace Pro.
+            </li>
+            <li>
+              <b>Le code de confirmation</b>&nbsp;: un code à 6 chiffres envoyé à votre adresse vérifie qu'elle est bien
+              la vôtre&nbsp;; il n'est gardé que sous forme d'empreinte. Pour limiter les abus, l'API compte les envois
+              de codes à l'aide d'empreintes de votre adresse IP et de votre adresse électronique, calculées avec une clé
+              secrète&nbsp;: l'adresse IP n'est pas enregistrée.
+            </li>
+            <li>
+              <b>Le suivi</b>&nbsp;: l'état de la demande (envoyée, confirmée, refusée, annulée, sans réponse), le motif
+              donné par le garage et les dates. Le lien personnel reçu par e-mail ouvre la page de suivi&nbsp;; Pixcar
+              n'en garde qu'une empreinte.
+            </li>
+          </ul>
+          <p>
+            <b>Les e-mails</b> (code, récapitulatif, confirmation avec un fichier d'agenda, refus ou annulation, rappel
+            la veille, invitation à déclarer le prix payé si vous l'avez demandée) sont envoyés par Scaleway
+            Transactional Email (Scaleway SAS, France, centres de données de Paris). Le garage peut vous répondre
+            directement par e-mail. Si le garage refuse ou ne répond pas, l'e-mail et la page de suivi proposent
+            jusqu'à trois autres garages proches qui prennent cette prestation en ligne&nbsp;: rien de vous ne leur est
+            transmis.
+          </p>
+          <p>
+            Pourquoi&nbsp;: transmettre au garage la demande que vous faites et vous tenir informé de sa réponse (RGPD,
+            article 6, paragraphe 1, point b)&nbsp;; limiter les abus (intérêt légitime, point f)&nbsp;; l'invitation à
+            déclarer le prix payé, seulement si vous cochez la case (consentement, point a).
+          </p>
+          <p>
+            Combien de temps&nbsp;: une demande dont le code n'a pas été saisi, 24 heures&nbsp;; les empreintes des envois
+            de codes, 2 jours&nbsp;; vos nom, adresse électronique, téléphone, voiture et message, l'empreinte de votre
+            adresse IP et les liens, 30 jours après le rendez-vous, ou 7 jours après un refus, une annulation ou une
+            demande restée sans réponse. Restent ensuite, sans rien qui vous identifie, le garage, les prestations, la
+            date et l'état de la demande, pour les totaux (taux de réponse des garages), effacés après 24 mois&nbsp;; les
+            sauvegardes de la base, 30 jours.
+          </p>
+          <p>
+            Votre navigateur garde déjà la voiture saisie dans Pixcar (voir «&nbsp;Dans votre navigateur&nbsp;»)&nbsp;: elle
+            remplit la demande. Vos coordonnées n'y sont pas gardées.
+          </p>
+          <p>
+            Accès, rectification, effacement&nbsp;: annulez la demande depuis le lien reçu, ou écrivez à
+            <a href="mailto:{{legal.contact}}">{{legal.contact}}</a>.
           </p>
         </section>
         <!--/PRO:on-->

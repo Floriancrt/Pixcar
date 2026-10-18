@@ -7,7 +7,7 @@ Spécification des deux lots décidés avec l'utilisateur le 17 octobre 2026, d'
   temps moyen. Utile seul : les fiches du comparateur deviennent plus justes. **En service depuis le 18 octobre 2026** :
   détails dans [exploitation.md](exploitation.md), section 10.11.
 - **Lot 2 — Disponibilités et rendez-vous** : semaine type, fermetures, règles, demandes de rendez-vous des automobilistes et leur
-  traitement par le garage. **En développement** (branche `lot2-rendez-vous`). À livrer d'un bloc : un planning qui n'amène aucun client ne sera pas tenu à jour.
+  traitement par le garage. **Écrit et testé, pas en service** (branche `lot2-rendez-vous`, 18 octobre 2026 ; mise en service par étapes : `docs/exploitation.md`, 10.12). À livrer d'un bloc : un planning qui n'amène aucun client ne sera pas tenu à jour.
 
 ## Décisions
 
@@ -98,7 +98,7 @@ seule mention sous les lignes de la fiche dit ce que le garage a communiqué («
 par le garage, sous sa responsabilité. ») : une pastille par ligne, essayée, répétait quatre fois la même chose. La ligne sur la prestation cherchée dit « Le garage indique faire cette prestation » ou « ne pas la
 faire » (sans changer le tri ni les filtres). Rien ne change pour un garage non vérifié.
 
-## Lot 2 — Disponibilités et rendez-vous (en cours de développement, branche `lot2-rendez-vous`)
+## Lot 2 — Disponibilités et rendez-vous (écrit et testé, pas en service ; branche `lot2-rendez-vous`)
 
 Ce qui suit précise la conception du 17 octobre (maquettes « Rendez-vous » 1 à 7) et tranche les points qu'elle laissait ouverts.
 
@@ -229,5 +229,5 @@ semble partir, rien n'est envoyé. Un horaire n'est retenu qu'après le code, ca
   que les points suivants ne sont pas faits.
 - Adresse `rendez-vous@pixcar.fr` : le domaine est vérifié chez Scaleway ; vérifier qu'un envoi depuis cette adresse part bien, et que le
   fichier d'agenda (`text/calendar`) est accepté.
-- Texte de confidentialité complété (données des automobilistes) et **avis d'un juriste** (Pixcar devient intermédiaire de rendez-vous).
+- Texte de confidentialité : section « Rendez-vous en ligne » rédigée (`src/partials/legal.html`) ; **avis d'un juriste** à obtenir (Pixcar devient intermédiaire de rendez-vous).
 - Essai de bout en bout avec le garage d'essai.

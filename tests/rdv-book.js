@@ -107,6 +107,16 @@ async function tiles(ctx) {
   build("plain", [], { ...env, PIXCAR_PRO_POOL: "", PIXCAR_PRO_CLIENT: "" });
   const plainAssets = fs.readdirSync(path.join(OUT, "plain/dist/assets"));
   check("without the Espace Pro: no booking window, no rendez-vous/ page", !plainAssets.some((f) => f.startsWith("rdv-")) && !fs.existsSync(path.join(OUT, "plain/dist/rendez-vous")));
+  // texte de confidentialité : une section « Rendez-vous en ligne » dans le site qui a l'Espace Pro, aucune sans lui
+  const legalRdv = (file) => (/<section aria-labelledby="lg-rdv"[\s\S]*?<\/section>/.exec(fs.readFileSync(file, "utf8")) || [""])[0].replace(/<[^>]+>/g, " ").replace(/&nbsp;|\s+/g, " ");
+  const rdvText = legalRdv(path.join(dist, "index.html"));
+  check("privacy text: a « Rendez-vous en ligne » section only with the Espace Pro", !!rdvText && !legalRdv(path.join(OUT, "plain/dist/index.html")));
+  check(
+    "privacy text: what goes to the garage only, the code and the hashed counting (no IP kept), Scaleway, the legal bases, the retention (24 h, 2 days, 30 / 7 days, 24 months anonymous)",
+    /transmises au seul garage choisi/.test(rdvText) && /l'adresse IP n'est pas enregistrée/.test(rdvText) && /Scaleway Transactional Email/.test(rdvText) && /point b/.test(rdvText) && /consentement, point a/.test(rdvText) &&
+      /une demande dont le code n'a pas été saisi, 24 heures/.test(rdvText) && /envois de codes, 2 jours/.test(rdvText) && /30 jours après le rendez-vous, ou 7 jours après un refus/.test(rdvText) && /effacés après 24 mois/.test(rdvText) && /rien de vous ne leur est transmis/.test(rdvText),
+    rdvText.slice(0, 400),
+  );
   build("pages", ["--pages", "pixcar.example"]);
   const rvHtml = fs.readFileSync(path.join(OUT, "pages/dist/rendez-vous/index.html"), "utf8");
   const rvCsp = (/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(rvHtml) || [])[1] || "";
