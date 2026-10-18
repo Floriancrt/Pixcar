@@ -7,7 +7,7 @@ Spécification des deux lots décidés avec l'utilisateur le 17 octobre 2026, d'
   temps moyen. Utile seul : les fiches du comparateur deviennent plus justes. **En service depuis le 18 octobre 2026** :
   détails dans [exploitation.md](exploitation.md), section 10.11.
 - **Lot 2 — Disponibilités et rendez-vous** : semaine type, fermetures, règles, demandes de rendez-vous des automobilistes et leur
-  traitement par le garage. **Écrit et testé, pas en service** (branche `lot2-rendez-vous`, 18 octobre 2026 ; mise en service par étapes : `docs/exploitation.md`, 10.12). À livrer d'un bloc : un planning qui n'amène aucun client ne sera pas tenu à jour.
+  traitement par le garage. **En service depuis le 18 octobre 2026** (mise en service par étapes : `docs/exploitation.md`, 10.12). À livrer d'un bloc : un planning qui n'amène aucun client ne sera pas tenu à jour.
 
 ## Décisions
 
@@ -98,7 +98,7 @@ seule mention sous les lignes de la fiche dit ce que le garage a communiqué («
 par le garage, sous sa responsabilité. ») : une pastille par ligne, essayée, répétait quatre fois la même chose. La ligne sur la prestation cherchée dit « Le garage indique faire cette prestation » ou « ne pas la
 faire » (sans changer le tri ni les filtres). Rien ne change pour un garage non vérifié.
 
-## Lot 2 — Disponibilités et rendez-vous (écrit et testé, pas en service ; branche `lot2-rendez-vous`)
+## Lot 2 — Disponibilités et rendez-vous (en service depuis le 18 octobre 2026)
 
 Ce qui suit précise la conception du 17 octobre (maquettes « Rendez-vous » 1 à 7) et tranche les points qu'elle laissait ouverts.
 
@@ -106,7 +106,7 @@ Ce qui suit précise la conception du 17 octobre (maquettes « Rendez-vous » 1 
 
 | Sujet | Décision |
 |---|---|
-| Jour ouvré | Un jour où le garage est ouvert d'après ses horaires de « Mon garage », hors fermetures et, si le réglage est actif, hors jours fériés. Les horaires d'ouverture sont donc **obligatoires** pour ouvrir les rendez-vous en ligne (sans eux, ni jour ouvré ni contrôle des créneaux). |
+| Jour ouvré | **Confirmé par l'utilisateur le 18 octobre 2026.** Un jour où le garage est ouvert d'après ses horaires de « Mon garage », hors fermetures et, si le réglage est actif, hors jours fériés. Les horaires d'ouverture sont donc **obligatoires** pour ouvrir les rendez-vous en ligne (sans eux, ni jour ouvré ni contrôle des créneaux). |
 | Heure limite | 12:00, heure de Paris, du premier jour ouvré qui suit le jour où la demande part (après le code). Toutes les heures limites tombent donc à midi. |
 | Adresse qui reçoit les demandes | Une adresse **privée** du garage, saisie dans « Disponibilités » et vérifiée par un code envoyé à cette adresse (les demandes contiennent les coordonnées des clients : une faute de frappe les enverrait à un inconnu). Obligatoire pour ouvrir les rendez-vous. Jamais montrée aux automobilistes. |
 | Liens des e-mails | Le jeton est dans le fragment de l'adresse (`rendez-vous/#c=…` pour l'automobiliste, `#g=…` pour le garage) : il n'est envoyé ni à GitHub Pages ni dans l'en-tête Referer. La page le passe à l'API dans un en-tête (`x-rdv-token`), jamais dans le chemin : les journaux de l'API notent le chemin. |
@@ -225,9 +225,9 @@ semble partir, rien n'est envoyé. Un horaire n'est retenu qu'après le code, ca
 
 ### Avant la mise en ligne du lot 2
 
-- Accord de l'utilisateur pour la nouvelle ressource AWS (planification horaire) et pour le déploiement ; `RdvEnabled` reste fermé tant
-  que les points suivants ne sont pas faits.
+- Accord de l'utilisateur pour la nouvelle ressource AWS (planification horaire) et pour le déploiement : **donné le 18 octobre 2026** ;
+  rendez-vous ouverts le même jour (`docs/exploitation.md`, 10.12, étape 6).
 - Adresse `rendez-vous@pixcar.fr` et fichier d'agenda (`text/calendar`) : **vérifiés le 18 octobre 2026** (envoi réel par Scaleway, reçu en
   boîte de réception Gmail, agenda reconnu, SPF, DKIM et DMARC à PASS ; `docs/exploitation.md`, 10.12, étape 3).
-- Texte de confidentialité : section « Rendez-vous en ligne » rédigée (`src/partials/legal.html`) ; **avis d'un juriste** à obtenir (Pixcar devient intermédiaire de rendez-vous).
-- Essai de bout en bout avec le garage d'essai.
+- Texte de confidentialité : section « Rendez-vous en ligne » (`src/partials/legal.html`), relecture par un juriste confirmée par l'utilisateur le 18 octobre 2026.
+- Essai de bout en bout avec le garage d'essai : **à faire** (ouvrir ses disponibilités, demander un rendez-vous, accepter depuis l'e-mail, annuler).
