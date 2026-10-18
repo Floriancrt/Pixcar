@@ -4,8 +4,8 @@ Spécification des deux lots décidés avec l'utilisateur le 17 octobre 2026, d'
 (« Espace Pro · maquettes 1 à 5 » et « Rendez-vous · maquettes 1 à 7 », hors dépôt).
 
 - **Lot 1 — Mon garage** : la fiche du garage telle qu'il la déclare (coordonnées, horaires) et les prestations qu'il fait, avec leur
-  temps moyen. Utile seul : les fiches du comparateur deviennent plus justes. **Écrit et testé (branche `mon-garage`), pas en service** :
-  mise en service dans [exploitation.md](exploitation.md), section 10.11.
+  temps moyen. Utile seul : les fiches du comparateur deviennent plus justes. **En service depuis le 18 octobre 2026** :
+  détails dans [exploitation.md](exploitation.md), section 10.11.
 - **Lot 2 — Disponibilités et rendez-vous** : semaine type, fermetures, règles, demandes de rendez-vous des automobilistes et leur
   traitement par le garage. Conçu ici, **pas commencé**. À livrer d'un bloc : un planning qui n'amène aucun client ne sera pas tenu à jour.
 
