@@ -129,6 +129,16 @@ Parameters:
     Default: ""
     Description: Espace Pro — identifiant du projet Scaleway qui porte le domaine d'envoi (UUID ; pas un secret). Exigé avec ProEmailProvider=scaleway.
     AllowedPattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$'
+  RdvEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Rendez-vous en ligne (docs/rendez-vous.md, lot 2). « true » ouvre les routes /v1/rdv et crée la tâche horaire (RdvSchedule) ; exige l'Espace Pro et des e-mails qui partent vers n'importe quelle adresse (Scaleway, ou SES hors mode test).
+  SiteUrl:
+    Type: String
+    Default: https://pixcar.fr
+    AllowedPattern: '^https://[a-z0-9.-]+$'
+    Description: Adresse du site, sans chemin ni barre finale ; les liens des e-mails de rendez-vous y mènent (pages rendez-vous/ et pro/).
 
 Rules:
   ScalewayNeedsProject:
@@ -136,6 +146,11 @@ Rules:
     Assertions:
       - Assert: !Not [!Equals [!Ref ProScwProjectId, ""]]
         AssertDescription: ProEmailProvider=scaleway exige ProScwProjectId (identifiant du projet Scaleway).
+  RdvNeedsMail:
+    RuleCondition: !Equals [!Ref RdvEnabled, "true"]
+    Assertions:
+      - Assert: !Or [!Equals [!Ref ProEmailProvider, scaleway], !Equals [!Ref ProSesSandbox, "false"]]
+        AssertDescription: RdvEnabled=true écrit à des automobilistes inconnus d'avance ; SES en mode test ne le permet pas (ProEmailProvider=scaleway, ou ProSesSandbox=false).
 
 Conditions:
   HasDomain: !And [!Not [!Equals [!Ref ApiDomainName, ""]], !Not [!Equals [!Ref ApiCertificateArn, ""]]]
@@ -147,6 +162,7 @@ Conditions:
   HasProSesSandbox: !And [!Condition HasPro, !Equals [!Ref ProSesSandbox, "true"]]
   HasProAlarm: !And [!Condition HasPro, !Condition HasAlarmEmail]
   HasProScaleway: !And [!Condition HasPro, !Equals [!Ref ProEmailProvider, scaleway]]
+  HasRdv: !And [!Condition HasPro, !Equals [!Ref RdvEnabled, "true"]]
 
 Resources:
   # ---- base de données
@@ -246,6 +262,10 @@ Resources:
           PRO_TEST_ESTABLISHMENTS: !Ref ProTestEstablishments
           PRO_EMAIL_PROVIDER: !Ref ProEmailProvider
           PRO_SCW_PROJECT_ID: !Ref ProScwProjectId
+          # Rendez-vous en ligne : fermés tant que RdvEnabled ne vaut pas « true » (et l'Espace Pro ouvert)
+          RDV_ENABLED: !If [HasRdv, "1", "0"]
+          RDV_EMAIL_FROM: !Sub "Pixcar <rendez-vous@${ProEmailDomain}>"
+          SITE_URL: !Ref SiteUrl
       Tags: [{ Key: Project, Value: pixcar }]
 
   # Espace Pro : droit d'envoyer les codes de vérification, et rien d'autre (une identité SES — les identités vérifiées en mode test de SES —, une configuration Notify)
@@ -404,7 +424,7 @@ Resources:
           LOG_LEVEL: info
       Tags: [{ Key: Project, Value: pixcar }]
 
-  # ---- entretien quotidien (journal d'écritures, cache Overpass, garages sans réparation)
+  # ---- entretien quotidien (journal d'écritures, cache Overpass, garages sans réparation) ; tâche horaire des rendez-vous (RdvSchedule)
   SchedulerRole:
     Type: AWS::IAM::Role
     Properties:
@@ -424,6 +444,7 @@ Resources:
             Version: "2012-10-17"
             Statement:
               - { Effect: Allow, Action: "lambda:InvokeFunction", Resource: !GetAtt OpsFunction.Arn }
+              - !If [HasRdv, { Effect: Allow, Action: "lambda:InvokeFunction", Resource: !GetAtt ApiFunction.Arn }, !Ref AWS::NoValue]
       Tags: [{ Key: Project, Value: pixcar }]
 
   PurgeSchedule:
@@ -439,6 +460,30 @@ Resources:
         RoleArn: !GetAtt SchedulerRole.Arn
         Input: '{"op":"purge"}'
         RetryPolicy: { MaximumEventAgeInSeconds: 3600, MaximumRetryAttempts: 2 }
+
+  # Rendez-vous en ligne : toutes les heures à hh:05, heure de Paris. Les heures limites tombent toutes à midi : la passe de 12:05 les
+  # traite ; les autres rattrapent un échec, envoient les rappels (la veille, dès 12:05) et les relances de prix (le lendemain, dès 10:05).
+  # Appelle la fonction de l'API (qui a déjà la clé Scaleway et le rôle de base à moindre privilège), pas celle d'opérations.
+  RdvSchedule:
+    Type: AWS::Scheduler::Schedule
+    Condition: HasRdv
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "expirer les demandes sans réponse à midi, envoyer rappels, relances et e-mails restés en file ; l'API ne garde rien en mémoire d'une requête à l'autre"
+        must: ["Input {\"pixcar\":\"rdv-tick\"} : server/lambda.mjs ne le traite que sans requestContext (jamais depuis la passerelle)", "fuseau Europe/Paris : la passe de 12:05 suit les heures limites (midi)"]
+        mutable: free-to-tune
+    Properties:
+      Name: !Sub "${AWS::StackName}-rdv"
+      Description: Rendez-vous en ligne — expirations à midi, rappels, relances, e-mails en file
+      ScheduleExpression: "cron(5 * * * ? *)"
+      ScheduleExpressionTimezone: Europe/Paris
+      FlexibleTimeWindow: { Mode: "OFF" }
+      State: ENABLED
+      Target:
+        Arn: !GetAtt ApiFunction.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: '{"pixcar":"rdv-tick"}'
+        RetryPolicy: { MaximumEventAgeInSeconds: 1800, MaximumRetryAttempts: 2 }
 
   # ---- sauvegardes quotidiennes du cluster (AWS Backup) ; BackupRetentionDays = 0 les désactive
   BackupVault:

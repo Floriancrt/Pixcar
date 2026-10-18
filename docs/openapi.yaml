@@ -44,6 +44,11 @@ tags:
       au garage, puis un code à 6 chiffres reçu par un moyen **connu du garage** (e-mail public, e-mail sur le domaine du site propre au
       garage, SMS au portable). Quand le garage offre plusieurs moyens, le demandeur choisit. Ces routes répondent `404 pro_disabled`
       tant que l'Espace Pro n'est pas ouvert (`PRO_ENABLED=1`). Jeton : `Authorization: Bearer <jeton d'accès Cognito>`.
+  - name: Rendez-vous
+    description: |
+      Rendez-vous en ligne (docs/rendez-vous.md, lot 2). Côté garage : compte de l'Espace Pro, garage rattaché. Côté automobiliste : sans
+      compte, code à 6 chiffres par e-mail avant tout envoi, puis un jeton de suivi passé dans l'en-tête `x-rdv-token` (jamais dans
+      l'adresse : les journaux notent le chemin). Ces routes répondent `404 rdv_disabled` tant que `RDV_ENABLED` ne vaut pas 1.
   - name: Exploitation
 
 paths:
@@ -370,6 +375,7 @@ paths:
                     properties:
                       views: { $ref: "#/components/schemas/ProVisitCounts" }
                       calls: { $ref: "#/components/schemas/ProVisitCounts" }
+                  rdv: { type: object, description: "Rendez-vous en ligne ouverts côté API : demandes à traiter.", required: [todo], properties: { todo: { type: integer, minimum: 0 } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { description: "Garage introuvable ou pas rattaché à ce compte (`not_found`), ou Espace Pro fermé (`pro_disabled`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   /v1/pro/garages/{id}/prices/{service}:
@@ -663,6 +669,338 @@ paths:
         "200": { description: Prêt. , content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, db: { type: string, enum: [up] } } } } } }
         "503": { description: Base indisponible ou arrêt en cours. , content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, db: { type: string }, draining: { type: boolean } } } } } }
 
+  # ---------------------------------------------------------------- rendez-vous en ligne (docs/rendez-vous.md, lot 2)
+  /v1/pro/garages/{id}/rdv:
+    get:
+      tags: [Rendez-vous]
+      summary: Disponibilités du garage (réglages, semaine type, fermetures, adresse de notification) et nombre de demandes à traiter
+      operationId: rdvAgenda
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/RdvAgenda" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+  /v1/pro/garages/{id}/rdv/settings:
+    put:
+      tags: [Rendez-vous]
+      summary: "Règles et interrupteur : `{ enabled?, minDelayH?, horizonDays?, stepMin?, holidays? }`"
+      description: |
+        Ouvrir (`enabled: true`) exige les horaires d'ouverture (Mon garage), une adresse de notification vérifiée et au moins un créneau
+        (sinon 409 `not_ready` avec `missing`) ; rouvrir lève la mise en pause automatique.
+      operationId: rdvSettings
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RdvSettingsInput" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/RdvAgenda" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Il manque de quoi ouvrir (`not_ready`, avec `missing` : hours, notify, slots).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/slots:
+    post:
+      tags: [Rendez-vous]
+      summary: Ajouter un créneau à la semaine type (20 au plus)
+      operationId: rdvSlotCreate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RdvSlotInput" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/RdvAgenda" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Déjà 20 créneaux (`too_many`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/slots/{slot}:
+    put:
+      tags: [Rendez-vous]
+      summary: Modifier un créneau
+      operationId: rdvSlotUpdate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: slot, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RdvSlotInput" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/RdvAgenda" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+    delete:
+      tags: [Rendez-vous]
+      summary: Retirer un créneau (les demandes déjà faites restent)
+      operationId: rdvSlotDelete
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: slot, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { $ref: "#/components/responses/RdvAgenda" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+  /v1/pro/garages/{id}/rdv/closures:
+    post:
+      tags: [Rendez-vous]
+      summary: Ajouter une fermeture ; les demandes et rendez-vous de la période sont annulés, clients prévenus
+      operationId: rdvClosureCreate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RdvClosureInput" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/RdvAgendaCancelled" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Déjà 30 fermetures à venir (`too_many`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/closures/{closure}:
+    put:
+      tags: [Rendez-vous]
+      summary: Modifier une fermeture (les demandes de la nouvelle période sont annulées)
+      operationId: rdvClosureUpdate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: closure, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RdvClosureInput" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/RdvAgendaCancelled" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+    delete:
+      tags: [Rendez-vous]
+      summary: Retirer une fermeture
+      operationId: rdvClosureDelete
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: closure, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { $ref: "#/components/responses/RdvAgenda" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+  /v1/pro/garages/{id}/rdv/notify:
+    post:
+      tags: [Rendez-vous]
+      summary: "Adresse privée qui recevra les demandes : envoi d'un code de vérification à cette adresse (`{ email }`)"
+      operationId: rdvNotify
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string } } } } } }
+      responses:
+        "200":
+          description: Code envoyé.
+          content: { application/json: { schema: { type: object, required: [pending, expiresInSeconds, resendInSeconds], properties: { pending: { type: string }, expiresInSeconds: { type: integer }, resendInSeconds: { type: integer } } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+        "429": { description: "Trop tôt (`resend_too_soon`) ou 5 codes par jour (`send_limited`).", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "502": { description: "Le code n'a pas pu partir (`send_failed`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/rdv/notify/code:
+    post:
+      tags: [Rendez-vous]
+      summary: Essai du code de l'adresse de notification (`{ code }`, 5 essais)
+      operationId: rdvNotifyCode
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string } } } } } }
+      responses:
+        "200": { $ref: "#/components/responses/RdvAgenda" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Aucun code en cours (`no_code`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "410": { description: "Code expiré (`code_expired`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "Code mal formé (`validation`) ou incorrect (`bad_code`, avec `attemptsLeft`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "423": { description: "Trop d'essais (`locked`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/rdv/requests:
+    get:
+      tags: [Rendez-vous]
+      summary: "Demandes du garage : à traiter (`todo`), rendez-vous à venir (`upcoming`), passées (`past`), coordonnées des clients comprises"
+      description: Les coordonnées d'un client sont effacées 30 jours après son rendez-vous (7 jours après un refus, une annulation ou une expiration).
+      operationId: rdvRequests
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: view, in: query, required: true, schema: { type: string, enum: [todo, upcoming, past] } }
+      responses:
+        "200":
+          description: Les demandes (100 au plus).
+          content: { application/json: { schema: { type: object, required: [view, todo, requests], properties: { view: { type: string }, todo: { type: integer }, requests: { type: array, items: { $ref: "#/components/schemas/RdvGarageRequest" } } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+  /v1/pro/garages/{id}/rdv/requests/{request}/accept:
+    post:
+      tags: [Rendez-vous]
+      summary: Accepter une demande (avant l'heure limite) ; le client reçoit la confirmation et le fichier d'agenda
+      operationId: rdvAccept
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: request, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: La demande à jour., content: { application/json: { schema: { $ref: "#/components/schemas/RdvGarageRequest" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { $ref: "#/components/responses/RdvState" }
+  /v1/pro/garages/{id}/rdv/requests/{request}/decline:
+    post:
+      tags: [Rendez-vous]
+      summary: "Refuser une demande : `{ reason (full, service, parts, other), note? }`"
+      operationId: rdvDecline
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: request, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RdvReasonInput" } } } }
+      responses:
+        "200": { description: La demande à jour., content: { application/json: { schema: { $ref: "#/components/schemas/RdvGarageRequest" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { $ref: "#/components/responses/RdvState" }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/requests/{request}/cancel:
+    post:
+      tags: [Rendez-vous]
+      summary: "Annuler un rendez-vous confirmé : `{ reason (workshop, parts, closed, other), note? }` ; compte comme une demande sans réponse"
+      operationId: rdvGarageCancel
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: request, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RdvReasonInput" } } } }
+      responses:
+        "200": { description: La demande à jour., content: { application/json: { schema: { $ref: "#/components/schemas/RdvGarageRequest" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { $ref: "#/components/responses/RdvState" }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/rdv/garages/{id}/times:
+    get:
+      tags: [Rendez-vous]
+      summary: Horaires libres d'un garage pour ces prestations, et l'heure limite de sa réponse si l'on demandait maintenant
+      operationId: rdvTimes
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: services, in: query, required: true, schema: { type: string }, example: "vidange,montage:2", description: "1 à 5 prestations ; quantité (1 à 4) après « : » pour une prestation par pneu ou par roue." }
+      responses:
+        "200": { description: Les horaires libres, jour par jour., content: { application/json: { schema: { $ref: "#/components/schemas/RdvTimes" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: "Rendez-vous en ligne fermés (`rdv_disabled`), ou garage qui ne les prend pas pour ces prestations (`not_open`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/rdv/requests:
+    post:
+      tags: [Rendez-vous]
+      summary: Coordonnées et horaire choisi ; un code à 6 chiffres part par e-mail, rien n'est envoyé au garage avant lui
+      description: |
+        Limites : 5 envois de code par heure et 20 par jour depuis une même adresse IP (empreinte), 5 par jour vers une même adresse e-mail,
+        200 par heure pour tout le service. Le champ `website` est un piège : rempli, la réponse est la même mais rien n'est fait.
+      operationId: rdvRequest
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RdvRequestInput" } } } }
+      responses:
+        "201": { $ref: "#/components/responses/RdvDraft" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: "Garage qui ne prend pas de rendez-vous en ligne pour ces prestations (`not_open`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Horaire plus libre (`time_taken`, avec `days`), ou trop de demandes en attente chez ce garage (`garage_busy`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+        "429": { description: "Limite d'envois de codes (`send_limited`, avec `scope`).", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "502": { description: "Le code n'a pas pu partir (`send_failed`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/rdv/requests/{id}/code:
+    post:
+      tags: [Rendez-vous]
+      summary: "Essai du code (`{ code, day?, time? }`) : la demande part au garage ; le jeton de suivi est renvoyé"
+      description: |
+        L'horaire et la capacité sont revérifiés à ce moment ; s'il a été pris entre-temps (409 `time_taken`, avec `days`), le même code
+        sert à en choisir un autre (`day`, `time`). Une adresse e-mail a au plus 1 demande en attente par garage et 3 en tout.
+      operationId: rdvCode
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string }, day: { type: string, format: date }, time: { type: string, example: "08:30" } } } } } }
+      responses:
+        "200":
+          description: Demande envoyée.
+          content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/RdvClientView" }, { type: object, required: [token], properties: { token: { type: string, description: "Jeton de suivi (en-tête x-rdv-token de /v1/rdv/me)." } } }] } } }
+        "404": { description: Introuvable., content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Déjà envoyée ou close (`closed`), horaire pris (`time_taken`), trop de demandes en attente (`too_many_pending`, `garage_busy`), essai simultané (`busy`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "410": { description: "Code expiré (`code_expired`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "Code mal formé (`validation`) ou incorrect (`bad_code`, avec `attemptsLeft`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "423": { description: "Trop d'essais (`locked`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/rdv/requests/{id}/resend:
+    post:
+      tags: [Rendez-vous]
+      summary: Nouveau code (60 s après le précédent, 3 envois par demande)
+      operationId: rdvResend
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { $ref: "#/components/responses/RdvDraft" }
+        "404": { description: Introuvable., content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Demande close (`closed`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { description: "Trop tôt (`resend_too_soon`) ou plus d'envoi possible (`send_limited`).", headers: { Retry-After: { schema: { type: integer } } }, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/rdv/me:
+    get:
+      tags: [Rendez-vous]
+      summary: "Suivi d'une demande par l'automobiliste (en-tête `x-rdv-token`), jusqu'à 7 jours après le rendez-vous"
+      operationId: rdvMe
+      parameters:
+        - { name: x-rdv-token, in: header, required: true, schema: { type: string } }
+      responses:
+        "200": { description: La demande., content: { application/json: { schema: { $ref: "#/components/schemas/RdvClientView" } } } }
+        "404": { $ref: "#/components/responses/RdvLinkInvalid" }
+  /v1/rdv/me/cancel:
+    post:
+      tags: [Rendez-vous]
+      summary: "Annulation par l'automobiliste, jusqu'à l'heure du rendez-vous (`{ reason? }` : unable, other_garage, no_need, other) ; le garage est prévenu"
+      operationId: rdvMeCancel
+      parameters:
+        - { name: x-rdv-token, in: header, required: true, schema: { type: string } }
+      responses:
+        "200": { description: La demande à jour., content: { application/json: { schema: { $ref: "#/components/schemas/RdvClientView" } } } }
+        "404": { $ref: "#/components/responses/RdvLinkInvalid" }
+        "409": { $ref: "#/components/responses/RdvState" }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/rdv/action:
+    get:
+      tags: [Rendez-vous]
+      summary: "Page du garage ouverte depuis l'e-mail « Nouvelle demande » (en-tête `x-rdv-token`, jeton du garage), sans connexion"
+      operationId: rdvAction
+      parameters:
+        - { name: x-rdv-token, in: header, required: true, schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/RdvActionView" }
+        "404": { $ref: "#/components/responses/RdvLinkInvalid" }
+  /v1/rdv/action/accept:
+    post:
+      tags: [Rendez-vous]
+      summary: Accepter depuis la page de l'e-mail
+      operationId: rdvActionAccept
+      parameters:
+        - { name: x-rdv-token, in: header, required: true, schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/RdvActionView" }
+        "404": { $ref: "#/components/responses/RdvLinkInvalid" }
+        "409": { $ref: "#/components/responses/RdvState" }
+  /v1/rdv/action/decline:
+    post:
+      tags: [Rendez-vous]
+      summary: "Refuser depuis la page de l'e-mail (`{ reason, note? }`)"
+      operationId: rdvActionDecline
+      parameters:
+        - { name: x-rdv-token, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RdvReasonInput" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/RdvActionView" }
+        "400": { description: JSON illisible., content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { $ref: "#/components/responses/RdvLinkInvalid" }
+        "409": { $ref: "#/components/responses/RdvState" }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
 components:
   securitySchemes:
     cognito:
@@ -689,6 +1027,30 @@ components:
       description: Base momentanément indisponible. Réessayer ; la page garde la déclaration et la renvoie.
       headers: { Retry-After: { schema: { type: integer } } }
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RdvAgenda:
+      description: Les disponibilités du garage.
+      content: { application/json: { schema: { $ref: "#/components/schemas/RdvAgenda" } } }
+    RdvAgendaCancelled:
+      description: "Les disponibilités, et le nombre de demandes annulées par la fermeture (`cancelled`)."
+      content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/RdvAgenda" }, { type: object, required: [cancelled], properties: { cancelled: { type: integer, minimum: 0 } } }] } } }
+    RdvNotFound:
+      description: "Garage pas rattaché à ce compte, créneau, fermeture ou demande introuvable (`not_found`), ou rendez-vous en ligne fermés (`rdv_disabled`)."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RdvInvalid:
+      description: "Saisie refusée (`validation`, avec `field` quand il est connu)."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RdvState:
+      description: "La demande n'est plus dans l'état voulu (`state`, avec `status`) : déjà décidée, heure limite passée, rendez-vous passé."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RdvLinkInvalid:
+      description: "Jeton absent, inconnu ou expiré, ou demande effacée (`link_invalid`)."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RdvDraft:
+      description: Code envoyé à l'adresse e-mail.
+      content: { application/json: { schema: { type: object, required: [id, email, expiresInSeconds, resendInSeconds, resendsLeft], properties: { id: { type: string, format: uuid }, email: { type: string }, expiresInSeconds: { type: integer }, resendInSeconds: { type: integer }, resendsLeft: { type: integer, minimum: 0 } } } } }
+    RdvActionView:
+      description: La demande vue par le garage, et si elle attend encore sa réponse (`open`).
+      content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/RdvGarageRequest" }, { type: object, required: [open, garage], properties: { open: { type: boolean }, garage: { type: object, required: [name], properties: { name: { type: string } } } } }] } } }
   schemas:
     ProPriceInput:
       type: object
@@ -753,6 +1115,162 @@ components:
           properties:
             offered: { type: array, items: { type: string } }
             notOffered: { type: array, items: { type: string } }
+        rdv:
+          type: object
+          description: Rendez-vous en ligne ouverts, avec un horaire libre dans les 14 jours pour ces prestations (quantité 1).
+          required: [services]
+          properties:
+            services: { type: array, items: { type: string } }
+    RdvSettings:
+      type: object
+      required: [minDelayH, horizonDays, stepMin, holidays]
+      properties:
+        minDelayH: { type: integer, enum: [0, 2, 4, 24, 48] }
+        horizonDays: { type: integer, enum: [7, 14, 21, 28] }
+        stepMin: { type: integer, enum: [15, 30, 60] }
+        holidays: { type: boolean, description: Fermé les jours fériés. }
+    RdvSettingsInput:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        minDelayH: { type: integer, enum: [0, 2, 4, 24, 48] }
+        horizonDays: { type: integer, enum: [7, 14, 21, 28] }
+        stepMin: { type: integer, enum: [15, 30, 60] }
+        holidays: { type: boolean }
+    RdvSlotInput:
+      type: object
+      required: [days, start, end, services]
+      properties:
+        name: { type: string, maxLength: 40, description: Pour le garage seulement. }
+        days: { type: array, items: { type: string, enum: [mo, tu, we, th, fr, sa, su] } }
+        start: { type: string, example: "08:00", description: Au quart d'heure, dans les horaires d'ouverture de chaque jour choisi. }
+        end: { type: string, example: "12:00" }
+        mode: { type: string, enum: [hour, drop], description: "À une heure précise, ou dépôt du véhicule (arrivée dans la première heure, voiture rendue en fin de créneau)." }
+        capacity: { type: integer, minimum: 1, maximum: 9, description: Voitures en même temps. }
+        services: { type: array, items: { type: string }, description: "Prestations faites, avec un temps moyen (Mon garage), qui tiennent dans le créneau." }
+    RdvSlot:
+      type: object
+      required: [id, name, days, start, end, mode, capacity, services]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        days: { type: array, items: { type: string } }
+        start: { type: string }
+        end: { type: string }
+        mode: { type: string, enum: [hour, drop] }
+        capacity: { type: integer }
+        services: { type: array, items: { type: string } }
+    RdvClosureInput:
+      type: object
+      required: [first]
+      properties:
+        first: { type: string, format: date }
+        last: { type: string, format: date, description: "Absent : un seul jour. 90 jours au plus." }
+        label: { type: string, maxLength: 60 }
+    RdvAgenda:
+      type: object
+      required: [enabled, paused, open, missing, settings, slots, closures, holidays, hours, services, notify, garage, todo]
+      properties:
+        enabled: { type: boolean }
+        paused: { type: boolean, description: Mise en pause automatique (3 demandes sans réponse de suite). }
+        open: { type: boolean, description: "Les automobilistes voient des horaires : ouvert, pas en pause, rien ne manque." }
+        missing: { type: array, items: { type: string, enum: [hours, notify, slots] } }
+        settings: { $ref: "#/components/schemas/RdvSettings" }
+        slots: { type: array, items: { $ref: "#/components/schemas/RdvSlot" } }
+        closures: { type: array, items: { type: object, required: [id, first, last, label], properties: { id: { type: string, format: uuid }, first: { type: string, format: date }, last: { type: string, format: date }, label: { type: string } } } }
+        holidays: { type: array, items: { type: object, required: [day, name], properties: { day: { type: string, format: date }, name: { type: string } } } }
+        hours: { $ref: "#/components/schemas/ProHours" }
+        services: { type: array, items: { type: object, required: [id, minutes], properties: { id: { type: string }, minutes: { type: integer } } }, description: "Prestations faites avec un temps moyen (privé)." }
+        notify: { type: object, required: [email], properties: { email: { type: string }, pending: { type: string }, codeLive: { type: boolean } } }
+        garage: { type: object, required: [name, addr, phone], properties: { name: { type: string }, addr: { type: string }, phone: { type: string } } }
+        todo: { type: integer, minimum: 0 }
+    RdvWhen:
+      type: object
+      required: [day, label, start, end, mode, startsAt, endsAt]
+      properties:
+        day: { type: string, format: date }
+        label: { type: string, example: "mardi 21 octobre à 8:30" }
+        start: { type: string }
+        end: { type: string }
+        mode: { type: string, enum: [hour, drop] }
+        until: { type: string, description: "Dépôt : fin de la fenêtre d'arrivée." }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+    RdvServices:
+      type: array
+      items: { type: object, required: [id, qty, label], properties: { id: { type: string }, qty: { type: integer, minimum: 1, maximum: 4 }, label: { type: string } } }
+    RdvGarageRequest:
+      type: object
+      required: [status, id, when, services, minutes, client, message, deadline, deadlineText]
+      properties:
+        status: { type: string, enum: [pending, confirmed, declined, expired, cancelled] }
+        id: { type: string, format: uuid }
+        when: { $ref: "#/components/schemas/RdvWhen" }
+        services: { $ref: "#/components/schemas/RdvServices" }
+        minutes: { type: integer }
+        client: { type: object, required: [name, email, phone, car], properties: { name: { type: string }, email: { type: string }, phone: { type: string }, phoneText: { type: string }, car: { type: string }, year: { type: integer, nullable: true }, plate: { type: string } } }
+        message: { type: string }
+        deadline: { type: string, format: date-time, nullable: true }
+        deadlineText: { type: string }
+        slot: { type: object, properties: { name: { type: string }, capacity: { type: integer }, left: { type: integer } } }
+        reason: { type: string }
+        reasonText: { type: string }
+        note: { type: string }
+        cancelledBy: { type: string, enum: [client, garage, closure] }
+    RdvTimes:
+      type: object
+      required: [garage, services, deadline, deadlineText, days]
+      properties:
+        garage: { type: object, required: [id, name, addr], properties: { id: { type: string }, name: { type: string }, addr: { type: string } } }
+        services: { $ref: "#/components/schemas/RdvServices" }
+        deadline: { type: string, format: date-time, description: "Heure limite de réponse du garage si la demande partait maintenant." }
+        deadlineText: { type: string, example: "lundi 20 octobre à 12:00" }
+        days:
+          type: array
+          items:
+            type: object
+            required: [day, label, times]
+            properties:
+              day: { type: string, format: date }
+              label: { type: string, example: "mar. 21 oct." }
+              times: { type: array, items: { type: object, required: [t], properties: { t: { type: string, example: "08:30" }, drop: { type: boolean }, until: { type: string }, end: { type: string } } } }
+    RdvRequestInput:
+      type: object
+      required: [garageId, services, day, time, name, email, phone, car, year]
+      properties:
+        garageId: { type: string }
+        services: { type: array, items: { type: object, required: [id], properties: { id: { type: string }, qty: { type: integer, minimum: 1, maximum: 4 } } } }
+        day: { type: string, format: date }
+        time: { type: string, example: "08:30" }
+        drop: { type: boolean, description: L'horaire choisi est un dépôt du véhicule. }
+        name: { type: string, maxLength: 80 }
+        email: { type: string }
+        phone: { type: string }
+        car: { type: string, maxLength: 40 }
+        year: { type: integer }
+        plate: { type: string, description: "Facultatif, format AB-123-CD." }
+        message: { type: string, maxLength: 500 }
+        remindPrice: { type: boolean, description: "Me rappeler par e-mail, après le rendez-vous, de déclarer ce que j'ai payé (une fois)." }
+        website: { type: string, description: "Champ piège : à laisser vide." }
+    RdvClientView:
+      type: object
+      required: [status, when, services, garage, car, email, deadline, deadlineText, canCancel]
+      properties:
+        status: { type: string, enum: [pending, confirmed, declined, expired, cancelled] }
+        when: { $ref: "#/components/schemas/RdvWhen" }
+        services: { $ref: "#/components/schemas/RdvServices" }
+        garage: { type: object, required: [name, addr, phone], properties: { name: { type: string }, addr: { type: string }, phone: { type: string }, phoneText: { type: string }, lat: { type: number }, lon: { type: number } } }
+        car: { type: object, properties: { model: { type: string }, year: { type: integer, nullable: true }, plate: { type: string } } }
+        email: { type: string }
+        deadline: { type: string, format: date-time, nullable: true }
+        deadlineText: { type: string }
+        sentText: { type: string }
+        decidedText: { type: string }
+        canCancel: { type: boolean }
+        reasonText: { type: string }
+        note: { type: string }
+        cancelledBy: { type: string, enum: [client, garage, closure] }
+        alternatives: { type: array, items: { type: object, required: [name, km, first], properties: { name: { type: string }, km: { type: string }, city: { type: string }, first: { type: string } } } }
     ProAddr:
       type: object
       required: [street, pc, city]

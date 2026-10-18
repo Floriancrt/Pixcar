@@ -29,9 +29,13 @@ export function createScalewayMailer({ secretKey, projectId, region = "fr-par", 
   if (!/^[a-z]{2}-[a-z]{3}$/.test(region)) throw new Error("Scaleway : région invalide");
   const url = `https://api.scaleway.com/transactional-email/v1alpha1/regions/${region}/emails`;
   return {
-    // { from: "Nom <adresse>", to: "adresse", subject, text } → { id } ; lève ScalewayError (statut HTTP) si Scaleway refuse
-    async send({ from, to, subject, text }) {
+    // { from: "Nom <adresse>", to: "adresse", subject, text, html?, replyTo?, attachments?: [{ name, type, content (texte) }] } → { id } ;
+    // lève ScalewayError (statut HTTP) si Scaleway refuse. Reply-To passe par additional_headers ; une pièce jointe, en base64 (2 Mo au plus).
+    async send({ from, to, subject, text, html, replyTo, attachments }) {
       const body = { project_id: projectId, from: parseAddress(from), to: [{ email: String(to) }], subject, text };
+      if (html) body.html = html;
+      if (replyTo) body.additional_headers = [{ key: "Reply-To", value: String(replyTo) }];
+      if (attachments && attachments.length) body.attachments = attachments.map((a) => ({ name: a.name, type: a.type, content: Buffer.from(a.content, "utf8").toString("base64") }));
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), timeoutMs);
       let res;

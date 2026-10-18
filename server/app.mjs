@@ -256,7 +256,7 @@ export function createApp({ db, config, services, fetchImpl = globalThis.fetch, 
       return limited(readLimiter.check(ip)) || deleteRepair(request, id);
     }
     if (path === "/v1/overpass") return method === "GET" ? limited(readLimiter.check(ip)) || getOverpass(request, url, ip) : methodNotAllowed("GET");
-    if (path === "/v1/pro" || path.startsWith("/v1/pro/")) return limited(readLimiter.check(ip)) || pro.handle(request, path, { ip });
+    if (path === "/v1/pro" || path.startsWith("/v1/pro/") || path === "/v1/rdv" || path.startsWith("/v1/rdv/")) return limited(readLimiter.check(ip)) || pro.handle(request, path, { ip });
     return apiError(404, "not_found", "Route inconnue.");
   }
   const methodNotAllowed = (allow) => apiError(405, "method_not_allowed", "Méthode non autorisée.", {}, { allow });
@@ -293,6 +293,8 @@ export function createApp({ db, config, services, fetchImpl = globalThis.fetch, 
     },
     // à lancer toutes les heures (index.mjs) : purge des journaux, caches et déclarations périmés
     maintenance: async () => ({ ...(await repo.purge({ repairRetentionMonths: config.repairRetentionMonths })), ...(await pro.maintenance()) }),
+    // tâche horaire des rendez-vous en ligne (index.mjs, ou planification AWS → lambda.mjs) : expirations, rappels, relances, e-mails en file
+    rdvTick: () => (config.pro.enabled && config.rdv.enabled ? pro.rdv.tick() : Promise.resolve({ skipped: "rendez-vous en ligne fermés" })),
     pro,
     drain() {
       draining = true;

@@ -52,7 +52,10 @@ export async function start({ env = process.env, log = jsonLog(env.LOG_LEVEL) } 
   server.headersTimeout = 66_000;
   server.requestTimeout = 15_000;
   await new Promise((resolve) => server.listen(config.port, resolve));
-  const timer = setInterval(() => app.maintenance().catch((e) => log({ level: "warn", msg: "entretien impossible", error: e.message })), 3600_000);
+  const timer = setInterval(() => {
+    app.maintenance().catch((e) => log({ level: "warn", msg: "entretien impossible", error: e.message }));
+    app.rdvTick().catch((e) => log({ level: "warn", msg: "tâche des rendez-vous impossible", error: e.message }));
+  }, 3600_000);
   timer.unref();
   log({ level: "info", msg: `API à l'écoute sur le port ${server.address().port}`, db: db.kind });
 

@@ -73,9 +73,9 @@ export function createSenders(pro, { production = false, log = () => {}, fetchIm
         if (!production) log({ level: "info", msg: "code de vérification (envoi simulé)", channel });
         return { id: "memory-" + outbox.length };
       },
-      // e-mail à Pixcar (relecture d'un changement de fiche)
-      async mail({ to, subject, text }) {
-        outbox.push({ channel: "review", target: to, subject, text });
+      // e-mail à Pixcar (relecture d'un changement de fiche) ou e-mail de rendez-vous (channel « rdv »)
+      async mail({ to, subject, text, html, from, replyTo, attachments, channel = "review" }) {
+        outbox.push({ channel, target: to, subject, text, ...(html ? { html } : {}), ...(from ? { from } : {}), ...(replyTo ? { replyTo } : {}), ...(attachments ? { attachments } : {}) });
         return { id: "memory-" + outbox.length };
       },
     };
@@ -116,19 +116,29 @@ export function createSenders(pro, { production = false, log = () => {}, fetchIm
       );
       return { id: out.MessageId || "" };
     },
-    // e-mail à Pixcar (relecture d'un changement de fiche), par le même fournisseur que les codes
-    async mail({ to, subject, text }) {
+    // e-mail à Pixcar (relecture d'un changement de fiche) ou e-mail de rendez-vous (from : rendez-vous@…, HTML, Reply-To, fichier
+    // d'agenda), par le même fournisseur que les codes. Scaleway refuse une pièce jointe (type non admis) : l'e-mail repart sans elle
+    // (le lien de suivi permet aussi d'ajouter le rendez-vous à l'agenda). SES (mode simple) : pas de pièce jointe.
+    async mail({ to, subject, text, html, from, replyTo, attachments }) {
+      const sender = from || pro.emailFrom;
       if (pro.emailProvider === "scaleway") {
         scw ||= createScalewayMailer({ secretKey: pro.scwSecretKey, projectId: pro.scwProjectId, region: pro.scwRegion, ...(fetchImpl ? { fetchImpl } : {}) });
-        return scw.send({ from: pro.emailFrom, to, subject, text });
+        try {
+          return await scw.send({ from: sender, to, subject, text, html, replyTo, attachments });
+        } catch (e) {
+          if (!(attachments && attachments.length && (e.status === 400 || e.status === 422))) throw e;
+          log({ level: "warn", msg: "pièce jointe refusée par Scaleway : e-mail renvoyé sans elle", event: "rdv_attachment_refused", error: String(e.message).slice(0, 200) });
+          return scw.send({ from: sender, to, subject, text, html, replyTo });
+        }
       }
       const { SESv2Client, SendEmailCommand } = await import("@aws-sdk/client-sesv2");
       ses ||= new SESv2Client({ region: pro.awsRegion });
       const out = await ses.send(
         new SendEmailCommand({
-          FromEmailAddress: pro.emailFrom,
+          FromEmailAddress: sender,
           Destination: { ToAddresses: [to] },
-          Content: { Simple: { Subject: { Data: subject, Charset: "UTF-8" }, Body: { Text: { Data: text, Charset: "UTF-8" } } } },
+          ...(replyTo ? { ReplyToAddresses: [replyTo] } : {}),
+          Content: { Simple: { Subject: { Data: subject, Charset: "UTF-8" }, Body: { Text: { Data: text, Charset: "UTF-8" }, ...(html ? { Html: { Data: html, Charset: "UTF-8" } } : {}) } } },
           ConfigurationSetName: pro.sesConfigurationSet || undefined,
         }),
       );

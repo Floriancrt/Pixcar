@@ -183,7 +183,8 @@ describe("CloudFormation template (infra/pixcar-api.yaml)", () => {
   test("IAM at the narrowest: the API connects as a plain database role and reads exactly the secrets the code asks SSM for", async () => {
     assert.deepEqual([...actions("ApiRole")].sort(), ["dsql:DbConnect", "logs:CreateLogStream", "logs:PutLogEvents", "ssm:GetParameters"]);
     assert.deepEqual([...actions("OpsRole")].sort(), ["dsql:DbConnectAdmin", "logs:CreateLogStream", "logs:PutLogEvents", "ssm:GetParameters"]);
-    for (const role of ["ApiRole", "OpsRole", "SchedulerRole"]) for (const s of statements(role)) assert.ok(![].concat(s.Resource).includes("*") && s.Effect === "Allow", `${role} : ${JSON.stringify(s).slice(0, 80)}`);
+    for (const role of ["ApiRole", "OpsRole", "SchedulerRole"])
+      for (const s of statements(role).map(pick).filter((x) => !(x && x.Ref === "AWS::NoValue"))) assert.ok(![].concat(s.Resource).includes("*") && s.Effect === "Allow", `${role} : ${JSON.stringify(s).slice(0, 80)}`);
     let asked = [];
     await readSecrets({ SSM_PREFIX: "/p/" }, { client: { SSMClient: class { send(c) { asked = c.input.Names; return { Parameters: asked.map((n) => ({ Name: n, Value: "x" })) }; } }, GetParametersCommand: class { constructor(input) { this.input = input; } } } });
     assert.deepEqual(secretNames("ApiRole"), asked.map((n) => n.slice("/p/".length)).sort());
@@ -191,7 +192,7 @@ describe("CloudFormation template (infra/pixcar-api.yaml)", () => {
     const trust = (role) => R[role].Properties.AssumeRolePolicyDocument.Statement.map((s) => s.Principal.Service);
     assert.deepEqual([trust("ApiRole"), trust("OpsRole"), trust("SchedulerRole")], [["lambda.amazonaws.com"], ["lambda.amazonaws.com"], ["scheduler.amazonaws.com"]]);
     assert.ok(R.SchedulerRole.Properties.AssumeRolePolicyDocument.Statement[0].Condition.StringEquals["aws:SourceAccount"]);
-    assert.deepEqual(statements("SchedulerRole").map((s) => [s.Action, s.Resource]), [["lambda:InvokeFunction", { "Fn::GetAtt": ["OpsFunction", "Arn"] }]]);
+    assert.deepEqual(statements("SchedulerRole").map(pick).filter((s) => !(s && s.Ref === "AWS::NoValue")).map((s) => [s.Action, s.Resource]), [["lambda:InvokeFunction", { "Fn::GetAtt": ["OpsFunction", "Arn"] }]], "rendez-vous fermés : la planification n'appelle que la fonction d'opérations");
   });
 
   test("the database survives a deleted stack: retained, replaced-then-retained, and protected against deletion", () => {
@@ -270,6 +271,47 @@ describe("CloudFormation template (infra/pixcar-api.yaml)", () => {
       assert.ok(withEmail(a.Condition), id);
       assert.deepEqual(a.Properties.AlarmActions, [{ Ref: "AlarmTopic" }], id);
     }
+  });
+});
+
+describe("Rendez-vous en ligne in the API template", () => {
+  const POOL = "eu-north-1_AbCdEf123", CLIENT = "3n4b5c6d7e8f9g0h1i2j3k4l5m";
+  const boot = (over) => {
+    overrides = over;
+    try {
+      return loadConfig({ ...environment("ApiFunction"), PLATE_PEPPER: "p".repeat(20), IP_PEPPER: "i".repeat(20) });
+    } finally {
+      overrides = {};
+    }
+  };
+  const schedulerTargets = (over) => {
+    overrides = over;
+    try {
+      return statements("SchedulerRole").map(pick).filter((x) => !(x && x.Ref === "AWS::NoValue")).map((x) => x.Resource["Fn::GetAtt"][0]);
+    } finally {
+      overrides = {};
+    }
+  };
+  test("closed by default and without the Pro space; opened, the function boots with the sender and the site address", () => {
+    assert.equal(boot({}).rdv.enabled, false);
+    assert.equal(boot({ RdvEnabled: "true" }).rdv.enabled, false, "sans Espace Pro, rien n'ouvre");
+    const on = boot({ RdvEnabled: "true", ProUserPoolId: POOL, ProClientId: CLIENT });
+    assert.deepEqual([on.rdv.enabled, on.rdv.emailFrom, on.rdv.siteUrl], [true, "Pixcar <rendez-vous@pixcar.fr>", "https://pixcar.fr"]);
+  });
+  test("the hourly task exists only when open: at hh:05 Paris time, on the API function, with an input only a direct invocation can carry", async () => {
+    const s = R.RdvSchedule;
+    assert.equal(s.Condition, "HasRdv");
+    assert.deepEqual(t.Conditions.HasRdv, { "Fn::And": [{ Condition: "HasPro" }, { "Fn::Equals": [{ Ref: "RdvEnabled" }, "true"] }] });
+    assert.equal(s.Properties.ScheduleExpression, "cron(5 * * * ? *)");
+    assert.equal(s.Properties.ScheduleExpressionTimezone, "Europe/Paris");
+    assert.deepEqual([s.Properties.Target.Arn, s.Properties.Target.RoleArn], [{ "Fn::GetAtt": ["ApiFunction", "Arn"] }, { "Fn::GetAtt": ["SchedulerRole", "Arn"] }]);
+    const { isTick } = await import("../lambda.mjs");
+    const input = JSON.parse(s.Properties.Target.Input);
+    assert.equal(isTick(input), true);
+    assert.equal(isTick({ ...input, requestContext: {} }), false, "un événement de la passerelle n'est jamais la tâche");
+    assert.deepEqual(schedulerTargets({}), ["OpsFunction"]);
+    assert.deepEqual(schedulerTargets({ RdvEnabled: "true", ProUserPoolId: POOL, ProClientId: CLIENT }), ["OpsFunction", "ApiFunction"]);
+    assert.ok(t.Rules.RdvNeedsMail, "SES en mode test ne peut pas écrire aux automobilistes : la pile le refuse");
   });
 });
 

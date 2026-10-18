@@ -209,6 +209,119 @@ describe("docs/openapi.yaml ↔ API", () => {
     }
   });
 
+  test("the rendez-vous routes answer with documented statuses and shapes", async () => {
+    const { parseContactRows } = await import("../lib/contact.mjs");
+    const { parisInstant } = await import("../../src/js/shared/rdv.js");
+    let clock = parisInstant("2026-10-19", 600); // lundi 10:00, heure de Paris
+    const app = await makeApp({ env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1", RDV_ENABLED: "1", READ_LIMIT_PER_MINUTE: "100000" }, now: () => clock });
+    const keep = t;
+    t = app;
+    try {
+      const gid = "aaaaaaaa-0000-4000-8000-000000000001";
+      await app.app.pro.repo.upsertContacts(parseContactRows([{ id: gid, name: "Garage Dupont", lat: 43.2174, lon: 1.1014, emails: ["contact@garage-dupont.fr"] }]).rows, "doc");
+      await app.db.query(
+        "INSERT INTO pro_claims (id, account_id, garage_id, siret, status, channel, holder_name, holder_role, target_hash, target_hint, verified_at) VALUES ($1, 'dev-doc', $2, '73282932000074', 'verified', 'email', 'C D', 'manager', $3, 'x', now())",
+        [crypto.randomUUID(), gid, "a".repeat(64)],
+      );
+      const me = { "x-pro-dev-account": "doc" };
+      const other = { "x-pro-dev-account": "other" };
+      const G = `/v1/pro/garages/${gid}/rdv`;
+      const code = (to) => /code (\d{6})/.exec(app.app.pro.senders.outbox.filter((m) => m.target === to).at(-1).subject)[1];
+      const week = Object.fromEntries(["mo", "tu", "we", "th", "fr"].map((d) => [d, [["08:00", "12:00"], ["14:00", "18:00"]]]));
+      await app.call("PUT", `/v1/pro/garages/${gid}/profile`, { headers: me, body: { hours: week } });
+      await app.call("PUT", `/v1/pro/garages/${gid}/services/vidange`, { headers: me, body: { offered: true, minutes: 45 } });
+      await call("GET", "/v1/pro/garages/{id}/rdv", G, { headers: me, status: 200 });
+      await call("GET", "/v1/pro/garages/{id}/rdv", G, { status: 401 });
+      await call("GET", "/v1/pro/garages/{id}/rdv", G, { headers: other, status: 404 });
+      await call("PUT", "/v1/pro/garages/{id}/rdv/settings", `${G}/settings`, { headers: me, body: { enabled: true }, status: 409 });
+      await call("PUT", "/v1/pro/garages/{id}/rdv/settings", `${G}/settings`, { headers: me, body: { stepMin: 20 }, status: 422 });
+      await call("POST", "/v1/pro/garages/{id}/rdv/notify", `${G}/notify`, { headers: me, body: { email: "x" }, status: 422 });
+      await call("POST", "/v1/pro/garages/{id}/rdv/notify/code", `${G}/notify/code`, { headers: me, body: { code: "123456" }, status: 409 });
+      await call("POST", "/v1/pro/garages/{id}/rdv/notify", `${G}/notify`, { headers: me, body: { email: "atelier@garage-dupont.fr" }, status: 200 });
+      await call("POST", "/v1/pro/garages/{id}/rdv/notify", `${G}/notify`, { headers: me, body: { email: "atelier@garage-dupont.fr" }, status: 429 });
+      const good = code("atelier@garage-dupont.fr");
+      await call("POST", "/v1/pro/garages/{id}/rdv/notify/code", `${G}/notify/code`, { headers: me, body: { code: good === "000000" ? "111111" : "000000" }, status: 422 });
+      await call("POST", "/v1/pro/garages/{id}/rdv/notify/code", `${G}/notify/code`, { headers: me, body: { code: good }, status: 200 });
+      const slot = { name: "Entretien", days: ["mo", "tu", "we", "th", "fr"], start: "08:00", end: "12:00", capacity: 2, services: ["vidange"] };
+      await call("POST", "/v1/pro/garages/{id}/rdv/slots", `${G}/slots`, { headers: me, body: { ...slot, days: ["su"] }, status: 422 });
+      const created = JSON.parse((await call("POST", "/v1/pro/garages/{id}/rdv/slots", `${G}/slots`, { headers: me, body: slot, status: 200 })).text);
+      const sid = created.slots[0].id;
+      await call("PUT", "/v1/pro/garages/{id}/rdv/slots/{slot}", `${G}/slots/${sid}`, { headers: me, body: slot, status: 200 });
+      await call("PUT", "/v1/pro/garages/{id}/rdv/slots/{slot}", `${G}/slots/${sid}`, { headers: me, body: { ...slot, capacity: 0 }, status: 422 });
+      const extra = JSON.parse((await call("POST", "/v1/pro/garages/{id}/rdv/slots", `${G}/slots`, { headers: me, body: slot, status: 200 })).text).slots[1].id;
+      await call("DELETE", "/v1/pro/garages/{id}/rdv/slots/{slot}", `${G}/slots/${extra}`, { headers: me, status: 200 });
+      await call("DELETE", "/v1/pro/garages/{id}/rdv/slots/{slot}", `${G}/slots/${extra}`, { headers: me, status: 404 });
+      await call("PUT", "/v1/pro/garages/{id}/rdv/settings", `${G}/settings`, { headers: me, body: { enabled: true, minDelayH: 0 }, status: 200 });
+      // l'automobiliste
+      const T = "/v1/rdv/garages/{id}/times";
+      await call("GET", T, `/v1/rdv/garages/${gid}/times?services=vidange`, { status: 200 });
+      await call("GET", T, `/v1/rdv/garages/${gid}/times?services=clim`, { status: 404 });
+      await call("GET", T, `/v1/rdv/garages/${gid}/times?services=`, { status: 400 });
+      const body = { garageId: gid, services: [{ id: "vidange" }], day: "2026-10-21", time: "08:00", name: "Julien Roux", email: "julien.roux@example.com", phone: "06 39 98 12 34", car: "Peugeot 208", year: 2019 };
+      await call("POST", "/v1/rdv/requests", "/v1/rdv/requests", { body: { ...body, email: "x" }, status: 422 });
+      await call("POST", "/v1/rdv/requests", "/v1/rdv/requests", { body: { ...body, time: "08:10" }, status: 409 });
+      await call("POST", "/v1/rdv/requests", "/v1/rdv/requests", { body: "{", status: 400 });
+      const draft = JSON.parse((await call("POST", "/v1/rdv/requests", "/v1/rdv/requests", { body, status: 201 })).text);
+      await call("POST", "/v1/rdv/requests/{id}/resend", `/v1/rdv/requests/${draft.id}/resend`, { status: 429 });
+      const c = code("julien.roux@example.com");
+      await call("POST", "/v1/rdv/requests/{id}/code", `/v1/rdv/requests/${draft.id}/code`, { body: { code: c === "000000" ? "111111" : "000000" }, status: 422 });
+      const sent = JSON.parse((await call("POST", "/v1/rdv/requests/{id}/code", `/v1/rdv/requests/${draft.id}/code`, { body: { code: c }, status: 200 })).text);
+      await call("POST", "/v1/rdv/requests/{id}/code", `/v1/rdv/requests/${draft.id}/code`, { body: { code: c }, status: 409 });
+      await call("POST", "/v1/rdv/requests/{id}/resend", `/v1/rdv/requests/${draft.id}/resend`, { status: 409 });
+      await call("POST", "/v1/rdv/requests/{id}/code", `/v1/rdv/requests/${crypto.randomUUID()}/code`, { body: { code: c }, status: 404 });
+      await call("GET", "/v1/rdv/me", "/v1/rdv/me", { headers: { "x-rdv-token": sent.token }, status: 200 });
+      await call("GET", "/v1/rdv/me", "/v1/rdv/me", { status: 404 });
+      await call("GET", "/v1/pro/public/garages", `/v1/pro/public/garages?ids=${gid}`, { status: 200 }); // avec rdv
+      await call("GET", "/v1/pro/garages/{id}", `/v1/pro/garages/${gid}`, { headers: me, status: 200 }); // avec rdv.todo
+      // le garage : page de l'e-mail, puis l'Espace Pro
+      const g = /#g=([A-Za-z0-9_-]{43})/.exec(app.app.pro.senders.outbox.find((m) => /Nouvelle demande/.test(m.subject)).text)[1];
+      await call("GET", "/v1/rdv/action", "/v1/rdv/action", { headers: { "x-rdv-token": g }, status: 200 });
+      await call("GET", "/v1/rdv/action", "/v1/rdv/action", { headers: { "x-rdv-token": sent.token }, status: 404 });
+      await call("POST", "/v1/rdv/action/decline", "/v1/rdv/action/decline", { headers: { "x-rdv-token": g }, body: {}, status: 422 });
+      await call("POST", "/v1/rdv/action/decline", "/v1/rdv/action/decline", { headers: { "x-rdv-token": g }, body: "{", status: 400 });
+      await call("POST", "/v1/rdv/action/accept", "/v1/rdv/action/accept", { headers: { "x-rdv-token": g }, status: 200 });
+      await call("POST", "/v1/rdv/action/accept", "/v1/rdv/action/accept", { headers: { "x-rdv-token": g }, status: 409 });
+      await call("POST", "/v1/rdv/action/decline", "/v1/rdv/action/decline", { headers: { "x-rdv-token": g }, body: { reason: "full" }, status: 409 });
+      await call("POST", "/v1/rdv/action/accept", "/v1/rdv/action/accept", { status: 404 });
+      const R = "/v1/pro/garages/{id}/rdv/requests";
+      await call("GET", R, `${G}/requests?view=upcoming`, { headers: me, status: 200 });
+      await call("GET", R, `${G}/requests?view=x`, { headers: me, status: 400 });
+      await call("POST", `${R}/{request}/accept`, `${G}/requests/${draft.id}/accept`, { headers: me, status: 409 });
+      await call("POST", `${R}/{request}/accept`, `${G}/requests/${crypto.randomUUID()}/accept`, { headers: me, status: 404 });
+      await call("POST", `${R}/{request}/decline`, `${G}/requests/${draft.id}/decline`, { headers: me, body: { reason: "x" }, status: 422 });
+      await call("POST", `${R}/{request}/decline`, `${G}/requests/${draft.id}/decline`, { headers: me, body: { reason: "full" }, status: 409 });
+      await call("POST", `${R}/{request}/cancel`, `${G}/requests/${draft.id}/cancel`, { headers: me, body: {}, status: 422 });
+      // le client annule, puis le garage ne peut plus annuler
+      await call("POST", "/v1/rdv/me/cancel", "/v1/rdv/me/cancel", { headers: { "x-rdv-token": sent.token }, body: { reason: "zzz" }, status: 422 });
+      await call("POST", "/v1/rdv/me/cancel", "/v1/rdv/me/cancel", { headers: { "x-rdv-token": sent.token }, body: { reason: "unable" }, status: 200 });
+      await call("POST", "/v1/rdv/me/cancel", "/v1/rdv/me/cancel", { headers: { "x-rdv-token": sent.token }, body: {}, status: 409 });
+      await call("POST", "/v1/rdv/me/cancel", "/v1/rdv/me/cancel", { status: 404 });
+      await call("POST", `${R}/{request}/cancel`, `${G}/requests/${draft.id}/cancel`, { headers: me, body: { reason: "workshop" }, status: 409 });
+      // une seconde demande, acceptée puis annulée par le garage
+      const d2 = JSON.parse((await call("POST", "/v1/rdv/requests", "/v1/rdv/requests", { body: { ...body, email: "b@example.com" }, status: 201 })).text);
+      await call("POST", "/v1/rdv/requests/{id}/code", `/v1/rdv/requests/${d2.id}/code`, { body: { code: code("b@example.com") }, status: 200 });
+      await call("GET", R, `${G}/requests?view=todo`, { headers: me, status: 200 });
+      await call("POST", `${R}/{request}/accept`, `${G}/requests/${d2.id}/accept`, { headers: me, status: 200 });
+      await call("POST", `${R}/{request}/cancel`, `${G}/requests/${d2.id}/cancel`, { headers: me, body: { reason: "workshop", note: "Pont en panne." }, status: 200 });
+      const d3 = JSON.parse((await call("POST", "/v1/rdv/requests", "/v1/rdv/requests", { body: { ...body, email: "c@example.com" }, status: 201 })).text);
+      await call("POST", "/v1/rdv/requests/{id}/code", `/v1/rdv/requests/${d3.id}/code`, { body: { code: code("c@example.com") }, status: 200 });
+      await call("POST", `${R}/{request}/decline`, `${G}/requests/${d3.id}/decline`, { headers: me, body: { reason: "full" }, status: 200 });
+      await call("GET", R, `${G}/requests?view=past`, { headers: me, status: 200 });
+      // fermetures
+      const CL = "/v1/pro/garages/{id}/rdv/closures";
+      const closure = JSON.parse((await call("POST", CL, `${G}/closures`, { headers: me, body: { first: "2026-12-24", last: "2027-01-02", label: "Congés" }, status: 200 })).text);
+      await call("POST", CL, `${G}/closures`, { headers: me, body: { first: "2026-01-01" }, status: 422 });
+      const cid = closure.closures[0].id;
+      await call("PUT", `${CL}/{closure}`, `${G}/closures/${cid}`, { headers: me, body: { first: "2026-12-23", last: "2027-01-02" }, status: 200 });
+      await call("PUT", `${CL}/{closure}`, `${G}/closures/${cid}`, { headers: me, body: { first: "x" }, status: 422 });
+      await call("DELETE", `${CL}/{closure}`, `${G}/closures/${cid}`, { headers: me, status: 200 });
+      await call("DELETE", `${CL}/{closure}`, `${G}/closures/${cid}`, { headers: me, status: 404 });
+    } finally {
+      t = keep;
+      await app.close();
+    }
+  });
+
   test("no route exists that the document does not mention", async () => {
     const documented = new Set(Object.entries(doc.paths).flatMap(([p, ops]) => Object.keys(ops).map((m) => `${m.toUpperCase()} ${p}`)));
     assert.deepEqual([...documented].sort(), [
@@ -219,6 +332,13 @@ describe("docs/openapi.yaml ↔ API", () => {
     ].concat([
       "DELETE /v1/pro/garages/{id}/changes/{change}", "GET /v1/pro/garages/{id}/profile", "GET /v1/pro/garages/{id}/registry", "POST /v1/pro/garages/{id}/changes",
       "PUT /v1/pro/garages/{id}/profile", "PUT /v1/pro/garages/{id}/services/{service}",
+    ]).concat([
+      "GET /v1/pro/garages/{id}/rdv", "PUT /v1/pro/garages/{id}/rdv/settings", "POST /v1/pro/garages/{id}/rdv/slots", "PUT /v1/pro/garages/{id}/rdv/slots/{slot}",
+      "DELETE /v1/pro/garages/{id}/rdv/slots/{slot}", "POST /v1/pro/garages/{id}/rdv/closures", "PUT /v1/pro/garages/{id}/rdv/closures/{closure}",
+      "DELETE /v1/pro/garages/{id}/rdv/closures/{closure}", "POST /v1/pro/garages/{id}/rdv/notify", "POST /v1/pro/garages/{id}/rdv/notify/code",
+      "GET /v1/pro/garages/{id}/rdv/requests", "POST /v1/pro/garages/{id}/rdv/requests/{request}/accept", "POST /v1/pro/garages/{id}/rdv/requests/{request}/decline",
+      "POST /v1/pro/garages/{id}/rdv/requests/{request}/cancel", "GET /v1/rdv/garages/{id}/times", "POST /v1/rdv/requests", "POST /v1/rdv/requests/{id}/code",
+      "POST /v1/rdv/requests/{id}/resend", "GET /v1/rdv/me", "POST /v1/rdv/me/cancel", "GET /v1/rdv/action", "POST /v1/rdv/action/accept", "POST /v1/rdv/action/decline",
     ]).sort());
     // et chaque méthode non documentée d'une route documentée est refusée en 405
     for (const [method, path] of [["PUT", "/v1/repairs"], ["DELETE", "/v1/repairs"], ["POST", "/v1/overpass"], ["POST", "/healthz"], ["GET", `/v1/repairs/${repair().id}`]]) {

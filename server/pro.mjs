@@ -21,6 +21,7 @@
 //   DELETE /v1/pro/garages/:id/changes/:change    annule un changement en attente
 //   PUT    /v1/pro/garages/:id/services/:service  { offered, minutes } : prestation faite ou non, temps moyen ; décocher retire le prix annoncé
 //   GET    /v1/pro/garages/:id/registry           l'établissement rattaché dans le registre public (lecture seule)
+// Rendez-vous en ligne (docs/rendez-vous.md, lot 2) : /v1/pro/garages/:id/rdv/… et /v1/rdv/… (server/rdv.mjs).
 // Sans compte (le comparateur) :
 //   GET    /v1/pro/public/garages?ids=a,b,…       garages vérifiés parmi ces identifiants (100 au plus), leurs prix publiés, leur fiche déclarée
 //                                                 et les prestations qu'ils disent faire ou non (jamais les temps moyens)
@@ -41,6 +42,7 @@ import { GARAGE_NAF, NAF_LABELS, isSiret, lookupSiret, normalizeSiret } from "./
 import { AuthError, createCognitoVerifier } from "./lib/jwt.mjs";
 import { createSenders, reviewEmailText } from "./lib/senders.mjs";
 import { createProRepo } from "./pro-repo.mjs";
+import { createRdv } from "./rdv.mjs";
 import { PRO_SERVICES, freshness, parseProPrice, staleAt } from "../src/js/shared/pro-prices.js";
 import { addrText, parseAddr, parseEmail, parseHours, parseMinutes, parseName, parsePhone, parseWebsite, phoneText } from "../src/js/shared/garage-profile.js";
 
@@ -157,6 +159,8 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
   const limits = { perGarageAccountPerDay: pro.sendsPerGarageAccountPerDay, perGaragePerDay: pro.sendsPerGaragePerDay, perAccountPerDay: pro.sendsPerAccountPerDay, globalPerHour: pro.sendsGlobalPerHour };
   // Plusieurs comptes demandent des codes pour un même garage en 24 h : litige ou tentative de blocage. Une ligne de journal dédiée
   // (event « pro_contested ») que la pile transforme en alarme par courriel ; la vérification manuelle tranche.
+  // rendez-vous en ligne : mêmes envois d'e-mails, même secret pour les empreintes et les jetons des liens
+  const rdv = createRdv({ db, config, now, log, send, secret: proSecret, proRepo: repo, newCode });
   const watch = (garageId, accounts) => {
     if (accounts >= 2) log({ level: "warn", msg: "garage demandé par plusieurs comptes", event: "pro_contested", garageId, accounts });
   };
@@ -396,8 +400,10 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
   return {
     // Réponse pour un chemin /v1/pro/…, ou null si le chemin n'est pas de l'Espace Pro.
     async handle(request, path, ctx = {}) {
-      if (path !== "/v1/pro" && !path.startsWith("/v1/pro/")) return null;
+      const isRdv = path === "/v1/rdv" || path.startsWith("/v1/rdv/");
+      if (!isRdv && path !== "/v1/pro" && !path.startsWith("/v1/pro/")) return null;
       try {
+        if (isRdv) return await rdv.publicRoute(request, path, ctx);
         return await route(request, path, ctx);
       } catch (e) {
         // base ou registre injoignable : on échoue vite et proprement, comme le reste de l'API
@@ -405,7 +411,8 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
         return apiError(503, "unavailable", "Service momentanément indisponible. Réessayez dans quelques secondes.", {}, { "retry-after": "5" });
       }
     },
-    maintenance: () => repo.purge(),
+    maintenance: async () => ({ ...(await repo.purge()), ...(config.rdv.enabled ? await rdv.purge() : {}) }),
+    rdv,
     repo,
     senders: send,
   };
@@ -450,6 +457,11 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
       }
       if (method !== "POST") return apiError(405, "method_not_allowed", "Méthode non autorisée.", {}, { allow: "POST" });
       return m[2] === "/code" ? postCode(request, sub, id) : postResend(sub, id);
+    }
+    if ((m = /^\/v1\/pro\/garages\/([^/]+)\/rdv(\/.*)?$/.exec(path))) {
+      const id = m[1].toLowerCase();
+      if (!GARAGE_RE.test(id)) return noGarage();
+      return rdv.garageRoute(request, sub, id, m[2] || "");
     }
     if ((m = /^\/v1\/pro\/garages\/([^/]+)\/(profile|registry|changes|services)(?:\/([^/]+))?$/.exec(path))) {
       const id = m[1].toLowerCase();
@@ -502,6 +514,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
         prices: prices.map((p) => priceView(p, nowMs)),
         paid,
         visits: { views: visits.view, calls: visits.call },
+        ...(config.rdv.enabled ? { rdv: { todo: await rdv.todo(id) } } : {}),
       },
       NO_STORE,
     );
@@ -708,6 +721,11 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
             }
           : {}),
       }));
+      // rendez-vous en ligne : les prestations qu'un garage prend en ligne avec un horaire libre dans les 14 jours
+      if (config.rdv.enabled && garages.length) {
+        const open = await rdv.openServices(garages.map((g) => g.id));
+        for (const g of garages) if (open.has(g.id)) g.rdv = { services: open.get(g.id) };
+      }
       return json(200, { garages }, { "cache-control": "public, max-age=60" });
     }
     if (path === "/v1/pro/public/visits") {

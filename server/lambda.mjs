@@ -50,6 +50,10 @@ const problem = (statusCode, code, message, extra = {}) => ({
   body: JSON.stringify({ error: { code, message } }),
 });
 
+// Appel de la planification AWS (RdvSchedule) : { "pixcar": "rdv-tick" }. Une requête de la passerelle a toujours requestContext et
+// n'atteint jamais cette branche : seul un appel direct de la fonction (droit lambda:InvokeFunction) le peut.
+export const isTick = (event) => !!event && event.pixcar === "rdv-tick" && !event.requestContext;
+
 export function createHandler({ getApp, log = () => {} }) {
   return async (event) => {
     let app;
@@ -57,8 +61,10 @@ export function createHandler({ getApp, log = () => {} }) {
       app = await getApp();
     } catch (e) {
       log({ level: "error", msg: "démarrage impossible", error: e.message });
+      if (isTick(event)) throw e; // la planification réessaie
       return problem(503, "unavailable", "Service momentanément indisponible.", { "retry-after": "5" });
     }
+    if (isTick(event)) return app.rdvTick();
     let request;
     try {
       request = toRequest(event);

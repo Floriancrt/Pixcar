@@ -23,6 +23,10 @@
 //   {"op":"pro-changes"}                                                changements de nom, d'adresse ou de téléphone en attente de relecture
 //   {"op":"pro-change","id":"…","decision":"approve"}                   publie un changement relu ; « reject » le refuse, avec « reason »
 //                                                                        (300 caractères au plus, montré au garagiste)
+// Rendez-vous en ligne (docs/rendez-vous.md, lot 2) :
+//   {"op":"rdv-stats"}                                                  demandes par état, garages ouverts, e-mails en attente ou en échec
+// (« purge » efface aussi les coordonnées des automobilistes arrivées à échéance ; « pro-revoke » annule les rendez-vous à venir du garage,
+// les clients sont prévenus par la file d'e-mails à la tâche horaire suivante.)
 import { repairRetentionMonths } from "./config.mjs";
 import { createDb } from "./db.mjs";
 import { jsonLog } from "./lib/log.mjs";
@@ -32,6 +36,7 @@ import { MIGRATIONS_DIR, ensureRuntimeRole, migrate } from "./migrate.mjs";
 import { moderate } from "./moderate.mjs";
 import { createRepo } from "./repo.mjs";
 import { IMPORT_BATCH_MAX, createProRepo } from "./pro-repo.mjs";
+import { createRdvRepo } from "./rdv-repo.mjs";
 import { parseContactRows } from "./lib/contact.mjs";
 import { selfcheck } from "./selfcheck.mjs";
 import { addrText, phoneText } from "../src/js/shared/garage-profile.js";
@@ -85,7 +90,9 @@ export function createOps({ openDb, env = process.env, log = () => {} }) {
         return runModerate(["forget", ...plates], db, secrets.PLATE_PEPPER || env.PLATE_PEPPER || "");
       }),
     purge: () =>
-      withDb(async (db) => ({ deleted: { ...(await createRepo(db).purge({ repairRetentionMonths: repairRetentionMonths(env) })), ...(await createProRepo(db).purge()) } })),
+      withDb(async (db) => ({
+        deleted: { ...(await createRepo(db).purge({ repairRetentionMonths: repairRetentionMonths(env) })), ...(await createProRepo(db).purge()), ...(await createRdvRepo(db).purge()) },
+      })),
     selfcheck: () => withDb((db) => selfcheck(db, { log: (m) => log({ level: "info", msg: m }) })),
     whoami: () => withDb(async (db) => ({ db: db.kind, role: (await db.query("SELECT current_user AS who")).rows[0].who })),
     "import-contacts": (e) => {
@@ -105,7 +112,13 @@ export function createOps({ openDb, env = process.env, log = () => {} }) {
     },
     "pro-stats": () => withDb((db) => createProRepo(db).proStats()),
     "pro-claims": (e) => withDb(async (db) => ({ claims: await createProRepo(db).claimsOfGarage(garageIdOf(e.garageId)) })),
-    "pro-revoke": (e) => withDb(async (db) => ({ revoked: await createProRepo(db).revoke(garageIdOf(e.garageId)) })),
+    "pro-revoke": (e) =>
+      withDb(async (db) => {
+        const garageId = garageIdOf(e.garageId);
+        const revoked = await createProRepo(db).revoke(garageId);
+        return { revoked, rdvCancelled: revoked ? await createRdvRepo(db).tx((r) => r.revoke(garageId)) : 0 };
+      }),
+    "rdv-stats": () => withDb((db) => createRdvRepo(db).stats()),
     "pro-prices": () =>
       withDb(async (db) => ({
         review: (await createProRepo(db).pricesToReview()).map((p) => ({ garageId: p.garage_id, garageName: p.garage_name || "", serviceId: p.service_id, kind: p.kind, price: p.price_cents === null ? null : p.price_cents / 100, updatedAt: p.updated_at })),

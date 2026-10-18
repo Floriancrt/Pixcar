@@ -51,6 +51,15 @@ export function loadConfig(env = process.env) {
     if (!isScwProjectId(env.PRO_SCW_PROJECT_ID)) problems.push("PRO_SCW_PROJECT_ID : identifiant du projet Scaleway (UUID) qui porte le domaine d'envoi");
     if (!env.SCW_SECRET_KEY) problems.push("SCW_SECRET_KEY : clé secrète Scaleway (paramètre SSM SecureString <SSM_PREFIX>SCW_SECRET_KEY)");
   }
+  // Rendez-vous en ligne (docs/rendez-vous.md, lot 2) : fermés tant que RDV_ENABLED ne vaut pas 1. Ils reposent sur l'Espace Pro (garages
+  // vérifiés) et envoient des e-mails à n'importe quel automobiliste : en production, pas sans Espace Pro ni sans vrai fournisseur d'e-mails.
+  const rdvEnabled = env.RDV_ENABLED === "1";
+  const siteUrl = String(env.SITE_URL || "https://pixcar.fr").replace(/\/+$/, "");
+  if (!/^https?:\/\/[a-z0-9.-]+(:\d+)?$/i.test(siteUrl)) problems.push("SITE_URL : adresse du site, sans chemin (ex. https://pixcar.fr) : les liens des e-mails de rendez-vous y mènent");
+  if (production && rdvEnabled) {
+    if (!proEnabled) problems.push("RDV_ENABLED : les rendez-vous en ligne demandent l'Espace Pro (PRO_ENABLED=1)");
+    if (!/^https:\/\//.test(siteUrl)) problems.push("SITE_URL : https:// attendu en production");
+  }
   const testEstablishments = parseTestEstablishments(env.PRO_TEST_ESTABLISHMENTS, problems);
   if (problems.length) throw new Error("Configuration incomplète :\n  - " + problems.join("\n  - "));
 
@@ -105,6 +114,24 @@ export function loadConfig(env = process.env) {
       lookupsPerAccountPerHour: int(env.PRO_LOOKUPS_PER_ACCOUNT_PER_HOUR, 30, 1),
       maxDistanceM: int(env.PRO_MAX_DISTANCE_M, 300, 50),
       testEstablishments,
+    },
+    rdv: {
+      enabled: rdvEnabled,
+      emailFrom: env.RDV_EMAIL_FROM || "Pixcar <rendez-vous@pixcar.fr>",
+      siteUrl,
+      codeTtlSeconds: int(env.RDV_CODE_TTL_SECONDS, 600, 60),
+      maxAttempts: int(env.RDV_MAX_ATTEMPTS, 5, 1),
+      resendAfterSeconds: int(env.RDV_RESEND_AFTER_SECONDS, 60, 10),
+      maxSends: int(env.RDV_MAX_SENDS, 3, 1),
+      codesPerIpPerHour: int(env.RDV_CODES_PER_IP_PER_HOUR, 5, 1),
+      codesPerIpPerDay: int(env.RDV_CODES_PER_IP_PER_DAY, 20, 1),
+      codesPerEmailPerDay: int(env.RDV_CODES_PER_EMAIL_PER_DAY, 5, 1),
+      codesGlobalPerHour: int(env.RDV_CODES_GLOBAL_PER_HOUR, 200, 1),
+      pendingPerEmailPerGarage: int(env.RDV_PENDING_PER_EMAIL_PER_GARAGE, 1, 1),
+      pendingPerEmail: int(env.RDV_PENDING_PER_EMAIL, 3, 1),
+      pendingPerGarage: int(env.RDV_PENDING_PER_GARAGE, 20, 1),
+      pauseAfter: int(env.RDV_PAUSE_AFTER, 3, 1),
+      notifyCodesPerDay: int(env.RDV_NOTIFY_CODES_PER_DAY, 5, 1),
     },
   };
 }

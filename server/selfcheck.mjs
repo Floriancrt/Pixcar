@@ -6,6 +6,8 @@
 import { randomHex } from "./lib/crypto.mjs";
 import { createRepo } from "./repo.mjs";
 import { createProRepo } from "./pro-repo.mjs";
+import { createRdvRepo } from "./rdv-repo.mjs";
+import { addDays, freeTimes, parisInstant, parisParts } from "../src/js/shared/rdv.js";
 
 const TEST_IP = "5e1fc4ec".repeat(8);
 const LAT = 0.5; // plein Atlantique : aucune vraie zone d'utilisateurs
@@ -15,6 +17,9 @@ const INDEXES = [
   "garage_contacts_area_idx", "garage_contacts_domain_idx", "garage_contacts_import_idx", "pro_claims_account_idx", "pro_claims_garage_idx",
   "pro_claims_one_owner_idx", "pro_events_garage_idx", "pro_events_account_idx", "pro_events_at_idx", "pro_prices_status_idx", "pro_visits_once_idx",
   "pro_visits_day_idx", "pro_profile_changes_one_pending_idx", "pro_profile_changes_garage_idx", "pro_profile_changes_status_idx",
+  "rdv_slots_garage_idx", "rdv_closures_garage_idx", "rdv_requests_garage_day_idx", "rdv_requests_status_deadline_idx", "rdv_requests_status_day_idx",
+  "rdv_requests_email_idx", "rdv_requests_client_token_idx", "rdv_requests_garage_token_idx", "rdv_events_ip_idx", "rdv_events_email_idx", "rdv_events_at_idx",
+  "rdv_mails_due_idx", "rdv_mails_request_idx",
 ];
 
 export async function selfcheck(db, { log = () => {} } = {}) {
@@ -283,6 +288,84 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     expect(JSON.stringify(offered) === JSON.stringify({ clim: true, diag: true, montage: true, vidange: false }), "prestations : " + JSON.stringify(offered));
     expect(pub.profile && pub.profile.phone === "+33561000003" && !pub.services.some((x) => "minutes" in x), "lecture publique sans les temps moyens");
   });
+  // ---- rendez-vous en ligne (lot 2) : un garage vérifié (proGarage2) ouvre ses rendez-vous ; une demande va jusqu'à son expiration.
+  // Horloge de l'application fixée à un lundi 10:00 (heure de Paris) dans 3 semaines : aucune date réelle n'en dépend.
+  const nextMonday = (() => {
+    let d = parisParts(Date.now()).iso;
+    d = addDays(d, 21);
+    while (new Date(d + "T12:00:00Z").getUTCDay() !== 1) d = addDays(d, 1);
+    return d;
+  })();
+  let rdvClock = parisInstant(nextMonday, 600);
+  const rdv = createRdvRepo(db, { now: () => rdvClock });
+  const rdvEmail = `selfcheck-${tag}@example.invalid`;
+  let rdvId = null;
+  await check("Rendez-vous : réglages, créneau (jsonb), fermeture (dates), demande avec code, horaires libres (moteur partagé), envoi (verrou du garage), file d'e-mails", async () => {
+    await pro.saveProfile(proGarage2, acc("c"), { hours: { mo: [["08:00", "12:00"]], tu: [["08:00", "12:00"]], we: [["08:00", "12:00"]], th: [["08:00", "12:00"]], fr: [["08:00", "12:00"]] } });
+    await pro.saveService({ garageId: proGarage2, serviceId: "vidange", offered: true, minutes: 45 });
+    const st = await rdv.saveSettings(proGarage2, acc("c"), { enabled: true, min_delay_h: 0 });
+    expect(st.enabled === true && st.minDelayH === 0 && st.horizonDays === 28, "réglages : " + JSON.stringify(st));
+    await db.query("UPDATE rdv_settings SET notify_email = $2 WHERE garage_id = $1", [proGarage2, rdvEmail]);
+    const slot = await rdv.createSlot(proGarage2, { name: "Auto-contrôle", days: ["mo", "tu", "we", "th", "fr"], start: 480, end: 720, mode: "hour", capacity: 1, services: ["vidange"] });
+    expect(slot.services[0] === "vidange" && slot.days.length === 5, "créneau relu");
+    const closed = addDays(nextMonday, 3);
+    await rdv.createClosure(proGarage2, { first: closed, last: closed, label: "auto-contrôle" });
+    const b = await rdv.bundle(proGarage2, nextMonday);
+    expect(b && b.closures.length === 1 && b.closures[0].first === closed && b.minutes.vidange === 45 && b.slots.length === 1, "lecture groupée du garage");
+    const ctx = { hours: b.profile.hours, closures: b.closures, holidays: true };
+    const days = freeTimes({ nowMs: rdvClock, ctx, settings: { minDelayH: 0, horizonDays: 28, stepMin: 30 }, slots: b.slots, need: { services: [{ id: "vidange", qty: 1 }], minutes: 45 }, bookings: [] });
+    // pas avant le surlendemain (heure limite : mardi midi, le créneau finit à midi), jamais le jour fermé
+    expect(days.length && days[0].day >= addDays(nextMonday, 2) && !days.some((d) => d.day === closed), "horaires : " + JSON.stringify(days.slice(0, 2).map((d) => d.day)));
+    rdvId = crypto.randomUUID();
+    const day = days[0].day;
+    await rdv.tx(async (r) => {
+      await r.createDraft({ id: rdvId, garageId: proGarage2, slotId: slot.id, day, start: 480, end: 525, startsAt: parisInstant(day, 480), endsAt: parisInstant(day, 525), mode: "hour", services: [{ id: "vidange", qty: 1 }], minutes: 45,
+        name: "Auto Contrôle", email: rdvEmail, phone: "+33600000000", car: "Essai", carYear: 2020, plate: "", message: "auto-contrôle", remindPrice: true, codeHash: "d".repeat(64), ttlSeconds: 600, ipHash: TEST_IP, garageName: "Garage d'auto-contrôle", garageAddr: "", garagePhone: "" });
+      await r.logCode({ ipHash: TEST_IP, emailHash: "e".repeat(64), garageId: proGarage2 });
+    });
+    const n = await rdv.codeCounts({ ipHash: TEST_IP, emailHash: "e".repeat(64) });
+    expect(n.ipHour === 1 && n.emailDay === 1, "envois de codes comptés : " + JSON.stringify(n));
+    const q = await rdv.getRequest(rdvId);
+    expect(q.status === "code" && q.code_expires_at > rdvClock && Array.isArray(q.services) && q.day === day, "brouillon relu");
+    expect(await rdv.countAttempt(rdvId, 0), "essai compté");
+    expect(!(await rdv.countAttempt(rdvId, 0)), "essai déjà compté par un autre : refusé");
+    const sent = await rdv.tx(async (r) => {
+      await r.lockGarage(proGarage2);
+      const mine = await r.pendingOf(rdvEmail, proGarage2);
+      expect(mine.total === 0, "aucune demande en attente");
+      return r.send({ id: rdvId, garageId: proGarage2, offer: { slotId: slot.id, day, start: 480, end: 525, startsAt: parisInstant(day, 480), endsAt: parisInstant(day, 525), mode: "hour" }, deadline: parisInstant(addDays(nextMonday, 1), 720), clientTokenHash: randomHex(32), garageTokenHash: randomHex(32) });
+    });
+    expect(sent === true, "demande envoyée");
+    expect((await rdv.pendingAtGarage(proGarage2)) === 1 && (await rdv.countTodo(proGarage2)) === 1, "une demande à traiter");
+    const booked = await rdv.bookings(proGarage2, nextMonday, addDays(nextMonday, 28));
+    expect(booked.length === 1 && booked[0].day === day && booked[0].start === 480, "horaire retenu");
+    const due = await rdv.dueMails(10, [rdvId]);
+    expect(due.length === 2 && due.every((m) => m.attempts === 0), "deux e-mails en file : " + due.map((m) => m.kind).join(", "));
+    expect((await rdv.claimMail(due[0].id, 0)) && !(await rdv.claimMail(due[0].id, 0)), "un e-mail n'est pris qu'une fois");
+    await rdv.mailSent(due[0].id);
+    expect((await rdv.listRequests(proGarage2, "todo", nextMonday)).length === 1 && (await rdv.listRequests(proGarage2, "upcoming", nextMonday)).length === 0, "listes du garage");
+  });
+  await check("Rendez-vous : deux prises d'horaire simultanées sur un même garage passent l'une après l'autre (verrou du garage, reprise sur conflit)", async () => {
+    const before = (await rdv.getSettings(proGarage2)).version;
+    await Promise.all([1, 2].map(() => rdv.tx(async (r) => {
+      await r.lockGarage(proGarage2);
+      await r.pendingOf(rdvEmail, proGarage2);
+    })));
+    expect((await rdv.getSettings(proGarage2)).version === before + 2, "compteur incrémenté deux fois");
+  });
+  await check("Rendez-vous : heure limite passée (expiration, série sans réponse), effacement des coordonnées, purge par lots", async () => {
+    rdvClock = parisInstant(addDays(nextMonday, 1), 725); // mardi 12:05
+    const due = await rdv.dueExpiries(10);
+    expect(due.some((x) => x.id === rdvId), "demande à expirer");
+    expect(await rdv.tx((r) => r.expire(rdvId, proGarage2, 3)), "expirée");
+    expect((await rdv.getRequest(rdvId)).status === "expired" && (await rdv.getSettings(proGarage2)).missed === 1, "série sans réponse : 1");
+    rdvClock += 8 * 864e5;
+    const out = await rdv.purge();
+    expect(out.rdvAnonymized >= 1, "coordonnées effacées : " + JSON.stringify(out));
+    const row = (await db.query("SELECT name, email, phone, client_token_hash, anonymized_at FROM rdv_requests WHERE id = $1", [rdvId])).rows[0];
+    expect(row.name === "" && row.email === "" && row.client_token_hash === null && row.anonymized_at, "ligne anonyme");
+    expect((await rdv.tx((r) => r.revoke(proGarage2))) === 0 && !(await rdv.getSettings(proGarage2)), "retrait : réglages, créneaux et fermetures partent");
+  });
   await check("Espace Pro : purge des visites de plus de 60 jours ; retrait d'un rattachement : ses prix et sa fiche partent avec lui", async () => {
     await pro.recordVisit({ garageId: proGarage2, day: new Date(Date.now() - 70 * 864e5).toISOString().slice(0, 10), kind: "view", visitor: randomHex(32) });
     await pro.purge();
@@ -299,6 +382,8 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     await db.query("DELETE FROM pro_prices WHERE garage_id IN ($1, $2)", [proGarage, proGarage2]);
     await db.query("DELETE FROM pro_visits WHERE garage_id IN ($1, $2)", [proGarage, proGarage2]);
     for (const table of ["pro_profiles", "pro_profile_changes", "pro_services"]) await db.query(`DELETE FROM ${table} WHERE garage_id IN ($1, $2)`, [proGarage, proGarage2]);
+    for (const table of ["rdv_settings", "rdv_slots", "rdv_closures", "rdv_requests", "rdv_mails"]) await db.query(`DELETE FROM ${table} WHERE garage_id IN ($1, $2)`, [proGarage, proGarage2]);
+    await db.query("DELETE FROM rdv_events WHERE ip_hash = $1", [TEST_IP]);
     await db.query("DELETE FROM repairs WHERE garage_id = $1", [ovt]);
     await db.query("DELETE FROM garages WHERE id = $1", [ovt]);
     await db.query("DELETE FROM repairs WHERE garage_id LIKE 'custom:selfcheck-%'");
@@ -309,7 +394,9 @@ export async function selfcheck(db, { log = () => {} } = {}) {
       (await count("SELECT count(*) AS n FROM garages WHERE id LIKE 'custom:selfcheck-%' OR id = $1", [ovt])) +
       (await count("SELECT count(*) AS n FROM write_log WHERE ip_hash = $1", [TEST_IP])) +
       (await count("SELECT count(*) AS n FROM pro_prices WHERE garage_id IN ($1, $2)", [proGarage, proGarage2])) +
-      (await count("SELECT count(*) AS n FROM pro_visits WHERE garage_id IN ($1, $2)", [proGarage, proGarage2]));
+      (await count("SELECT count(*) AS n FROM pro_visits WHERE garage_id IN ($1, $2)", [proGarage, proGarage2])) +
+      (await count("SELECT count(*) AS n FROM rdv_requests WHERE garage_id IN ($1, $2)", [proGarage, proGarage2])) +
+      (await count("SELECT count(*) AS n FROM rdv_events WHERE ip_hash = $1", [TEST_IP]));
     expect(left === 0, "reste " + left);
   });
 
