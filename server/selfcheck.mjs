@@ -271,6 +271,7 @@ export async function selfcheck(db, { log = () => {} } = {}) {
       refused = true;
     }
     expect(refused, "l'index unique partiel refuse un second changement en attente");
+    expect((await pro.countRecentChanges(proGarage2)) === 2, "demandes des dernières 24 h comptées (plafond des e-mails de relecture)");
     expect((await pro.decideChange({ id: second.id, decision: "approve" })).kind === "approved", "approuvé");
     expect((await pro.getProfile(proGarage2)).phone === "+33561000003", "téléphone publié");
     const s1 = await pro.saveService({ garageId: proGarage2, serviceId: "vidange", offered: false, minutes: null });

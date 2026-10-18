@@ -86,6 +86,7 @@ Lecture publique : `GET /v1/pro/public/garages` ajoute à chaque garage vérifi�
 - `{"op":"pro-changes"}` : changements en attente (garage, champ, valeur actuelle, valeur demandée, date).
 - `{"op":"pro-change","id":"…","decision":"approve"}` ou `"reject"` avec `"reason"` (300 caractères au plus, montré au garagiste).
 
+Chaque demande est envoyée par e-mail à Pixcar (`PRO_CONTACT`), avec les commandes pour décider ; 5 par garage et par 24 h au plus.
 Pas d'e-mail au garagiste en v1 : il voit la décision à sa prochaine visite (l'API ne connaît pas l'adresse e-mail des comptes).
 L'adresse approuvée ne déplace pas le garage sur la carte : la position reste celle des données (refuser et traiter à la main un
 déménagement).

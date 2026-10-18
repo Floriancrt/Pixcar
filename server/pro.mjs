@@ -39,10 +39,10 @@ import { createMemoryLimiter } from "./lib/ratelimit.mjs";
 import { resolveOption, sameName, verificationOptions } from "./lib/contact.mjs";
 import { GARAGE_NAF, NAF_LABELS, isSiret, lookupSiret, normalizeSiret } from "./lib/sirene.mjs";
 import { AuthError, createCognitoVerifier } from "./lib/jwt.mjs";
-import { createSenders } from "./lib/senders.mjs";
+import { createSenders, reviewEmailText } from "./lib/senders.mjs";
 import { createProRepo } from "./pro-repo.mjs";
 import { PRO_SERVICES, freshness, parseProPrice, staleAt } from "../src/js/shared/pro-prices.js";
-import { addrText, parseAddr, parseEmail, parseHours, parseMinutes, parseName, parsePhone, parseWebsite } from "../src/js/shared/garage-profile.js";
+import { addrText, parseAddr, parseEmail, parseHours, parseMinutes, parseName, parsePhone, parseWebsite, phoneText } from "../src/js/shared/garage-profile.js";
 
 const NO_STORE = { "cache-control": "no-store" };
 const SIRENE_TTL_MS = 10 * 60_000;
@@ -131,6 +131,11 @@ const changeView = (c) => ({
   ...(c.decided_at ? { decidedAt: isoOf(c.decided_at) } : {}),
 });
 const CHANGE_PARSERS = { name: parseName, addr: parseAddr, phone: parsePhone };
+const CHANGE_LABELS = { name: "nom affiché", addr: "adresse", phone: "téléphone" };
+const REVIEW_MAILS_PER_DAY = 5; // e-mails de relecture par garage et par 24 h : au-delà, la demande attend dans la file (op « pro-changes »)
+const REVIEW_MAIL_TIMEOUT_MS = 4000;
+const withTimeout = (promise, ms) =>
+  Promise.race([promise, new Promise((_, reject) => { const t = setTimeout(() => reject(new Error("délai dépassé")), ms); t.unref && t.unref(); })]);
 const SERVICE_IDS = new Set(PRO_SERVICES.map((x) => x.id));
 
 export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date.now, log = () => {}, senders, verifier, sirene } = {}) {
@@ -583,13 +588,51 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
     if (!parse) return apiError(422, "validation", "Champ : name, addr ou phone.", { field: "field" });
     const out = parse(value);
     if (out.error) return apiError(422, "validation", out.error, { field });
-    if (!(await repo.ownedGarage(id, sub))) return noGarage();
+    const owned = await repo.ownedGarage(id, sub);
+    if (!owned) return noGarage();
     const current = profileView(await repo.getProfile(id));
     const same = field === "addr" ? current.addr && addrText(current.addr) === addrText(out.value) : current[field] === out.value;
     if (same) return apiError(422, "unchanged", "C'est déjà la valeur de votre fiche.", { field });
     const row = await repo.requestChange({ id: crypto.randomUUID(), garageId: id, field, value: field === "addr" ? JSON.stringify(out.value) : out.value, accountId: sub });
     log({ level: "info", msg: "changement de fiche à relire", event: "pro_change_review", garageId: id, field });
+    await reviewMail({ garageId: id, owned, current, field, value: out.value, row });
     return json(201, changeView(row), NO_STORE);
+  }
+
+  // Prévient Pixcar (adresse PRO_CONTACT) qu'un changement attend sa relecture. Jamais bloquant : un échec ou un dépassement du plafond
+  // est journalisé, la demande du garagiste reste enregistrée et visible avec l'op « pro-changes ».
+  async function reviewMail({ garageId, owned, current, field, value, row }) {
+    if (typeof send.mail !== "function" || !pro.contact) return;
+    try {
+      if ((await repo.countRecentChanges(garageId)) > REVIEW_MAILS_PER_DAY) {
+        log({ level: "warn", msg: "changement à relire : plafond d'e-mails atteint pour ce garage", event: "pro_change_review_mail_skipped", garageId });
+        return;
+      }
+      const c = owned.contact || {};
+      const shown = (v) => (field === "addr" ? addrText(v) : field === "phone" ? phoneText(v) : v);
+      const publicAddr = [c.addr, c.pc].filter(Boolean).join(", ");
+      const currentText = current[field]
+        ? `${shown(current[field])} (déjà vérifié par Pixcar)`
+        : field === "name" && c.name
+          ? `${c.name} (données publiques)`
+          : field === "addr" && publicAddr
+            ? `${publicAddr} (données publiques)`
+            : "aucune valeur déclarée";
+      const { subject, text } = reviewEmailText({
+        garageName: current.name || c.name || garageId,
+        garageId,
+        siret: owned.claim.siret,
+        fieldLabel: CHANGE_LABELS[field],
+        current: currentText,
+        requested: shown(value),
+        changeId: row.id,
+        at: row.created_at || now(),
+      });
+      await withTimeout(send.mail({ to: pro.contact, subject, text }), REVIEW_MAIL_TIMEOUT_MS);
+      log({ level: "info", msg: "changement à relire : e-mail envoyé à Pixcar", event: "pro_change_review_mail", garageId, field });
+    } catch (e) {
+      log({ level: "warn", msg: "changement à relire : e-mail non envoyé", event: "pro_change_review_mail_failed", garageId, error: String((e && e.message) || e).slice(0, 200) });
+    }
   }
 
   async function deleteChange(sub, id, rawChange) {

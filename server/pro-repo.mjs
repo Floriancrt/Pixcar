@@ -407,6 +407,9 @@ export function createProRepo(db) {
         return r.rows[0];
       });
     },
+    // Demandes de changement d'un garage sur les dernières 24 h (toutes, même remplacées ou annulées) : plafond des e-mails de relecture
+    countRecentChanges: (garageId) =>
+      one("SELECT count(*)::int AS n FROM pro_profile_changes WHERE garage_id = $1 AND created_at > now() - interval '1 day'", [garageId]).then((r) => (r ? r.n : 0)),
     cancelChange: (garageId, id) =>
       db.query("UPDATE pro_profile_changes SET status = 'cancelled', decided_at = now() WHERE id = $1 AND garage_id = $2 AND status = 'pending'", [id, garageId]).then((r) => r.rowCount > 0),
     listServices: (garageId) => db.query("SELECT service_id, offered, minutes FROM pro_services WHERE garage_id = $1 ORDER BY service_id", [garageId]).then((r) => r.rows),

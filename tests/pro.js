@@ -158,6 +158,7 @@ function fakeCognito() {
   const proText = (/<section aria-labelledby="lg-pro"[\s\S]*?<\/section>/.exec(fs.readFileSync(path.join(dist, "index.html"), "utf8")) || [""])[0].replace(/<[^>]+>/g, " ").replace(/&nbsp;|\s+/g, " ");
   check("privacy text: announced prices, the visit counting (daily keyed IP fingerprint, no IP kept, totals only) and its 60-day retention", /Les prix annoncés/.test(proText) && /empreinte de son adresse IP liée au garage et au jour/.test(proText) && /l'adresse IP n'est pas enregistrée/.test(proText) && /que des totaux/.test(proText) && /les empreintes des visites, 60 jours/.test(proText), proText.slice(0, 300));
   check("privacy text: the garage's fiche (declared details published, average times never shown, change requests reviewed) and its retention", /La fiche du garage/.test(proText) && /temps moyen, qui n'est pas publié/.test(proText) && /relues par Pixcar avant publication/.test(proText) && /la fiche du garage, tant que le garage est rattaché au compte/.test(proText) && /relue ou annulée, 90 jours/.test(proText), proText.slice(0, 300));
+  check("privacy text: the change requests are e-mailed to Pixcar for review, without the requester's name or e-mail", /transmises à Pixcar par le même service, pour relecture/.test(proText) && /ni le nom ni l'adresse e-mail du demandeur/.test(proText), proText.slice(0, 300));
   let refused = "";
   try {
     build("noapi", [], { ...env, PIXCAR_API_BASE: "" });

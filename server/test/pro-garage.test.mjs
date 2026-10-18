@@ -19,6 +19,7 @@ const HOURS = { mo: [["08:00", "12:00"], ["14:00", "18:30"]], tu: [["08:00", "12
 
 describe("Espace Pro : Mon garage", () => {
   let t, registry;
+  const logs = [];
   const as = (who) => ({ "x-pro-dev-account": who });
   const call = (who, method, path, body, extra = {}) => t.call(method, path, { body, headers: who ? as(who) : {}, ...extra });
   const json = async (res) => ({ status: res.status, body: res.status === 204 ? null : await res.json(), headers: res.headers });
@@ -36,6 +37,7 @@ describe("Espace Pro : Mon garage", () => {
     registry = { fail: false, calls: 0 };
     t = await makeApp({
       env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1", WRITE_LIMIT_PER_HOUR: "1000" },
+      log: (l) => logs.push(l),
       proOptions: {
         sirene: async (siret) => {
           registry.calls++;
@@ -168,6 +170,55 @@ describe("Espace Pro : Mon garage", () => {
     assert.equal((await req("alice", "DELETE", `${G}/changes/pas-un-uuid`)).status, 404);
     await own("bob", PETIT);
     assert.equal((await req("bob", "DELETE", `/v1/pro/garages/${PETIT}/changes/${name.body.id}`)).status, 404, "le changement d'un autre garage");
+  });
+
+  test("each change to review is e-mailed to Pixcar (PRO_CONTACT): garage, SIRET with its official page, current and requested value, the commands to decide; 5 a day per garage at most; a failed e-mail never fails the request", async () => {
+    await own("alice", DUPONT);
+    const outbox = t.app.pro.senders.outbox;
+    outbox.length = 0;
+    const r = await req("alice", "POST", G + "/changes", { field: "addr", value: { street: "14 rue de l'Exemple", pc: "31220", city: "Cazères" } });
+    assert.equal(r.status, 201);
+    const mails = outbox.filter((m) => m.channel === "review");
+    assert.equal(mails.length, 1);
+    const m = mails[0];
+    assert.equal(m.target, "contact@pixcar.fr");
+    assert.equal(m.subject, "Pixcar · à relire : adresse de « Garage Dupont »");
+    for (const line of [
+      "Garage : Garage Dupont",
+      `Identifiant : ${DUPONT}`,
+      "SIRET : 732 829 320 00074 — fiche officielle : https://annuaire-entreprises.data.gouv.fr/etablissement/73282932000074",
+      "Champ : adresse",
+      "Valeur actuelle : 12 rue de l'Exemple, 31220 (données publiques)",
+      "Valeur demandée : 14 rue de l'Exemple, 31220 Cazères",
+      `approuver : {"op":"pro-change","id":"${r.body.id}","decision":"approve"}`,
+      `{"op":"pro-change","id":"${r.body.id}","decision":"reject","reason":"<motif montré au garagiste>"}`,
+    ])
+      assert.ok(m.text.includes(line), `e-mail : ${line}\n${m.text}`);
+    assert.match(m.text, /Demandé le \d{1,2} \S+ 20\d\d à \d\d:\d\d \(heure de Paris\)/);
+    assert.ok(!/garage-dupont\.fr|561000001|Camille/.test(m.text), "ni les contacts privés du garage ni le nom du demandeur");
+    // le téléphone : écrit à la française ; aucune valeur publique montrée (les numéros des données servent à la vérification)
+    await req("alice", "POST", G + "/changes", { field: "phone", value: "05 61 00 00 99" });
+    const phone = outbox.filter((x) => x.channel === "review").at(-1);
+    assert.ok(phone.subject.includes("téléphone") && phone.text.includes("Valeur actuelle : aucune valeur déclarée") && phone.text.includes("Valeur demandée : 05 61 00 00 99"), phone.text);
+    // plafond : 5 e-mails par garage sur 24 h (les demandes, elles, restent enregistrées)
+    for (const n of [1, 2, 3, 4]) assert.equal((await req("alice", "POST", G + "/changes", { field: "name", value: `Garage Dupont ${n}` })).status, 201);
+    assert.equal(outbox.filter((x) => x.channel === "review").length, 5);
+    assert.ok(logs.some((l) => l.event === "pro_change_review_mail_skipped" && l.garageId === DUPONT));
+    assert.equal((await t.db.query("SELECT count(*)::int AS n FROM pro_profile_changes WHERE garage_id = $1", [DUPONT])).rows[0].n, 6);
+    // un envoi qui échoue : la demande est enregistrée, l'échec journalisé (sans valeur ni adresse)
+    await t.db.query("DELETE FROM pro_profile_changes");
+    const real = t.app.pro.senders.mail;
+    t.app.pro.senders.mail = async () => {
+      throw new Error("Scaleway injoignable");
+    };
+    try {
+      assert.equal((await req("alice", "POST", G + "/changes", { field: "name", value: "Garage Dupont et Fils" })).status, 201);
+    } finally {
+      t.app.pro.senders.mail = real;
+    }
+    const failed = logs.filter((l) => l.event === "pro_change_review_mail_failed");
+    assert.equal(failed.length, 1);
+    assert.ok(!JSON.stringify(failed).includes("Dupont et Fils") && !JSON.stringify(failed).includes("contact@pixcar.fr"), JSON.stringify(failed));
   });
 
   test("operations: the pending changes are listed with the current and the requested value; approve publishes, reject keeps the reason for the garage", async () => {
