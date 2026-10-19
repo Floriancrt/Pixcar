@@ -409,6 +409,36 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     });
     expect(hit.n === 1 && hit.conflicts.length === 1 && hit.conflicts[0] === rdvId, "absence enregistrée, rendez-vous signalé en conflit : " + JSON.stringify(hit));
   });
+  // lot 3c : sans rien envoyer (la mise en file de l'e-mail « prête » est annulée avec la transaction)
+  await check("Lot 3c : état d'une intervention (client absent ignoré par le moteur : double jointure), e-mail « prête » une seule fois, préférences du tableau de bord", async () => {
+    if (!calIds) throw new Error("le contrôle du calendrier n'a pas abouti");
+    const q0 = await rdv.getRequest(rdvId);
+    const ROLLBACK = new Error("annulation voulue");
+    let seen = null;
+    await rdv
+      .tx(async (r) => {
+        await r.cal.setWork(proGarage2, rdvId, "no_show", rdvClock);
+        const busy = await r.cal.busy(proGarage2, q0.day, q0.day);
+        const order = await r.cal.workOrder(rdvId);
+        seen = { busy, order, first: await r.readyMail(rdvId, proGarage2), second: await r.readyMail(rdvId, proGarage2) };
+        throw ROLLBACK;
+      })
+      .catch((e) => {
+        if (e !== ROLLBACK) throw e;
+      });
+    const mine = seen.busy.filter((b) => b.requestId === rdvId);
+    expect(mine.length === 2 && mine.every((b) => b.noShow) && seen.busy.filter((b) => b.blockId).every((b) => !b.noShow), "client absent lu sur les affectations : " + JSON.stringify(seen.busy));
+    expect(seen.order.status === "planned" && seen.order.noShow && seen.order.statusAt === rdvClock, "intervention : absent noté, état « planned » : " + JSON.stringify(seen.order));
+    expect(seen.first === true && seen.second === false, "e-mail « prête » mis en file une seule fois");
+    expect((await count("SELECT count(*) AS n FROM rdv_mails WHERE request_id = $1 AND kind = 'client_ready'", [rdvId])) === 0, "rien dans la file après l'annulation");
+    // ligne d'intervention rattachée à un bloc (celle d'un rendez-vous hors Pixcar ; le dépôt ne regarde pas le genre du bloc)
+    await rdv.tx((r) => r.cal.setWork(proGarage2, calIds.hold, "received", rdvClock));
+    expect((await rdv.cal.workOrder(calIds.hold)).status === "received", "intervention d'un bloc relue");
+    await pro.savePrefs(proGarage2, acc("c"), { shortcuts: ["planning", "site"] });
+    await pro.savePrefs(proGarage2, acc("c"), { shortcuts: ["site", "planning", "prices"] });
+    const prefs = await pro.getPrefs(proGarage2, acc("c"));
+    expect(prefs && prefs.shortcuts.join() === "site,planning,prices", "préférences relues (jsonb, ON CONFLICT sur la clé double) : " + JSON.stringify(prefs));
+  });
   await check("Rendez-vous : heure limite passée (expiration, série sans réponse), effacement des coordonnées, purge par lots", async () => {
     rdvClock = parisInstant(addDays(nextMonday, 1), 725); // mardi 12:05
     const due = await rdv.dueExpiries(10);
@@ -427,7 +457,8 @@ export async function selfcheck(db, { log = () => {} } = {}) {
       const left = await rdv.tx(async (r) => ({ cal: await r.cal.getCalendar(proGarage2), staff: await r.cal.countStaff(proGarage2), skills: await r.cal.countSkills(proGarage2), res: await r.cal.countResources(proGarage2) }));
       // réglages, compétence, mécanicien, lien de compétence, poste, exigence, absence, intervention, historique, bloc et son affectation
       // (les affectations de la demande sont déjà parties)
-      expect(gone === 11 && !left.cal && left.staff + left.skills + left.res === 0, `retrait du calendrier par lots : ${gone} lignes, reste ${JSON.stringify(left)}`);
+      // + l'intervention du bloc (lot 3c)
+      expect(gone === 12 && !left.cal && left.staff + left.skills + left.res === 0, `retrait du calendrier par lots : ${gone} lignes, reste ${JSON.stringify(left)}`);
       expect((await count("SELECT count(*) AS n FROM rdv_work_orders WHERE garage_id = $1", [proGarage2])) === 0, "intervention retirée");
     }
   });
@@ -436,7 +467,7 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     await pro.purge();
     expect((await count("SELECT count(*) AS n FROM pro_visits WHERE garage_id = $1", [proGarage2])) === 4, "les 4 visites de moins de 60 jours restent");
     expect((await pro.revoke(proGarage2)) === 1 && (await count("SELECT count(*) AS n FROM pro_prices WHERE garage_id = $1", [proGarage2])) === 0, "prix retirés");
-    for (const table of ["pro_profiles", "pro_profile_changes", "pro_services"])
+    for (const table of ["pro_profiles", "pro_profile_changes", "pro_services", "pro_prefs"])
       expect((await count(`SELECT count(*) AS n FROM ${table} WHERE garage_id = $1`, [proGarage2])) === 0, `${table} vidée pour ce garage`);
   });
 
@@ -446,7 +477,7 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     await db.query("DELETE FROM garage_contacts WHERE import_id = $1", [`selfcheck-${tag}`]);
     await db.query("DELETE FROM pro_prices WHERE garage_id IN ($1, $2)", [proGarage, proGarage2]);
     await db.query("DELETE FROM pro_visits WHERE garage_id IN ($1, $2)", [proGarage, proGarage2]);
-    for (const table of ["pro_profiles", "pro_profile_changes", "pro_services"]) await db.query(`DELETE FROM ${table} WHERE garage_id IN ($1, $2)`, [proGarage, proGarage2]);
+    for (const table of ["pro_profiles", "pro_profile_changes", "pro_services", "pro_prefs"]) await db.query(`DELETE FROM ${table} WHERE garage_id IN ($1, $2)`, [proGarage, proGarage2]);
     for (const table of ["rdv_settings", "rdv_slots", "rdv_closures", "rdv_requests", "rdv_mails"]) await db.query(`DELETE FROM ${table} WHERE garage_id IN ($1, $2)`, [proGarage, proGarage2]);
     for (const g of [proGarage, proGarage2]) await rdv.cal.revoke(g);
     await db.query("DELETE FROM rdv_events WHERE ip_hash = $1", [TEST_IP]);

@@ -304,7 +304,8 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
       async cancelByGarage(id, garageId, reason, note, pauseAfter) {
         const r = await one(
           `UPDATE rdv_requests SET status = 'cancelled', cancelled_by = 'garage', reason = $3, note = $4, decided_at = $5::timestamptz
-           WHERE id = $1 AND garage_id = $2 AND status = 'confirmed' AND starts_at > $5::timestamptz RETURNING ${REQUEST_COLUMNS}`,
+           WHERE id = $1 AND garage_id = $2 AND status = 'confirmed' AND starts_at > $5::timestamptz
+             AND NOT EXISTS (SELECT 1 FROM rdv_work_orders w WHERE w.request_id = $1 AND w.status <> 'planned') RETURNING ${REQUEST_COLUMNS}`,
           [id, garageId, reason, note, T()],
         );
         if (!r) return null;
@@ -369,11 +370,19 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
         if (r.rowCount) await enqueue([{ requestId: id, garageId, kind: "client_reminder" }]);
         return r.rowCount > 0;
       },
+      // relance « prix payé » : pas pour un client noté absent (lot 3c)
       dueFollowUps: (fromIso, toIso, limit) =>
         all(
-          "SELECT id, garage_id FROM rdv_requests WHERE status = 'confirmed' AND remind_price AND followed_up_at IS NULL AND anonymized_at IS NULL AND day BETWEEN $1::date AND $2::date LIMIT $3",
+          `SELECT id, garage_id FROM rdv_requests r WHERE status = 'confirmed' AND remind_price AND followed_up_at IS NULL AND anonymized_at IS NULL AND day BETWEEN $1::date AND $2::date
+             AND NOT EXISTS (SELECT 1 FROM rdv_work_orders w WHERE w.request_id = r.id AND w.no_show_at IS NOT NULL) LIMIT $3`,
           [fromIso, toIso, limit],
         ),
+      // « Votre voiture est prête » (lot 3c) : un seul par rendez-vous ; false s'il est déjà dans la file (ou parti)
+      async readyMail(id, garageId) {
+        if (await one("SELECT id FROM rdv_mails WHERE request_id = $1 AND kind = 'client_ready' LIMIT 1", [id])) return false;
+        await enqueue([{ requestId: id, garageId, kind: "client_ready" }]);
+        return true;
+      },
       async followUp(id, garageId) {
         const r = await q.query("UPDATE rdv_requests SET followed_up_at = $2::timestamptz WHERE id = $1 AND status = 'confirmed' AND followed_up_at IS NULL", [id, T()]);
         if (r.rowCount) await enqueue([{ requestId: id, garageId, kind: "client_followup" }]);

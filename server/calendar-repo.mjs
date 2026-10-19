@@ -22,7 +22,10 @@ const reqOf = (r) => ({
 });
 const unavailOf = (r) => ({ id: r.id, target: r.target, targetId: r.target_id, start: ms(r.starts_at), end: ms(r.ends_at), kind: r.kind, label: r.label });
 const workOrderOf = (r) =>
-  r && { requestId: r.request_id, status: r.status, vehicle: r.vehicle, workStart: ms(r.work_start), workEnd: ms(r.work_end), readyAt: ms(r.ready_at), returnAt: ms(r.return_at), labour: r.labour_min, immob: r.immob_min };
+  r && {
+    requestId: r.request_id, status: r.status, vehicle: r.vehicle, workStart: ms(r.work_start), workEnd: ms(r.work_end), readyAt: ms(r.ready_at), returnAt: ms(r.return_at), labour: r.labour_min, immob: r.immob_min,
+    statusAt: ms(r.status_at), noShow: !!r.no_show_at,
+  };
 
 const blockOf = (r) =>
   r && {
@@ -79,15 +82,20 @@ export function bindCalendar(q, { now = Date.now, inTx = false } = {}) {
         busy,
       };
     },
-    // Affectations du jour fromIso au jour toIso, avec l'état de leur demande (le moteur ne garde que celles qui retiennent encore)
+    // Affectations du jour fromIso au jour toIso, avec l'état de leur demande (le moteur ne garde que celles qui retiennent encore) et le
+    // client absent (lot 3c : sa place se reprend), noté sur l'intervention de la demande ou du rendez-vous hors Pixcar
     busy: (garageId, fromIso, toIso) =>
       all(
-        `SELECT a.request_id, a.block_id, a.target, a.target_id, a.role, a.starts_at, a.ends_at, a.fixed, r.status, r.deadline
+        `SELECT a.request_id, a.block_id, a.target, a.target_id, a.role, a.starts_at, a.ends_at, a.fixed, r.status, r.deadline, w.no_show_at, wb.no_show_at AS block_no_show_at
          FROM rdv_assignments a LEFT JOIN rdv_requests r ON r.id = a.request_id
+           LEFT JOIN rdv_work_orders w ON w.request_id = a.request_id LEFT JOIN rdv_work_orders wb ON wb.request_id = a.block_id
          WHERE a.garage_id = $1 AND a.day BETWEEN $2::date AND $3::date`,
         [garageId, fromIso, toIso],
       ).then((rows) =>
-        rows.map((r) => ({ requestId: r.request_id, blockId: r.block_id, target: r.target, targetId: r.target_id, role: r.role, start: ms(r.starts_at), end: ms(r.ends_at), fixed: r.fixed, status: r.status, deadline: ms(r.deadline) })),
+        rows.map((r) => ({
+          requestId: r.request_id, blockId: r.block_id, target: r.target, targetId: r.target_id, role: r.role, start: ms(r.starts_at), end: ms(r.ends_at), fixed: r.fixed, status: r.status, deadline: ms(r.deadline),
+          noShow: !!(r.no_show_at || r.block_no_show_at),
+        })),
       ),
 
     // ---- mécaniciens
@@ -223,6 +231,7 @@ export function bindCalendar(q, { now = Date.now, inTx = false } = {}) {
       const r = await q.query("DELETE FROM rdv_blocks WHERE id = $1 AND garage_id = $2", [id, garageId]);
       if (!r.rowCount) return false;
       await q.query("DELETE FROM rdv_assignments WHERE block_id = $1 AND garage_id = $2", [id, garageId]);
+      await q.query("DELETE FROM rdv_work_orders WHERE request_id = $1 AND garage_id = $2", [id, garageId]); // état du rendez-vous hors Pixcar (lot 3c)
       return true;
     },
     // rows [{ target, targetId, role, day, start, end (ms) }]
@@ -251,6 +260,14 @@ export function bindCalendar(q, { now = Date.now, inTx = false } = {}) {
         [requestId, garageId, f.vehicle || "", f.workStart ? iso(f.workStart) : null, f.workEnd ? iso(f.workEnd) : null, f.readyAt ? iso(f.readyAt) : null, f.returnAt ? iso(f.returnAt) : null, f.labour ?? null, f.immob ?? null, T()],
       ),
     workOrder: (requestId) => one("SELECT * FROM rdv_work_orders WHERE request_id = $1", [requestId]).then(workOrderOf),
+    // état d'une intervention (lot 3c) : id d'une demande, ou d'un rendez-vous hors Pixcar (sa ligne naît au premier changement) ;
+    // state : un état de src/js/shared/work.js, « no_show » compris (l'état reste « planned », le client est noté absent)
+    setWork: (garageId, id, state, atMs) =>
+      q.query(
+        `INSERT INTO rdv_work_orders (request_id, garage_id, status, no_show_at, status_at, created_at, updated_at) VALUES ($1, $2, $3, $4::timestamptz, $5::timestamptz, $5::timestamptz, $5::timestamptz)
+         ON CONFLICT (request_id) DO UPDATE SET status = EXCLUDED.status, no_show_at = EXCLUDED.no_show_at, status_at = EXCLUDED.status_at, updated_at = EXCLUDED.updated_at`,
+        [id, garageId, state === "no_show" ? "planned" : state, state === "no_show" ? iso(atMs) : null, iso(atMs)],
+      ),
     workOrders: (garageId, requestIds) =>
       requestIds.length ? all(`SELECT * FROM rdv_work_orders WHERE garage_id = $1 AND request_id IN (${placeholders(requestIds.length, 2)})`, [garageId, ...requestIds]).then((rows) => rows.map(workOrderOf)) : Promise.resolve([]),
 
@@ -275,7 +292,7 @@ export function bindCalendar(q, { now = Date.now, inTx = false } = {}) {
       q.query("INSERT INTO rdv_history (id, garage_id, at, account_id, what, ref_id, detail) VALUES ($1, $2, $3::timestamptz, $4, $5, $6, $7)", [crypto.randomUUID(), garageId, T(), accountId || "", what, refId || null, String(detail || "").slice(0, 300)]),
     history: (garageId, limit = 50) => all("SELECT at, what, ref_id, detail FROM rdv_history WHERE garage_id = $1 ORDER BY at DESC, id LIMIT $2", [garageId, limit]).then((rows) => rows.map((r) => ({ at: ms(r.at), what: r.what, refId: r.ref_id, detail: r.detail }))),
 
-    // ---- entretien : historique de plus de 12 mois ; affectations et interventions dont la demande n'existe plus
+    // ---- entretien : historique de plus de 12 mois ; affectations et interventions dont la demande (ou le bloc) n'existe plus
     async purge() {
       const run = async (sql) => {
         let n = 0;
@@ -291,8 +308,9 @@ export function bindCalendar(q, { now = Date.now, inTx = false } = {}) {
         calAssignments: await run(
           "DELETE FROM rdv_assignments WHERE id IN (SELECT a.id FROM rdv_assignments a LEFT JOIN rdv_requests r ON r.id = a.request_id WHERE a.request_id IS NOT NULL AND r.id IS NULL AND a.created_at < $2::timestamptz LIMIT $1)",
         ),
+        // l'intervention d'une demande, ou d'un rendez-vous hors Pixcar (lot 3c) : effacée quand ni l'une ni l'autre n'existe plus
         calWorkOrders: await run(
-          "DELETE FROM rdv_work_orders WHERE request_id IN (SELECT w.request_id FROM rdv_work_orders w LEFT JOIN rdv_requests r ON r.id = w.request_id WHERE r.id IS NULL AND w.created_at < $2::timestamptz LIMIT $1)",
+          "DELETE FROM rdv_work_orders WHERE request_id IN (SELECT w.request_id FROM rdv_work_orders w LEFT JOIN rdv_requests r ON r.id = w.request_id LEFT JOIN rdv_blocks k ON k.id = w.request_id WHERE r.id IS NULL AND k.id IS NULL AND w.created_at < $2::timestamptz LIMIT $1)",
         ),
         // blocs internes comme les demandes : libellé effacé 30 jours après le jour, ligne effacée après 24 mois
         calBlocksAnonymized: await run(

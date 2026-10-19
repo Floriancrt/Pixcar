@@ -381,8 +381,27 @@ paths:
                       views: { $ref: "#/components/schemas/ProVisitCounts" }
                       calls: { $ref: "#/components/schemas/ProVisitCounts" }
                   rdv: { type: object, description: "Rendez-vous en ligne ouverts côté API : demandes à traiter, mode du calendrier (l'écran Planning n'existe qu'en mode avancé).", required: [todo, mode], properties: { todo: { type: integer, minimum: 0 }, mode: { type: string, enum: [simple, advanced] } } }
+                  prefs: { $ref: "#/components/schemas/ProPrefs" }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { description: "Garage introuvable ou pas rattaché à ce compte (`not_found`), ou Espace Pro fermé (`pro_disabled`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/prefs:
+    put:
+      tags: [Espace Pro]
+      summary: "Raccourcis du tableau de bord de ce compte pour ce garage (lot 3c) : `{ shortcuts }`"
+      description: |
+        Six au plus, sans doublon, parmi les identifiants de `src/js/shared/work.js` (planning, requests, prices, agenda, garage, team,
+        new, closure, site). Une liste vide est permise. Effacés avec le rattachement.
+      operationId: proPrefs
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProPrefs" } } } }
+      responses:
+        "200": { description: Les raccourcis enregistrés., content: { application/json: { schema: { $ref: "#/components/schemas/ProPrefs" } } } }
+        "400": { description: "JSON illisible (`bad_json`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Garage pas rattaché à ce compte.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "Liste invalide (`validation`, `field` : shortcuts).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   /v1/pro/garages/{id}/prices/{service}:
     put:
       tags: [Espace Pro]
@@ -885,7 +904,7 @@ paths:
         "200": { description: La demande à jour., content: { application/json: { schema: { $ref: "#/components/schemas/RdvGarageRequest" } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
-        "409": { $ref: "#/components/responses/RdvState" }
+        "409": { description: "La demande n'est plus dans l'état voulu (`state`, avec `status`), ou l'intervention a commencé (`started`, lot 3c : la voiture est au garage).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
   # ---------------------------------------------------------------- calendrier avancé (docs/calendrier-avance.md, lot 3a)
   /v1/pro/garages/{id}/rdv/requests/{request}/move:
@@ -906,7 +925,7 @@ paths:
         "200": { description: La demande à jour., content: { application/json: { schema: { $ref: "#/components/schemas/RdvGarageRequest" } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
-        "409": { description: "Conflit (`conflict`, avec `reasons` et `alternatives`), confirmation du changement d'heure attendue (`confirm`), rendez-vous passé ou clos (`state`), mode simple (`simple_mode`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Conflit (`conflict`, avec `reasons` et `alternatives`), confirmation du changement d'heure attendue (`confirm`), rendez-vous passé ou clos (`state`), intervention commencée (`started`, lot 3c), mode simple (`simple_mode`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
   /v1/pro/garages/{id}/rdv/calendar:
     get:
@@ -1214,7 +1233,7 @@ paths:
         "200": { description: "Bloc enregistré (`saved`).", content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockSaved" } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
-        "409": { description: "Mode simple (`simple_mode`), prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`), travaux qui attendraient (`shifted`, comme à la création ; une modification qui garde l'heure de dépôt ne redemande pas).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Mode simple (`simple_mode`), prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`), travaux qui attendraient (`shifted`, comme à la création ; une modification qui garde l'heure de dépôt ne redemande pas), intervention commencée qui changerait de jour ou d'heure (`started`, lot 3c).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
     delete:
       tags: [Calendrier]
@@ -1228,6 +1247,47 @@ paths:
         "200": { description: Bloc supprimé., content: { application/json: { schema: { type: object, required: [deleted], properties: { deleted: { type: boolean, enum: [true] } } } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
+  /v1/pro/garages/{id}/rdv/calendar/work/{ref}:
+    post:
+      tags: [Calendrier]
+      summary: "État de l'intervention (lot 3c) d'un rendez-vous Pixcar confirmé ou d'un rendez-vous hors Pixcar : `{ status, notify? }`"
+      description: |
+        Mode avancé. Passages possibles (`src/js/shared/work.js`) : prévue → voiture reçue ou client absent (une fois l'heure de dépôt
+        passée) ; reçue → en cours, prête (ou retour à prévue) ; en cours → en attente de pièces, suspendue, prête ; en attente de
+        pièces ou suspendue → en cours, prête ; prête → restituée (ou retour à en cours) ; restituée → prête ; client absent → prévue.
+        Du jour du rendez-vous à 30 jours après. Un client absent ne retient plus ses ressources. Passée à « Prête », une demande Pixcar
+        envoie au client « Votre voiture est prête » (une seule fois), sauf `notify: false`.
+      operationId: calWork
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: ref, in: path, required: true, schema: { type: string, format: uuid }, description: "Identifiant de la demande ou du bloc `job`." }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [planned, received, in_progress, waiting_parts, suspended, done, returned, no_show] }
+                notify: { type: boolean, description: "Passage à `done` d'une demande Pixcar : prévenir le client (vrai par défaut)." }
+      responses:
+        "200":
+          description: L'état enregistré.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, work, notified]
+                properties:
+                  id: { type: string, format: uuid }
+                  work: { $ref: "#/components/schemas/CalWork" }
+                  notified: { type: boolean, description: "L'e-mail « Votre voiture est prête » vient d'être mis en file." }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Passage impossible ou demande pas confirmée (`state`), jour à venir ou heure de dépôt pas passée pour un absent (`too_early`), plus de 30 jours après (`too_late`), mode simple (`simple_mode`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
   /v1/rdv/garages/{id}/times:
     get:
       tags: [Rendez-vous]
@@ -1650,7 +1710,7 @@ components:
             phone: { type: string, description: "Téléphone du client (vide une fois effacé)." }
             plate: { type: string }
             vehicle: { type: string }
-            work: { type: object, nullable: true, properties: { start: { type: string, format: date-time, nullable: true }, ready: { type: string, format: date-time, nullable: true }, back: { type: string, format: date-time, nullable: true }, labour: { type: integer, nullable: true }, status: { type: string } } }
+            work: { type: object, nullable: true, properties: { start: { type: string, format: date-time, nullable: true }, ready: { type: string, format: date-time, nullable: true }, back: { type: string, format: date-time, nullable: true }, labour: { type: integer, nullable: true }, status: { type: string, enum: [planned, received, in_progress, waiting_parts, suspended, done, returned] }, at: { type: string, format: date-time, nullable: true }, noShow: { type: boolean } } }
             plan: { type: array, items: { allOf: [{ $ref: "#/components/schemas/CalPlanRow" }, { type: object, required: [fixed] }] } }
     CalPlanRow:
       type: object
@@ -1678,6 +1738,15 @@ components:
         station: { type: string, format: uuid, nullable: true, description: "`job` : poste choisi." }
         resources: { type: array, items: { type: string, format: uuid }, description: "`hold` : postes bloqués (10 mécaniciens et postes au plus)." }
         confirm: { type: boolean, description: "`job` : accepte que les travaux attendent le premier moment libre après le dépôt (réponse 409 `shifted` reçue avant)." }
+        received: { type: boolean, description: "Création d'un `job` seulement (lot 3c) : client déjà sur place, aujourd'hui, au plus tard au prochain quart d'heure ; l'intervention est aussitôt « Voiture reçue »." }
+    CalWork:
+      type: object
+      required: [status, at, noShow]
+      description: "État de l'intervention (lot 3c). Client absent : `status` reste `planned` et `noShow` est vrai."
+      properties:
+        status: { type: string, enum: [planned, received, in_progress, waiting_parts, suspended, done, returned] }
+        at: { type: string, format: date-time, nullable: true, description: Dernier changement. }
+        noShow: { type: boolean }
     CalBlockSaved:
       type: object
       required: [saved]
@@ -1696,6 +1765,7 @@ components:
         startsAt: { type: string, format: date-time }
         endsAt: { type: string, format: date-time }
         fixed: { type: boolean }
+        work: { allOf: [{ $ref: "#/components/schemas/CalWork" }], nullable: true, description: "`job` seulement : null tant que l'état n'a pas changé (« Prévue »)." }
         plan: { type: array, items: { $ref: "#/components/schemas/CalPlanRow" } }
     CalAgenda:
       type: object
@@ -1848,6 +1918,20 @@ components:
         note: { type: string }
         cancelledBy: { type: string, enum: [client, garage, closure] }
         alternatives: { type: array, items: { type: object, required: [name, km, first], properties: { name: { type: string }, km: { type: string }, city: { type: string }, first: { type: string } } } }
+        progress:
+          type: object
+          description: "Lot 3c : avancement de l'intervention, dès « Voiture reçue » (absent sinon, et pour un client noté absent)."
+          required: [status, label, at, atText]
+          properties:
+            status: { type: string, enum: [received, in_progress, waiting_parts, suspended, done, returned] }
+            label: { type: string, example: Travaux en cours }
+            at: { type: string, format: date-time, nullable: true }
+            atText: { type: string, example: mercredi 21 octobre à 10:20 }
+    ProPrefs:
+      type: object
+      required: [shortcuts]
+      properties:
+        shortcuts: { type: array, maxItems: 6, items: { type: string, enum: [planning, requests, prices, agenda, garage, team, new, closure, site] } }
     ProAddr:
       type: object
       required: [street, pc, city]

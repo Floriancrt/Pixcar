@@ -469,6 +469,131 @@ describe("Calendrier avancé", () => {
     assert.equal(await count("SELECT count(*)::int AS n FROM rdv_assignments WHERE block_id IS NOT NULL"), 0);
   });
 
+  test("lot 3c · interventions: received, in progress, ready (the client is told once), returned; no-show frees the workshop and skips the price follow-up; started = fixed", async () => {
+    await openGarage();
+    await setUp();
+    await activate();
+    const one = await sendRequest({ remindPrice: true });
+    const two = await sendRequest({ email: "b@example.com", name: "Bruno Petit", time: "14:00", remindPrice: true });
+    for (const q of [one, two]) assert.equal((await pro("POST", `/rdv/requests/${q.id}/accept`)).status, 200);
+    const work = (id, status, extra = {}) => pro("POST", `/rdv/calendar/work/${id}`, { status, ...extra });
+    const agenda = async () => (await pro("GET", `/rdv/calendar/agenda?from=${WED}&to=${WED}`)).body;
+    // pas avant le jour du rendez-vous ; un état inconnu
+    let r = await work(one.id, "received");
+    assert.deepEqual([r.status, r.body.error.code], [409, "too_early"]);
+    assert.equal((await work(one.id, "fini")).status, 422);
+    // mercredi 8:30 : le client arrive en avance ; « absent » seulement une fois l'heure de dépôt passée
+    clock = at(WED, "08:30");
+    r = await work(one.id, "no_show");
+    assert.deepEqual([r.status, r.body.error.code], [409, "too_early"]);
+    r = await work(one.id, "received");
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual([r.body.work.status, r.body.work.at, r.body.work.noShow, r.body.notified], ["received", new Date(at(WED, "08:30")).toISOString(), false, false]);
+    // commencée = figée : ni déplacement ni annulation depuis l'Espace Pro
+    r = await pro("POST", `/rdv/requests/${one.id}/move`, { day: WED, time: "10:00", confirm: true });
+    assert.deepEqual([r.status, r.body.error.code], [409, "started"]);
+    r = await pro("POST", `/rdv/requests/${one.id}/cancel`, { reason: "workshop" });
+    assert.deepEqual([r.status, r.body.error.code], [409, "started"]);
+    assert.equal((await t.db.query("SELECT status FROM rdv_requests WHERE id = $1", [one.id])).rows[0].status, "confirmed");
+    // la suite : en cours, en attente de pièces, reprise ; « Restituée » ne se saute pas
+    clock = at(WED, "08:40");
+    for (const s of ["in_progress", "waiting_parts", "in_progress"]) assert.equal((await work(one.id, s)).status, 200, s);
+    r = await work(one.id, "returned");
+    assert.deepEqual([r.status, r.body.error.code], [409, "state"]);
+    // prête : le client est prévenu (case cochée par défaut), avec les heures d'ouverture qui restent
+    clock = at(WED, "10:20");
+    r = await work(one.id, "done");
+    assert.deepEqual([r.status, r.body.work.status, r.body.notified], [200, "done", true]);
+    let ready = mails(/^Votre voiture est prête/);
+    assert.equal(ready.length, 1);
+    assert.equal(ready[0].target, "julien.roux@example.com");
+    assert.equal(ready[0].subject, "Votre voiture est prête chez Garage Dupont");
+    assert.match(ready[0].text, /Vous pouvez venir la chercher aujourd'hui jusqu'à 12:00 et de 14:00 à 18:00\./);
+    assert.match(ready[0].html, /Votre voiture est prête/);
+    // la page de suivi du client
+    r = await pub("GET", "/v1/rdv/me", undefined, { token: one.token });
+    assert.deepEqual(r.body.progress, { status: "done", label: "Prête", at: new Date(at(WED, "10:20")).toISOString(), atText: "mercredi 21 octobre à 10:20" });
+    // une erreur corrigée, puis « Prête » de nouveau : pas de second e-mail ; puis restituée
+    assert.equal((await work(one.id, "in_progress")).status, 200);
+    r = await work(one.id, "done");
+    assert.deepEqual([r.status, r.body.notified], [200, false]);
+    assert.equal(mails(/^Votre voiture est prête/).length, 1);
+    assert.equal((await work(one.id, "returned")).body.work.status, "returned");
+    assert.equal((await pub("GET", "/v1/rdv/me", undefined, { token: one.token })).body.progress.label, "Restituée");
+    assert.deepEqual((await agenda()).appointments.map((a) => [a.id, a.work.status, a.work.noShow]), [[one.id, "returned", false], [two.id, "planned", false]]);
+    // « Prête » sans prévenir : la case décochée
+    assert.equal((await work(one.id, "done")).status, 200);
+    // client absent : Paul et le pont sont libres, un rendez-vous pris au comptoir à 14:15 passe sans attente
+    clock = at(WED, "14:10");
+    r = await work(two.id, "no_show");
+    assert.deepEqual([r.status, r.body.work.status, r.body.work.noShow], [200, "planned", true]);
+    assert.equal((await pub("GET", "/v1/rdv/me", undefined, { token: two.token })).body.progress, undefined, "rien sur la page du client");
+    r = await pro("POST", "/rdv/calendar/blocks", { kind: "job", label: "M. Martin", services: [{ id: "plaq_av", qty: 1 }], day: WED, time: "14:15" });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    // erreur corrigée (le client est finalement venu), puis de nouveau absent
+    assert.deepEqual((await work(two.id, "planned")).body.work, { status: "planned", at: new Date(clock).toISOString(), noShow: false });
+    assert.equal((await work(two.id, "no_show")).status, 200);
+    // client déjà sur place : rendez-vous hors Pixcar à l'heure actuelle, reçu aussitôt (pas pour demain)
+    clock = at(WED, "15:40");
+    r = await pro("POST", "/rdv/calendar/blocks", { kind: "job", label: "Client au comptoir", services: [{ id: "vidange", qty: 1 }], day: WED, time: "15:45", received: true });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const walk = r.body.saved;
+    r = await pro("POST", "/rdv/calendar/blocks", { kind: "job", label: "Demain", services: [{ id: "vidange", qty: 1 }], day: "2026-10-22", time: "09:00", received: true });
+    assert.deepEqual([r.status, r.body.error.field], [422, "time"]);
+    let ag = await agenda();
+    assert.deepEqual(ag.blocks.map((k) => [k.label, k.work && k.work.status]), [["M. Martin", null], ["Client au comptoir", "received"]]);
+    assert.equal(ag.appointments.find((a) => a.id === two.id).work.noShow, true);
+    // mêmes états, jamais d'e-mail ; commencé = figé
+    assert.equal((await work(walk, "in_progress")).status, 200);
+    r = await work(walk, "done");
+    assert.deepEqual([r.status, r.body.notified], [200, false]);
+    r = await pro("PUT", `/rdv/calendar/blocks/${walk}`, { kind: "job", label: "Client au comptoir", services: [{ id: "vidange", qty: 1 }], day: WED, time: "16:30" });
+    assert.deepEqual([r.status, r.body.error.code], [409, "started"]);
+    // un créneau bloqué n'a pas d'intervention
+    const hold = (await pro("POST", "/rdv/calendar/blocks", { kind: "hold", label: "Réunion", day: WED, time: "17:00", to: "17:30", resources: [] , staff: [ag.staff[0].id] })).body.saved;
+    assert.equal((await work(hold, "received")).status, 404);
+    // historique sans donnée de client ; le bloc supprimé emporte son état
+    const hist = (await t.db.query("SELECT detail FROM rdv_history WHERE garage_id = $1 AND what = 'work' ORDER BY at", [DUPONT])).rows.map((x) => x.detail);
+    assert.ok(hist.length >= 14 && hist.every((d) => !/Julien|Bruno|comptoir|Martin/.test(d)), hist.join("\n"));
+    assert.ok(hist.includes("Intervention Pixcar du mercredi 21 octobre à 9:00 : Prête (client prévenu par e-mail)."), hist.join("\n"));
+    assert.equal((await pro("DELETE", `/rdv/calendar/blocks/${walk}`)).status, 200);
+    assert.equal(await count("SELECT count(*)::int AS n FROM rdv_work_orders WHERE request_id = $1", [walk]), 0);
+    // la relance « prix payé » (le lendemain) : pour Julien, pas pour le client absent
+    clock = at("2026-10-22", "10:30");
+    outbox().length = 0;
+    assert.equal((await t.app.rdvTick()).followedUp, 1);
+    assert.deepEqual(mails(/^Combien avez-vous payé/).map((m) => m.target), ["julien.roux@example.com"]);
+    // plus de 30 jours après : l'état ne change plus
+    clock = at("2026-11-21", "10:00");
+    r = await work(one.id, "returned");
+    assert.deepEqual([r.status, r.body.error.code], [409, "too_late"]);
+    // mode simple (un autre garage) ; un autre compte ne voit rien
+    const petit = proOf(PETIT);
+    await openGarage(petit, PETIT, "bob");
+    r = await petit("POST", `/rdv/calendar/work/${one.id}`, { status: "returned" });
+    assert.deepEqual([r.status, r.body.error.code], [409, "simple_mode"]);
+    assert.equal((await pro("POST", `/rdv/calendar/work/${one.id}`, { status: "returned" }, "bob")).status, 404);
+  });
+
+  test("lot 3c · dashboard shortcuts: defaults, saved per account and garage, validated, gone with the claim", async () => {
+    await own("alice", DUPONT);
+    let r = await pro("GET", "");
+    assert.deepEqual(r.body.prefs, { shortcuts: ["planning", "prices", "agenda"] });
+    r = await pro("PUT", "/prefs", { shortcuts: ["requests", "planning", "site"] });
+    assert.deepEqual([r.status, r.body], [200, { shortcuts: ["requests", "planning", "site"] }]);
+    assert.deepEqual((await pro("GET", "")).body.prefs, { shortcuts: ["requests", "planning", "site"] });
+    for (const bad of [["planning", "planning"], ["nope"], ["planning", "prices", "agenda", "garage", "team", "new", "site"], "planning", null]) {
+      r = await pro("PUT", "/prefs", { shortcuts: bad });
+      assert.deepEqual([r.status, r.body.error.field], [422, "shortcuts"], JSON.stringify(bad));
+    }
+    assert.deepEqual((await pro("PUT", "/prefs", { shortcuts: [] })).body, { shortcuts: [] });
+    assert.equal((await pro("PUT", "/prefs", { shortcuts: ["site"] }, "bob")).status, 404);
+    assert.equal((await pro("GET", "/prefs")).status, 405);
+    // retrait du rattachement : les préférences partent avec lui
+    assert.equal(await t.app.pro.repo.revoke(DUPONT), 1);
+    assert.equal(await count("SELECT count(*)::int AS n FROM pro_prefs WHERE garage_id = $1", [DUPONT]), 0);
+  });
+
   test("routes: methods, unknown paths, the agenda range", async () => {
     await openGarage();
     assert.equal((await pro("DELETE", "/rdv/calendar")).status, 405);

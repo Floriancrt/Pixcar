@@ -32,7 +32,7 @@ describe("operations (Lambda « ops »)", () => {
   test("migrate applies the migrations once (nothing the second time); the database role is a DSQL matter and is skipped elsewhere", async () => {
     const first = await ops({ op: "migrate" });
     assert.equal(first.ok, true, first.error);
-    assert.deepEqual(first.applied, ["001_init.sql", "002_pro.sql", "003_pro_prices.sql", "004_pro_garage.sql", "005_rdv.sql", "006_calendar.sql", "007_calendar_blocks.sql"]);
+    assert.deepEqual(first.applied, ["001_init.sql", "002_pro.sql", "003_pro_prices.sql", "004_pro_garage.sql", "005_rdv.sql", "006_calendar.sql", "007_calendar_blocks.sql", "008_pro_prefs.sql"]);
     assert.ok(first.role.skipped);
     assert.deepEqual((await ops({ op: "migrate" })).applied, []);
   });

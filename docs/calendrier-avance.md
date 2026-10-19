@@ -6,7 +6,7 @@ compétences, prestations autorisées), postes et équipements (pont, banc, stat
 son mode dans Disponibilités ; passer de l'un à l'autre ne perd rien.
 
 Découpage : **lot 3a** (ce document : modèle, moteur, API, assistant, réservation en mode avancé), lot 3b (calendrier multi-vues,
-glisser-déposer, blocs internes : section « Lot 3b » plus bas), lot 3c (interventions, tableau de bord). Plus tard : stock, statistiques avancées, comptes mécaniciens.
+glisser-déposer, blocs internes : section « Lot 3b » plus bas), lot 3c (suivi des interventions, tableau de bord : section « Lot 3c »). Plus tard : stock, statistiques avancées, comptes mécaniciens.
 
 ## Décisions (validées par l'utilisateur le 19 octobre 2026)
 
@@ -19,6 +19,8 @@ glisser-déposer, blocs internes : section « Lot 3b » plus bas), lot 3c (inter
 | Bascule de mode | Vers l'avancé : les rendez-vous à venir sont affectés automatiquement ; ceux qui n'entrent pas sont listés et l'activation attend qu'ils soient placés à la main (ou annulés). Vers le simple : chaque rendez-vous à venir est rattaché à un créneau compatible ; même règle. Rien n'est déplacé ni supprimé. |
 | Pause pendant une intervention | La main-d'œuvre s'interrompt (pause, fermeture de midi) et reprend ; le véhicule reste sur son poste. |
 | Mécaniciens | Des ressources, pas des comptes : un seul compte par garage (inchangé). |
+| Voiture prête (lot 3c) | Au passage d'un rendez-vous Pixcar à « Prête », une case « Prévenir le client par e-mail » est **cochée par défaut** (le garage peut la décocher) ; la page de suivi du client montre l'avancement. Décision de l'utilisateur du 19 octobre 2026. |
+| Tableau de bord (lot 3c) | Inspiré de la maquette de l'utilisateur du 19 octobre 2026 ; raccourcis personnalisables. |
 
 ## Données (migration `006_calendar.sql`)
 
@@ -222,6 +224,101 @@ d'ensemble et d'un bloc enrichi, vidéo de la barre latérale). Tout est dans la
 | `POST …/calendar/blocks` | crée un bloc (`kind` : `job` ou `hold`) ; 409 `conflict` avec causes et autres horaires |
 | `PUT …/calendar/blocks/:block` | modifie ou déplace un bloc ; mêmes contrôles |
 | `DELETE …/calendar/blocks/:block` | supprime un bloc et libère ses ressources |
+
+## Lot 3c : suivi des interventions, tableau de bord
+
+Choix faits au début du lot (19 octobre 2026), dans le cadre des décisions ci-dessus ; à revoir sur retour de l'utilisateur.
+
+### Suivi des interventions
+
+En **mode avancé**, pour les rendez-vous Pixcar confirmés et les rendez-vous pris hors Pixcar (pas les créneaux bloqués). Les états sont
+ceux prévus dès la migration 006 (`rdv_work_orders.status`), plus « Client absent » (`no_show_at`) :
+
+| État | Libellé (garage) | Vu par le client | Passages possibles |
+|---|---|---|---|
+| `planned` | Prévue | rien de plus que « Confirmé » | Voiture reçue · Client absent (une fois l'heure de dépôt passée) |
+| `received` | Voiture reçue | Voiture reçue | En cours · Prête · retour à Prévue |
+| `in_progress` | En cours | Travaux en cours | En attente de pièces · Suspendue · Prête |
+| `waiting_parts` | En attente de pièces | En attente de pièces | En cours · Prête |
+| `suspended` | Suspendue | En attente | En cours · Prête |
+| `done` | Prête | Prête | Restituée · retour à En cours |
+| `returned` | Restituée | Restituée | retour à Prête |
+| `no_show` | Client absent | rien | retour à Prévue (« le client est finalement venu ») |
+
+- **Quand** : le jour du rendez-vous et jusqu'à 30 jours après (une voiture peut attendre ses pièces) ; jamais pour un jour à venir.
+- **Retours en arrière** : un pas, pour corriger une erreur (colonne de droite) ; rien d'autre n'est effacé.
+- **Client absent** : ses affectations ne retiennent plus leurs ressources (le moteur les ignore : on peut reprendre la place), la
+  relance « prix payé » ne part pas, le client n'en est ni prévenu ni informé sur sa page. Si la place a été reprise entre-temps, un
+  retour à « Prévue » est accepté et le chevauchement se voit dans le planning.
+- **Commencée = figée** : au-delà de « Prévue », le rendez-vous ne se déplace plus (409 `started`, glisser compris) et un rendez-vous
+  Pixcar ne s'annule plus depuis l'Espace Pro (le garage appelle le client).
+- **Historique** : chaque changement est noté (`rdv_history`, `what = 'work'`), sans donnée de client.
+- **E-mail « Votre voiture est prête »** (rendez-vous Pixcar) : au passage à « Prête », case « Prévenir le client par e-mail » cochée par
+  défaut ; un seul par rendez-vous (un second passage à « Prête » ne renvoie rien) ; par la file d'envoi des rendez-vous (`rdv_mails`,
+  `client_ready`) ; nom, adresse et téléphone du garage, ses horaires du jour, lien vers la page de suivi.
+- **Page de suivi du client** (`rendez-vous/`) : dès « Voiture reçue », une frise (Voiture reçue → Travaux en cours → Prête →
+  Restituée) avec l'heure du dernier changement ; « En attente de pièces » et « En attente » y prennent la place de « Travaux en cours ».
+- **Données** : aucune colonne nouvelle. Un rendez-vous Pixcar a déjà sa ligne `rdv_work_orders` (`status`, `status_at`, `no_show_at`) ;
+  un rendez-vous hors Pixcar en reçoit une au premier changement d'état (`request_id` = identifiant du bloc), effacée avec le bloc ; la
+  purge garde les lignes dont la demande **ou** le bloc existe encore.
+
+### Tableau de bord
+
+Premier écran de l'Espace Pro. Tout est calculé dans la page à partir des routes existantes (agenda du jour et du lendemain, réglages
+du calendrier, demandes à traiter, prix et visites), avec les mêmes règles de charge que le Planning.
+
+**Mode avancé** (inspiré de la maquette de l'utilisateur) :
+
+- **Cinq chiffres** : *Véhicules attendus aujourd'hui* (rendez-vous Pixcar confirmés et hors Pixcar du jour, sans les clients absents ;
+  dessous : combien restent à recevoir, combien hors Pixcar) ; *Interventions en cours* (reçue, en cours, en attente de pièces,
+  suspendue) ; *Véhicules prêts* (à remettre) ; *Capacité restante* (heures de main-d'œuvre encore libres aujourd'hui, à partir de
+  maintenant, pour les mécaniciens présents) ; *Alertes* (nombre de points d'attention). Les trois premiers filtrent la liste du jour,
+  Capacité ouvre le Planning sur la journée, Alertes mène aux points d'attention.
+- **Aujourd'hui à l'atelier** : heure de dépôt, client (ou libellé), voiture et immatriculation, prestations, état (À confirmer, Prévue,
+  l'état de l'intervention, Client absent) et un menu « Actions » : les passages possibles, « Ouvrir dans le planning ». Lien « Voir le
+  planning complet ».
+- **Actions rapides** : *Nouveau rendez-vous* (pris par téléphone ou au comptoir), *Client déjà sur place* (rendez-vous hors Pixcar au
+  prochain quart d'heure, marqué « Voiture reçue » à l'enregistrement), *Bloquer un créneau*, *Déclarer une absence* : les formulaires du
+  Planning. La maquette disait « Prendre un rendez-vous Pixcar » : un rendez-vous Pixcar créé par le garage pour son client supposerait
+  d'enregistrer les coordonnées d'un client qui n'a rien demandé (Pixcar sous-traitant du garage) ; c'est la décision « plus tard » sur
+  les rendez-vous pris hors Pixcar, inchangée.
+- **Demandes à traiter** : les trois plus urgentes (Confirmer ; Refuser, avec le motif, comme dans Demandes) et le lien vers toutes.
+- **Équipe & charge** : chaque mécanicien actif, sa charge du jour (planifié / disponible, %), son état maintenant (En intervention,
+  Disponible, Absent, Absent à partir de…, De retour à…, Ne travaille pas aujourd'hui).
+- **Postes & équipements** : état maintenant (Occupé, avec la voiture et l'heure de fin ; Disponible ; Indisponible jusqu'à… ; Fermé).
+- **Points d'attention**, les plus urgents d'abord : rendez-vous en conflit, demande dont l'heure limite tombe dans les 24 heures,
+  prestation faite que l'équipe ne peut pas planifier (contrôles du calendrier : compétence, poste ou équipement manquant), voiture pas
+  arrivée 15 minutes après l'heure de dépôt, voiture pas prête à l'heure prévue, absence ou indisponibilité de demain, prix à confirmer.
+  Quatre affichés, « Voir tous les points » pour le reste ; chacun mène à l'écran où le régler.
+- **Raccourcis utiles** : trois par défaut (Planning, Prestations & tarifs, Disponibilités) ; « Personnaliser » en choisit jusqu'à six
+  parmi : Planning, Demandes, Prestations & tarifs, Disponibilités, Mon garage, Équipe et postes, Nouveau rendez-vous, Fermer une
+  journée, Ma fiche sur Pixcar. Gardés sur le compte pour ce garage (tous les appareils).
+
+**Mode simple** : chiffres (rendez-vous aujourd'hui, demandes à traiter, vues de la fiche sur 30 jours, prix à jour), liste du jour
+(sans états d'intervention), demandes à traiter, points d'attention (heures limites, prix à confirmer, adresse de notification
+manquante), raccourcis et une invitation au calendrier avancé. **Sans rendez-vous en ligne** : chiffres des prix et des visites, points
+d'attention (prix), raccourcis.
+
+**Prestations & tarifs** : ce qu'affichait le tableau de bord jusqu'ici (prix à confirmer, chiffres des visites, tableau des prix
+annoncés) devient un écran à part ; « Mes prix » prend ce nom.
+
+**Planning** : l'état de l'intervention s'affiche sur le bloc quand il n'est plus « Prévue » ; la fiche porte les mêmes actions que le
+tableau de bord ; un client absent est grisé et ne compte plus dans la charge.
+
+### Données (migration `008_pro_prefs.sql`) et API
+
+`pro_prefs` : préférences d'un compte pour un garage (`garage_id`, `account_id`, `shortcuts` jsonb, `updated_at`) ; aucune donnée
+personnelle ; effacées avec le rattachement (`pro-revoke`).
+
+| Route | Rôle |
+|---|---|
+| `POST …/rdv/calendar/work/:id` | `{ status, notify? }` : change l'état de l'intervention d'un rendez-vous Pixcar confirmé ou d'un rendez-vous hors Pixcar (`status` : un état du tableau, dont `no_show`) ; 409 `state` (passage impossible), `too_early` (jour à venir, heure de dépôt pas passée pour un absent), `simple_mode` |
+| `GET …/rdv/calendar/agenda` | complétée : `work: { status, at, noShow }` pour les rendez-vous et les rendez-vous hors Pixcar |
+| `POST …/rdv/calendar/blocks` | `received: true` : client déjà sur place (aujourd'hui, au prochain quart d'heure au plus tard) |
+| `POST …/rdv/requests/:req/move`, `PUT …/calendar/blocks/:id`, `POST …/requests/:req/cancel` | 409 `started` au-delà de « Prévue » |
+| `GET /v1/pro/garages/:id` | complétée : `prefs: { shortcuts }` |
+| `PUT /v1/pro/garages/:id/prefs` | `{ shortcuts: [identifiants] }` (six au plus, sans doublon) |
+| `GET /v1/rdv/me` | complétée : `progress: { status, label, at }` dès « Voiture reçue » |
 
 ## Confidentialité
 

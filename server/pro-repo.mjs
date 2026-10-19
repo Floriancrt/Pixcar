@@ -253,6 +253,7 @@ export function createProRepo(db) {
           await t.query("DELETE FROM pro_profiles WHERE garage_id = $1", [garageId]);
           await t.query("DELETE FROM pro_profile_changes WHERE garage_id = $1", [garageId]);
           await t.query("DELETE FROM pro_services WHERE garage_id = $1", [garageId]);
+          await t.query("DELETE FROM pro_prefs WHERE garage_id = $1", [garageId]); // raccourcis du tableau de bord (lot 3c)
         }
         return r.rowCount;
       });
@@ -370,6 +371,15 @@ export function createProRepo(db) {
     },
 
     // ---- « Mon garage » : fiche déclarée, changements relus, prestations (le garage est rattaché au compte : vérifié par l'appelant)
+    // préférences d'un compte pour un garage (lot 3c) : raccourcis du tableau de bord ; null tant que rien n'a été choisi
+    getPrefs: (garageId, accountId) =>
+      one("SELECT shortcuts FROM pro_prefs WHERE garage_id = $1 AND account_id = $2", [garageId, accountId]).then((r) => (r ? { shortcuts: Array.isArray(r.shortcuts) ? r.shortcuts : [] } : null)),
+    savePrefs: (garageId, accountId, prefs) =>
+      db.query(
+        `INSERT INTO pro_prefs (garage_id, account_id, shortcuts, updated_at) VALUES ($1, $2, $3::jsonb, now())
+         ON CONFLICT (garage_id, account_id) DO UPDATE SET shortcuts = EXCLUDED.shortcuts, updated_at = EXCLUDED.updated_at`,
+        [garageId, accountId, JSON.stringify(prefs.shortcuts)],
+      ),
     getProfile: (garageId) => one(`SELECT ${PROFILE_COLUMNS} FROM pro_profiles WHERE garage_id = $1`, [garageId]),
     // Site, e-mail affiché, horaires : seuls les champs présents dans fields sont écrits (null efface les horaires, "" le reste).
     saveProfile(garageId, accountId, fields) {

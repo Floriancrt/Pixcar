@@ -13,12 +13,15 @@
 //   GET    …/calendar/agenda?from=AAAA-MM-JJ&to=AAAA-MM-JJ    planning d'une période : rendez-vous, blocs, affectations, ouverture, absences, conflits
 //   POST   …/calendar/blocks · PUT, DELETE …/blocks/:id        blocs internes : rendez-vous hors Pixcar, créneaux bloqués (lot 3b)
 //   POST   …/rdv/requests/:req/move                           { day, time, staff?, station?, confirm? } : déplacer ou réaffecter
+//   POST   …/calendar/work/:id                                { status, notify? } : état de l'intervention (lot 3c) d'un rendez-vous Pixcar
+//                                                             confirmé ou d'un rendez-vous hors Pixcar
 // Et pour server/rdv.mjs : world() (ce que lit le moteur, dans la transaction de la prise d'horaire), writePlan(), planInfo().
 import { apiError, json } from "./lib/http.mjs";
 import { isUuid } from "./lib/validate.mjs";
 import { DEFAULT_CAL } from "./calendar-repo.mjs";
 import * as P from "../src/js/shared/plan.js";
 import * as R from "../src/js/shared/rdv.js";
+import * as W from "../src/js/shared/work.js";
 import { PRO_SERVICES, VEHICLES } from "../src/js/shared/pro-prices.js";
 
 const NO_STORE = { "cache-control": "no-store" };
@@ -43,7 +46,8 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
   }
   function worldFrom(b, data, nowMs, { exclude = null, withBusy = true } = {}) {
     const ex = exclude instanceof Set ? exclude : new Set(exclude ? [exclude] : []);
-    const busy = withBusy ? data.busy.filter((x) => !ex.has(x.requestId) && !ex.has(x.blockId) && (x.blockId || (x.requestId && R.holds({ status: x.status, deadline: x.deadline }, nowMs)))) : [];
+    // un client noté absent (lot 3c) ne retient plus ses ressources
+    const busy = withBusy ? data.busy.filter((x) => !x.noShow && !ex.has(x.requestId) && !ex.has(x.blockId) && (x.blockId || (x.requestId && R.holds({ status: x.status, deadline: x.deadline }, nowMs)))) : [];
     const offered = new Set(b.offered || []);
     const reqs = Object.fromEntries(Object.entries(data.reqs).filter(([id]) => offered.has(id)));
     return P.makeWorld({ nowMs, ctx: ctxOf(b), settings: settingsOf(b), cal: b.calendar || DEFAULT_CAL, staff: data.staff, resources: data.resources, skills: data.skills, reqs, unavail: data.unavail, busy });
@@ -430,7 +434,9 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
   // ---------------------------------------------------------------- calendrier d'une période (écran Planning, lot 3b)
   const iso = (msv) => msv && new Date(msv).toISOString();
   const planView = (names) => (a) => ({ target: a.target, id: a.targetId, name: names.get(a.targetId) || "", role: a.role, start: iso(a.start), end: iso(a.end), ...(a.fixed !== undefined ? { fixed: a.fixed } : {}) });
-  const blockView = (k, rows, names) => ({
+  // état de l'intervention (lot 3c) : null tant que rien n'a changé pour un rendez-vous hors Pixcar
+  const workView = (o) => (o ? { status: o.status, at: iso(o.statusAt), noShow: o.noShow } : null);
+  const blockView = (k, rows, names, orders = []) => ({
     id: k.id,
     kind: k.kind,
     label: k.label,
@@ -440,6 +446,7 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
     startsAt: iso(k.startsAt),
     endsAt: iso(k.endsAt),
     fixed: k.fixed,
+    ...(k.kind === "job" ? { work: workView(orders.find((o) => o.requestId === k.id)) } : {}),
     plan: rows.filter((a) => a.blockId === k.id).map(planView(names)),
   });
   // blocs à venir dont une ressource n'est plus là (absence, fiche désactivée…) : signalés comme les rendez-vous, jamais déplacés
@@ -459,8 +466,10 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
     const nowMs = now();
     const [list, data, blocks, b] = await Promise.all([repo.cal.requestsBetween(garageId, from, to), repo.cal.load(garageId, today(), today()), repo.cal.blocksBetween(garageId, from, to), repo.bundle(garageId, today())]);
     if (!b) return notFound("Garage introuvable.");
-    const ids = list.map((q) => q.id);
-    const [rows, orders, brows, conflicts] = await Promise.all([repo.cal.assignmentsOf(garageId, ids), repo.cal.workOrders(garageId, ids), repo.cal.blockAssignments(garageId, blocks.map((k) => k.id)), conflictsOf(garageId, b, data, nowMs)]);
+    const ids = list.map((q) => q.id), jobs = blocks.filter((k) => k.kind === "job").map((k) => k.id);
+    const [rows, orders, brows, conflicts, jobOrders] = await Promise.all([
+      repo.cal.assignmentsOf(garageId, ids), repo.cal.workOrders(garageId, ids), repo.cal.blockAssignments(garageId, blocks.map((k) => k.id)), conflictsOf(garageId, b, data, nowMs), repo.cal.workOrders(garageId, jobs),
+    ]);
     const names = new Map([...data.staff, ...data.resources].map((x) => [x.id, x.name]));
     const w = worldFrom(b, data, nowMs, { withBusy: false });
     const days = [];
@@ -484,7 +493,7 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
           ...conflicts.map((c) => ({ id: c.id, reasons: c.reasons })),
           ...blockConflicts(w, brows, blocks, nowMs),
         ],
-        blocks: blocks.map((k) => blockView(k, brows, names)),
+        blocks: blocks.map((k) => blockView(k, brows, names, jobOrders)),
         appointments: list.map((q) => {
           const o = orders.find((x) => x.requestId === q.id);
           return {
@@ -492,7 +501,7 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
             phone: q.phone || "",
             plate: q.plate || "",
             vehicle: (o && o.vehicle) || "",
-            work: o ? { start: o.workStart && new Date(o.workStart).toISOString(), ready: o.readyAt && new Date(o.readyAt).toISOString(), back: o.returnAt && new Date(o.returnAt).toISOString(), labour: o.labour, status: o.status } : null,
+            work: o ? { start: o.workStart && new Date(o.workStart).toISOString(), ready: o.readyAt && new Date(o.readyAt).toISOString(), back: o.returnAt && new Date(o.returnAt).toISOString(), labour: o.labour, ...workView(o) } : null,
             plan: rows.filter((a) => a.requestId === q.id).map(planView(names)),
           };
         }),
@@ -520,6 +529,12 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
       const p = P.parseBlock(body, { staffIds: new Set(w.staff.map((m) => m.id)), resourceIds: new Set(w.resources.map((x) => x.id)), serviceIds: new Set(Object.keys(w.reqs)), nowMs });
       if (p.error) return { kind: "invalid", p };
       const v = p.value;
+      // une intervention commencée ne change plus d'heure ni de jour (lot 3c)
+      if (prev && (prev.day !== v.day || prev.start !== v.start) && W.workState(await r.cal.workOrder(prev.id)) !== "planned") return { kind: "started" };
+      // client déjà sur place (lot 3c) : rendez-vous hors Pixcar d'aujourd'hui, au plus tard au prochain quart d'heure, reçu aussitôt
+      const arrived = body.received === true;
+      if (arrived && (id || v.kind !== "job" || v.day !== R.parisParts(nowMs).iso || R.parisInstant(v.day, v.start) > nowMs + 15 * 60e3))
+        return { kind: "invalid", p: { error: "Client déjà sur place : un rendez-vous hors Pixcar d'aujourd'hui, à l'heure actuelle.", field: "time" } };
       let row, rows;
       if (v.kind === "job") {
         const job = P.buildJob(v.services, w.reqs, v.vehicle);
@@ -549,6 +564,10 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
       if (!saved) return { kind: "not_found" };
       await r.cal.replaceBlockAssignments(garageId, saved, rows);
       await r.cal.log(garageId, sub, "block", saved, `${v.kind === "job" ? "Rendez-vous hors Pixcar" : "Créneau bloqué"} ${id ? "modifié" : "ajouté"} : ${R.whenLabel(v.day, v.start)}.`);
+      if (arrived) {
+        await r.cal.setWork(garageId, saved, "received", nowMs);
+        await r.cal.log(garageId, sub, "work", saved, `Intervention hors Pixcar du ${R.whenLabel(v.day, v.start)} : ${W.workLabel("received")}.`);
+      }
       return { kind: "ok", saved };
     });
     switch (out.kind) {
@@ -556,6 +575,8 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
         return apiError(409, "simple_mode", "Les blocs du planning demandent le mode avancé.");
       case "not_found":
         return notFound("Bloc introuvable.");
+      case "started":
+        return apiError(409, "started", "L'intervention a commencé : elle ne change plus de jour ni d'heure.");
       case "too_many":
         return apiError(409, "too_many", `${P.MAX_BLOCKS} blocs à venir au plus.`);
       case "invalid":
@@ -611,6 +632,7 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
       const w = await world(r, b, nowMs, { exclude: id });
       if (forced && (forced.staff.some((x) => !w.staff.some((m) => m.id === x)) || (forced.station && !w.resources.some((x) => x.id === forced.station)))) return { kind: "unknown" };
       const order = await r.cal.workOrder(id);
+      if (W.workState(order) !== "planned") return { kind: "started" };
       const vehicle = (order && order.vehicle) || "";
       const job = P.buildJob(q.services, w.reqs, vehicle);
       if (job.error) return { kind: "not_configured" };
@@ -629,6 +651,8 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
         return notFound("Demande introuvable.");
       case "state":
         return apiError(409, "state", "Ce rendez-vous est passé, annulé ou sans réponse : il ne se déplace plus.");
+      case "started":
+        return apiError(409, "started", "L'intervention a commencé : le rendez-vous ne se déplace plus.");
       case "simple":
         return apiError(409, "simple_mode", "Le déplacement avec contrôle des ressources demande le mode avancé.");
       case "unknown":
@@ -647,11 +671,53 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
     return json(200, garageView(await repo.getForGarage(garageId, id)), NO_STORE);
   }
 
+  // ---------------------------------------------------------------- suivi des interventions (lot 3c, src/js/shared/work.js)
+  // id : une demande Pixcar confirmée, ou un rendez-vous hors Pixcar (bloc « job »). Passé « Prête », le client d'un rendez-vous Pixcar
+  // est prévenu par e-mail sauf notify: false (une seule fois par rendez-vous).
+  async function setWork(garageId, sub, id, body) {
+    const p = W.parseWork(body);
+    if (p.error) return invalid(p);
+    const nowMs = now();
+    const t = R.parisParts(nowMs).iso;
+    const out = await repo.tx(async (r) => {
+      await r.lockGarage(garageId);
+      const b = await r.bundle(garageId, t);
+      if (!advanced(b)) return { kind: "simple" };
+      const q = await r.getForGarage(garageId, id);
+      const k = q ? null : await r.cal.getBlock(garageId, id);
+      if (!q && (!k || k.kind !== "job")) return { kind: "not_found" };
+      if (q && q.status !== "confirmed") return { kind: "not_confirmed" };
+      const at = q ? { day: q.day, start: q.start_min, startsAt: q.starts_at } : { day: k.day, start: k.start, startsAt: k.startsAt };
+      const from = W.workState(await r.cal.workOrder(id));
+      const c = W.checkWork({ from, to: p.value.status, day: at.day, today: t, started: nowMs >= at.startsAt });
+      if (c.error) return { kind: "refused", c };
+      await r.cal.setWork(garageId, id, p.value.status, nowMs);
+      const notified = !!q && p.value.status === "done" && p.value.notify && !!q.email && (await r.readyMail(id, garageId));
+      await r.cal.log(garageId, sub, "work", id, `Intervention ${q ? "Pixcar" : "hors Pixcar"} du ${R.whenLabel(at.day, at.start)} : ${W.workLabel(p.value.status)}${notified ? " (client prévenu par e-mail)" : ""}.`);
+      return { kind: "ok", notified, order: await r.cal.workOrder(id) };
+    });
+    switch (out.kind) {
+      case "simple":
+        return apiError(409, "simple_mode", "Le suivi des interventions demande le mode avancé.");
+      case "not_found":
+        return notFound("Rendez-vous introuvable.");
+      case "not_confirmed":
+        return apiError(409, "state", "Ce rendez-vous n'est pas confirmé : répondez d'abord à la demande.");
+      case "refused":
+        return apiError(409, out.c.code, out.c.error);
+      default:
+        break;
+    }
+    if (out.notified) await drain({ requestIds: [id] });
+    log({ level: "info", msg: "calendrier : état d'une intervention", event: "cal_work", garageId, status: p.value.status, notified: out.notified });
+    return json(200, { id, work: workView(out.order), notified: out.notified }, NO_STORE);
+  }
+
   // ---------------------------------------------------------------- aiguillage
   async function route(request, sub, garageId, parts, readBody) {
     const method = request.method;
     const [what, id, extra] = parts;
-    if (extra || (id && !["staff", "skills", "resources", "unavail", "services", "blocks"].includes(what))) return notFound("Route inconnue.");
+    if (extra || (id && !["staff", "skills", "resources", "unavail", "services", "blocks", "work"].includes(what))) return notFound("Route inconnue.");
     if (!what) return method === "GET" ? state(garageId) : allow("GET");
     if (what === "agenda") return method === "GET" ? agenda(garageId, new URL(request.url)) : allow("GET");
     if (what === "start") return method === "POST" ? start(garageId, sub) : allow("POST");
@@ -659,6 +725,10 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
     if (what === "check") return method === "POST" ? check(garageId, await readBody(16384)) : allow("POST");
     if (what === "activate") return method === "POST" ? activate(garageId, sub, await readBody(16384)) : allow("POST");
     if (what === "simple") return method === "POST" ? toSimple(garageId, sub) : allow("POST");
+    if (what === "work") {
+      if (!id || !isUuid(id)) return notFound("Rendez-vous introuvable.");
+      return method === "POST" ? setWork(garageId, sub, id.toLowerCase(), await readBody(512)) : allow("POST");
+    }
     if (what === "services") {
       if (!id) return notFound("Route inconnue.");
       return method === "PUT" ? saveReq(garageId, sub, id, await readBody(4096)) : allow("PUT");

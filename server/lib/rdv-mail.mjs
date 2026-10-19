@@ -301,6 +301,41 @@ const BUILDERS = {
     }),
     text: lines(`Rappel : votre rendez-vous chez ${c.garage.name} est demain.`, "", textFacts(clientFacts(c)), "", `Voir ou annuler : ${c.links.track}`, c.links.route ? `Itinéraire : ${c.links.route}` : null, "", clientFootText(c)),
   }),
+  // lot 3c : le garage a passé l'intervention à « Prête » (case cochée par défaut dans l'Espace Pro) ; un seul par rendez-vous
+  client_ready: (c) => {
+    const rows = [
+      ["Où", c.garage.name, [c.garage.addr, c.garage.phone].filter(Boolean).join(" · ")],
+      ["Quand venir", c.opening ? cap(c.opening) : "", c.opening ? "heures d'ouverture du garage" : ""],
+      ["Prestation", svc(c.r)],
+      ["Voiture", carText(c.r)],
+    ];
+    return {
+      subject: `Votre voiture est prête chez ${oneLine(c.garage.name)}`,
+      html: layout({
+        title: "Votre voiture est prête",
+        aside: "Votre rendez-vous",
+        body: [
+          badge("Prête", "ok"),
+          h1("Votre voiture est prête"),
+          p(`${b(c.garage.name)} a terminé l'intervention. Vous pouvez venir la chercher${c.opening ? ` ${esc(c.opening)}` : " aux heures d'ouverture du garage"}.`),
+          facts(rows),
+          buttons(c.links.route ? button(c.links.route, "Itinéraire") : "", button(c.links.track, "Voir mon rendez-vous", { secondary: true })),
+        ].join(""),
+        foot: clientFoot(c),
+      }),
+      text: lines(
+        `Votre voiture est prête chez ${c.garage.name}.`,
+        `Vous pouvez venir la chercher${c.opening ? ` ${c.opening}` : " aux heures d'ouverture du garage"}.`,
+        "",
+        textFacts(rows),
+        "",
+        `Voir mon rendez-vous : ${c.links.track}`,
+        c.links.route ? `Itinéraire : ${c.links.route}` : null,
+        "",
+        clientFootText(c),
+      ),
+    };
+  },
   client_followup: (c) => ({
     subject: `Combien avez-vous payé chez ${c.garage.name} ?`,
     html: layout({

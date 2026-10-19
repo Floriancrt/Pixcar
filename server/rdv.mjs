@@ -28,6 +28,7 @@ import { PRO_SERVICES, serviceLabel } from "../src/js/shared/pro-prices.js";
 import { addrText, parseEmail, parsePhone, phoneText } from "../src/js/shared/garage-profile.js";
 import { MODEL_MAX, MODEL_MIN, PLATE_RE, YEAR_MIN } from "../src/js/shared/rules.js";
 import * as R from "../src/js/shared/rdv.js";
+import * as W from "../src/js/shared/work.js";
 import { NIL_SLOT, buildJob, pickPlan, planTimes } from "../src/js/shared/plan.js";
 import { VEHICLES } from "../src/js/shared/pro-prices.js";
 import { createCalendar } from "./calendar.mjs";
@@ -249,6 +250,7 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     if (m.kind === "client_confirmed") c.ics = R.icsCalendar([icsEvent(r)], now());
     if (m.kind === "client_moved") c.ics = R.icsCalendar([{ ...icsEvent(r), sequence: Math.floor(now() / 60000) % 2147483647 }], now());
     if (m.kind === "client_confirmed" && r.slot_id === NIL_SLOT && r.sent_at && r.decided_at === r.sent_at) c.auto = true;
+    if (m.kind === "client_ready") c.opening = b ? W.nextOpening(ctxOf(b), now()) : ""; // lot 3c : quand venir la chercher
     const mail = requestMail(m.kind, c);
     await withTimeout(send.mail({ to, from: cfg.emailFrom, subject: mail.subject, text: mail.text, html: mail.html, replyTo: m.kind === "garage_new" ? r.email : undefined, attachments: mail.attachments, channel: "rdv" }), MAIL_BUDGET_MS);
     log({ level: "info", msg: "rendez-vous : e-mail envoyé", event: "rdv_mail", kind: m.kind });
@@ -575,6 +577,8 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
       const cur = await repo.getForGarage(garageId, id);
       if (!cur) return apiError(404, "not_found", "Demande introuvable.");
       const st = effective(cur, now());
+      // lot 3c : la voiture est déjà au garage (ou plus loin) : on n'annule plus depuis l'Espace Pro
+      if (act === "cancel" && st === "confirmed" && W.workState(await repo.cal.workOrder(id)) !== "planned") return apiError(409, "started", "L'intervention a commencé : ce rendez-vous ne s'annule plus ici. Appelez le client.", { status: st });
       return apiError(409, "state", st === "expired" ? "L'heure limite est passée : la demande est annulée et le client prévenu." : act === "cancel" ? "Ce rendez-vous ne peut plus être annulé." : "Cette demande a déjà reçu une réponse.", { status: st });
     }
     log({ level: "info", msg: `rendez-vous : ${act}`, event: "rdv_decision", garageId, decision: act });
@@ -848,6 +852,12 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
       ...(r.cancelled_by ? { cancelledBy: r.cancelled_by } : {}),
     };
     if (["declined", "expired", "cancelled"].includes(st) && r.cancelled_by !== "client" && b) view.alternatives = await alternatives(r, b).catch(() => []);
+    // lot 3c : l'avancement de l'intervention, dès « Voiture reçue » (rien pour un client noté absent)
+    if (st === "confirmed") {
+      const o = await repo.cal.workOrder(r.id);
+      const state = W.workState(o);
+      if (W.clientWorkLabel(state)) view.progress = { status: state, label: W.clientWorkLabel(state), at: isoOf(o.statusAt), atText: o.statusAt ? R.instantLabel(o.statusAt) : "" };
+    }
     return view;
   }
   async function clientCancel(request, row) {

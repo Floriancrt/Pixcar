@@ -21,6 +21,9 @@
 //   DELETE /v1/pro/garages/:id/changes/:change    annule un changement en attente
 //   PUT    /v1/pro/garages/:id/services/:service  { offered, minutes } : prestation faite ou non, temps moyen ; décocher retire le prix annoncé
 //   GET    /v1/pro/garages/:id/registry           l'établissement rattaché dans le registre public (lecture seule)
+// Tableau de bord (docs/calendrier-avance.md, lot 3c) :
+//   PUT    /v1/pro/garages/:id/prefs              { shortcuts: [identifiants] } : raccourcis de ce compte pour ce garage (GET /v1/pro/garages/:id
+//                                                 les renvoie dans prefs)
 // Rendez-vous en ligne (docs/rendez-vous.md, lot 2) : /v1/pro/garages/:id/rdv/… et /v1/rdv/… (server/rdv.mjs).
 // Sans compte (le comparateur) :
 //   GET    /v1/pro/public/garages?ids=a,b,…       garages vérifiés parmi ces identifiants (100 au plus), leurs prix publiés, leur fiche déclarée
@@ -45,6 +48,7 @@ import { createProRepo } from "./pro-repo.mjs";
 import { createRdv } from "./rdv.mjs";
 import { PRO_SERVICES, freshness, parseProPrice, staleAt } from "../src/js/shared/pro-prices.js";
 import { addrText, parseAddr, parseEmail, parseHours, parseMinutes, parseName, parsePhone, parseWebsite, phoneText } from "../src/js/shared/garage-profile.js";
+import { DEFAULT_SHORTCUTS, parsePrefs } from "../src/js/shared/work.js";
 
 const NO_STORE = { "cache-control": "no-store" };
 const SIRENE_TTL_MS = 10 * 60_000;
@@ -463,7 +467,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
       if (!GARAGE_RE.test(id)) return noGarage();
       return rdv.garageRoute(request, sub, id, m[2] || "");
     }
-    if ((m = /^\/v1\/pro\/garages\/([^/]+)\/(profile|registry|changes|services)(?:\/([^/]+))?$/.exec(path))) {
+    if ((m = /^\/v1\/pro\/garages\/([^/]+)\/(profile|registry|changes|services|prefs)(?:\/([^/]+))?$/.exec(path))) {
       const id = m[1].toLowerCase();
       if (!GARAGE_RE.test(id)) return noGarage();
       const [what, sub2] = [m[2], m[3]];
@@ -473,6 +477,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
       if (what === "changes" && !sub2) return method === "POST" ? postChange(request, sub, id) : allow("POST");
       if (what === "changes") return method === "DELETE" ? deleteChange(sub, id, sub2) : allow("DELETE");
       if (what === "services" && sub2) return method === "PUT" ? putService(request, sub, id, sub2) : allow("PUT");
+      if (what === "prefs" && !sub2) return method === "PUT" ? putPrefs(request, sub, id) : allow("PUT");
       return apiError(404, "not_found", "Route inconnue.");
     }
     if ((m = /^\/v1\/pro\/garages\/([^/]+)(?:\/(confirm)|\/prices\/([^/]+))?$/.exec(path))) {
@@ -499,11 +504,12 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
     const owned = await repo.ownedGarage(id, sub);
     if (!owned) return noGarage();
     const nowMs = now();
-    const [prices, paid, visits, profile] = await Promise.all([
+    const [prices, paid, visits, profile, prefs] = await Promise.all([
       repo.listPrices(id),
       repo.paidPrices(owned.contact),
       repo.visitStats(id, { since30: isoDay(nowMs - 30 * DAY_MS), since60: isoDay(nowMs - 60 * DAY_MS) }),
       repo.getProfile(id),
+      repo.getPrefs(id, sub),
     ]);
     const c = owned.contact || {};
     const p = profileView(profile); // un nom ou une adresse relus par Pixcar remplacent ceux des données
@@ -514,6 +520,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
         prices: prices.map((p) => priceView(p, nowMs)),
         paid,
         visits: { views: visits.view, calls: visits.call },
+        prefs: prefs || { shortcuts: DEFAULT_SHORTCUTS },
         ...(config.rdv.enabled ? { rdv: await rdv.summary(id) } : {}),
       },
       NO_STORE,
@@ -545,6 +552,17 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
     } catch {}
     if (!(await repo.ownedGarage(id, sub))) return noGarage();
     return (await repo.deletePrice(id, serviceId)) ? new Response(null, { status: 204, headers: NO_STORE }) : apiError(404, "not_found", "Aucun prix pour cette prestation.");
+  }
+
+  // raccourcis du tableau de bord (lot 3c)
+  async function putPrefs(request, sub, id) {
+    const body = await readJson(request, 1024);
+    if (body.error) return apiError(400, "bad_json", "JSON attendu (1 Ko au plus).");
+    const parsed = parsePrefs(body.value);
+    if (parsed.error) return apiError(422, "validation", parsed.error, { field: parsed.field });
+    if (!(await repo.ownedGarage(id, sub))) return noGarage();
+    await repo.savePrefs(id, sub, parsed.value);
+    return json(200, parsed.value, NO_STORE);
   }
 
   async function postConfirm(sub, id) {

@@ -156,6 +156,14 @@ describe("docs/openapi.yaml ↔ API", () => {
       await call("POST", "/v1/pro/public/visits", "/v1/pro/public/visits", { body: { garageId: g.id, kind: "like" }, status: 422 });
       await call("POST", "/v1/pro/public/visits", "/v1/pro/public/visits", { body: "{", status: 400 });
       await call("GET", "/v1/pro/garages/{id}", G, { headers: me, status: 200 });
+      // raccourcis du tableau de bord (lot 3c)
+      const PF = "/v1/pro/garages/{id}/prefs";
+      await call("PUT", PF, `${G}/prefs`, { headers: me, body: { shortcuts: ["planning", "site"] }, status: 200 });
+      await call("PUT", PF, `${G}/prefs`, { headers: me, body: { shortcuts: ["x"] }, status: 422 });
+      await call("PUT", PF, `${G}/prefs`, { headers: me, body: "{", status: 400 });
+      await call("PUT", PF, `${G}/prefs`, { headers: { "x-pro-dev-account": "other" }, body: { shortcuts: [] }, status: 404 });
+      await call("PUT", PF, `${G}/prefs`, { body: { shortcuts: [] }, status: 401 });
+      await call("GET", "/v1/pro/garages/{id}", G, { headers: me, status: 200 }); // avec prefs
       await call("POST", "/v1/pro/garages/{id}/confirm", `${G}/confirm`, { headers: me, status: 200 });
       await call("POST", "/v1/pro/garages/{id}/confirm", `${G}/confirm`, { status: 401 });
       await call("POST", "/v1/pro/garages/{id}/confirm", `${G}/confirm`, { headers: { "x-pro-dev-account": "other" }, status: 404 });
@@ -412,6 +420,15 @@ describe("docs/openapi.yaml ↔ API", () => {
       await call("GET", `${C}/agenda`, `${G}/calendar/agenda?from=2026-10-21&to=2026-10-23`, { headers: me, status: 200 }); // avec les blocs
       await call("DELETE", BB, `${G}/calendar/blocks/${h}`, { headers: me, status: 200 });
       await call("DELETE", BB, `${G}/calendar/blocks/${h}`, { headers: me, status: 404 });
+      // suivi des interventions (lot 3c) : client déjà sur place aujourd'hui, en cours ; passage impossible, jour à venir, erreurs
+      const WK = `${C}/work/{ref}`;
+      const walk = JSON.parse((await call("POST", B, `${G}/calendar/blocks`, { headers: me, body: { kind: "job", label: "Client au comptoir", services: ["plaq_av"], day: "2026-10-19", time: "10:15", received: true }, status: 201 })).text).saved;
+      await call("POST", WK, `${G}/calendar/work/${walk}`, { headers: me, body: { status: "in_progress" }, status: 200 });
+      await call("POST", WK, `${G}/calendar/work/${walk}`, { headers: me, body: { status: "returned" }, status: 409 });
+      await call("POST", WK, `${G}/calendar/work/${walk}`, { headers: me, body: { status: "x" }, status: 422 });
+      await call("POST", WK, `${G}/calendar/work/${crypto.randomUUID()}`, { headers: me, body: { status: "received" }, status: 404 });
+      await call("POST", WK, `${G}/calendar/work/${walk}`, { body: { status: "done" }, status: 401 });
+      await call("GET", `${C}/agenda`, `${G}/calendar/agenda?from=2026-10-19&to=2026-10-21`, { headers: me, status: 200 }); // avec les états
       await call("DELETE", `${C}/staff/{staff}`, `${G}/calendar/staff/${paul}`, { headers: me, status: 409 }); // engagé
       await call("POST", `${C}/simple`, `${G}/calendar/simple`, { headers: me, status: 409 }); // aucun créneau
       await app.call("POST", `${G}/slots`, { headers: me, body: { name: "Journée", days: ["mo", "tu", "we", "th", "fr"], start: "08:00", end: "18:00", capacity: 1, services: ["plaq_av"] } });
@@ -449,6 +466,9 @@ describe("docs/openapi.yaml ↔ API", () => {
       "DELETE /v1/pro/garages/{id}/rdv/calendar/unavail/{unavail}", "POST /v1/pro/garages/{id}/rdv/calendar/check", "POST /v1/pro/garages/{id}/rdv/calendar/activate",
       "POST /v1/pro/garages/{id}/rdv/calendar/simple", "GET /v1/pro/garages/{id}/rdv/calendar/agenda", "POST /v1/pro/garages/{id}/rdv/calendar/blocks",
       "PUT /v1/pro/garages/{id}/rdv/calendar/blocks/{block}", "DELETE /v1/pro/garages/{id}/rdv/calendar/blocks/{block}",
+    ]).concat([
+      // lot 3c
+      "POST /v1/pro/garages/{id}/rdv/calendar/work/{ref}", "PUT /v1/pro/garages/{id}/prefs",
     ]).sort());
     // et chaque méthode non documentée d'une route documentée est refusée en 405
     for (const [method, path] of [["PUT", "/v1/repairs"], ["DELETE", "/v1/repairs"], ["POST", "/v1/overpass"], ["POST", "/healthz"], ["GET", `/v1/repairs/${repair().id}`]]) {
