@@ -24,10 +24,24 @@ const unavailOf = (r) => ({ id: r.id, target: r.target, targetId: r.target_id, s
 const workOrderOf = (r) =>
   r && { requestId: r.request_id, status: r.status, vehicle: r.vehicle, workStart: ms(r.work_start), workEnd: ms(r.work_end), readyAt: ms(r.ready_at), returnAt: ms(r.return_at), labour: r.labour_min, immob: r.immob_min };
 
-export function bindCalendar(q, { now = Date.now } = {}) {
+const blockOf = (r) =>
+  r && {
+    id: r.id, kind: r.kind, label: r.label, services: Array.isArray(r.services) ? r.services : [], vehicle: r.vehicle, mode: r.mode, day: r.day, start: r.start_min, end: r.end_min,
+    startsAt: ms(r.starts_at), endsAt: ms(r.ends_at), fixed: r.fixed,
+  };
+const BLOCK_COLUMNS = "id, kind, label, services, vehicle, mode, day::text AS day, start_min, end_min, starts_at, ends_at, fixed";
+
+// inTx : lié à la connexion d'une transaction (les requêtes passent l'une après l'autre), sinon au pool (en parallèle)
+export function bindCalendar(q, { now = Date.now, inTx = false } = {}) {
   const T = () => new Date(now()).toISOString();
   const one = async (sql, params) => (await q.query(sql, params)).rows[0] || null;
   const all = async (sql, params) => (await q.query(sql, params)).rows;
+  const each = async (thunks) => {
+    if (!inTx) return Promise.all(thunks.map((f) => f()));
+    const out = [];
+    for (const f of thunks) out.push(await f());
+    return out;
+  };
 
   return {
     // ---- réglages
@@ -47,14 +61,14 @@ export function bindCalendar(q, { now = Date.now } = {}) {
 
     // ---- ce que le moteur lit pour un garage (src/js/shared/plan.js) ; fromIso / toIso : jours des affectations
     async load(garageId, fromIso, toIso) {
-      const [staff, skillRows, skills, resources, reqs, unavail, busy] = await Promise.all([
-        all("SELECT id, name, active, hours, services, position FROM rdv_staff WHERE garage_id = $1 ORDER BY position, created_at, id", [garageId]),
-        all("SELECT staff_id, skill_id, until::text AS until FROM rdv_staff_skills WHERE garage_id = $1", [garageId]),
-        all("SELECT id, label, cert FROM rdv_skills WHERE garage_id = $1 ORDER BY created_at, id", [garageId]),
-        all("SELECT id, name, type, active, hours, services, position FROM rdv_resources WHERE garage_id = $1 ORDER BY position, created_at, id", [garageId]),
-        all("SELECT * FROM rdv_service_reqs WHERE garage_id = $1", [garageId]),
-        all("SELECT id, target, target_id, starts_at, ends_at, kind, label FROM rdv_unavail WHERE garage_id = $1 AND ends_at > $2::timestamptz ORDER BY starts_at, id", [garageId, T()]),
-        this.busy(garageId, fromIso, toIso),
+      const [staff, skillRows, skills, resources, reqs, unavail, busy] = await each([
+        () => all("SELECT id, name, active, hours, services, position FROM rdv_staff WHERE garage_id = $1 ORDER BY position, created_at, id", [garageId]),
+        () => all("SELECT staff_id, skill_id, until::text AS until FROM rdv_staff_skills WHERE garage_id = $1", [garageId]),
+        () => all("SELECT id, label, cert FROM rdv_skills WHERE garage_id = $1 ORDER BY created_at, id", [garageId]),
+        () => all("SELECT id, name, type, active, hours, services, position FROM rdv_resources WHERE garage_id = $1 ORDER BY position, created_at, id", [garageId]),
+        () => all("SELECT * FROM rdv_service_reqs WHERE garage_id = $1", [garageId]),
+        () => all("SELECT id, target, target_id, starts_at, ends_at, kind, label FROM rdv_unavail WHERE garage_id = $1 AND ends_at > $2::timestamptz ORDER BY starts_at, id", [garageId, T()]),
+        () => this.busy(garageId, fromIso, toIso),
       ]);
       return {
         staff: staff.map((r) => staffOf(r, skillRows)),
@@ -185,6 +199,47 @@ export function bindCalendar(q, { now = Date.now } = {}) {
           )
         : Promise.resolve([]),
 
+    // ---- blocs internes (lot 3b) : b = { kind, label, services, vehicle, mode, day, start, end, startsAt, endsAt, fixed }
+    countBlocks: (garageId) => one("SELECT count(*)::int AS n FROM rdv_blocks WHERE garage_id = $1 AND ends_at > $2::timestamptz", [garageId, T()]).then((r) => r.n),
+    async saveBlock(garageId, accountId, id, b) {
+      const vals = [b.kind, b.label, JSON.stringify(b.services || []), b.vehicle || "", b.mode || "hour", b.day, b.start, b.end, iso(b.startsAt), iso(b.endsAt), !!b.fixed];
+      const row = id
+        ? await one(
+            `UPDATE rdv_blocks SET kind = $3, label = $4, services = $5::jsonb, vehicle = $6, mode = $7, day = $8::date, start_min = $9, end_min = $10, starts_at = $11::timestamptz,
+               ends_at = $12::timestamptz, fixed = $13, account_id = $14, updated_at = $15::timestamptz WHERE id = $1 AND garage_id = $2 RETURNING id`,
+            [id, garageId, ...vals, accountId || "", T()],
+          )
+        : await one(
+            `INSERT INTO rdv_blocks (id, garage_id, kind, label, services, vehicle, mode, day, start_min, end_min, starts_at, ends_at, fixed, account_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8::date, $9, $10, $11::timestamptz, $12::timestamptz, $13, $14, $15::timestamptz, $15::timestamptz) RETURNING id`,
+            [crypto.randomUUID(), garageId, ...vals, accountId || "", T()],
+          );
+      return row && row.id;
+    },
+    getBlock: (garageId, id) => one(`SELECT ${BLOCK_COLUMNS} FROM rdv_blocks WHERE id = $1 AND garage_id = $2`, [id, garageId]).then(blockOf),
+    blocksBetween: (garageId, fromIso, toIso) =>
+      all(`SELECT ${BLOCK_COLUMNS} FROM rdv_blocks WHERE garage_id = $1 AND day BETWEEN $2::date AND $3::date ORDER BY starts_at, id`, [garageId, fromIso, toIso]).then((rows) => rows.map(blockOf)),
+    async deleteBlock(garageId, id) {
+      const r = await q.query("DELETE FROM rdv_blocks WHERE id = $1 AND garage_id = $2", [id, garageId]);
+      if (!r.rowCount) return false;
+      await q.query("DELETE FROM rdv_assignments WHERE block_id = $1 AND garage_id = $2", [id, garageId]);
+      return true;
+    },
+    // rows [{ target, targetId, role, day, start, end (ms) }]
+    async replaceBlockAssignments(garageId, blockId, rows) {
+      await q.query("DELETE FROM rdv_assignments WHERE block_id = $1 AND garage_id = $2", [blockId, garageId]);
+      for (const a of rows)
+        await q.query("INSERT INTO rdv_assignments (id, garage_id, block_id, target, target_id, role, day, starts_at, ends_at, fixed) VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8::timestamptz, $9::timestamptz, false)", [
+          crypto.randomUUID(), garageId, blockId, a.target, a.targetId, a.role, a.day, iso(a.start), iso(a.end),
+        ]);
+    },
+    blockAssignments: (garageId, blockIds) =>
+      blockIds.length
+        ? all(`SELECT block_id, target, target_id, role, starts_at, ends_at FROM rdv_assignments WHERE garage_id = $1 AND block_id IN (${placeholders(blockIds.length, 2)}) ORDER BY starts_at, role`, [garageId, ...blockIds]).then((rows) =>
+            rows.map((r) => ({ blockId: r.block_id, target: r.target, targetId: r.target_id, role: r.role, start: ms(r.starts_at), end: ms(r.ends_at) })),
+          )
+        : Promise.resolve([]),
+
     // ---- interventions
     // fields : { vehicle, workStart, workEnd, readyAt, returnAt, labour, immob } (instants en ms)
     saveWorkOrder: (garageId, requestId, f) =>
@@ -239,12 +294,20 @@ export function bindCalendar(q, { now = Date.now } = {}) {
         calWorkOrders: await run(
           "DELETE FROM rdv_work_orders WHERE request_id IN (SELECT w.request_id FROM rdv_work_orders w LEFT JOIN rdv_requests r ON r.id = w.request_id WHERE r.id IS NULL AND w.created_at < $2::timestamptz LIMIT $1)",
         ),
+        // blocs internes comme les demandes : libellé effacé 30 jours après le jour, ligne effacée après 24 mois
+        calBlocksAnonymized: await run(
+          "UPDATE rdv_blocks SET label = '', anonymized_at = $2::timestamptz WHERE id IN (SELECT id FROM rdv_blocks WHERE anonymized_at IS NULL AND ends_at < $2::timestamptz - interval '30 days' LIMIT $1)",
+        ),
+        calBlocks: await run("DELETE FROM rdv_blocks WHERE id IN (SELECT id FROM rdv_blocks WHERE ends_at < $2::timestamptz - interval '24 months' LIMIT $1)"),
+        calBlockAssignments: await run(
+          "DELETE FROM rdv_assignments WHERE id IN (SELECT a.id FROM rdv_assignments a LEFT JOIN rdv_blocks k ON k.id = a.block_id WHERE a.block_id IS NOT NULL AND k.id IS NULL AND a.created_at < $2::timestamptz LIMIT $1)",
+        ),
       };
     },
     // retrait d'un rattachement : tout le calendrier du garage part (les demandes sont annulées par rdv-repo). Hors transaction, par lots
     // (DSQL : 3 000 lignes modifiées au plus par transaction).
     async revoke(garageId) {
-      const KEYS = { rdv_calendar: "garage_id", rdv_staff: "id", rdv_staff_skills: "staff_id, skill_id", rdv_skills: "id", rdv_resources: "id", rdv_service_reqs: "service_id", rdv_unavail: "id", rdv_assignments: "id", rdv_work_orders: "request_id", rdv_history: "id" };
+      const KEYS = { rdv_calendar: "garage_id", rdv_staff: "id", rdv_staff_skills: "staff_id, skill_id", rdv_skills: "id", rdv_resources: "id", rdv_service_reqs: "service_id", rdv_unavail: "id", rdv_assignments: "id", rdv_work_orders: "request_id", rdv_history: "id", rdv_blocks: "id" };
       let n = 0;
       for (const [t, key] of Object.entries(KEYS))
         for (let pass = 0; pass < 1000; pass++) {

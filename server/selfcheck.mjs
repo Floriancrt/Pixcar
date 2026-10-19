@@ -23,6 +23,7 @@ const INDEXES = [
   "rdv_mails_due_idx", "rdv_mails_request_idx",
   "rdv_staff_garage_idx", "rdv_skills_garage_idx", "rdv_staff_skills_garage_idx", "rdv_resources_garage_idx", "rdv_unavail_garage_idx", "rdv_assignments_garage_day_idx",
   "rdv_assignments_request_idx", "rdv_assignments_target_idx", "rdv_work_orders_garage_idx", "rdv_history_garage_idx", "rdv_history_at_idx",
+  "rdv_blocks_garage_day_idx", "rdv_blocks_day_idx",
 ];
 
 export async function selfcheck(db, { log = () => {} } = {}) {
@@ -375,7 +376,10 @@ export async function selfcheck(db, { log = () => {} } = {}) {
       ]);
       await c.saveWorkOrder(proGarage2, rdvId, { vehicle: "suv", workStart: at, workEnd: end, readyAt: end, returnAt: end + 15 * 6e4, labour: 45, immob: 45 });
       await c.log(proGarage2, acc("c"), "staff", staff, "auto-contrôle");
-      return { skill, staff, lift };
+      // bloc interne (lot 3b) : créneau bloqué sur le pont, l'après-midi
+      const hold = await c.saveBlock(proGarage2, acc("c"), null, { kind: "hold", label: "Auto-contrôle", services: [], day: q0.day, start: 840, end: 900, startsAt: parisInstant(q0.day, 840), endsAt: parisInstant(q0.day, 900), fixed: true });
+      await c.replaceBlockAssignments(proGarage2, hold, [{ target: "resource", targetId: lift, role: "station", day: q0.day, start: parisInstant(q0.day, 840), end: parisInstant(q0.day, 900) }]);
+      return { skill, staff, lift, hold };
     });
     const w = await rdv.tx(async (r) => ({
       data: await r.cal.load(proGarage2, nextMonday, addDays(nextMonday, 28)),
@@ -383,15 +387,20 @@ export async function selfcheck(db, { log = () => {} } = {}) {
       order: await r.cal.workOrder(rdvId),
       mine: await r.cal.assignmentsOf(proGarage2, [rdvId]),
       history: await r.cal.history(proGarage2),
+      blocks: await r.cal.blocksBetween(proGarage2, q0.day, q0.day),
+      blockRows: await r.cal.blockAssignments(proGarage2, [calIds.hold]),
     }));
     const p = w.data.staff[0];
     expect(w.data.staff.length === 1 && p.name === "Auto" && p.hours === null && p.skills[0].id === calIds.skill && p.skills[0].until === addDays(nextMonday, 365), "mécanicien relu : " + JSON.stringify(p));
     expect(w.data.skills[0].cert === true && w.data.resources[0].type === "lift", "compétence et poste relus");
     expect(w.data.reqs.vidange.labour === 45 && w.data.reqs.vidange.skills[0] === calIds.skill && w.data.reqs.vidange.vehicles.suv === 60, "exigences relues (jsonb) : " + JSON.stringify(w.data.reqs.vidange));
-    expect(w.data.busy.length === 2 && w.data.busy.every((b) => b.status === "pending" && b.start === at && b.end === end), "affectations relues avec l'état de la demande (LEFT JOIN) : " + JSON.stringify(w.data.busy));
+    const own = w.data.busy.filter((b) => b.requestId === rdvId);
+    expect(own.length === 2 && own.every((b) => b.status === "pending" && b.start === at && b.end === end), "affectations relues avec l'état de la demande (LEFT JOIN) : " + JSON.stringify(w.data.busy));
     expect(w.uses === 1 && w.mine.length === 2, "mécanicien engagé par 1 rendez-vous");
     expect(w.order.vehicle === "suv" && w.order.status === "planned" && w.order.returnAt === end + 15 * 6e4, "intervention relue : " + JSON.stringify(w.order));
     expect(w.history.length === 1 && w.history[0].refId === calIds.staff, "historique relu");
+    expect(w.blocks.length === 1 && w.blocks[0].kind === "hold" && w.blocks[0].day === q0.day && w.blocks[0].start === 840 && w.blocks[0].startsAt === parisInstant(q0.day, 840), "bloc interne relu : " + JSON.stringify(w.blocks[0]));
+    expect(w.blockRows.length === 1 && w.blockRows[0].targetId === calIds.lift && w.data.busy.some((x) => x.blockId === calIds.hold), "affectation du bloc relue, comptée par le moteur");
     const un = parseUnavail({ target: "staff", targetId: calIds.staff, kind: "training", first: q0.day }, { staffIds: new Set([calIds.staff]), resourceIds: new Set(), nowMs: rdvClock });
     expect(!un.error, "absence : " + JSON.stringify(un));
     const hit = await rdv.tx(async (r) => {
@@ -416,8 +425,9 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     if (calIds) {
       const gone = await rdv.cal.revoke(proGarage2);
       const left = await rdv.tx(async (r) => ({ cal: await r.cal.getCalendar(proGarage2), staff: await r.cal.countStaff(proGarage2), skills: await r.cal.countSkills(proGarage2), res: await r.cal.countResources(proGarage2) }));
-      // réglages, compétence, mécanicien, lien de compétence, poste, exigence, absence, intervention, historique (les affectations sont déjà parties)
-      expect(gone === 9 && !left.cal && left.staff + left.skills + left.res === 0, `retrait du calendrier par lots : ${gone} lignes, reste ${JSON.stringify(left)}`);
+      // réglages, compétence, mécanicien, lien de compétence, poste, exigence, absence, intervention, historique, bloc et son affectation
+      // (les affectations de la demande sont déjà parties)
+      expect(gone === 11 && !left.cal && left.staff + left.skills + left.res === 0, `retrait du calendrier par lots : ${gone} lignes, reste ${JSON.stringify(left)}`);
       expect((await count("SELECT count(*) AS n FROM rdv_work_orders WHERE garage_id = $1", [proGarage2])) === 0, "intervention retirée");
     }
   });

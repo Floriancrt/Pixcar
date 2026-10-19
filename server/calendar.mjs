@@ -10,7 +10,8 @@
 //   POST   …/calendar/check                                   contrôles et affectation proposée des rendez-vous à venir (rien n'est écrit)
 //   POST   …/calendar/activate                                { placements?: [{ requestId, staff: [ids], station }] } : mode avancé
 //   POST   …/calendar/simple                                  retour au mode simple
-//   GET    …/calendar/agenda?from=AAAA-MM-JJ&to=AAAA-MM-JJ    rendez-vous et affectations d'une période
+//   GET    …/calendar/agenda?from=AAAA-MM-JJ&to=AAAA-MM-JJ    planning d'une période : rendez-vous, blocs, affectations, ouverture, absences, conflits
+//   POST   …/calendar/blocks · PUT, DELETE …/blocks/:id        blocs internes : rendez-vous hors Pixcar, créneaux bloqués (lot 3b)
 //   POST   …/rdv/requests/:req/move                           { day, time, staff?, station?, confirm? } : déplacer ou réaffecter
 // Et pour server/rdv.mjs : world() (ce que lit le moteur, dans la transaction de la prise d'horaire), writePlan(), planInfo().
 import { apiError, json } from "./lib/http.mjs";
@@ -42,7 +43,7 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
   }
   function worldFrom(b, data, nowMs, { exclude = null, withBusy = true } = {}) {
     const ex = exclude instanceof Set ? exclude : new Set(exclude ? [exclude] : []);
-    const busy = withBusy ? data.busy.filter((x) => !ex.has(x.requestId) && (x.blockId || (x.requestId && R.holds({ status: x.status, deadline: x.deadline }, nowMs)))) : [];
+    const busy = withBusy ? data.busy.filter((x) => !ex.has(x.requestId) && !ex.has(x.blockId) && (x.blockId || (x.requestId && R.holds({ status: x.status, deadline: x.deadline }, nowMs)))) : [];
     const offered = new Set(b.offered || []);
     const reqs = Object.fromEntries(Object.entries(data.reqs).filter(([id]) => offered.has(id)));
     return P.makeWorld({ nowMs, ctx: ctxOf(b), settings: settingsOf(b), cal: b.calendar || DEFAULT_CAL, staff: data.staff, resources: data.resources, skills: data.skills, reqs, unavail: data.unavail, busy });
@@ -287,7 +288,8 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
   // Rendez-vous à venir → à placer, dans l'ordre. manual : { requestId: { staff, station } } (choix du garage) ; à défaut, les
   // affectations choisies à la main auparavant sont gardées.
   async function itemsOf(r, garageId, fut, w, manual = {}) {
-    const [rows, orders] = await Promise.all([r.cal.assignmentsOf(garageId, fut.map((q) => q.id)), r.cal.workOrders(garageId, fut.map((q) => q.id))]);
+    const rows = await r.cal.assignmentsOf(garageId, fut.map((q) => q.id));
+    const orders = await r.cal.workOrders(garageId, fut.map((q) => q.id));
     return fut.map((q) => {
       const order = orders.find((o) => o.requestId === q.id);
       const fixed = rows.filter((a) => a.requestId === q.id && a.fixed);
@@ -419,19 +421,64 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
     return state(garageId, { moved: out.moved });
   }
 
-  // ---------------------------------------------------------------- calendrier d'une période
+  // ---------------------------------------------------------------- calendrier d'une période (écran Planning, lot 3b)
+  const iso = (msv) => msv && new Date(msv).toISOString();
+  const planView = (names) => (a) => ({ target: a.target, id: a.targetId, name: names.get(a.targetId) || "", role: a.role, start: iso(a.start), end: iso(a.end), ...(a.fixed !== undefined ? { fixed: a.fixed } : {}) });
+  const blockView = (k, rows, names) => ({
+    id: k.id,
+    kind: k.kind,
+    label: k.label,
+    services: k.services.map((s) => ({ id: s.id, qty: s.qty, label: R.serviceText(s) })),
+    vehicle: k.vehicle,
+    when: { day: k.day, label: R.whenLabel(k.day, k.start), start: R.hm(k.start), end: R.hm(k.end) },
+    startsAt: iso(k.startsAt),
+    endsAt: iso(k.endsAt),
+    fixed: k.fixed,
+    plan: rows.filter((a) => a.blockId === k.id).map(planView(names)),
+  });
+  // blocs à venir dont une ressource n'est plus là (absence, fiche désactivée…) : signalés comme les rendez-vous, jamais déplacés
+  function blockConflicts(w, brows, blocks, nowMs) {
+    const fut = new Set(blocks.filter((k) => k.endsAt > nowMs).map((k) => k.id));
+    const out = new Map();
+    for (const s of P.staleAssignments(w, brows.filter((a) => fut.has(a.blockId)).map((a) => ({ ...a, requestId: a.blockId })))) {
+      const v = out.get(s.requestId) || { id: s.requestId, block: true, reasons: [] };
+      v.reasons.push(s.text);
+      out.set(s.requestId, v);
+    }
+    return [...out.values()];
+  }
   async function agenda(garageId, url) {
     const from = url.searchParams.get("from") || today(), to = url.searchParams.get("to") || from;
     if (!R.isIsoDay(from) || !R.isIsoDay(to) || to < from || R.addDays(from, AGENDA_MAX_DAYS) < to) return apiError(400, "bad_request", `from et to : AAAA-MM-JJ, ${AGENDA_MAX_DAYS} jours au plus.`);
-    const [list, data] = await Promise.all([repo.cal.requestsBetween(garageId, from, to), repo.cal.load(garageId, today(), today())]);
+    const nowMs = now();
+    const [list, data, blocks, b] = await Promise.all([repo.cal.requestsBetween(garageId, from, to), repo.cal.load(garageId, today(), today()), repo.cal.blocksBetween(garageId, from, to), repo.bundle(garageId, today())]);
+    if (!b) return notFound("Garage introuvable.");
     const ids = list.map((q) => q.id);
-    const [rows, orders] = await Promise.all([repo.cal.assignmentsOf(garageId, ids), repo.cal.workOrders(garageId, ids)]);
+    const [rows, orders, brows, conflicts] = await Promise.all([repo.cal.assignmentsOf(garageId, ids), repo.cal.workOrders(garageId, ids), repo.cal.blockAssignments(garageId, blocks.map((k) => k.id)), conflictsOf(garageId, b, data, nowMs)]);
     const names = new Map([...data.staff, ...data.resources].map((x) => [x.id, x.name]));
+    const w = worldFrom(b, data, nowMs, { withBusy: false });
+    const days = [];
+    for (let d = from; d <= to; d = R.addDays(d, 1)) days.push({ day: d, open: P.openOn(w, d).map(([a, z]) => [R.hm(a), R.hm(z)]) });
+    const fromMs = R.parisInstant(from, 0), toMs = R.parisInstant(R.addDays(to, 1), 0);
     return json(
       200,
       {
         from,
         to,
+        today: today(),
+        days,
+        staff: data.staff.map((m) => ({ id: m.id, name: m.name, active: m.active })),
+        resources: data.resources.map((x) => ({ id: x.id, name: x.name, type: x.type, active: x.active })),
+        services: (b.offered || [])
+          .filter((id) => data.reqs[id])
+          .map((id) => ({ id, label: SERVICE_BY_ID.get(id).label, unit: SERVICE_BY_ID.get(id).unit || "", byVehicle: Object.keys(data.reqs[id].vehicles || {}).length > 0 })),
+        vehicles: VEHICLES,
+        unavail: data.unavail.filter((u) => u.start < toMs && u.end > fromMs).map((u) => ({ ...unavailView(u), name: names.get(u.targetId) || "" })),
+        conflicts: [
+          ...conflicts.map((c) => ({ id: c.id, reasons: c.reasons })),
+          ...blockConflicts(w, brows, blocks, nowMs),
+        ],
+        blocks: blocks.map((k) => blockView(k, brows, names)),
         appointments: list.map((q) => {
           const o = orders.find((x) => x.requestId === q.id);
           return {
@@ -439,12 +486,80 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
             plate: q.plate || "",
             vehicle: (o && o.vehicle) || "",
             work: o ? { start: o.workStart && new Date(o.workStart).toISOString(), ready: o.readyAt && new Date(o.readyAt).toISOString(), back: o.returnAt && new Date(o.returnAt).toISOString(), labour: o.labour, status: o.status } : null,
-            plan: rows.filter((a) => a.requestId === q.id).map((a) => ({ target: a.target, id: a.targetId, name: names.get(a.targetId) || "", role: a.role, start: new Date(a.start).toISOString(), end: new Date(a.end).toISOString(), fixed: a.fixed })),
+            plan: rows.filter((a) => a.requestId === q.id).map(planView(names)),
           };
         }),
       },
       NO_STORE,
     );
+  }
+
+  // ---------------------------------------------------------------- blocs internes (lot 3b)
+  // job : planifié par le moteur comme une demande, sans les règles de la réservation en ligne, travaux au premier moment libre après
+  // le dépôt ; hold : ses ressources doivent être libres. Rien n'est forcé : en cas de conflit, la cause et d'autres horaires.
+  const holdRows = (v) => P.holdAssignments(v).map((a) => ({ target: a.target, targetId: a.targetId, role: a.role, day: v.day, start: R.parisInstant(v.day, a.a), end: R.parisInstant(v.day, a.b) }));
+  async function saveBlock(garageId, sub, id, body) {
+    const nowMs = now();
+    const out = await repo.tx(async (r) => {
+      await r.lockGarage(garageId);
+      const b = await r.bundle(garageId, R.parisParts(nowMs).iso);
+      if (!advanced(b)) return { kind: "simple" };
+      if (id && !(await r.cal.getBlock(garageId, id))) return { kind: "not_found" };
+      if (!id && (await r.cal.countBlocks(garageId)) >= P.MAX_BLOCKS) return { kind: "too_many" };
+      const w = await world(r, b, nowMs, { exclude: id });
+      const p = P.parseBlock(body, { staffIds: new Set(w.staff.map((m) => m.id)), resourceIds: new Set(w.resources.map((x) => x.id)), serviceIds: new Set(Object.keys(w.reqs)), nowMs });
+      if (p.error) return { kind: "invalid", p };
+      const v = p.value;
+      let row, rows;
+      if (v.kind === "job") {
+        const job = P.buildJob(v.services, w.reqs, v.vehicle);
+        if (job.error) return { kind: "not_configured" };
+        if (job.needVehicle && !v.vehicle) return { kind: "invalid", p: { error: "Type de véhicule : une prestation en dépend.", field: "vehicle" } };
+        const forced = v.staff.length || v.station ? { staff: v.staff, station: v.station } : null;
+        const ex = P.explain(w, job, { day: v.day, start: v.start, mode: "hour", forced, float: true });
+        if (!ex.plan) return { kind: "conflict", reasons: ex.reasons.map((x) => x.text), alternatives: ex.alternatives.map(altView) };
+        row = { kind: "job", label: v.label, services: v.services, vehicle: v.vehicle, mode: "hour", day: v.day, start: v.start, end: ex.plan.back, startsAt: R.parisInstant(v.day, v.start), endsAt: R.parisInstant(v.day, ex.plan.back), fixed: !!forced };
+        rows = rowsOf(ex.plan);
+      } else {
+        const c = P.checkHold(w, v);
+        if (c.fail) return { kind: "conflict", reasons: c.fail.map((x) => x.text), alternatives: [] };
+        row = { kind: "hold", label: v.label, services: [], vehicle: "", mode: "hour", day: v.day, start: v.start, end: v.end, startsAt: R.parisInstant(v.day, v.start), endsAt: R.parisInstant(v.day, v.end), fixed: true };
+        rows = holdRows(v);
+      }
+      const saved = await r.cal.saveBlock(garageId, sub, id, row);
+      if (!saved) return { kind: "not_found" };
+      await r.cal.replaceBlockAssignments(garageId, saved, rows);
+      await r.cal.log(garageId, sub, "block", saved, `${v.kind === "job" ? "Rendez-vous hors Pixcar" : "Créneau bloqué"} ${id ? "modifié" : "ajouté"} : ${R.whenLabel(v.day, v.start)}.`);
+      return { kind: "ok", saved };
+    });
+    switch (out.kind) {
+      case "simple":
+        return apiError(409, "simple_mode", "Les blocs du planning demandent le mode avancé.");
+      case "not_found":
+        return notFound("Bloc introuvable.");
+      case "too_many":
+        return apiError(409, "too_many", `${P.MAX_BLOCKS} blocs à venir au plus.`);
+      case "invalid":
+        return invalid(out.p);
+      case "not_configured":
+        return apiError(409, "not_configured", "Une prestation n'a pas ses exigences (Calendrier › Prestations).");
+      case "conflict":
+        return apiError(409, "conflict", out.reasons[0] || "Impossible à cette heure-là.", { reasons: out.reasons, alternatives: out.alternatives });
+      default:
+        log({ level: "info", msg: id ? "calendrier : bloc modifié" : "calendrier : bloc ajouté", event: "cal_block", garageId });
+        return json(id ? 200 : 201, { saved: out.saved }, NO_STORE);
+    }
+  }
+  async function deleteBlock(garageId, sub, id) {
+    const done = await repo.tx(async (r) => {
+      await r.lockGarage(garageId);
+      const k = await r.cal.getBlock(garageId, id);
+      if (!k || !(await r.cal.deleteBlock(garageId, id))) return false;
+      await r.cal.log(garageId, sub, "block", id, `${k.kind === "job" ? "Rendez-vous hors Pixcar" : "Créneau bloqué"} supprimé : ${R.whenLabel(k.day, k.start)}.`);
+      return true;
+    });
+    if (!done) return notFound("Bloc introuvable.");
+    return json(200, { deleted: true }, NO_STORE);
   }
 
   // ---------------------------------------------------------------- déplacer ou réaffecter un rendez-vous
@@ -507,7 +622,7 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
   async function route(request, sub, garageId, parts, readBody) {
     const method = request.method;
     const [what, id, extra] = parts;
-    if (extra || (id && !["staff", "skills", "resources", "unavail", "services"].includes(what))) return notFound("Route inconnue.");
+    if (extra || (id && !["staff", "skills", "resources", "unavail", "services", "blocks"].includes(what))) return notFound("Route inconnue.");
     if (!what) return method === "GET" ? state(garageId) : allow("GET");
     if (what === "agenda") return method === "GET" ? agenda(garageId, new URL(request.url)) : allow("GET");
     if (what === "start") return method === "POST" ? start(garageId, sub) : allow("POST");
@@ -519,7 +634,7 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
       if (!id) return notFound("Route inconnue.");
       return method === "PUT" ? saveReq(garageId, sub, id, await readBody(4096)) : allow("PUT");
     }
-    const crud = { staff: [saveStaff, deleteStaff], skills: [saveSkill, deleteSkill], resources: [saveResource, deleteResource], unavail: [saveUnavail, deleteUnavail] }[what];
+    const crud = { staff: [saveStaff, deleteStaff], skills: [saveSkill, deleteSkill], resources: [saveResource, deleteResource], unavail: [saveUnavail, deleteUnavail], blocks: [saveBlock, deleteBlock] }[what];
     if (!crud) return notFound("Route inconnue.");
     if (!id) return method === "POST" ? crud[0](garageId, sub, ...(what === "unavail" ? [] : [null]), await readBody(4096)) : allow("POST");
     if (!isUuid(id)) return notFound();

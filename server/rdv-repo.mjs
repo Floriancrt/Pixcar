@@ -62,33 +62,39 @@ export const bookingOf = (r) => ({ slotId: r.slot_id, day: r.day, start: r.start
 // heure limite, heure du rendez-vous et validité d'un code se jugent à la même horloge que le calcul des horaires (et les tests la fixent).
 export function createRdvRepo(db, { now = Date.now } = {}) {
   const T = () => new Date(now()).toISOString();
-  const bind = (q) => {
+  // inTx : lié à la connexion d'une transaction, où les requêtes passent l'une après l'autre (pg refusera bientôt d'en recevoir une
+  // pendant qu'une autre s'exécute) ; hors transaction, le pool les lance en parallèle.
+  const bind = (q, inTx = false) => {
     const one = async (sql, params) => (await q.query(sql, params)).rows[0] || null;
     const all = async (sql, params) => (await q.query(sql, params)).rows;
+    const each = async (thunks) => {
+      if (!inTx) return Promise.all(thunks.map((f) => f()));
+      const out = [];
+      for (const f of thunks) out.push(await f());
+      return out;
+    };
     const enqueue = (mails) =>
-      Promise.all(
-        mails.map((m) => q.query("INSERT INTO rdv_mails (id, request_id, garage_id, kind, created_at) VALUES ($1, $2, $3, $4, $5)", [crypto.randomUUID(), m.requestId || null, m.garageId, m.kind, T()])),
-      );
+      each(mails.map((m) => () => q.query("INSERT INTO rdv_mails (id, request_id, garage_id, kind, created_at) VALUES ($1, $2, $3, $4, $5)", [crypto.randomUUID(), m.requestId || null, m.garageId, m.kind, T()])));
 
     // libère les ressources réservées par ces demandes (mode avancé ; sans effet sinon)
     const release = (ids) => (ids.length ? q.query(`DELETE FROM rdv_assignments WHERE request_id IN (${placeholders(ids.length)})`, ids) : Promise.resolve());
     return {
       enqueue,
-      cal: bindCalendar(q, { now }),
+      cal: bindCalendar(q, { now, inTx }),
 
       // ---- ce qu'il faut pour calculer les horaires d'un garage : rattachement vérifié, réglages, créneaux, fermetures à venir, horaires
       // d'ouverture et coordonnées déclarés, temps moyens des prestations faites, fiche des données publiques
       async bundle(garageId, todayIso) {
         const claim = await one("SELECT account_id FROM pro_claims WHERE garage_id = $1 AND status = 'verified'", [garageId]);
         if (!claim) return null;
-        const [settings, slots, closures, profile, services, contact, calendar] = await Promise.all([
-          one(`SELECT ${SETTINGS_COLUMNS} FROM rdv_settings WHERE garage_id = $1`, [garageId]),
-          all(`SELECT ${SLOT_COLUMNS} FROM rdv_slots WHERE garage_id = $1 ORDER BY created_at, id`, [garageId]),
-          all(`SELECT ${CLOSURE_COLUMNS} FROM rdv_closures WHERE garage_id = $1 AND last_day >= $2::date ORDER BY first_day, id`, [garageId, todayIso]),
-          one("SELECT name, street, pc, city, phone, hours FROM pro_profiles WHERE garage_id = $1", [garageId]),
-          all("SELECT service_id, offered, minutes FROM pro_services WHERE garage_id = $1", [garageId]),
-          one("SELECT name, addr, pc, lat, lon FROM garage_contacts WHERE garage_id = $1", [garageId]),
-          this.cal.getCalendar(garageId),
+        const [settings, slots, closures, profile, services, contact, calendar] = await each([
+          () => one(`SELECT ${SETTINGS_COLUMNS} FROM rdv_settings WHERE garage_id = $1`, [garageId]),
+          () => all(`SELECT ${SLOT_COLUMNS} FROM rdv_slots WHERE garage_id = $1 ORDER BY created_at, id`, [garageId]),
+          () => all(`SELECT ${CLOSURE_COLUMNS} FROM rdv_closures WHERE garage_id = $1 AND last_day >= $2::date ORDER BY first_day, id`, [garageId, todayIso]),
+          () => one("SELECT name, street, pc, city, phone, hours FROM pro_profiles WHERE garage_id = $1", [garageId]),
+          () => all("SELECT service_id, offered, minutes FROM pro_services WHERE garage_id = $1", [garageId]),
+          () => one("SELECT name, addr, pc, lat, lon FROM garage_contacts WHERE garage_id = $1", [garageId]),
+          () => this.cal.getCalendar(garageId),
         ]);
         const minutes = {};
         for (const s of services) if (s.offered && Number.isInteger(s.minutes)) minutes[s.service_id] = s.minutes;
@@ -448,6 +454,6 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
     };
   };
   const base = bind(db);
-  base.tx = (fn) => db.tx((t) => fn(bind(t)));
+  base.tx = (fn) => db.tx((t) => fn(bind(t, true)));
   return base;
 }

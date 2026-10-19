@@ -13,7 +13,7 @@ import { createDb, withRetry } from "./db.mjs";
 import { isIndexStatement, splitStatements, toDsqlStatement } from "./lib/sql.mjs";
 
 export const MIGRATIONS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../db/migrations");
-export const APP_TABLES = ["garages", "repairs", "write_log", "upstream_cache", "garage_contacts", "pro_claims", "pro_events", "pro_prices", "pro_visits", "pro_profiles", "pro_profile_changes", "pro_services", "rdv_settings", "rdv_slots", "rdv_closures", "rdv_requests", "rdv_events", "rdv_mails", "rdv_calendar", "rdv_staff", "rdv_skills", "rdv_staff_skills", "rdv_resources", "rdv_service_reqs", "rdv_unavail", "rdv_assignments", "rdv_work_orders", "rdv_history"];
+export const APP_TABLES = ["garages", "repairs", "write_log", "upstream_cache", "garage_contacts", "pro_claims", "pro_events", "pro_prices", "pro_visits", "pro_profiles", "pro_profile_changes", "pro_services", "rdv_settings", "rdv_slots", "rdv_closures", "rdv_requests", "rdv_events", "rdv_mails", "rdv_calendar", "rdv_staff", "rdv_skills", "rdv_staff_skills", "rdv_resources", "rdv_service_reqs", "rdv_unavail", "rdv_assignments", "rdv_work_orders", "rdv_history", "rdv_blocks"];
 
 export async function migrate(db, dir = MIGRATIONS_DIR, log = () => {}, { pollMs = 1000, timeoutMs = 600_000 } = {}) {
   // une session dédiée : le verrou est pris et rendu sur la même connexion, et aucun délai de requête ne coupe une migration longue

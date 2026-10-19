@@ -6,7 +6,7 @@ compétences, prestations autorisées), postes et équipements (pont, banc, stat
 son mode dans Disponibilités ; passer de l'un à l'autre ne perd rien.
 
 Découpage : **lot 3a** (ce document : modèle, moteur, API, assistant, réservation en mode avancé), lot 3b (calendrier multi-vues,
-glisser-déposer, blocs internes), lot 3c (interventions, tableau de bord). Plus tard : stock, statistiques avancées, comptes mécaniciens.
+glisser-déposer, blocs internes : section « Lot 3b » plus bas), lot 3c (interventions, tableau de bord). Plus tard : stock, statistiques avancées, comptes mécaniciens.
 
 ## Décisions (validées par l'utilisateur le 19 octobre 2026)
 
@@ -105,6 +105,55 @@ déplace aucune affectation : l'API renvoie les rendez-vous concernés (conflits
 
 Côté automobiliste, `GET /v1/rdv/garages/:id/times` accepte `vehicle=` et répond `needVehicle: true` (avec la liste des types) quand
 il le faut ; chaque horaire du mode avancé porte `end` (restitution prévue) et la réponse `auto: true` quand la confirmation est immédiate.
+
+## Lot 3b : planning, glisser-déposer, blocs internes
+
+Choix faits au début du lot (19 octobre 2026), dans le cadre des décisions ci-dessus ; à revoir sur retour de l'utilisateur.
+
+**Écran « Planning »** (menu de l'Espace Pro, visible en mode avancé ; sur téléphone il prend la place de « Créneaux », qui passe sous
+« Plus »). Cinq vues, un seul composant de grille horaire (blocs proportionnels à la durée) sauf le mois :
+
+| Vue | Colonnes | Contenu |
+|---|---|---|
+| Jour | une par mécanicien (ou par poste, au choix) | main-d'œuvre de chaque mécanicien ; occupation de chaque poste |
+| Semaine | une par jour ouvert | tous les rendez-vous et blocs, côte à côte s'ils se chevauchent (dépôt → restitution) |
+| Mois | grille de 6 semaines | par jour : nombre de rendez-vous et les trois premiers |
+| Par mécanicien | une par jour de la semaine | la main-d'œuvre du mécanicien choisi |
+| Par poste | une par jour de la semaine | l'occupation du poste choisi |
+
+Chaque bloc montre l'heure, le client (ou le libellé), la prestation, la durée, le mécanicien et le statut (libellé et icône, pas
+seulement une couleur) : à confirmer, confirmé, hors Pixcar, bloqué, en conflit. Filtres : mécanicien, poste, prestation, statut.
+
+**Interactions.** Un clic ouvre la fiche (client ou libellé, voiture, prestations, dépôt, travaux, restitution, affectations ; actions :
+déplacer, changer de mécanicien ou de poste, appeler, annuler). Glisser-déposer (souris, doigt ; pas de 15 min) : vers une autre heure,
+un autre jour, un autre mécanicien ou un autre poste. Avant d'enregistrer, l'API contrôle tout (règles du lot 3a) : en cas de conflit,
+la cause et trois horaires possibles ; un changement d'heure d'un rendez-vous client demande la confirmation du garage (le client est
+prévenu par e-mail). La fiche offre le même déplacement au clavier (jour, heure, mécanicien, poste). Clic sur une case vide ou
+« Nouveau » : création rapide.
+
+**Blocs internes** (table `rdv_blocks`, migration `007_calendar_blocks.sql`) :
+
+- **rendez-vous pris hors Pixcar** (téléphone, comptoir) : libellé de 40 caractères au plus, sans coordonnées obligatoires ; prestations
+  (pour la durée et les ressources), type de véhicule si une prestation en dépend, jour et heure, mécanicien ou poste au choix. Planifié
+  comme une demande (même moteur, mêmes contrôles) mais sans les règles de la réservation en ligne (délai minimum, heure limite, part de
+  capacité, rendez-vous par jour, pièces) ; aucun e-mail ;
+- **créneau bloqué** (réunion, livraison, essai…) : libellé, jour, de… à…, un ou plusieurs mécaniciens ou postes. Refusé s'il chevauche
+  un rendez-vous ou un autre bloc de ces ressources (la cause est donnée) ; pour une absence ou une maintenance, il y a les fiches.
+
+Ils occupent leurs ressources comme les rendez-vous (`rdv_assignments.block_id`) et se déplacent de la même façon. Au retour au mode
+simple, ils restent mais ne comptent plus (ce sont les créneaux qui décident) ; ils comptent de nouveau à la réactivation, qui signale
+les rendez-vous sans place comme d'habitude. Conservation comme
+les demandes : le libellé (qui peut contenir un nom) est effacé 30 jours après le jour du bloc, la ligne 24 mois après ; l'historique
+note l'ajout, le déplacement ou la suppression d'un bloc sans son libellé.
+
+**API** (en plus du lot 3a) :
+
+| Route | Rôle |
+|---|---|
+| `GET …/calendar/agenda?from=&to=` | complétée : blocs, mécaniciens et postes, plages d'ouverture de chaque jour, absences et maintenances, rendez-vous en conflit |
+| `POST …/calendar/blocks` | crée un bloc (`kind` : `job` ou `hold`) ; 409 `conflict` avec causes et autres horaires |
+| `PUT …/calendar/blocks/:block` | modifie ou déplace un bloc ; mêmes contrôles |
+| `DELETE …/calendar/blocks/:block` | supprime un bloc et libère ses ressources |
 
 ## Confidentialité
 

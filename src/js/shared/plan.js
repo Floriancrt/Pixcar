@@ -779,3 +779,83 @@ export function parseUnavail(b, { staffIds, resourceIds, nowMs }) {
   if (chars(label) > 60) return { error: "Précision : 60 caractères au plus.", field: "label" };
   return { value: { target: b.target, targetId: b.targetId.toLowerCase(), start, end, kind: kind.id, label } };
 }
+
+// ---------------------------------------------------------------- blocs internes (lot 3b)
+// « job » : rendez-vous pris hors Pixcar, planifié comme une demande (sans les règles de la réservation en ligne) ;
+// « hold » : créneau bloqué sur des mécaniciens ou des postes.
+export const BLOCK_KINDS = ["job", "hold"];
+export const BLOCK_LABEL_MAX = 40;
+export const MAX_BLOCK_SERVICES = 8;
+export const MAX_BLOCK_TARGETS = 10;
+export const MAX_BLOCKS = 1000; // blocs à venir par garage
+const hhmm = (t) => {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(t ?? ""));
+  return m && Number(m[2]) % 5 === 0 ? Number(m[1]) * 60 + Number(m[2]) : null;
+};
+const ids = (v, known, max, what) => {
+  const raw = v === undefined || v === null ? [] : v;
+  if (!Array.isArray(raw) || raw.length > max) return { error: `${what} : une liste.` };
+  const out = [];
+  for (const x of raw) {
+    if (!isUuid(x) || !known.has(x.toLowerCase())) return { error: `${what} : inconnu.` };
+    if (!out.includes(x.toLowerCase())) out.push(x.toLowerCase());
+  }
+  return { value: out };
+};
+// → { value: { kind, label, day, start, … } } ou { error, field }. job : services, vehicle, staff (imposés), station ; hold : end, staff, resources.
+export function parseBlock(b, { staffIds, resourceIds, serviceIds, nowMs }) {
+  if (!b || typeof b !== "object" || Array.isArray(b)) return { error: "Objet attendu.", field: "block" };
+  if (!BLOCK_KINDS.includes(b.kind)) return { error: "Rendez-vous ou créneau bloqué ?", field: "kind" };
+  const label = clean(b.label);
+  if (chars(label) < 2 || chars(label) > BLOCK_LABEL_MAX) return { error: `Libellé : de 2 à ${BLOCK_LABEL_MAX} caractères.`, field: "label" };
+  if (!isIsoDay(b.day)) return { error: "Jour : AAAA-MM-JJ.", field: "day" };
+  const start = hhmm(b.time);
+  if (start === null) return { error: "Heure : HH:MM, par 5 min.", field: "time" };
+  if (parisInstant(b.day, start) <= nowMs) return { error: "Cet horaire est passé.", field: "time" };
+  if (parisInstant(b.day, start) > nowMs + 366 * 864e5) return { error: "Dans l'année qui vient seulement.", field: "day" };
+  if (b.kind === "job") {
+    const raw = b.services;
+    if (!Array.isArray(raw) || !raw.length || raw.length > MAX_BLOCK_SERVICES) return { error: "Choisissez au moins une prestation.", field: "services" };
+    const services = [];
+    for (const s of raw) {
+      const id = s && typeof s === "object" ? s.id : s;
+      const qty = s && typeof s === "object" && s.qty !== undefined ? s.qty : 1;
+      if (!serviceIds.has(id)) return { error: "Prestation inconnue ou sans exigences (Calendrier › Prestations).", field: "services" };
+      if (!Number.isInteger(qty) || qty < 1 || qty > 4) return { error: "Quantité : de 1 à 4.", field: "services" };
+      if (!services.some((x) => x.id === id)) services.push({ id, qty });
+    }
+    const vehicle = b.vehicle === undefined || b.vehicle === null ? "" : b.vehicle;
+    if (vehicle !== "" && !VEHICLE_IDS.includes(vehicle)) return { error: "Type de véhicule inconnu.", field: "vehicle" };
+    const staff = ids(b.staff, staffIds, 3, "Mécanicien");
+    if (staff.error) return { error: staff.error, field: "staff" };
+    if (b.station !== undefined && b.station !== null && (!isUuid(b.station) || !resourceIds.has(b.station.toLowerCase()))) return { error: "Poste : inconnu.", field: "station" };
+    return { value: { kind: "job", label, day: b.day, start, services, vehicle, staff: staff.value, station: b.station ? b.station.toLowerCase() : null } };
+  }
+  const end = b.to === "24:00" ? 1440 : hhmm(b.to);
+  if (end === null || end <= start) return { error: "Fin : HH:MM, après le début.", field: "to" };
+  const staff = ids(b.staff, staffIds, MAX_BLOCK_TARGETS, "Mécanicien");
+  if (staff.error) return { error: staff.error, field: "staff" };
+  const resources = ids(b.resources, resourceIds, MAX_BLOCK_TARGETS, "Poste");
+  if (resources.error) return { error: resources.error, field: "resources" };
+  if (!staff.value.length && !resources.value.length) return { error: "Choisissez au moins un mécanicien ou un poste.", field: "staff" };
+  if (staff.value.length + resources.value.length > MAX_BLOCK_TARGETS) return { error: `${MAX_BLOCK_TARGETS} mécaniciens ou postes au plus.`, field: "staff" };
+  return { value: { kind: "hold", label, day: b.day, start, end, staff: staff.value, resources: resources.value } };
+}
+// Créneau bloqué : ses ressources sont-elles libres (ni prises, ni absentes, ni en maintenance) ? → { ok } ou { fail: [raisons] }
+export function checkHold(w, { day, start, end, staff, resources }) {
+  if (parisInstant(day, start) <= w.nowMs) return { fail: reasons([{ code: "past" }], w) };
+  const d = dayOf(w, day);
+  const out = [];
+  for (const id of [...staff, ...resources]) {
+    const k = clash(d, id, [[start, end]]);
+    if (k) out.push(why(k, w));
+  }
+  return out.length ? { fail: reasons(out, w) } : { ok: true };
+}
+// Lignes d'affectation d'un créneau bloqué (minutes de sa journée)
+export const holdAssignments = ({ start, end, staff, resources }) => [
+  ...staff.map((id) => ({ target: "staff", targetId: id, role: "labour", a: start, b: end })),
+  ...resources.map((id) => ({ target: "resource", targetId: id, role: "station", a: start, b: end })),
+];
+// Plages d'ouverture d'un jour (minutes), pour la grille du planning
+export const openOn = (w, iso) => dayOf(w, iso).open;

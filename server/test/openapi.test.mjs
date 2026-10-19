@@ -400,6 +400,18 @@ describe("docs/openapi.yaml ↔ API", () => {
       await call("POST", M, `${G}/requests/${d.id}/move`, { headers: me, body: { day: "x" }, status: 422 });
       await call("POST", M, `${G}/requests/${crypto.randomUUID()}/move`, { headers: me, body: { day: "2026-10-21", time: "14:00" }, status: 404 });
       await call("POST", M, `${G}/requests/${d.id}/move`, { headers: me, body: { day: "2026-10-21", time: "14:00", confirm: true }, status: 200 });
+      // blocs internes (lot 3b) : créneau bloqué, rendez-vous hors Pixcar, puis le planning qui les montre
+      const B = `${C}/blocks`, BB = `${C}/blocks/{block}`;
+      const hold = { kind: "hold", label: "Réunion", day: "2026-10-22", time: "14:00", to: "15:00", staff: [paul] };
+      const h = JSON.parse((await call("POST", B, `${G}/calendar/blocks`, { headers: me, body: hold, status: 201 })).text).saved;
+      await call("POST", B, `${G}/calendar/blocks`, { headers: me, body: { ...hold, time: "14:30", to: "15:30" }, status: 409 }); // Paul déjà pris
+      await call("POST", B, `${G}/calendar/blocks`, { headers: me, body: { ...hold, kind: "x" }, status: 422 });
+      await call("POST", B, `${G}/calendar/blocks`, { headers: me, body: { kind: "job", label: "Client du quartier", services: ["plaq_av"], day: "2026-10-23", time: "08:00" }, status: 201 });
+      await call("PUT", BB, `${G}/calendar/blocks/${h}`, { headers: me, body: { ...hold, time: "16:00", to: "17:00" }, status: 200 });
+      await call("PUT", BB, `${G}/calendar/blocks/${crypto.randomUUID()}`, { headers: me, body: hold, status: 404 });
+      await call("GET", `${C}/agenda`, `${G}/calendar/agenda?from=2026-10-21&to=2026-10-23`, { headers: me, status: 200 }); // avec les blocs
+      await call("DELETE", BB, `${G}/calendar/blocks/${h}`, { headers: me, status: 200 });
+      await call("DELETE", BB, `${G}/calendar/blocks/${h}`, { headers: me, status: 404 });
       await call("DELETE", `${C}/staff/{staff}`, `${G}/calendar/staff/${paul}`, { headers: me, status: 409 }); // engagé
       await call("POST", `${C}/simple`, `${G}/calendar/simple`, { headers: me, status: 409 }); // aucun créneau
       await app.call("POST", `${G}/slots`, { headers: me, body: { name: "Journée", days: ["mo", "tu", "we", "th", "fr"], start: "08:00", end: "18:00", capacity: 1, services: ["plaq_av"] } });
@@ -435,7 +447,8 @@ describe("docs/openapi.yaml ↔ API", () => {
       "DELETE /v1/pro/garages/{id}/rdv/calendar/skills/{skill}", "POST /v1/pro/garages/{id}/rdv/calendar/resources", "PUT /v1/pro/garages/{id}/rdv/calendar/resources/{resource}",
       "DELETE /v1/pro/garages/{id}/rdv/calendar/resources/{resource}", "PUT /v1/pro/garages/{id}/rdv/calendar/services/{service}", "POST /v1/pro/garages/{id}/rdv/calendar/unavail",
       "DELETE /v1/pro/garages/{id}/rdv/calendar/unavail/{unavail}", "POST /v1/pro/garages/{id}/rdv/calendar/check", "POST /v1/pro/garages/{id}/rdv/calendar/activate",
-      "POST /v1/pro/garages/{id}/rdv/calendar/simple", "GET /v1/pro/garages/{id}/rdv/calendar/agenda",
+      "POST /v1/pro/garages/{id}/rdv/calendar/simple", "GET /v1/pro/garages/{id}/rdv/calendar/agenda", "POST /v1/pro/garages/{id}/rdv/calendar/blocks",
+      "PUT /v1/pro/garages/{id}/rdv/calendar/blocks/{block}", "DELETE /v1/pro/garages/{id}/rdv/calendar/blocks/{block}",
     ]).sort());
     // et chaque méthode non documentée d'une route documentée est refusée en 405
     for (const [method, path] of [["PUT", "/v1/repairs"], ["DELETE", "/v1/repairs"], ["POST", "/v1/overpass"], ["POST", "/healthz"], ["GET", `/v1/repairs/${repair().id}`]]) {

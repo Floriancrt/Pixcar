@@ -1165,7 +1165,11 @@ paths:
   /v1/pro/garages/{id}/rdv/calendar/agenda:
     get:
       tags: [Calendrier]
-      summary: Rendez-vous d'une période (42 jours au plus), avec leurs affectations et leur intervention
+      summary: "Planning d'une période (42 jours au plus) : rendez-vous avec leurs affectations, blocs internes, absences, conflits"
+      description: |
+        Lu par l'écran Planning (docs/calendrier-avance.md, lot 3b). `days` donne les heures d'ouverture de chaque jour (vide : fermé),
+        `staff`, `resources`, `services` et `vehicles` ce qu'il faut pour les filtres et la création rapide, `conflicts` les rendez-vous et
+        les blocs à venir dont une affectation ne tient plus (`block: true` pour un bloc).
       operationId: calAgenda
       security: [{ cognito: [] }]
       parameters:
@@ -1173,10 +1177,55 @@ paths:
         - { name: from, in: query, schema: { type: string, format: date } }
         - { name: to, in: query, schema: { type: string, format: date } }
       responses:
-        "200":
-          description: Les rendez-vous de la période.
-          content: { application/json: { schema: { type: object, required: [from, to, appointments], properties: { from: { type: string, format: date }, to: { type: string, format: date }, appointments: { type: array, items: { $ref: "#/components/schemas/CalAgendaItem" } } } } } }
+        "200": { description: Le planning de la période., content: { application/json: { schema: { $ref: "#/components/schemas/CalAgenda" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+  /v1/pro/garages/{id}/rdv/calendar/blocks:
+    post:
+      tags: [Calendrier]
+      summary: "Bloc interne : rendez-vous hors Pixcar (`job`, placé par le moteur) ou créneau bloqué (`hold`, ressources libres exigées)"
+      description: |
+        Mode avancé seulement. Un `job` occupe mécanicien et poste comme une demande, sans les règles de la réservation en ligne (délai, plafond,
+        prestations proposées) et sans aucun e-mail. Un `hold` réserve des mécaniciens ou des postes de `time` à `to`. Rien n'est forcé :
+        un conflit renvoie 409 `conflict` avec `reasons` et, pour un `job`, `alternatives`.
+      operationId: calBlockCreate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockInput" } } } }
+      responses:
+        "201": { description: "Bloc créé (`saved`).", content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockSaved" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Mode simple (`simple_mode`), 1 000 blocs au plus (`too_many`), prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/calendar/blocks/{block}:
+    put:
+      tags: [Calendrier]
+      summary: Modifier ou déplacer un bloc interne (mêmes règles que la création)
+      operationId: calBlockUpdate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: block, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockInput" } } } }
+      responses:
+        "200": { description: "Bloc enregistré (`saved`).", content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockSaved" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Mode simple (`simple_mode`), prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+    delete:
+      tags: [Calendrier]
+      summary: Supprimer un bloc interne (ses affectations partent avec lui)
+      operationId: calBlockDelete
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: block, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Bloc supprimé., content: { application/json: { schema: { type: object, required: [deleted], properties: { deleted: { type: boolean, enum: [true] } } } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
   /v1/rdv/garages/{id}/times:
@@ -1601,7 +1650,67 @@ components:
             plate: { type: string }
             vehicle: { type: string }
             work: { type: object, nullable: true, properties: { start: { type: string, format: date-time, nullable: true }, ready: { type: string, format: date-time, nullable: true }, back: { type: string, format: date-time, nullable: true }, labour: { type: integer, nullable: true }, status: { type: string } } }
-            plan: { type: array, items: { type: object, required: [target, id, name, role, start, end, fixed], properties: { target: { type: string, enum: [staff, resource] }, id: { type: string, format: uuid }, name: { type: string }, role: { type: string, enum: [labour, station, tool] }, start: { type: string, format: date-time }, end: { type: string, format: date-time }, fixed: { type: boolean } } } }
+            plan: { type: array, items: { allOf: [{ $ref: "#/components/schemas/CalPlanRow" }, { type: object, required: [fixed] }] } }
+    CalPlanRow:
+      type: object
+      required: [target, id, name, role, start, end]
+      properties:
+        target: { type: string, enum: [staff, resource] }
+        id: { type: string, format: uuid }
+        name: { type: string }
+        role: { type: string, enum: [labour, station, tool] }
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time }
+        fixed: { type: boolean, description: Choisi par le garage (absent pour un bloc). }
+    CalBlockInput:
+      type: object
+      required: [kind, label, day, time]
+      properties:
+        kind: { type: string, enum: [job, hold], description: "`job` : rendez-vous hors Pixcar ; `hold` : créneau bloqué." }
+        label: { type: string, minLength: 2, maxLength: 40, description: "Court et sans donnée sensible (effacé 30 jours après le bloc)." }
+        day: { type: string, format: date }
+        time: { type: string, example: "08:00", description: Début (dépôt pour un `job`), par 5 minutes. }
+        to: { type: string, example: "12:00", description: "Fin d'un `hold` (24:00 admis)." }
+        services: { type: array, maxItems: 8, items: { oneOf: [{ type: string }, { type: object, required: [id], properties: { id: { type: string }, qty: { type: integer, minimum: 1, maximum: 4 } } }] }, description: "`job` : 1 à 8 prestations dont les exigences sont saisies." }
+        vehicle: { type: string, description: "`job` : type de véhicule (exigé si une prestation en dépend)." }
+        staff: { type: array, items: { type: string, format: uuid }, description: "`job` : 3 mécaniciens choisis au plus (sinon le moteur choisit) ; `hold` : mécaniciens bloqués." }
+        station: { type: string, format: uuid, nullable: true, description: "`job` : poste choisi." }
+        resources: { type: array, items: { type: string, format: uuid }, description: "`hold` : postes bloqués (10 mécaniciens et postes au plus)." }
+    CalBlockSaved:
+      type: object
+      required: [saved]
+      properties:
+        saved: { type: string, format: uuid }
+    CalBlock:
+      type: object
+      required: [id, kind, label, services, vehicle, when, startsAt, endsAt, fixed, plan]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [job, hold] }
+        label: { type: string, description: Vide une fois effacé (30 jours après le bloc). }
+        services: { type: array, items: { type: object, required: [id, qty, label], properties: { id: { type: string }, qty: { type: integer }, label: { type: string } } } }
+        vehicle: { type: string }
+        when: { type: object, required: [day, label, start, end], properties: { day: { type: string, format: date }, label: { type: string }, start: { type: string }, end: { type: string } } }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        fixed: { type: boolean }
+        plan: { type: array, items: { $ref: "#/components/schemas/CalPlanRow" } }
+    CalAgenda:
+      type: object
+      required: [from, to, today, days, staff, resources, services, vehicles, unavail, conflicts, blocks, appointments]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        today: { type: string, format: date }
+        days: { type: array, items: { type: object, required: [day, open], properties: { day: { type: string, format: date }, open: { type: array, items: { type: array, minItems: 2, maxItems: 2, items: { type: string } }, example: [["08:00", "12:00"], ["14:00", "18:00"]] } } } }
+        staff: { type: array, items: { type: object, required: [id, name, active], properties: { id: { type: string, format: uuid }, name: { type: string }, active: { type: boolean } } } }
+        resources: { type: array, items: { type: object, required: [id, name, type, active], properties: { id: { type: string, format: uuid }, name: { type: string }, type: { type: string }, active: { type: boolean } } } }
+        services: { type: array, items: { type: object, required: [id, label, unit, byVehicle], properties: { id: { type: string }, label: { type: string }, unit: { type: string }, byVehicle: { type: boolean } } } }
+        vehicles: { type: array, items: { type: object, required: [id, label], properties: { id: { type: string }, label: { type: string } } } }
+        unavail: { type: array, items: { allOf: [{ $ref: "#/components/schemas/CalUnavail" }, { type: object, required: [name], properties: { name: { type: string } } }] } }
+        conflicts: { type: array, items: { type: object, required: [id, reasons], properties: { id: { type: string, format: uuid }, block: { type: boolean }, reasons: { type: array, items: { type: string } } } } }
+        blocks: { type: array, items: { $ref: "#/components/schemas/CalBlock" } }
+        appointments: { type: array, items: { $ref: "#/components/schemas/CalAgendaItem" } }
     CalState:
       type: object
       required: [today, mode, step, started, settings, booking, enabled, notify, hours, closures, staff, skills, resources, services, readiness, conflicts, catalogs]

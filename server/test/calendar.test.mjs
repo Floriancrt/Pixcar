@@ -358,10 +358,83 @@ describe("Calendrier avancé", () => {
     assert.equal((await bob("POST", `/rdv/requests/${a.id}/move`, { day: WED, time: "14:00", confirm: true })).status, 404);
     assert.equal((await bob("GET", `/rdv/calendar/agenda?from=${WED}&to=${WED}`)).body.appointments.length, 0);
     assert.equal((await pro("GET", "/rdv/calendar")).body.staff[0].name, "Paul");
+    assert.equal((await pro("POST", "/rdv/calendar/blocks", { kind: "hold", label: "Réunion", day: WED, time: "16:00", to: "17:00", staff: [paul] })).status, 201);
+    assert.equal((await bob("GET", `/rdv/calendar/agenda?from=${WED}&to=${WED}`)).body.blocks.length, 0);
     // le retrait du rattachement efface tout le calendrier du garage
     const out = await t.app.pro.rdv.repo.cal.revoke(DUPONT);
     assert.ok(out >= 1);
     assert.equal(await count("SELECT count(*)::int AS n FROM rdv_staff WHERE garage_id = $1", [DUPONT]), 0);
+    assert.equal(await count("SELECT count(*)::int AS n FROM rdv_blocks WHERE garage_id = $1", [DUPONT]), 0);
+  });
+
+  test("lot 3b · internal blocks: a phone booking and a blocked slot take their resources; conflicts explained; moved, flagged, deleted; kept like requests", async () => {
+    await openGarage();
+    const { paul, lift } = await setUp();
+    await activate();
+    const THU = "2026-10-22";
+    // rendez-vous pris au téléphone : Paul et le pont, mercredi de 8:00 à 9:30 (restitution 9:45)
+    const job = await pro("POST", "/rdv/calendar/blocks", { kind: "job", label: "M. Martin (tél.)", services: [{ id: "plaq_av" }], day: WED, time: "08:00" });
+    assert.equal(job.status, 201, JSON.stringify(job.body));
+    assert.ok(!timesOn(await times()).includes("08:00") && !timesOn(await times()).includes("09:00") && timesOn(await times()).includes("09:30"), "Paul et le pont sont pris de 8:00 à 9:30");
+    // un créneau bloqué qui chevauche : refusé, avec la cause ; un autre, libre : accepté
+    const clash = await pro("POST", "/rdv/calendar/blocks", { kind: "hold", label: "Réunion", day: WED, time: "09:00", to: "10:00", staff: [paul] });
+    assert.equal(clash.status, 409);
+    assert.equal(clash.body.error.code, "conflict");
+    assert.match(clash.body.error.message, /^Paul : déjà occupé/);
+    const hold = await pro("POST", "/rdv/calendar/blocks", { kind: "hold", label: "Livraison pièces", day: WED, time: "14:00", to: "15:00", resources: [lift] });
+    assert.equal(hold.status, 201, JSON.stringify(hold.body));
+    assert.ok(!timesOn(await times()).includes("14:00"), "pont pris de 14:00 à 15:00");
+    assert.equal((await pub("POST", "/v1/rdv/requests", booking({ time: "14:00" }))).body.error.code, "time_taken", "un client ne prend pas un créneau bloqué");
+    // le planning de la période
+    const ag = (await pro("GET", `/rdv/calendar/agenda?from=${WED}&to=${THU}`)).body;
+    assert.equal(ag.blocks.length, 2);
+    const j = ag.blocks.find((k) => k.kind === "job");
+    assert.deepEqual([j.label, j.when.start, j.when.end, j.services[0].id, j.fixed], ["M. Martin (tél.)", "08:00", "09:45", "plaq_av", false]);
+    assert.deepEqual(j.plan.map((a) => a.name).sort(), ["Paul", "Pont n°1"]);
+    assert.deepEqual(ag.blocks.find((k) => k.kind === "hold").plan.map((a) => [a.name, a.role]), [["Pont n°1", "station"]]);
+    assert.deepEqual(ag.days, [{ day: WED, open: H }, { day: THU, open: H }]);
+    assert.deepEqual([ag.staff.map((m) => m.name), ag.resources.map((x) => x.name), ag.today], [["Paul"], ["Pont n°1"], "2026-10-19"]);
+    assert.ok(ag.services.some((x) => x.id === "plaq_av" && x.byVehicle === false));
+    // déplacé au jeudi : mercredi 8:00 redevient libre, jeudi 8:00 ne l'est plus
+    const moved = await pro("PUT", `/rdv/calendar/blocks/${job.body.saved}`, { kind: "job", label: "M. Martin (tél.)", services: [{ id: "plaq_av" }], day: THU, time: "08:00" });
+    assert.equal(moved.status, 200, JSON.stringify(moved.body));
+    assert.ok(timesOn(await times()).includes("08:00") && !timesOn(await times(), THU).includes("08:00"));
+    // une absence de Paul jeudi : le bloc est signalé en conflit, rien n'est déplacé
+    const un = await pro("POST", "/rdv/calendar/unavail", { target: "staff", targetId: paul, kind: "training", first: THU });
+    assert.equal(un.status, 200);
+    const flagged = (await pro("GET", `/rdv/calendar/agenda?from=${THU}&to=${THU}`)).body;
+    assert.deepEqual(flagged.conflicts.map((c) => [c.id, c.block]), [[job.body.saved, true]]);
+    assert.equal(flagged.blocks[0].when.start, "08:00");
+    assert.equal((await pro("DELETE", `/rdv/calendar/unavail/${un.body.saved}`)).status, 200);
+    // contrôles des données reçues
+    for (const [body, field] of [
+      [{ kind: "rdv", label: "Essai", day: WED, time: "15:00" }, "kind"],
+      [{ kind: "job", label: "M", services: [{ id: "plaq_av" }], day: WED, time: "15:00" }, "label"],
+      [{ kind: "job", label: "Essai", services: [], day: WED, time: "15:00" }, "services"],
+      [{ kind: "job", label: "Essai", services: [{ id: "vidange" }], day: WED, time: "15:00", vehicle: "camion" }, "vehicle"],
+      [{ kind: "job", label: "Essai", services: [{ id: "plaq_av" }], day: "2026-10-19", time: "08:00" }, "time"],
+      [{ kind: "job", label: "Essai", services: [{ id: "plaq_av" }], day: WED, time: "15:02" }, "time"],
+      [{ kind: "hold", label: "Essai", day: WED, time: "15:00", to: "14:00", staff: [paul] }, "to"],
+      [{ kind: "hold", label: "Essai", day: WED, time: "15:00", to: "16:00" }, "staff"],
+      [{ kind: "hold", label: "Essai", day: WED, time: "15:00", to: "16:00", staff: ["aaaaaaaa-0000-4000-8000-000000000099"] }, "staff"],
+    ])
+      assert.equal((await pro("POST", "/rdv/calendar/blocks", body)).body.error.field, field, JSON.stringify(body));
+    // un autre garage n'y touche pas ; supprimé : le pont redevient libre ; une seconde fois : introuvable
+    await own("bob", PETIT);
+    assert.equal((await proOf(PETIT)("DELETE", `/rdv/calendar/blocks/${hold.body.saved}`)).status, 404);
+    assert.equal((await proOf(PETIT)("PUT", `/rdv/calendar/blocks/${hold.body.saved}`, { kind: "hold", label: "Volé", day: WED, time: "16:00", to: "17:00", resources: [lift] })).status, 409, "PETIT est en mode simple");
+    assert.equal((await pro("DELETE", `/rdv/calendar/blocks/${hold.body.saved}`)).status, 200);
+    assert.equal((await pro("DELETE", `/rdv/calendar/blocks/${hold.body.saved}`)).status, 404);
+    assert.ok(timesOn(await times()).includes("14:00"));
+    assert.ok((await t.app.pro.rdv.repo.cal.history(DUPONT)).every((h) => !/Martin|Livraison/.test(h.detail)), "l'historique ne garde pas le libellé");
+    // conservation : libellé effacé 30 jours après le jour, ligne et affectations effacées après 24 mois
+    clock = at("2026-11-25", "10:00");
+    assert.equal((await t.app.pro.rdv.repo.cal.purge()).calBlocksAnonymized, 1);
+    assert.equal((await t.db.query("SELECT label FROM rdv_blocks")).rows[0].label, "");
+    clock = at("2028-11-25", "10:00");
+    const p2 = await t.app.pro.rdv.repo.cal.purge();
+    assert.deepEqual([p2.calBlocks, p2.calBlockAssignments], [1, 2]);
+    assert.equal(await count("SELECT count(*)::int AS n FROM rdv_assignments WHERE block_id IS NOT NULL"), 0);
   });
 
   test("routes: methods, unknown paths, the agenda range", async () => {
