@@ -264,7 +264,7 @@ export function bindCalendar(q, { now = Date.now, inTx = false } = {}) {
     // rendez-vous d'une période (calendrier) : en attente avant l'heure limite, ou confirmés
     requestsBetween: (garageId, fromIso, toIso) =>
       all(
-        `SELECT id, slot_id, status, day::text AS day, start_min, end_min, starts_at, ends_at, mode, services, minutes, deadline, name, car, plate FROM rdv_requests
+        `SELECT id, slot_id, status, day::text AS day, start_min, end_min, starts_at, ends_at, mode, services, minutes, deadline, name, phone, car, plate FROM rdv_requests
          WHERE garage_id = $1 AND day BETWEEN $2::date AND $3::date AND (status = 'confirmed' OR (status = 'pending' AND deadline > $4::timestamptz)) ORDER BY starts_at, id`,
         [garageId, fromIso, toIso, T()],
       ).then((rows) => rows.map((r) => ({ ...r, services: Array.isArray(r.services) ? r.services : [], starts_at: ms(r.starts_at), ends_at: ms(r.ends_at), deadline: ms(r.deadline) }))),

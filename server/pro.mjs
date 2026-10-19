@@ -514,7 +514,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
         prices: prices.map((p) => priceView(p, nowMs)),
         paid,
         visits: { views: visits.view, calls: visits.call },
-        ...(config.rdv.enabled ? { rdv: { todo: await rdv.todo(id) } } : {}),
+        ...(config.rdv.enabled ? { rdv: await rdv.summary(id) } : {}),
       },
       NO_STORE,
     );

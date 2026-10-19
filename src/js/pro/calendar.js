@@ -20,7 +20,7 @@ const minText = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? " " + Strin
 const plural = (n, one, many = one + "s") => `${n} ${n > 1 ? many : one}`;
 const label = (id) => (SERVICE.get(id) || { label: id }).label;
 
-export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProblem, goPanel }) {
+export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProblem, goPanel, onMode = () => {} }) {
   let garageId = null;
   let st = null; // réponse de GET …/rdv/calendar
   let cur = 1; // étape affichée (1 à 6)
@@ -64,6 +64,7 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
   }
 
   function render() {
+    onMode(st.mode); // le menu montre « Planning » en mode avancé
     $("calTitle").textContent = advanced() ? "Mon atelier" : "Calendrier avancé";
     $("calLead").textContent = advanced()
       ? "Le mode avancé est actif : les horaires proposés tiennent compte de vos mécaniciens, de vos postes et du temps de chaque prestation."
@@ -774,6 +775,7 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
     await busy(button, async () => {
       try {
         st = await api.calSimple(garageId);
+        onMode(st.mode);
         await goPanel("agenda");
         alertBox("Mode simple : les horaires proposés viennent de nouveau de votre semaine type.", "info");
       } catch (e) {

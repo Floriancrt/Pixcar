@@ -146,11 +146,29 @@ les rendez-vous sans place comme d'habitude. Conservation comme
 les demandes : le libellé (qui peut contenir un nom) est effacé 30 jours après le jour du bloc, la ligne 24 mois après ; l'historique
 note l'ajout, le déplacement ou la suppression d'un bloc sans son libellé.
 
+**Ce qui a été tranché en le construisant** (`src/js/pro/planning.js`, test `tests/pro-planning.js`) :
+
+- **Glisser-déposer, selon la vue** : en Semaine, seuls le jour et l'heure changent et le moteur rechoisit mécanicien et poste ; vers
+  la colonne d'un mécanicien (Jour par mécanicien, Par mécanicien), ce mécanicien est imposé (il remplace celui du bloc glissé) ; vers
+  la colonne d'un poste, ce poste est imposé. Un créneau bloqué garde ses autres mécaniciens et postes. Au doigt, le glisser commence
+  après un appui long (350 ms) pour laisser la page défiler ; Échap l'abandonne. Le clic qui suit un glisser n'ouvre pas la fiche.
+- **Après un glisser**, tout passe par l'API : succès → planning rechargé et annonce ; confirmation demandée (rendez-vous client à une
+  autre heure) ou conflit → la fiche s'ouvre sur le formulaire de déplacement, pré-rempli, avec la cause et les autres horaires.
+- **Fiche** : une demande à confirmer renvoie à « Demandes » pour y répondre ; un rendez-vous confirmé s'annule depuis la fiche (motif
+  transmis au client) ; un bloc se modifie ou se supprime (second clic pour confirmer). Rien ne se déplace dans le passé.
+- **Création rapide** : clic sur une case vide (jour, heure au quart d'heure, mécanicien ou poste de la colonne) ou « Nouveau » (jour
+  affiché, 9:00 ou le prochain quart d'heure aujourd'hui). Rendez-vous hors Pixcar par défaut.
+- **Écran** : 1 minute = 1 pixel, de la première à la dernière heure d'ouverture de la période ; heures fermées grisées, absences et
+  maintenances hachurées en rouge avec leur libellé ; blocs qui se chevauchent côte à côte. Semaine par défaut sur ordinateur, Jour sur
+  téléphone, filtres repliés sur téléphone ; la grille défile dans son cadre, jamais la page. Le menu ne montre « Planning » qu'en mode
+  avancé (`rdv.mode` dans `GET /v1/pro/garages/{id}`).
+- **Données** : l'agenda donne aussi le téléphone du client (pour « Appeler » depuis la fiche), comme « Demandes ».
+
 **API** (en plus du lot 3a) :
 
 | Route | Rôle |
 |---|---|
-| `GET …/calendar/agenda?from=&to=` | complétée : blocs, mécaniciens et postes, plages d'ouverture de chaque jour, absences et maintenances, rendez-vous en conflit |
+| `GET …/calendar/agenda?from=&to=` | complétée : blocs, mécaniciens et postes, prestations et types de véhicule, plages d'ouverture de chaque jour, absences et maintenances, rendez-vous et blocs en conflit, téléphone du client |
 | `POST …/calendar/blocks` | crée un bloc (`kind` : `job` ou `hold`) ; 409 `conflict` avec causes et autres horaires |
 | `PUT …/calendar/blocks/:block` | modifie ou déplace un bloc ; mêmes contrôles |
 | `DELETE …/calendar/blocks/:block` | supprime un bloc et libère ses ressources |
@@ -166,6 +184,23 @@ agit pour le compte du garage.
 Conservation : les affectations partent dès qu'une demande se termine (refus, expiration, annulation) ; l'intervention (type de
 véhicule, heures prévues) reste avec la demande anonymisée puis part avec elle (24 mois) ; l'historique part au bout de 12 mois
 (purge quotidienne) ; le retrait d'un rattachement efface tout le calendrier du garage, par lots (`pro-revoke`).
+
+Lot 3b (blocs internes) : le libellé d'un bloc, qui peut contenir un nom, est effacé 30 jours après le jour du bloc et la ligne
+24 mois après (purge quotidienne) ; aucune coordonnée n'est demandée et aucun e-mail n'est envoyé ; l'historique ne garde pas le
+libellé. Les deux textes de confidentialité le disent (`src/partials/legal.html`, côté garage ; le pied de page de l'Espace Pro). Côté
+automobiliste, le texte précise que le garage voit son nom et son téléphone dans son planning et qu'un changement d'heure décidé par
+le garage lui est annoncé par e-mail.
+
+## Avant la mise en ligne du lot 3b
+
+- Fusion de `lot3b-planning` dans `main` puis poussée : **go de l'utilisateur attendu**.
+- Déploiement de l'API : migration `007_calendar_blocks.sql` (1 table, 2 index `ASYNC`) par l'opération `migrate`, droits du rôle
+  d'exécution sur la nouvelle table, puis `selfcheck` (le contrôle du calendrier écrit, relit et retire un créneau bloqué) et `smoke`.
+  Aucune nouvelle ressource AWS. L'API doit précéder le site : la page du lot 3a ignore les nouveaux champs (`rdv.mode`, `blocks`,
+  `days`…) et l'ancienne API ne connaît pas les routes des blocs.
+- Publication du site (Espace Pro) après l'API : **go de l'utilisateur attendu**.
+- Essai avec le garage d'essai : Planning (les cinq vues), déplacement d'un rendez-vous au clavier puis par glisser-déposer (e-mail au
+  client), rendez-vous hors Pixcar et créneau bloqué, conflit avec une absence, sur ordinateur et téléphone.
 
 ## Avant la mise en ligne du lot 3a
 

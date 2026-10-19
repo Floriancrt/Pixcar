@@ -483,6 +483,7 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
           const o = orders.find((x) => x.requestId === q.id);
           return {
             ...reqView(q),
+            phone: q.phone || "",
             plate: q.plate || "",
             vehicle: (o && o.vehicle) || "",
             work: o ? { start: o.workStart && new Date(o.workStart).toISOString(), ready: o.readyAt && new Date(o.readyAt).toISOString(), back: o.returnAt && new Date(o.returnAt).toISOString(), labour: o.labour, status: o.status } : null,

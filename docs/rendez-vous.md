@@ -10,8 +10,9 @@ Spécification des deux lots décidés avec l'utilisateur le 17 octobre 2026, d'
   traitement par le garage. **En service depuis le 18 octobre 2026** (mise en service par étapes : `docs/exploitation.md`, 10.12). À livrer d'un bloc : un planning qui n'amène aucun client ne sera pas tenu à jour.
 - **Lot 3 — Calendrier avancé** (mécaniciens, postes, exigences des prestations, planification par ressources), à côté du mode simple
   ci-dessous qui reste le mode par défaut : spécification dans [calendrier-avance.md](calendrier-avance.md). Lot 3a (modèle, moteur,
-  API, assistant, réservation en mode avancé) **en service depuis le 19 octobre 2026** (API et site, `docs/exploitation.md`, 10.13) ; lots 3b (vues du
-  calendrier, glisser-déposer, blocs internes) et 3c (ordres de réparation, tableau de bord) à suivre.
+  API, assistant, réservation en mode avancé) **en service depuis le 19 octobre 2026** (API et site, `docs/exploitation.md`, 10.13) ; lot 3b
+  (écran Planning : cinq vues, glisser-déposer, blocs internes) **prêt sur la branche `lot3b-planning`, pas encore en service** ; lot 3c
+  (ordres de réparation, tableau de bord) à suivre.
 
 ## Décisions
 

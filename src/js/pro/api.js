@@ -74,5 +74,10 @@ export function createProApi({ base, token, fetchImpl = (...a) => fetch(...a) })
     calCheck: (id, body) => call("POST", `${rdv(id)}/calendar/check`, body || {}),
     calActivate: (id, body) => call("POST", `${rdv(id)}/calendar/activate`, body || {}),
     calSimple: (id) => call("POST", `${rdv(id)}/calendar/simple`),
+    // écran Planning (lot 3b)
+    calAgenda: (id, from, to) => call("GET", `${rdv(id)}/calendar/agenda?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    move: (id, request, body) => call("POST", `${rdv(id)}/requests/${encodeURIComponent(request)}/move`, body),
+    saveBlock: (id, block, body) => call(block ? "PUT" : "POST", `${rdv(id)}/calendar/blocks${block ? "/" + encodeURIComponent(block) : ""}`, body),
+    deleteBlock: (id, block) => call("DELETE", `${rdv(id)}/calendar/blocks/${encodeURIComponent(block)}`),
   };
 }

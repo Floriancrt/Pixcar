@@ -380,7 +380,7 @@ paths:
                     properties:
                       views: { $ref: "#/components/schemas/ProVisitCounts" }
                       calls: { $ref: "#/components/schemas/ProVisitCounts" }
-                  rdv: { type: object, description: "Rendez-vous en ligne ouverts côté API : demandes à traiter.", required: [todo], properties: { todo: { type: integer, minimum: 0 } } }
+                  rdv: { type: object, description: "Rendez-vous en ligne ouverts côté API : demandes à traiter, mode du calendrier (l'écran Planning n'existe qu'en mode avancé).", required: [todo, mode], properties: { todo: { type: integer, minimum: 0 }, mode: { type: string, enum: [simple, advanced] } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { description: "Garage introuvable ou pas rattaché à ce compte (`not_found`), ou Espace Pro fermé (`pro_disabled`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   /v1/pro/garages/{id}/prices/{service}:
@@ -1645,8 +1645,9 @@ components:
       allOf:
         - { $ref: "#/components/schemas/CalAppointment" }
         - type: object
-          required: [plate, vehicle, work, plan]
+          required: [phone, plate, vehicle, work, plan]
           properties:
+            phone: { type: string, description: "Téléphone du client (vide une fois effacé)." }
             plate: { type: string }
             vehicle: { type: string }
             work: { type: object, nullable: true, properties: { start: { type: string, format: date-time, nullable: true }, ready: { type: string, format: date-time, nullable: true }, back: { type: string, format: date-time, nullable: true }, labour: { type: integer, nullable: true }, status: { type: string } } }

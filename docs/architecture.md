@@ -129,8 +129,10 @@ Schéma : `db/migrations/001_init.sql`, pour PostgreSQL 14 ou plus **et** pour A
 
 Les migrations suivantes ajoutent l'Espace Pro (`002_pro.sql` à `004_pro_garage.sql`), les rendez-vous en ligne (`005_rdv.sql`,
 [rendez-vous.md](rendez-vous.md)) et le calendrier avancé (`006_calendar.sql` : réglages, mécaniciens, compétences, postes, exigences
-des prestations, absences, affectations, ordres de réparation, historique ; [calendrier-avance.md](calendrier-avance.md)). Le moteur de
-planification (`src/js/shared/plan.js`) est partagé par l'API et la page Pro, comme celui des horaires (`src/js/shared/rdv.js`).
+des prestations, absences, affectations, ordres de réparation, historique ; [calendrier-avance.md](calendrier-avance.md)), puis ses
+blocs internes (`007_calendar_blocks.sql` : rendez-vous pris hors Pixcar et créneaux bloqués, montrés par l'écran Planning,
+`src/js/pro/planning.js`). Le moteur de planification (`src/js/shared/plan.js`) est partagé par l'API et la page Pro, comme celui des
+horaires (`src/js/shared/rdv.js`).
 
 Les `CHECK` de la base répètent la validation de l'API : **même une erreur de l'API ne peut pas y inscrire un prix négatif ou une note de 9**. Index : lecture d'une zone (`garages_area_idx`, `repairs_garage_service_idx`, index partiels sur `approved`), unicité anti-doublon, file de modération, limitation.
 
