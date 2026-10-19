@@ -1198,7 +1198,7 @@ paths:
         "201": { description: "Bloc créé (`saved`).", content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockSaved" } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
-        "409": { description: "Mode simple (`simple_mode`), 1 000 blocs au plus (`too_many`), prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Mode simple (`simple_mode`), 1 000 blocs au plus (`too_many`), prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`), travaux qui attendraient (`shifted` : la cause, `work` { start, end }, `back`, et des horaires de dépôt sans attente dans `alternatives` ; renvoyer avec `confirm: true` pour accepter).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
   /v1/pro/garages/{id}/rdv/calendar/blocks/{block}:
     put:
@@ -1214,7 +1214,7 @@ paths:
         "200": { description: "Bloc enregistré (`saved`).", content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockSaved" } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
-        "409": { description: "Mode simple (`simple_mode`), prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Mode simple (`simple_mode`), prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`), travaux qui attendraient (`shifted`, comme à la création ; une modification qui garde l'heure de dépôt ne redemande pas).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
     delete:
       tags: [Calendrier]
@@ -1677,6 +1677,7 @@ components:
         staff: { type: array, items: { type: string, format: uuid }, description: "`job` : 3 mécaniciens choisis au plus (sinon le moteur choisit) ; `hold` : mécaniciens bloqués." }
         station: { type: string, format: uuid, nullable: true, description: "`job` : poste choisi." }
         resources: { type: array, items: { type: string, format: uuid }, description: "`hold` : postes bloqués (10 mécaniciens et postes au plus)." }
+        confirm: { type: boolean, description: "`job` : accepte que les travaux attendent le premier moment libre après le dépôt (réponse 409 `shifted` reçue avant)." }
     CalBlockSaved:
       type: object
       required: [saved]

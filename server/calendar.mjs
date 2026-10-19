@@ -502,8 +502,10 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
   }
 
   // ---------------------------------------------------------------- blocs internes (lot 3b)
-  // job : planifié par le moteur comme une demande, sans les règles de la réservation en ligne, travaux au premier moment libre après
-  // le dépôt ; hold : ses ressources doivent être libres. Rien n'est forcé : en cas de conflit, la cause et d'autres horaires.
+  // job : planifié par le moteur comme une demande, sans les règles de la réservation en ligne, travaux à l'heure du dépôt ; si les
+  // ressources sont prises à cette heure-là, travaux au premier moment libre après le dépôt, mais seulement après confirmation du
+  // garage (409 « shifted » : la cause, les horaires des travaux et de la restitution, d'autres horaires de dépôt sans attente).
+  // hold : ses ressources doivent être libres. Rien n'est forcé : en cas de conflit, la cause et d'autres horaires.
   const holdRows = (v) => P.holdAssignments(v).map((a) => ({ target: a.target, targetId: a.targetId, role: a.role, day: v.day, start: R.parisInstant(v.day, a.a), end: R.parisInstant(v.day, a.b) }));
   async function saveBlock(garageId, sub, id, body) {
     const nowMs = now();
@@ -511,7 +513,8 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
       await r.lockGarage(garageId);
       const b = await r.bundle(garageId, R.parisParts(nowMs).iso);
       if (!advanced(b)) return { kind: "simple" };
-      if (id && !(await r.cal.getBlock(garageId, id))) return { kind: "not_found" };
+      const prev = id ? await r.cal.getBlock(garageId, id) : null;
+      if (id && !prev) return { kind: "not_found" };
       if (!id && (await r.cal.countBlocks(garageId)) >= P.MAX_BLOCKS) return { kind: "too_many" };
       const w = await world(r, b, nowMs, { exclude: id });
       const p = P.parseBlock(body, { staffIds: new Set(w.staff.map((m) => m.id)), resourceIds: new Set(w.resources.map((x) => x.id)), serviceIds: new Set(Object.keys(w.reqs)), nowMs });
@@ -523,10 +526,19 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
         if (job.error) return { kind: "not_configured" };
         if (job.needVehicle && !v.vehicle) return { kind: "invalid", p: { error: "Type de véhicule : une prestation en dépend.", field: "vehicle" } };
         const forced = v.staff.length || v.station ? { staff: v.staff, station: v.station } : null;
-        const ex = P.explain(w, job, { day: v.day, start: v.start, mode: "hour", forced, float: true });
-        if (!ex.plan) return { kind: "conflict", reasons: ex.reasons.map((x) => x.text), alternatives: ex.alternatives.map(altView) };
-        row = { kind: "job", label: v.label, services: v.services, vehicle: v.vehicle, mode: "hour", day: v.day, start: v.start, end: ex.plan.back, startsAt: R.parisInstant(v.day, v.start), endsAt: R.parisInstant(v.day, ex.plan.back), fixed: !!forced };
-        rows = rowsOf(ex.plan);
+        const at = { day: v.day, start: v.start, mode: "hour", forced };
+        const exact = P.explain(w, job, { ...at, float: false });
+        let plan = exact.plan;
+        if (!plan) {
+          const later = P.explain(w, job, { ...at, float: true });
+          if (!later.plan) return { kind: "conflict", reasons: later.reasons.map((x) => x.text), alternatives: later.alternatives.map(altView) };
+          // une modification qui garde l'heure de dépôt (libellé, prestation…) ne redemande pas : l'attente était déjà acceptée
+          const kept = prev && prev.day === v.day && prev.start === v.start;
+          if (body.confirm !== true && !kept) return { kind: "shifted", plan: later.plan, reasons: exact.reasons.map((x) => x.text), alternatives: exact.alternatives.map(altView) };
+          plan = later.plan;
+        }
+        row = { kind: "job", label: v.label, services: v.services, vehicle: v.vehicle, mode: "hour", day: v.day, start: v.start, end: plan.back, startsAt: R.parisInstant(v.day, v.start), endsAt: R.parisInstant(v.day, plan.back), fixed: !!forced };
+        rows = rowsOf(plan);
       } else {
         const c = P.checkHold(w, v);
         if (c.fail) return { kind: "conflict", reasons: c.fail.map((x) => x.text), alternatives: [] };
@@ -552,6 +564,16 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
         return apiError(409, "not_configured", "Une prestation n'a pas ses exigences (Calendrier › Prestations).");
       case "conflict":
         return apiError(409, "conflict", out.reasons[0] || "Impossible à cette heure-là.", { reasons: out.reasons, alternatives: out.alternatives });
+      case "shifted": {
+        const work = { start: R.hm(out.plan.workStart), end: R.hm(out.plan.workEnd) }, back = R.hm(out.plan.back);
+        const cause = out.reasons[0] ? `${out.reasons[0]} ` : "";
+        return apiError(
+          409,
+          "shifted",
+          `${cause}Travaux de ${R.timeLabel(out.plan.workStart)} à ${R.timeLabel(out.plan.workEnd)}, voiture prête vers ${R.timeLabel(out.plan.back)} : confirmez, ou choisissez un horaire sans attente.`,
+          { reasons: out.reasons, alternatives: out.alternatives, work, back },
+        );
+      }
       default:
         log({ level: "info", msg: id ? "calendrier : bloc modifié" : "calendrier : bloc ajouté", event: "cal_block", garageId });
         return json(id ? 200 : 201, { saved: out.saved }, NO_STORE);

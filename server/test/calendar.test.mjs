@@ -400,6 +400,23 @@ describe("Calendrier avancé", () => {
     assert.equal(hold.status, 201, JSON.stringify(hold.body));
     assert.ok(!timesOn(await times()).includes("14:00"), "pont pris de 14:00 à 15:00");
     assert.equal((await pub("POST", "/v1/rdv/requests", booking({ time: "14:00" }))).body.error.code, "time_taken", "un client ne prend pas un créneau bloqué");
+    // un second rendez-vous au téléphone, déposé à 8:00 pendant que Paul est pris : confirmation demandée (cause, travaux, restitution,
+    // horaires sans attente) ; confirmé, les travaux suivent ; une modification qui garde l'heure de dépôt ne redemande pas
+    const wait = { kind: "job", label: "Mme Durand (tél.)", services: [{ id: "plaq_av" }], day: WED, time: "08:00" };
+    const ask = await pro("POST", "/rdv/calendar/blocks", wait);
+    assert.equal(ask.status, 409);
+    assert.equal(ask.body.error.code, "shifted");
+    assert.match(ask.body.error.message, /^Paul : déjà occupé de 8:00 à 9:30\. Travaux de 9:30 à \d+:\d\d, voiture prête vers \d+:\d\d : confirmez, ou choisissez un horaire sans attente\.$/);
+    assert.equal(ask.body.error.work.start, "09:30");
+    assert.ok(ask.body.error.alternatives.length >= 1 && ask.body.error.alternatives.every((x) => x.day > WED || x.time >= "09:30"), JSON.stringify(ask.body.error.alternatives));
+    assert.equal((await pro("GET", `/rdv/calendar/agenda?from=${WED}&to=${WED}`)).body.blocks.length, 2, "rien n'est enregistré sans confirmation");
+    const ok = await pro("POST", "/rdv/calendar/blocks", { ...wait, confirm: true });
+    assert.equal(ok.status, 201, JSON.stringify(ok.body));
+    const waited = (await pro("GET", `/rdv/calendar/agenda?from=${WED}&to=${WED}`)).body.blocks.find((k) => k.id === ok.body.saved);
+    assert.equal(waited.when.start, "08:00");
+    assert.equal(waited.plan.find((a) => a.name === "Paul").start.slice(11, 16), "07:30", "travaux de Paul à 9:30 (heure de Paris)");
+    assert.equal((await pro("PUT", `/rdv/calendar/blocks/${ok.body.saved}`, { ...wait, label: "Mme Durand (comptoir)" })).status, 200, "même heure de dépôt : pas de nouvelle confirmation");
+    assert.equal((await pro("DELETE", `/rdv/calendar/blocks/${ok.body.saved}`)).status, 200);
     // le planning de la période
     const ag = (await pro("GET", `/rdv/calendar/agenda?from=${WED}&to=${THU}`)).body;
     assert.equal(ag.blocks.length, 2);

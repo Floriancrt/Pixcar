@@ -3885,7 +3885,7 @@ input[type="url"] {
   margin-left: auto;
 }
 /* bloc étroit : la pastille garde son icône (la légende, l'infobulle et la fiche la disent en mots) */
-@container (max-width: 225px) {
+@container (max-width: 240px) {
   .pl-ev-h .pl-pill {
     padding: 1px 4px;
   }

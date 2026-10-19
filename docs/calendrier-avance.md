@@ -82,6 +82,15 @@ les horaires encore libres. Sur DSQL, le conflit est rejoué (`withRetry`).
 **Jamais de déplacement automatique.** Une absence, une maintenance, un mécanicien désactivé ou un poste indisponible n'efface et ne
 déplace aucune affectation : l'API renvoie les rendez-vous concernés (conflits) pour que le garage décide.
 
+**Travaux qui attendraient : le garage confirme.** Un rendez-vous pris hors Pixcar se place à l'heure du dépôt. Si le mécanicien (ou le
+poste) est pris à cette heure-là, le moteur trouve le premier moment libre après le dépôt, mais l'API ne l'enregistre pas d'elle-même :
+409 `shifted` avec la cause (« Paul : déjà occupé de 9:00 à 9:45. »), les horaires des travaux et de la restitution, et des heures de
+dépôt sans attente ; le formulaire les affiche et le bouton devient « Confirmer ces horaires » (renvoi avec `confirm: true`). Une
+modification qui garde l'heure de dépôt (libellé, prestation) ne redemande pas. Ajouté le 19 octobre 2026 sur signalement de
+l'utilisateur : un rendez-vous saisi à 10:00 pendant que l'unique mécanicien était pris s'enregistrait sans rien dire (travaux décalés à
+10:45) et s'affichait à côté de l'autre dans la vue Semaine, comme un double rendez-vous. Le déplacement d'une demande client, lui,
+reste refusé si les travaux ne peuvent pas commencer à l'heure choisie (conflit et autres horaires), comme avant.
+
 **Pas deux absences au même moment.** Une absence (ou une indisponibilité de poste) qui chevauche une autre déjà saisie pour le même
 mécanicien (ou le même poste) est refusée (409 `overlap`) : le message nomme la période existante, à modifier ou retirer d'abord. Bout
 à bout, ou pour un autre mécanicien ou poste, elle passe. Ajouté le 19 octobre 2026 sur signalement de l'utilisateur : une seconde
@@ -191,8 +200,10 @@ d'ensemble et d'un bloc enrichi, vidéo de la barre latérale). Tout est dans la
   la **provenance** (étiquette : Pixcar, Hors Pixcar, Créneau bloqué ; et l'icône de la ligne client : globe, téléphone, cadenas) et
   l'**alerte** (« En conflit » : contour et pastille rouges). L'état de l'intervention (`work.status` : prévue, voiture reçue, en cours…)
   est dans la fiche ; il reste « Prévue » tant que le lot 3c ne permet pas de le changer.
-- **Bloc enrichi** : heure et durée, pastille ; prestation ; voiture et immatriculation ; client · mécanicien · poste ; étiquette de
-  provenance. Les lignes posées dépendent de la hauteur du bloc (un bloc court garde l'heure, la prestation et le client) ; tout est
+- **Bloc enrichi** : heure et durée **du travail** (vue Semaine comprise : du début à la fin de la main-d'œuvre des mécaniciens ce
+  jour-là, si bien qu'avec un seul mécanicien deux rendez-vous ne se superposent pas ; le séjour de la voiture, dépôt et restitution, est
+  dans l'infobulle, le nom lu et la fiche, qui donne aussi les travaux d'un rendez-vous hors Pixcar), pastille ; prestation ; voiture et
+  immatriculation ; client · mécanicien · poste ; étiquette de provenance. Les lignes posées dépendent de la hauteur du bloc (un bloc court garde l'heure, la prestation et le client) ; tout est
   dans l'infobulle et le nom lu par les lecteurs d'écran, et la fiche s'ouvre au clic. Dans une colonne étroite (menu déplié), la
   pastille garde son icône seule (règle `@container`).
 - **Filtres** repliés derrière un bouton « Filtres » (avec le nombre de filtres actifs) ; chaque filtre actif est une puce qui le retire.
