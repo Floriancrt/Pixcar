@@ -193,7 +193,8 @@ le garage lui est annoncé par e-mail.
 
 ## Avant la mise en ligne du lot 3b
 
-- Fusion de `lot3b-planning` dans `main` puis poussée : **go de l'utilisateur attendu**.
+- Fusion de `lot3b-planning` dans `main` (avance rapide) et poussée : **faites le 19 octobre 2026** (go de l'utilisateur : « Tu peux
+  pousser main »), avec la documentation de la publication du lot 3a et la correction des « null » des fiches.
 - Déploiement de l'API : migration `007_calendar_blocks.sql` (1 table, 2 index `ASYNC`) par l'opération `migrate`, droits du rôle
   d'exécution sur la nouvelle table, puis `selfcheck` (le contrôle du calendrier écrit, relit et retire un créneau bloqué) et `smoke`.
   Aucune nouvelle ressource AWS. L'API doit précéder le site : la page du lot 3a ignore les nouveaux champs (`rdv.mode`, `blocks`,
