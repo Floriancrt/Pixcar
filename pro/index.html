@@ -14,7 +14,7 @@
 <link rel="icon" href="../favicon.ico" sizes="48x48">
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 <link rel="preload" href="../assets/fonts/manrope-latin.a30ddcd349.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="../assets/pro.1e1b2ec2b9.css">
+<link rel="stylesheet" href="../assets/pro.dcc11439d4.css">
 </head>
 <body>
 <svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
@@ -396,7 +396,17 @@
 </div>
 </div>
 <div class="rv-alert" id="agMissing" hidden></div>
-<section class="mg-panel" aria-labelledby="agWeekTitle">
+<section class="mg-panel cal-mode" id="agMode" aria-labelledby="agModeTitle">
+<div class="mg-head">
+<div>
+<h2 id="agModeTitle">Mode du calendrier</h2>
+<p class="sub" id="agModeText"></p>
+</div>
+<button type="button" class="btn small" id="agModeGo"></button>
+</div>
+<p class="help" id="agModeHelp"></p>
+</section>
+<section class="mg-panel" id="agWeekBox" aria-labelledby="agWeekTitle">
 <div class="mg-head">
 <div>
 <h2 id="agWeekTitle">Ma semaine type</h2>
@@ -444,6 +454,15 @@
 <p class="field-err" id="agNotifyErr" hidden></p>
 </section>
 <p class="sr-only" id="agLive" role="status" aria-live="polite"></p>
+</div>
+<div class="dash-body" id="dash-calendar" hidden>
+<p class="cal-back"><button type="button" class="link-btn" id="calBack"><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg>Disponibilités</button></p>
+<h1 id="calTitle" tabindex="-1">Calendrier avancé</h1>
+<p class="lead" id="calLead"></p>
+<ol class="cal-steps" id="calSteps" aria-label="Étapes"></ol>
+<div class="cal-body" id="calBody"></div>
+<div class="cal-foot" id="calFoot"></div>
+<p class="sr-only" id="calLive" role="status" aria-live="polite"></p>
 </div>
 </section>
 <section class="card narrow" data-screen="manual" hidden aria-labelledby="manualTitle">
@@ -578,6 +597,9 @@
 </div>
 </form>
 </dialog>
+<dialog class="sheet wide" id="calDlg" aria-labelledby="calDlgTitle">
+<form id="calForm" novalidate></form>
+</dialog>
 <dialog class="sheet" id="closDlg" aria-labelledby="closDlgTitle">
 <form id="closForm" novalidate>
 <div class="sheet-head">
@@ -628,6 +650,6 @@
 </details>
 <p><a href="../">Pixcar, le comparateur</a><span aria-hidden="true"> · </span><a href="mailto:contact@pixcar.fr">contact@pixcar.fr</a></p>
 </footer>
-<script src="../assets/pro.091e177528.js" defer></script>
+<script src="../assets/pro.1524c3d1eb.js" defer></script>
 </body>
 </html>
