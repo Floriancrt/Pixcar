@@ -3,6 +3,7 @@
 // Arial, aucune image ni ressource distante. Tout ce qui vient d'une saisie est échappé ; l'objet tient sur une ligne.
 import { dayLabel, instantLabel, servicesText, timeLabel, whenLabel } from "../../src/js/shared/rdv.js";
 import { phoneText } from "../../src/js/shared/garage-profile.js";
+import { NIL_SLOT } from "../../src/js/shared/plan.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const oneLine = (s) => String(s ?? "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
@@ -13,7 +14,9 @@ const when = (r) => whenLabel(r.day, r.start_min);
 const whenCap = (r) => cap(when(r));
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const carText = (r) => [r.car, r.car_year, r.plate].filter(Boolean).join(" · ");
-const dropText = (r) => (r.mode === "drop" ? `voiture déposée entre ${timeLabel(r.start_min)} et ${timeLabel(Math.min(r.start_min + 60, r.end_min))}, rendue vers ${timeLabel(r.end_min)}` : "");
+const dropText = (r) => (r.mode === "drop" ? `voiture déposée entre ${timeLabel(r.start_min)} et ${timeLabel(Math.min(r.start_min + 60, r.end_min))}, rendue vers ${timeLabel(r.end_min)}` : r.slot_id === NIL_SLOT ? `voiture rendue vers ${timeLabel(r.end_min)}` : "");
+// mode avancé : qui fait l'intervention, et sur quel poste (e-mails au garage)
+const planText = (p) => (p ? [p.staff.length ? `Affecté à ${p.staff.join(", ")}` : "", p.posts.length ? p.posts.join(", ") : ""].filter(Boolean).join(" · ") : "");
 
 // ---------------------------------------------------------------- briques HTML
 function layout({ title, aside, body, foot }) {
@@ -89,7 +92,8 @@ export function notifyCodeMail({ code, garageName, minutes }) {
 
 // ---------------------------------------------------------------- e-mails d'une demande
 // c : { r (demande), garage: { name, addr, phone }, links: { track, action, pro, site, route }, alternatives: [{ name, km, city, first }],
-//       reason (texte du motif), slot: { name, left, capacity } (e-mail au garage), ics (texte du fichier d'agenda) }
+//       reason (texte du motif), slot: { name, left, capacity } ou plan: { staff, posts } (e-mail au garage), ics (fichier d'agenda),
+//       auto (confirmé d'office : prestations à confirmation automatique) }
 export function requestMail(kind, c) {
   const make = BUILDERS[kind];
   if (!make) throw new Error(`e-mail inconnu : ${kind}`);
@@ -147,7 +151,7 @@ const BUILDERS = {
   },
   garage_new: (c) => {
     const deadline = instantLabel(c.r.deadline);
-    const slot = c.slot ? `Créneau « ${c.slot.name} »${c.slot.capacity > 1 ? ` · encore ${c.slot.left} place${c.slot.left > 1 ? "s" : ""} sur ${c.slot.capacity} à cette heure` : ""}` : "";
+    const slot = c.slot ? `Créneau « ${c.slot.name} »${c.slot.capacity > 1 ? ` · encore ${c.slot.left} place${c.slot.left > 1 ? "s" : ""} sur ${c.slot.capacity} à cette heure` : ""}` : planText(c.plan);
     const rows = [
       ["Quand", whenCap(c.r), [dropText(c.r), slot].filter(Boolean).join(" · ")],
       ["Prestation", svc(c.r)],
@@ -184,13 +188,58 @@ const BUILDERS = {
       ),
     };
   },
+  // nouveau rendez-vous confirmé d'office (mode avancé, confirmation automatique) : le garage est prévenu, il n'a rien à décider
+  garage_booked: (c) => {
+    const rows = [
+      ["Quand", whenCap(c.r), [dropText(c.r), planText(c.plan)].filter(Boolean).join(" · ")],
+      ["Prestation", svc(c.r)],
+      ["Client", c.r.name, [phoneText(c.r.phone), c.r.email].filter(Boolean).join(" · ")],
+      ["Voiture", carText(c.r)],
+      ["Message", c.r.message || "Aucun"],
+    ];
+    return {
+      subject: `Nouveau rendez-vous confirmé : ${svc(c.r)}, ${when(c.r)}`,
+      html: layout({
+        title: "Nouveau rendez-vous confirmé",
+        aside: `Espace Pro · ${c.garage.name}`,
+        body: [
+          badge("Confirmé automatiquement", "ok"),
+          h1("Nouveau rendez-vous"),
+          p("Cette prestation est en confirmation automatique : le client a reçu sa confirmation, les ressources sont réservées dans votre calendrier."),
+          facts(rows),
+          buttons(button(c.links.pro, "Ouvrir l'Espace Pro", { secondary: true })),
+          p("Pour écrire au client, répondez simplement à cet e-mail. Un empêchement : annulez depuis Espace Pro › Demandes, le client est prévenu.", `font-size:13px;color:${MUTED}`),
+        ].join(""),
+        foot: "Ces coordonnées vous sont transmises pour ce rendez-vous seulement : ne les utilisez pas à d'autres fins.",
+      }),
+      text: lines("Nouveau rendez-vous confirmé automatiquement.", "", textFacts(rows), "", `Espace Pro : ${c.links.pro}`, "Pour écrire au client, répondez à cet e-mail."),
+    };
+  },
+  // le garage change l'heure d'un rendez-vous : nouveau fichier d'agenda, annulation toujours possible
+  client_moved: (c) => ({
+    subject: `Nouvel horaire : ${when(c.r)} chez ${c.garage.name}`,
+    html: layout({
+      title: "Rendez-vous déplacé",
+      aside: "Votre rendez-vous",
+      body: [
+        badge("Horaire changé par le garage", "wait"),
+        h1(`Votre rendez-vous est déplacé : ${when(c.r)}`),
+        facts(clientFacts(c)),
+        buttons(button(c.links.track, "Voir mon rendez-vous"), c.links.route ? button(c.links.route, "Itinéraire", { secondary: true }) : ""),
+        p(`Ce nouvel horaire ne vous convient pas ? <a href="${esc(c.links.track)}" style="color:${INK}">Annulez ici</a>, ou appelez le garage.`, "font-size:14px"),
+      ].join(""),
+      foot: `Le fichier d'agenda joint remplace l'ancien horaire. ${clientFoot(c)}`,
+    }),
+    text: lines(`${c.garage.name} déplace votre rendez-vous.`, "", textFacts(clientFacts(c)), "", `Voir ou annuler : ${c.links.track}`, "", clientFootText(c)),
+    attachments: c.ics ? [{ name: "rendez-vous.ics", type: "text/calendar", content: c.ics }] : [],
+  }),
   client_confirmed: (c) => ({
     subject: `Confirmé : ${when(c.r)} chez ${c.garage.name}`,
     html: layout({
       title: "Rendez-vous confirmé",
       aside: "Votre rendez-vous",
       body: [
-        badge("Confirmé par le garage", "ok"),
+        badge(c.auto ? "Rendez-vous confirmé" : "Confirmé par le garage", "ok"),
         h1(`${cap(dayLabel(c.r.day).split(" ")[0])} ${dayLabel(c.r.day).split(" ").slice(1).join(" ")}, ${timeLabel(c.r.start_min)}, chez ${c.garage.name}`),
         facts(clientFacts(c)),
         buttons(button(c.links.track, "Ajouter à mon agenda"), c.links.route ? button(c.links.route, "Itinéraire", { secondary: true }) : ""),

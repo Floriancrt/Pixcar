@@ -61,7 +61,7 @@ function gone(text) {
   $("rvGoneTitle").focus();
 }
 const svcText = (v) => v.services.map((s) => s.label).join(" + ");
-const whenText = (w) => (w.mode === "drop" ? `${w.label} (dépôt entre ${w.start} et ${w.until}, voiture rendue vers ${w.end})` : w.label);
+const whenText = (w) => (w.mode === "drop" ? `${w.label} (dépôt entre ${w.start} et ${w.until}, voiture rendue vers ${w.end})` : w.back ? `${w.label} (voiture rendue vers ${w.back})` : w.label);
 function show(status, tone, title, lead) {
   $("rvLoading").hidden = true;
   $("rvGone").hidden = true;

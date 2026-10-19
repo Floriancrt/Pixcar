@@ -36,3 +36,16 @@ test("anything malformed is dropped: never a website other than http(s), no odd 
   const other = await loaded({ profile: { website: 'https://garage.fr/"><script>', hours: { xx: [["08:00", "12:00"]] }, email: "atelier@garage.fr" } });
   assert.deepEqual(other.pro.profile(other.g), { email: "atelier@garage.fr" });
 });
+
+test("online booking: the services taken online, and those the garage confirms at once (advanced calendar)", async () => {
+  const { pro, g } = await loaded({ rdv: { services: ["vidange", "plaq_av", "zzz"], auto: ["vidange"] } });
+  assert.equal(pro.books(g, ["vidange", "plaq_av"]), true);
+  assert.equal(pro.books(g, ["vidange", "clim"]), false);
+  assert.equal(pro.instant(g, ["vidange"]), true);
+  assert.equal(pro.instant(g, ["vidange", "plaq_av"]), false, "une prestation à confirmer rend la demande à confirmer");
+  assert.equal(pro.instant(g, []), false);
+  assert.match(pro.rdvHtml("", true), /Le garage le confirme aussitôt/);
+  assert.match(pro.rdvHtml(), /au plus tard à midi le jour ouvré suivant/);
+  const old = await loaded({ rdv: { services: ["vidange"] } });
+  assert.equal(old.pro.instant(old.g, ["vidange"]), false);
+});

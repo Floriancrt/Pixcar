@@ -116,7 +116,10 @@ export function createOps({ openDb, env = process.env, log = () => {} }) {
       withDb(async (db) => {
         const garageId = garageIdOf(e.garageId);
         const revoked = await createProRepo(db).revoke(garageId);
-        return { revoked, rdvCancelled: revoked ? await createRdvRepo(db).tx((r) => r.revoke(garageId)) : 0 };
+        if (!revoked) return { revoked, rdvCancelled: 0 };
+        const rdv = createRdvRepo(db);
+        const rdvCancelled = await rdv.tx((r) => r.revoke(garageId));
+        return { revoked, rdvCancelled, calendarRows: await rdv.cal.revoke(garageId) }; // par lots, hors transaction
       }),
     "rdv-stats": () => withDb((db) => createRdvRepo(db).stats()),
     "pro-prices": () =>

@@ -2,6 +2,11 @@
 // DSQL, fonctions passées à tx() rejouables sans effet hors de la base). repo.tx(fn) donne à fn le même dépôt, lié à la transaction.
 // Les dates (date) reviennent en texte AAAA-MM-JJ, les instants (timestamptz) en millisecondes.
 
+import { bindCalendar } from "./calendar-repo.mjs";
+import { PRO_SERVICES } from "../src/js/shared/pro-prices.js";
+
+const PRO_IDS = PRO_SERVICES.map((s) => s.id);
+
 const PURGE_BATCH = 1000;
 const placeholders = (n, from = 1) => Array.from({ length: n }, (_, i) => `$${i + from}`).join(", ");
 const ms = (v) => (v === null || v === undefined ? null : new Date(v).getTime());
@@ -65,25 +70,30 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
         mails.map((m) => q.query("INSERT INTO rdv_mails (id, request_id, garage_id, kind, created_at) VALUES ($1, $2, $3, $4, $5)", [crypto.randomUUID(), m.requestId || null, m.garageId, m.kind, T()])),
       );
 
+    // libère les ressources réservées par ces demandes (mode avancé ; sans effet sinon)
+    const release = (ids) => (ids.length ? q.query(`DELETE FROM rdv_assignments WHERE request_id IN (${placeholders(ids.length)})`, ids) : Promise.resolve());
     return {
       enqueue,
+      cal: bindCalendar(q, { now }),
 
       // ---- ce qu'il faut pour calculer les horaires d'un garage : rattachement vérifié, réglages, créneaux, fermetures à venir, horaires
       // d'ouverture et coordonnées déclarés, temps moyens des prestations faites, fiche des données publiques
       async bundle(garageId, todayIso) {
         const claim = await one("SELECT account_id FROM pro_claims WHERE garage_id = $1 AND status = 'verified'", [garageId]);
         if (!claim) return null;
-        const [settings, slots, closures, profile, services, contact] = await Promise.all([
+        const [settings, slots, closures, profile, services, contact, calendar] = await Promise.all([
           one(`SELECT ${SETTINGS_COLUMNS} FROM rdv_settings WHERE garage_id = $1`, [garageId]),
           all(`SELECT ${SLOT_COLUMNS} FROM rdv_slots WHERE garage_id = $1 ORDER BY created_at, id`, [garageId]),
           all(`SELECT ${CLOSURE_COLUMNS} FROM rdv_closures WHERE garage_id = $1 AND last_day >= $2::date ORDER BY first_day, id`, [garageId, todayIso]),
           one("SELECT name, street, pc, city, phone, hours FROM pro_profiles WHERE garage_id = $1", [garageId]),
           all("SELECT service_id, offered, minutes FROM pro_services WHERE garage_id = $1", [garageId]),
           one("SELECT name, addr, pc, lat, lon FROM garage_contacts WHERE garage_id = $1", [garageId]),
+          this.cal.getCalendar(garageId),
         ]);
         const minutes = {};
         for (const s of services) if (s.offered && Number.isInteger(s.minutes)) minutes[s.service_id] = s.minutes;
-        return { garageId, accountId: claim.account_id, settings: settingsOf(settings), slots: slots.map(slotOf), closures, profile, minutes, contact };
+        const offered = PRO_IDS.filter((id) => services.some((s) => s.offered && s.service_id === id));
+        return { garageId, accountId: claim.account_id, settings: settingsOf(settings), slots: slots.map(slotOf), closures, profile, minutes, offered, contact, calendar };
       },
       // demandes qui peuvent retenir un horaire, du jour fromIso au jour toIso
       bookings: (garageId, fromIso, toIso) =>
@@ -179,6 +189,7 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
           [garageId, first, last, T()],
         );
         await enqueue(rows.map((r) => ({ requestId: r.id, garageId, kind: "client_cancelled" })));
+        await release(rows.map((r) => r.id));
         return rows.length;
       },
 
@@ -230,17 +241,30 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
           [email, garageId, T()],
         ).then((r) => ({ total: r.total || 0, here: r.here || 0 })),
       pendingAtGarage: (garageId) => one("SELECT count(*)::int AS n FROM rdv_requests WHERE garage_id = $1 AND status = 'pending' AND deadline > $2::timestamptz", [garageId, T()]).then((r) => r.n),
-      // la demande part : horaire retenu (créneau éventuellement changé), heure limite, jetons ; e-mails à l'automobiliste et au garage
-      async send({ id, garageId, offer, deadline, clientTokenHash, garageTokenHash }) {
+      // la demande part : horaire retenu (créneau éventuellement changé), heure limite, jetons ; e-mails à l'automobiliste et au garage.
+      // auto (mode avancé, prestations à confirmation automatique) : confirmée tout de suite.
+      async send({ id, garageId, offer, deadline, clientTokenHash, garageTokenHash, auto = false }) {
         const r = await q.query(
-          `UPDATE rdv_requests SET status = 'pending', slot_id = $2, day = $3::date, start_min = $4, end_min = $5, starts_at = $6, ends_at = $7, mode = $8, deadline = $9,
-             client_token_hash = $10, garage_token_hash = $11, code_hash = NULL, code_expires_at = NULL, sent_at = $12::timestamptz
+          `UPDATE rdv_requests SET status = $13, slot_id = $2, day = $3::date, start_min = $4, end_min = $5, starts_at = $6, ends_at = $7, mode = $8, deadline = $9,
+             client_token_hash = $10, garage_token_hash = $11, code_hash = NULL, code_expires_at = NULL, sent_at = $12::timestamptz, decided_at = CASE WHEN $14 THEN $12::timestamptz ELSE NULL END
            WHERE id = $1 AND status = 'code'`,
-          [id, offer.slotId, offer.day, offer.start, offer.end, new Date(offer.startsAt).toISOString(), new Date(offer.endsAt).toISOString(), offer.mode, new Date(deadline).toISOString(), clientTokenHash, garageTokenHash, T()],
+          [id, offer.slotId, offer.day, offer.start, offer.end, new Date(offer.startsAt).toISOString(), new Date(offer.endsAt).toISOString(), offer.mode, new Date(deadline).toISOString(), clientTokenHash, garageTokenHash, T(), auto ? "confirmed" : "pending", auto],
         );
         if (!r.rowCount) return false;
-        await enqueue([{ requestId: id, garageId, kind: "client_sent" }, { requestId: id, garageId, kind: "garage_new" }]);
+        await enqueue(auto ? [{ requestId: id, garageId, kind: "client_confirmed" }, { requestId: id, garageId, kind: "garage_booked" }] : [{ requestId: id, garageId, kind: "client_sent" }, { requestId: id, garageId, kind: "garage_new" }]);
         return true;
+      },
+
+      // Le garage change l'heure d'un rendez-vous (mode avancé) : le client est prévenu ; le rappel de la veille repart.
+      async reschedule(id, garageId, { day, start, end, startsAt, endsAt }) {
+        const r = await one(
+          `UPDATE rdv_requests SET day = $3::date, start_min = $4, end_min = $5, starts_at = $6::timestamptz, ends_at = $7::timestamptz, reminded_at = NULL
+           WHERE id = $1 AND garage_id = $2 AND status IN ('pending', 'confirmed') RETURNING ${REQUEST_COLUMNS}`,
+          [id, garageId, day, start, end, new Date(startsAt).toISOString(), new Date(endsAt).toISOString()],
+        );
+        if (!r) return null;
+        await enqueue([{ requestId: id, garageId, kind: "client_moved" }]);
+        return requestOf(r);
       },
 
       // ---- accès par jeton
@@ -267,6 +291,7 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
         if (!r) return null;
         await q.query("UPDATE rdv_settings SET missed = 0 WHERE garage_id = $1", [garageId]);
         await enqueue([{ requestId: id, garageId, kind: "client_declined" }]);
+        await release([id]);
         return requestOf(r);
       },
       // Le garage annule un rendez-vous confirmé (motif) : compté comme une demande sans réponse pour la mise en pause automatique.
@@ -278,6 +303,7 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
         );
         if (!r) return null;
         await enqueue([{ requestId: id, garageId, kind: "client_cancelled" }]);
+        await release([id]);
         await this.missedOne(garageId, id, pauseAfter);
         return requestOf(r);
       },
@@ -290,6 +316,7 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
         );
         if (!r) return null;
         await enqueue([{ requestId: id, garageId: r.garage_id, kind: "garage_cancelled" }]);
+        await release([id]);
         return requestOf(r);
       },
       // Une demande sans réponse de plus ; à la 3e de suite, les rendez-vous en ligne du garage sont mis en pause (garage prévenu).
@@ -325,6 +352,7 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
         const r = await q.query("UPDATE rdv_requests SET status = 'expired', decided_at = $2::timestamptz WHERE id = $1 AND status = 'pending' AND deadline <= $2::timestamptz", [id, T()]);
         if (!r.rowCount) return false;
         await enqueue([{ requestId: id, garageId, kind: "client_expired" }]);
+        await release([id]);
         await this.missedOne(garageId, id, pauseAfter);
         return true;
       },
@@ -393,6 +421,7 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
           rdvOld: await run("DELETE FROM rdv_requests WHERE id IN (SELECT id FROM rdv_requests WHERE anonymized_at IS NOT NULL AND anonymized_at < $2::timestamptz - interval '24 months' LIMIT $1)"),
           rdvEvents: await run("DELETE FROM rdv_events WHERE id IN (SELECT id FROM rdv_events WHERE at < $2::timestamptz - interval '2 days' LIMIT $1)"),
           rdvMails: await run("DELETE FROM rdv_mails WHERE id IN (SELECT id FROM rdv_mails WHERE created_at < $2::timestamptz - interval '30 days' LIMIT $1)"),
+          ...(await this.cal.purge()),
         };
       },
       // Retrait d'un rattachement (op « pro-revoke ») : réglages, créneaux et fermetures partent ; les demandes à venir sont annulées
@@ -403,6 +432,7 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
           [garageId, T()],
         );
         await enqueue(rows.map((r) => ({ requestId: r.id, garageId, kind: "client_cancelled" })));
+        await release(rows.map((r) => r.id));
         await q.query("DELETE FROM rdv_settings WHERE garage_id = $1", [garageId]);
         await q.query("DELETE FROM rdv_slots WHERE garage_id = $1", [garageId]);
         await q.query("DELETE FROM rdv_closures WHERE garage_id = $1", [garageId]);

@@ -73,7 +73,7 @@ export function createProPublic({ base = "", fetchImpl = (...a) => fetch(...a), 
       const prices = {};
       for (const p of Array.isArray(g.prices) ? g.prices : []) if (p && ORDER.has(p.service) && ["fixed", "from", "quote"].includes(p.kind)) prices[p.service] = p;
       const svc = g.services && typeof g.services === "object" ? g.services : {};
-      known.set(g.id, { prices, profile: cleanProfile(g.profile), offered: serviceSet(svc.offered), notOffered: serviceSet(svc.notOffered), rdv: serviceSet(g.rdv && g.rdv.services) });
+      known.set(g.id, { prices, profile: cleanProfile(g.profile), offered: serviceSet(svc.offered), notOffered: serviceSet(svc.notOffered), rdv: serviceSet(g.rdv && g.rdv.services), instant: serviceSet(g.rdv && g.rdv.auto) });
       found = true;
     }
     if (waiting.size) timer = setTimeout(flush, 0);
@@ -109,6 +109,11 @@ export function createProPublic({ base = "", fetchImpl = (...a) => fetch(...a), 
       const i = known.get(proKey(g));
       return !!(i && ids.length && ids.every((id) => i.rdv.has(id)));
     },
+    // et les confirme aussitôt (calendrier avancé, confirmation automatique)
+    instant(g, ids) {
+      const i = known.get(proKey(g));
+      return !!(i && ids.length && ids.every((id) => i.instant.has(id)));
+    },
     visit(g, kind) {
       const k = proKey(g);
       if (off || !k || !known.get(k) || counted.has(k + kind)) return;
@@ -120,8 +125,8 @@ export function createProPublic({ base = "", fetchImpl = (...a) => fetch(...a), 
       return known.get(proKey(g)) ? `<p class="v-badge">${icon}Garage vérifié</p>${rdv ? '<p class="v-badge v-rdv">Rendez-vous en ligne</p>' : ""}` : "";
     },
     // Bloc de la fiche : le bouton ouvre la fenêtre de rendez-vous (horaire, coordonnées, code)
-    rdvHtml: (icon = "") =>
-      `<section class="rdv-box" aria-label="Rendez-vous en ligne"><div><h4>Prendre rendez-vous</h4><p>Choisissez un horaire libre. Le garage confirme au plus tard à midi le jour ouvré suivant ; sa réponse arrive par e-mail.</p></div><button type="button" class="btn dark" data-act="rdv" aria-haspopup="dialog">${icon}Choisir un horaire</button></section>`,
+    rdvHtml: (icon = "", instant = false) =>
+      `<section class="rdv-box" aria-label="Rendez-vous en ligne"><div><h4>Prendre rendez-vous</h4><p>Choisissez un horaire libre. ${instant ? "Le garage le confirme aussitôt ; la confirmation arrive par e-mail." : "Le garage confirme au plus tard à midi le jour ouvré suivant ; sa réponse arrive par e-mail."}</p></div><button type="button" class="btn dark" data-act="rdv" aria-haspopup="dialog">${icon}Choisir un horaire</button></section>`,
     // « Annoncé 89 € », à côté du prix payé (ou seul, quand aucun prix payé n'est déclaré)
     chipHtml(p) {
       return `<span class="tag annonce" title="Prix annoncé par le garage, sous sa responsabilité ; il n'entre pas dans l'échelle des prix payés${p.stale ? ". Non confirmé depuis 6 mois" : ""}">Annoncé ${esc(announcedText(p.kind, p.price))}${p.stale ? " · ancien" : ""}</span>`;

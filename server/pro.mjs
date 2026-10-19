@@ -724,7 +724,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
       // rendez-vous en ligne : les prestations qu'un garage prend en ligne avec un horaire libre dans les 14 jours
       if (config.rdv.enabled && garages.length) {
         const open = await rdv.openServices(garages.map((g) => g.id));
-        for (const g of garages) if (open.has(g.id)) g.rdv = { services: open.get(g.id) };
+        for (const g of garages) if (open.has(g.id)) g.rdv = open.get(g.id);
       }
       return json(200, { garages }, { "cache-control": "public, max-age=60" });
     }

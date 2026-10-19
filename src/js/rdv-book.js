@@ -1,7 +1,9 @@
 // Rendez-vous en ligne, côté automobiliste (docs/rendez-vous.md, lot 2 ; maquettes « Rendez-vous » 2 à 4) : la fenêtre ouverte depuis la
 // fiche d'un garage. Script à part (assets/rdv-book.<empreinte>.js, avec sa feuille de style), chargé au premier clic sur « Choisir un
 // horaire » : le comparateur n'en porte que le bouton. Étapes : horaire → coordonnées → code reçu par e-mail → demande envoyée (lien de
-// suivi). Rien ne part au garage avant le bon code ; un horaire pris entre-temps se rechoisit avec le même code.
+// suivi). Rien ne part au garage avant le bon code ; un horaire pris entre-temps se rechoisit avec le même code. Calendrier avancé du
+// garage (docs/calendrier-avance.md) : type de véhicule demandé d'abord quand la durée en dépend, heure de restitution prévue, et
+// confirmation immédiate quand les prestations y sont ouvertes.
 // Que du TEXTE écrit dans la page (textContent), jamais de HTML venu de l'API.
 import { MODEL_MAX, MODEL_MIN, PLATE_RE, YEAR_MIN } from "./shared/rules.js";
 
@@ -25,7 +27,7 @@ function el(tag, attrs = {}, ...kids) {
 const plural = (n, one, many = one + "s") => `${n} ${n > 1 ? many : one}`;
 const tl = (t) => String(t).replace(/^0(\d)/, "$1"); // « 08:00 » (API) → « 8:00 »
 
-let st = null; // { base, garage, services, opener, times, day, pick, draft, change, form }
+let st = null; // { base, garage, services, opener, times, day, pick, draft, change, form, vehicle }
 let dlg = null;
 
 async function call(method, path, body) {
@@ -85,15 +87,30 @@ function say(id, message) {
 async function loadTimes() {
   step(0, "Choisissez un horaire", el("p", { class: "hint", text: "Recherche des horaires libres…" }));
   try {
-    st.times = await call("GET", `/v1/rdv/garages/${encodeURIComponent(st.garage.id)}/times?services=${st.services.map(encodeURIComponent).join(",")}`);
+    st.times = await call("GET", `/v1/rdv/garages/${encodeURIComponent(st.garage.id)}/times?services=${st.services.map(encodeURIComponent).join(",")}${st.vehicle ? `&vehicle=${encodeURIComponent(st.vehicle)}` : ""}`);
   } catch (e) {
     step(0, "Choisissez un horaire", el("p", { class: "dlg-note warn", text: e.status === 404 ? "Ce garage ne prend plus de rendez-vous en ligne pour cette prestation. Appelez-le pour convenir d'un horaire." : e.message }), actions(el("button", { type: "button", class: "btn", text: "Fermer", onclick: () => dlg.close() })));
     return;
   }
   dlg.querySelector("#rbGarage").textContent = `${st.garage.name} · ${st.times.services.map((s) => s.label).join(" + ")}`;
+  if (st.times.needVehicle) return vehicleStep();
   st.day = (st.times.days[0] || {}).day || "";
   renderTimes();
 }
+// la durée dépend du véhicule : on le demande avant de chercher les horaires
+function vehicleStep() {
+  step(
+    0,
+    "Quel est votre véhicule ?",
+    el("p", { class: "hint", text: "La durée de l'intervention en dépend : les horaires proposés en tiennent compte." }),
+    el(
+      "div",
+      { class: "rb-vehicles", role: "group", "aria-label": "Type de véhicule" },
+      ...st.times.vehicles.map((v) => el("button", { type: "button", class: "rb-time rb-vehicle", "data-vehicle": v.id, "aria-pressed": String(st.vehicle === v.id), onclick: () => ((st.vehicle = v.id), (st.pick = null), loadTimes()) }, el("b", { text: v.label }))),
+    ),
+  );
+}
+const vehicleLabel = () => ((st.times.vehicles || []).find((v) => v.id === st.vehicle) || {}).label || "";
 function renderTimes(message = "") {
   if (!st.times.days.length) {
     step(0, "Choisissez un horaire", el("p", { class: "dlg-note warn", text: "Plus aucun horaire libre dans les semaines à venir. Appelez le garage pour convenir d'un rendez-vous." }), actions(el("button", { type: "button", class: "btn", text: "Fermer", onclick: () => dlg.close() })));
@@ -103,8 +120,9 @@ function renderTimes(message = "") {
     0,
     "Choisissez un horaire",
     message ? el("p", { class: "dlg-note warn", role: "alert", text: message }) : null,
+    st.vehicle ? el("p", { class: "rb-links" }, `Véhicule : ${vehicleLabel()} · `, el("button", { type: "button", class: "link-btn", text: "changer", onclick: () => ((st.vehicle = ""), (st.pick = null), loadTimes()) })) : null,
     el("div", { id: "rbPick" }),
-    el("p", { class: "hint", text: `Le garage répond au plus tard le ${st.times.deadlineText}. Vous recevez sa réponse par e-mail.` }),
+    el("p", { class: "hint", text: st.times.auto ? "Confirmation immédiate : ce garage confirme ces prestations dès votre demande envoyée." : `Le garage répond au plus tard le ${st.times.deadlineText}. Vous recevez sa réponse par e-mail.` }),
     actions(el("button", { type: "button", class: "btn dark", id: "rbGo", text: st.change ? "Envoyer avec cet horaire" : "Continuer", onclick: () => (st.change ? codeStep(true) : contactStep()) })),
   );
   paintTimes();
@@ -129,7 +147,7 @@ function paintTimes(focus = "") {
           "button",
           { type: "button", class: "rb-time" + (t.drop ? " drop" : ""), "data-t": t.t, "aria-pressed": String(!!st.pick && st.pick.day === day.day && st.pick.t === t.t), onclick: () => ((st.pick = { day: day.day, label: day.label, ...t }), paintTimes(`.rb-time[data-t="${t.t}"]`)) },
           el("b", { text: t.drop ? `Dépôt ${tl(t.t)}–${tl(t.until)}` : tl(t.t) }),
-          t.drop ? el("small", { text: `rendue vers ${tl(t.end)}` }) : null,
+          t.end ? el("small", { text: `rendue vers ${tl(t.end)}` }) : null,
         ),
       ),
     ),
@@ -248,6 +266,7 @@ async function sendContact(ev) {
       day: st.pick.day,
       time: st.pick.t,
       ...(st.pick.drop ? { drop: true } : {}),
+      ...(st.vehicle ? { vehicle: st.vehicle } : {}),
       name: f.name,
       email: f.email,
       phone: f.phone,
@@ -360,17 +379,21 @@ async function sendCode(ev) {
 function done(v) {
   const link = new URL(`rendez-vous/#c=${v.token}`, document.baseURI).href;
   st.code = "";
+  const ok = v.status === "confirmed";
+  const back = v.when.back || (v.when.mode === "drop" ? v.when.end : "");
   step(
     3,
-    "Demande envoyée",
+    ok ? "Rendez-vous confirmé" : "Demande envoyée",
     el(
       "div",
       { class: "rb-done" },
-      el("p", { class: "rb-when" }, el("b", { text: v.when.label }), el("span", { text: v.services.map((s) => s.label).join(" + ") })),
-      el("p", { text: `${st.garage.name} répond au plus tard le ${v.deadlineText}. Sa réponse arrive par e-mail à ${v.email}, avec le lien de suivi.` }),
-      el("p", { class: "hint", text: "Sans réponse à l'heure dite, la demande est annulée et vous êtes prévenu par e-mail." }),
+      el("p", { class: "rb-when" }, el("b", { text: v.when.label }), el("span", { text: v.services.map((s) => s.label).join(" + ") + (back ? ` · voiture rendue vers ${tl(back)}` : "") })),
+      ok
+        ? el("p", { text: `${st.garage.name} a confirmé votre rendez-vous. La confirmation et le fichier d'agenda arrivent par e-mail à ${v.email}, avec le lien de suivi.` })
+        : el("p", { text: `${st.garage.name} répond au plus tard le ${v.deadlineText}. Sa réponse arrive par e-mail à ${v.email}, avec le lien de suivi.` }),
+      ok ? null : el("p", { class: "hint", text: "Sans réponse à l'heure dite, la demande est annulée et vous êtes prévenu par e-mail." }),
     ),
-    actions(el("a", { class: "btn", href: link, text: "Suivre ma demande" }), el("button", { type: "button", class: "btn dark", text: "Fermer", onclick: () => dlg.close() })),
+    actions(el("a", { class: "btn", href: link, text: ok ? "Voir mon rendez-vous" : "Suivre ma demande" }), el("button", { type: "button", class: "btn dark", text: "Fermer", onclick: () => dlg.close() })),
   );
 }
 
@@ -378,7 +401,7 @@ function done(v) {
 function open({ base, garage, services, opener }) {
   if (!dlg) shell();
   stopTick();
-  st = { base, garage, services, opener, times: null, day: "", pick: null, draft: null, change: false, form: null, code: "" };
+  st = { base, garage, services, opener, times: null, day: "", pick: null, draft: null, change: false, form: null, code: "", vehicle: "" };
   dlg.querySelector("#rbTitle").textContent = "Prendre rendez-vous";
   dlg.querySelector("#rbGarage").textContent = garage.name;
   if (typeof dlg.showModal === "function") dlg.showModal();

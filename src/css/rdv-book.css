@@ -138,6 +138,11 @@
 .rb-time.drop {
   grid-column: span 2;
 }
+.rb-vehicles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
 .rb-time small {
   color: var(--ink-3);
   font-size: 0.74rem;

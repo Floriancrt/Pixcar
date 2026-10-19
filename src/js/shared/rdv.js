@@ -370,7 +370,8 @@ function fold(line) {
   out.push(cur);
   return out.join("\r\n ");
 }
-// events : [{ uid, start, end (ms), summary, location, description, cancelled? }] → texte du fichier .ics
+// events : [{ uid, start, end (ms), summary, location, description, cancelled?, sequence? }] → texte du fichier .ics (sequence : version
+// de l'événement, plus grande à chaque déplacement, pour que l'agenda remplace l'ancien horaire)
 export function icsCalendar(events, nowMs = Date.now()) {
   const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Pixcar//Rendez-vous//FR", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
   for (const e of events) {
@@ -378,6 +379,7 @@ export function icsCalendar(events, nowMs = Date.now()) {
       "BEGIN:VEVENT",
       `UID:${icsEsc(e.uid)}`,
       `DTSTAMP:${icsTime(nowMs)}`,
+      ...(e.sequence ? [`SEQUENCE:${e.sequence}`] : []),
       `DTSTART:${icsTime(e.start)}`,
       `DTEND:${icsTime(e.end)}`,
       `SUMMARY:${icsEsc(e.summary)}`,

@@ -314,6 +314,63 @@ async function tiles(ctx) {
     await ctx3.close();
   }
 
+  // ---- calendrier avancé (docs/calendrier-avance.md) : Garage Martin passe aux ressources de l'atelier
+  {
+    const cal = (await pro("POST", "/rdv/calendar/start")).body;
+    const sk = (label) => cal.skills.find((k) => k.label === label).id;
+    const okSetup =
+      (await pro("PUT", "/rdv/calendar/settings", { receptionMin: 0, returnMin: 15 })).status === 200 &&
+      (await pro("POST", "/rdv/calendar/staff", { name: "Paul", skills: [sk("Entretien courant")] })).status === 200 &&
+      (await pro("POST", "/rdv/calendar/resources", { name: "Pont n°1", type: "lift" })).status === 200 &&
+      (await pro("PUT", "/rdv/calendar/services/vidange", { labour: 45, immob: 45, skills: [sk("Entretien courant")], stations: ["lift"], auto: true, vehicles: { suv: { labour: 60 } } })).status === 200 &&
+      (await pro("POST", "/rdv/calendar/activate")).status === 200;
+    check("setup: Garage Martin switches to the advanced calendar (Paul, one lift, oil change confirmed at once, longer for an SUV)", okSetup);
+    const a = await go();
+    await search(a.page, { service: "vidange", km: 10 });
+    await a.page.waitForFunction(() => document.querySelector("#list .v-rdv"), null, { timeout: 8000 }).catch(() => {});
+    await a.page.click(`#list [data-id="${oid(1)}"] .g-main`);
+    await a.page.waitForSelector(`#list [data-id="${oid(1)}"] [data-act="rdv"]`);
+    check("fiche: the booking block says the garage confirms at once", /Le garage le confirme aussitôt ; la confirmation arrive par e-mail\./.test(await text(a.page, `#list [data-id="${oid(1)}"] .rdv-box`)), await text(a.page, `#list [data-id="${oid(1)}"] .rdv-box`));
+    await a.page.click(`#list [data-id="${oid(1)}"] [data-act="rdv"]`);
+    await a.page.waitForSelector(".rdv-dlg[open] .rb-vehicle");
+    const kinds = await a.page.$$eval(".rb-vehicle", (els) => els.map((e) => e.textContent));
+    check("advanced calendar: the vehicle type is asked first, because the duration depends on it", (await text(a.page, ".rb-h")) === "Quel est votre véhicule ?" && kinds.join() === "Citadine,Compacte,Berline,SUV,Utilitaire", kinds.join());
+    await axe(a.page, "fenêtre de rendez-vous : type de véhicule", ".rdv-dlg");
+    await shot(a.page, "9-vehicule");
+    await a.page.click('.rb-vehicle[data-vehicle="suv"]');
+    await a.page.waitForSelector(".rdv-dlg .rb-times .rb-time");
+    const first = await a.page.$eval(".rb-times .rb-time", (e) => e.innerText.replace(/\s+/g, " ").trim());
+    const m = /^(\d{1,2}):(\d{2}) rendue vers (\d{1,2}):(\d{2})$/.exec(first);
+    const body = await text(a.page, ".rb-body");
+    check(
+      "times: each with its return time (1 h for an SUV + 15 min), immediate confirmation said, the vehicle can be changed",
+      m && Number(m[3]) * 60 + Number(m[4]) - (Number(m[1]) * 60 + Number(m[2])) === 75 && /Confirmation immédiate/.test(body) && /Véhicule : SUV · changer/.test(body),
+      first + " | " + body.slice(0, 300),
+    );
+    await axe(a.page, "fenêtre de rendez-vous : horaires du calendrier avancé", ".rdv-dlg");
+    await a.page.click(".rb-times .rb-time");
+    await a.page.click("#rbGo");
+    await a.page.waitForSelector("#rbName");
+    await a.page.fill("#rbName", "Zoé Durand");
+    await a.page.fill("#rbEmail", "zoe.durand@example.com");
+    await a.page.fill("#rbPhone", "06 11 22 33 44");
+    await a.page.click("#rbSend");
+    await a.page.waitForSelector("#rbCode");
+    await a.page.fill("#rbCode", lastCode("zoe.durand@example.com"));
+    await a.page.click("#rbCheck");
+    await a.page.waitForSelector(".rb-done");
+    const done = await text(a.page, ".rb-body");
+    check(
+      "sent: « Rendez-vous confirmé » at once, with the return time; the driver gets the confirmation, the garage a confirmed appointment",
+      /^Rendez-vous confirmé /.test(done) && /voiture rendue vers \d{1,2}:\d{2}/.test(done) && /a confirmé votre rendez-vous/.test(done) && mails("zoe.durand@example.com").some((x) => /^Confirmé :/.test(x.subject)) && mails(NOTIFY).some((x) => /^Nouveau rendez-vous confirmé/.test(x.subject)),
+      done,
+    );
+    await axe(a.page, "fenêtre de rendez-vous : confirmé d'office", ".rdv-dlg");
+    await shot(a.page, "10-confirme");
+    check("advanced calendar window: no console error, no page error", !errorsOf(a.logs).length, errorsOf(a.logs).join("\n"));
+    await a.ctx.close();
+  }
+
   await browser.close();
   await api.close();
   srv.close && srv.close();

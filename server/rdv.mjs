@@ -28,6 +28,9 @@ import { PRO_SERVICES, serviceLabel } from "../src/js/shared/pro-prices.js";
 import { addrText, parseEmail, parsePhone, phoneText } from "../src/js/shared/garage-profile.js";
 import { MODEL_MAX, MODEL_MIN, PLATE_RE, YEAR_MIN } from "../src/js/shared/rules.js";
 import * as R from "../src/js/shared/rdv.js";
+import { NIL_SLOT, buildJob, pickPlan, planTimes } from "../src/js/shared/plan.js";
+import { VEHICLES } from "../src/js/shared/pro-prices.js";
+import { createCalendar } from "./calendar.mjs";
 
 const NO_STORE = { "cache-control": "no-store" };
 const GARAGE_RE = /^[0-9a-f-]{8,40}$/;
@@ -77,6 +80,8 @@ export function parseBooking(b, { thisYear }) {
   const message = cleanMultiline(b.message);
   if (chars(message) > MESSAGE_MAX) return { error: `Message : ${MESSAGE_MAX} caractères au plus.`, field: "message" };
   if (b.remindPrice !== undefined && typeof b.remindPrice !== "boolean") return { error: "remindPrice : true ou false.", field: "remindPrice" };
+  const vehicle = b.vehicle === undefined || b.vehicle === null ? "" : b.vehicle;
+  if (vehicle && !VEHICLES.some((x) => x.id === vehicle)) return { error: "Type de véhicule inconnu.", field: "vehicle" };
   return {
     value: {
       garageId: b.garageId.toLowerCase(),
@@ -92,6 +97,7 @@ export function parseBooking(b, { thisYear }) {
       plate,
       message,
       remindPrice: b.remindPrice === true,
+      vehicle,
       trap: typeof b.website === "string" && b.website.trim() !== "",
     },
   };
@@ -136,11 +142,11 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     const p = b.profile || {}, c = b.contact || {};
     return { name: p.name || c.name || "", addr: p.street ? addrText(p) : [c.addr, c.pc].filter(Boolean).join(", "), phone: p.phone ? phoneText(p.phone) : "" };
   };
-  // ce qui manque pour ouvrir les rendez-vous en ligne
+  // ce qui manque pour ouvrir les rendez-vous en ligne (en mode avancé, les créneaux sont remplacés par les ressources de l'atelier)
   const missing = (b) => [
     ...(b.profile && b.profile.hours && Object.keys(b.profile.hours).length ? [] : ["hours"]),
     ...(b.settings && b.settings.notifyEmail ? [] : ["notify"]),
-    ...(b.slots.length ? [] : ["slots"]),
+    ...(b.slots.length || calendar.advanced(b) ? [] : ["slots"]),
   ];
   const isOpen = (b) => !!(b && b.settings && b.settings.enabled && !b.settings.paused && !missing(b).length);
   async function engine(r, b, nowMs) {
@@ -148,15 +154,39 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     const settings = settingsOf(b);
     return { nowMs, ctx: ctxOf(b), settings, slots: b.slots, bookings: await r.bookings(b.garageId, t, R.addDays(t, settings.horizonDays + 1)) };
   }
+  // Calendrier avancé (server/calendar.mjs) : mêmes réglages et même vue d'une demande
+  const calendar = createCalendar({ repo, now, log, drain: (o) => drain(o), ctxOf, settingsOf, garageView: (r) => garageView(r) });
+
+  // ---- horaires des deux modes derrière une même façade : semaine type en créneaux (simple) ou ressources de l'atelier (avancé)
+  async function planner(r, b, nowMs) {
+    if (!calendar.advanced(b)) return { kind: "simple", args: await engine(r, b, nowMs) };
+    return { kind: "advanced", w: await calendar.world(r, b, nowMs) };
+  }
+  // ce que demandent ces prestations : { need } | { needVehicle, need } | { error: "not_open" }
+  function needOf(p, b, services, vehicle = "") {
+    if (p.kind === "simple") {
+      const minutes = R.neededMinutes(services, b.minutes);
+      if (minutes === null || !b.slots.some((s) => services.every((x) => s.services.includes(x.id)))) return { error: "not_open" };
+      return { need: { services, minutes } };
+    }
+    if (services.some((x) => !p.w.reqs[x.id] || !p.w.reqs[x.id].online)) return { error: "not_open" };
+    const job = buildJob(services, p.w.reqs, vehicle);
+    if (job.error) return { error: "not_open" };
+    const need = { services, minutes: Math.min(2400, Math.max(15, job.labour)), job };
+    return job.needVehicle && !vehicle ? { needVehicle: true, need } : { need };
+  }
+  const daysOf = (p, need, opts = {}) => (p.kind === "simple" ? R.freeTimes({ ...p.args, need, ...opts }) : planTimes(p.w, need.job, opts));
+  const pickOf = (p, need, wanted) => (p.kind === "simple" ? R.pickOffer({ ...p.args, need }, wanted) : pickPlan(p.w, need.job, wanted));
   const daysView = (days) =>
     days.map((d) => ({
       day: d.day,
       label: R.dayLabel(d.day, { short: true }),
-      times: d.times.map((t) => ({ t: R.hm(t.start), ...(t.mode === "drop" ? { drop: true, until: R.hm(t.until), end: R.hm(t.end) } : {}) })),
+      times: d.times.map((t) => ({ t: R.hm(t.start), ...(t.mode === "drop" ? { drop: true, until: R.hm(t.until), end: R.hm(t.end) } : t.plan ? { end: R.hm(t.end) } : {}) })),
     }));
   const servicesView = (list) => list.map((s) => ({ id: s.id, qty: s.qty, label: R.serviceText(s) }));
 
   // Les prestations qu'un garage ouvert prend en ligne avec au moins un horaire libre dans les 14 jours (quantité 1) : lecture publique.
+  // Map(id → { services, auto? }) ; auto : celles qu'il confirme aussitôt (calendrier avancé).
   async function openServices(garageIds) {
     const open = await repo.openAmong(garageIds);
     const out = new Map();
@@ -164,13 +194,16 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     for (const id of open) {
       const b = await repo.bundle(id, today());
       if (!isOpen(b)) continue;
-      const args = await engine(repo, b, nowMs);
-      const list = [];
+      const p = await planner(repo, b, nowMs);
+      const list = [], auto = [];
       for (const s of PRO_SERVICES) {
-        if (!Number.isInteger(b.minutes[s.id]) || !b.slots.some((x) => x.services.includes(s.id))) continue;
-        if (R.freeTimes({ ...args, need: { services: [{ id: s.id, qty: 1 }], minutes: b.minutes[s.id] }, maxDays: 14, first: true }).length) list.push(s.id);
+        const n = needOf(p, b, [{ id: s.id, qty: 1 }]);
+        if (n.error) continue;
+        if (!daysOf(p, n.need, { maxDays: 14, first: true }).length) continue;
+        list.push(s.id);
+        if (n.need.job && n.need.job.auto) auto.push(s.id);
       }
-      if (list.length) out.set(id, list);
+      if (list.length) out.set(id, { services: list, ...(auto.length ? { auto } : {}) });
     }
     return out;
   }
@@ -208,8 +241,13 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     const c = { r: r || {}, garage, links: await links(r || { id: "none" }, b), alternatives: [], reason: "" };
     if (r && r.reason) c.reason = R.reasonText(r.cancelled_by === "client" ? R.CLIENT_CANCEL_REASONS : r.status === "declined" ? R.DECLINE_REASONS : R.GARAGE_CANCEL_REASONS, r.reason);
     if (["client_declined", "client_expired", "client_cancelled"].includes(m.kind) && b) c.alternatives = await alternatives(r, b).catch(() => []);
-    if (m.kind === "garage_new" && b) c.slot = slotInfo(r, b, await repo.bookings(b.garageId, r.day, r.day));
+    if ((m.kind === "garage_new" || m.kind === "garage_booked") && b) {
+      if (r.slot_id === NIL_SLOT) c.plan = (await calendar.planInfo(b.garageId, [r.id])).get(r.id) || null;
+      else c.slot = slotInfo(r, b, await repo.bookings(b.garageId, r.day, r.day));
+    }
     if (m.kind === "client_confirmed") c.ics = R.icsCalendar([icsEvent(r)], now());
+    if (m.kind === "client_moved") c.ics = R.icsCalendar([{ ...icsEvent(r), sequence: Math.floor(now() / 60000) % 2147483647 }], now());
+    if (m.kind === "client_confirmed" && r.slot_id === NIL_SLOT && r.sent_at && r.decided_at === r.sent_at) c.auto = true;
     const mail = requestMail(m.kind, c);
     await withTimeout(send.mail({ to, from: cfg.emailFrom, subject: mail.subject, text: mail.text, html: mail.html, replyTo: m.kind === "garage_new" ? r.email : undefined, attachments: mail.attachments, channel: "rdv" }), MAIL_BUDGET_MS);
     log({ level: "info", msg: "rendez-vous : e-mail envoyé", event: "rdv_mail", kind: m.kind });
@@ -248,9 +286,10 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
       if (out.length >= 3) break;
       const ob = await repo.bundle(g.garage_id, today());
       if (!isOpen(ob)) continue;
-      const minutes = R.neededMinutes(r.services, ob.minutes);
-      if (minutes === null) continue;
-      const first = R.freeTimes({ ...(await engine(repo, ob, nowMs)), need: { services: r.services, minutes }, first: true })[0];
+      const p = await planner(repo, ob, nowMs);
+      const n = needOf(p, ob, r.services);
+      if (n.error) continue;
+      const first = daysOf(p, n.need, { first: true })[0];
       if (!first) continue;
       const info = garageInfo(ob);
       out.push({ name: info.name, km: kmText(g.d), city: ob.profile && ob.profile.city ? ob.profile.city : "", first: `${R.dayLabel(first.day, { short: true })} dès ${R.timeLabel(first.times[0].start)}` });
@@ -294,7 +333,7 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     start: R.hm(r.start_min),
     end: R.hm(r.end_min),
     mode: r.mode,
-    ...(r.mode === "drop" ? { until: R.hm(Math.min(r.start_min + 60, r.end_min)) } : {}),
+    ...(r.mode === "drop" ? { until: R.hm(Math.min(r.start_min + 60, r.end_min)) } : r.slot_id === NIL_SLOT ? { back: R.hm(r.end_min) } : {}),
     startsAt: isoOf(r.starts_at),
     endsAt: isoOf(r.ends_at),
   });
@@ -349,10 +388,12 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     }
     if (what === "requests") {
       if (!id) return method === "GET" ? listRequests(garageId, new URL(request.url).searchParams.get("view")) : allow("GET");
-      if (!isUuid(id) || !["accept", "decline", "cancel"].includes(act) || parts.length > 3) return apiError(404, "not_found", "Route inconnue.");
+      if (!isUuid(id) || !["accept", "decline", "cancel", "move"].includes(act) || parts.length > 3) return apiError(404, "not_found", "Route inconnue.");
       if (method !== "POST") return allow("POST");
+      if (act === "move") return calendar.move(garageId, sub, id.toLowerCase(), await body(1024));
       return decide(garageId, id.toLowerCase(), act, act === "accept" ? {} : (await body(1024)) || {});
     }
+    if (what === "calendar") return calendar.route(request, sub, garageId, parts.slice(1), body);
     return apiError(404, "not_found", "Route inconnue.");
   }
 
@@ -381,6 +422,7 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
         },
         garage: garageInfo(b),
         todo: await repo.countTodo(garageId),
+        calendar: { mode: (b.calendar && b.calendar.mode) || "simple", started: !!b.calendar },
       },
       NO_STORE,
     );
@@ -491,6 +533,7 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     const [rows, b, todo] = await Promise.all([repo.listRequests(garageId, view, t), repo.bundle(garageId, t), repo.countTodo(garageId)]);
     const days = [...new Set(rows.filter((r) => r.status === "pending").map((r) => r.day))];
     const bookings = days.length ? (await Promise.all(days.map((d) => repo.bookings(garageId, d, d)))).flat() : [];
+    const plans = await calendar.planInfo(garageId, rows.filter((r) => r.slot_id === NIL_SLOT).map((r) => r.id));
     return json(
       200,
       {
@@ -498,7 +541,10 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
         todo,
         requests: rows.map((r) => {
           const v = garageView(r);
-          if (r.status === "pending") {
+          if (r.slot_id === NIL_SLOT) {
+            const plan = plans.get(r.id);
+            if (plan) v.plan = plan;
+          } else if (r.status === "pending") {
             const slot = slotInfo(r, b, bookings);
             if (slot) v.slot = slot;
           } else {
@@ -581,22 +627,27 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
   async function getTimes(request, garageId) {
     const parsed = R.parseServices(new URL(request.url).searchParams.get("services") || "");
     if (parsed.error) return apiError(400, "bad_request", parsed.error);
+    const vehicle = new URL(request.url).searchParams.get("vehicle") || "";
+    if (vehicle && !VEHICLES.some((x) => x.id === vehicle)) return apiError(400, "bad_request", "Type de véhicule inconnu.");
     const b = await repo.bundle(garageId, today());
     if (!isOpen(b)) return notOpen();
-    const minutes = R.neededMinutes(parsed.value, b.minutes);
-    if (minutes === null || !b.slots.some((s) => parsed.value.every((x) => s.services.includes(x.id)))) return notOpen();
     const nowMs = now();
-    const args = await engine(repo, b, nowMs);
-    const days = R.freeTimes({ ...args, need: { services: parsed.value, minutes } });
-    const deadline = R.deadlineAfter(nowMs, args.ctx);
+    const p = await planner(repo, b, nowMs);
+    const n = needOf(p, b, parsed.value, vehicle);
+    if (n.error) return notOpen();
+    const deadline = R.deadlineAfter(nowMs, ctxOf(b));
     const g = garageInfo(b);
-    return json(200, { garage: { id: garageId, name: g.name, addr: g.addr }, services: servicesView(parsed.value), deadline: isoOf(deadline), deadlineText: R.instantLabel(deadline), days: daysView(days) }, NO_STORE);
+    const head = { garage: { id: garageId, name: g.name, addr: g.addr }, services: servicesView(parsed.value), deadline: isoOf(deadline), deadlineText: R.instantLabel(deadline) };
+    // mode avancé : type de véhicule à demander d'abord (durées par type), confirmation immédiate ou non
+    const extra = p.kind === "advanced" ? { auto: n.need.job.auto, needVehicle: !!n.needVehicle, ...(n.needVehicle || vehicle ? { vehicles: VEHICLES, vehicle } : {}) } : {};
+    if (n.needVehicle) return json(200, { ...head, ...extra, days: [] }, NO_STORE);
+    return json(200, { ...head, ...extra, days: daysView(daysOf(p, n.need)) }, NO_STORE);
   }
 
   const limitedCodes = (scope) =>
     apiError(429, "send_limited", scope === "global" ? "Trop de demandes en ce moment. Réessayez dans une heure." : scope === "email" ? "Trop de codes envoyés à cette adresse aujourd'hui. Réessayez demain." : "Trop de demandes depuis cette connexion. Réessayez plus tard.", { scope }, { "retry-after": scope === "global" || scope === "ip_hour" ? "3600" : "86400" });
-  async function timeTaken(args, need) {
-    return apiError(409, "time_taken", "Cet horaire n'est plus libre. Choisissez-en un autre.", { days: daysView(R.freeTimes({ ...args, need })) });
+  async function timeTaken(p, need) {
+    return apiError(409, "time_taken", "Cet horaire n'est plus libre. Choisissez-en un autre.", { days: daysView(daysOf(p, need)) });
   }
 
   async function postRequest(request, ctx) {
@@ -618,12 +669,13 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     if (n.emailDay >= cfg.codesPerEmailPerDay) return limitedCodes("email");
     const b = await repo.bundle(v.garageId, today());
     if (!isOpen(b)) return notOpen();
-    const minutes = R.neededMinutes(v.services, b.minutes);
-    if (minutes === null) return notOpen();
-    const need = { services: v.services, minutes };
-    const args = await engine(repo, b, now());
-    const offer = R.pickOffer({ ...args, need }, { day: v.day, start: v.start, mode: v.mode });
-    if (!offer) return timeTaken(args, need);
+    const p = await planner(repo, b, now());
+    const wish = needOf(p, b, v.services, v.vehicle);
+    if (wish.error) return notOpen();
+    if (wish.needVehicle) return apiError(422, "validation", "Choisissez le type de votre véhicule.", { field: "vehicle" });
+    const need = wish.need;
+    const offer = pickOf(p, need, { day: v.day, start: v.start, mode: v.mode });
+    if (!offer) return timeTaken(p, need);
     if ((await repo.pendingAtGarage(v.garageId)) >= cfg.pendingPerGarage) return apiError(409, "garage_busy", "Ce garage a déjà beaucoup de demandes en attente. Réessayez plus tard ou appelez-le.");
     const id = crypto.randomUUID();
     const code = newCode();
@@ -631,13 +683,14 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     const profile = b.profile || {};
     await repo.tx(async (r) => {
       await r.createDraft({
-        id, garageId: v.garageId, slotId: offer.slotId, day: v.day, start: offer.start, end: offer.end,
+        id, garageId: v.garageId, slotId: offer.slotId || NIL_SLOT, day: v.day, start: offer.start, end: offer.end,
         startsAt: R.parisInstant(v.day, offer.start), endsAt: R.parisInstant(v.day, offer.end), mode: offer.mode,
-        services: v.services, minutes, name: v.name, email: v.email, phone: v.phone, car: v.car, carYear: v.year, plate: v.plate, message: v.message, remindPrice: v.remindPrice,
+        services: v.services, minutes: need.minutes, name: v.name, email: v.email, phone: v.phone, car: v.car, carYear: v.year, plate: v.plate, message: v.message, remindPrice: v.remindPrice,
         codeHash: await digest(`rdv-code:${id}:${code}`), ttlSeconds: cfg.codeTtlSeconds, ipHash,
         garageName: g.name.slice(0, 120), garageAddr: g.addr.slice(0, 300), garagePhone: profile.phone || "",
       });
       await r.logCode({ ipHash, emailHash, garageId: v.garageId });
+      if (offer.plan) await r.cal.saveWorkOrder(v.garageId, id, { vehicle: v.vehicle }); // le type de véhicule, jusqu'à l'envoi
     });
     const mail = clientCodeMail({ code, garageName: g.name, minutes: Math.round(cfg.codeTtlSeconds / 60) });
     try {
@@ -698,24 +751,29 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
       if ((await r.pendingAtGarage(q.garage_id)) >= cfg.pendingPerGarage) return { kind: "garage_busy" };
       const b = await r.bundle(q.garage_id, R.parisParts(nowMs).iso);
       if (!isOpen(b)) return { kind: "not_open" };
-      const minutes = R.neededMinutes(q.services, b.minutes);
-      if (minutes === null) return { kind: "not_open" };
-      const args = await engine(r, b, nowMs);
-      const need = { services: q.services, minutes };
+      const p = await planner(r, b, nowMs);
+      const order = p.kind === "advanced" ? await r.cal.workOrder(id) : null;
+      const vehicle = (order && order.vehicle) || "";
+      const n = needOf(p, b, q.services, vehicle);
+      if (n.error || n.needVehicle) return { kind: "not_open" };
+      const need = n.need;
       const wanted = change || { day: q.day, start: q.start_min, mode: q.mode };
-      const offer = R.pickOffer({ ...args, need }, wanted);
-      if (!offer) return { kind: "time_taken", days: daysView(R.freeTimes({ ...args, need })) }; // le code reste valable pour choisir un autre horaire
-      const deadline = R.deadlineAfter(nowMs, args.ctx);
+      const offer = pickOf(p, need, wanted);
+      if (!offer) return { kind: "time_taken", days: daysView(daysOf(p, need)) }; // le code reste valable pour choisir un autre horaire
+      const deadline = R.deadlineAfter(nowMs, ctxOf(b));
+      const auto = p.kind === "advanced" && need.job.auto;
       const [clientToken, garageToken] = await Promise.all([tokenFor("c", id), tokenFor("g", id)]);
       const sent = await r.send({
         id,
         garageId: q.garage_id,
-        offer: { ...offer, day: wanted.day, startsAt: R.parisInstant(wanted.day, offer.start), endsAt: R.parisInstant(wanted.day, offer.end) },
+        offer: { ...offer, slotId: offer.slotId || NIL_SLOT, day: wanted.day, startsAt: R.parisInstant(wanted.day, offer.start), endsAt: R.parisInstant(wanted.day, offer.end) },
         deadline,
         clientTokenHash: await tokenHash(clientToken),
         garageTokenHash: await tokenHash(garageToken),
+        auto,
       });
       if (!sent) return { kind: "closed" };
+      if (offer.plan) await calendar.writePlan(r, q.garage_id, id, offer.plan, vehicle); // ressources retenues dans la même transaction
       return { kind: "sent", clientToken };
     });
     switch (out.kind) {

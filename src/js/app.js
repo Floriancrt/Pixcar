@@ -3018,7 +3018,7 @@ import { SERVICES } from "./shared/services.js";
             : "center" === a.kind
               ? "L'enseigne ne publie pas de prix national pour cette prestation : demandez un devis au centre."
               : "Ce garage ne publie pas ses prix : demandez un devis, puis déclarez le prix payé."),
-      `${wt(e)}\n      ${proPub.ficheHtml(e, proSvc(), he("check"))}${rdvOk(e) ? proPub.rdvHtml() : ""}\n      ${whyHtml(e)}\n      ${multi ? comboHtml(a) : ""}<p class="price-note">${r}</p>\n      ${n.length ? ue(n, t.id) : ""}\n      ${multi ? a.parts.filter((p) => !p.no && "declared" === p.price.kind).map((p) => it(p.price.mine, p.id, !0)).join("") : "declared" === a.kind ? it(a.mine, t.id, !1) : ""}\n      ${(function (
+      `${wt(e)}\n      ${proPub.ficheHtml(e, proSvc(), he("check"))}${rdvOk(e) ? proPub.rdvHtml("", proPub.instant(e, selSvcs().map((s) => s.id))) : ""}\n      ${whyHtml(e)}\n      ${multi ? comboHtml(a) : ""}<p class="price-note">${r}</p>\n      ${n.length ? ue(n, t.id) : ""}\n      ${multi ? a.parts.filter((p) => !p.no && "declared" === p.price.kind).map((p) => it(p.price.mine, p.id, !0)).join("") : "declared" === a.kind ? it(a.mine, t.id, !1) : ""}\n      ${(function (
         e,
         t,
       ) {
