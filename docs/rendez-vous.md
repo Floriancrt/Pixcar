@@ -11,8 +11,8 @@ Spécification des deux lots décidés avec l'utilisateur le 17 octobre 2026, d'
 - **Lot 3 — Calendrier avancé** (mécaniciens, postes, exigences des prestations, planification par ressources), à côté du mode simple
   ci-dessous qui reste le mode par défaut : spécification dans [calendrier-avance.md](calendrier-avance.md). Lot 3a (modèle, moteur,
   API, assistant, réservation en mode avancé) **en service depuis le 19 octobre 2026** (API et site, `docs/exploitation.md`, 10.13) ; lot 3b
-  (écran Planning : cinq vues, glisser-déposer, blocs internes) **fusionné dans `main` le 19 octobre 2026, pas encore en service** (API
-  puis site à déployer) ; lot 3c
+  (écran Planning : cinq vues, glisser-déposer, blocs internes) **API déployée le 19 octobre 2026** (`docs/exploitation.md`, 10.14), **site
+  pas encore publié** ; lot 3c
   (ordres de réparation, tableau de bord) à suivre.
 
 ## Décisions
