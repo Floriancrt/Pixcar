@@ -120,7 +120,8 @@ véhicule, heures prévues) reste avec la demande anonymisée puis part avec ell
 
 ## Avant la mise en ligne du lot 3a
 
-- **Go de l'utilisateur** pour fusionner `calendrier-avance` dans `main`, déployer l'API et publier le site (trois étapes distinctes).
+- Fusion de `calendrier-avance` dans `main` (avance rapide) et poussée : **faites le 19 octobre 2026** (go de l'utilisateur : « Fusionne dans
+  main et pousse »). Restent, chacune avec son go : le déploiement de l'API, puis la publication du site.
 - Déploiement de l'API : migration `006_calendar.sql` (10 tables, 11 index `ASYNC`) par l'opération `migrate`, droits du rôle
   d'exécution sur les nouvelles tables (`ensureRuntimeRole`), puis `selfcheck` (30 contrôles, dont celui du calendrier) et `smoke`.
   Aucune nouvelle ressource AWS. L'API doit précéder le site : l'ancienne page ignore les nouveaux champs (`auto`, `needVehicle`,
