@@ -199,7 +199,7 @@ le garage lui est annoncé par e-mail.
   d'exécution sur la nouvelle table, puis `selfcheck` (le contrôle du calendrier écrit, relit et retire un créneau bloqué) et `smoke`.
   Aucune nouvelle ressource AWS. L'API doit précéder le site : la page du lot 3a ignore les nouveaux champs (`rdv.mode`, `blocks`,
   `days`…) et l'ancienne API ne connaît pas les routes des blocs.
-- Publication du site (Espace Pro) après l'API : **go de l'utilisateur attendu**.
+- Publication du site (Espace Pro) après l'API : **faite le 19 octobre 2026** (`gh-pages` `9b5b9b2`, `docs/exploitation.md` section 2).
 - Essai avec le garage d'essai : Planning (les cinq vues), déplacement d'un rendez-vous au clavier puis par glisser-déposer (e-mail au
   client), rendez-vous hors Pixcar et créneau bloqué, conflit avec une absence, sur ordinateur et téléphone.
 
