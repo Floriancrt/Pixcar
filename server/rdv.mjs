@@ -242,7 +242,8 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     if (r && r.reason) c.reason = R.reasonText(r.cancelled_by === "client" ? R.CLIENT_CANCEL_REASONS : r.status === "declined" ? R.DECLINE_REASONS : R.GARAGE_CANCEL_REASONS, r.reason);
     if (["client_declined", "client_expired", "client_cancelled"].includes(m.kind) && b) c.alternatives = await alternatives(r, b).catch(() => []);
     if ((m.kind === "garage_new" || m.kind === "garage_booked") && b) {
-      if (r.slot_id === NIL_SLOT) c.plan = (await calendar.planInfo(b.garageId, [r.id])).get(r.id) || null;
+      const info = r.slot_id === NIL_SLOT || calendar.advanced(b) ? (await calendar.planInfo(b.garageId, [r.id])).get(r.id) : null;
+      if (info || r.slot_id === NIL_SLOT) c.plan = info ? { ...info, proposed: !info.fixed && !!b.calendar && b.calendar.autoAssign === false } : null;
       else c.slot = slotInfo(r, b, await repo.bookings(b.garageId, r.day, r.day));
     }
     if (m.kind === "client_confirmed") c.ics = R.icsCalendar([icsEvent(r)], now());
@@ -533,7 +534,8 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     const [rows, b, todo] = await Promise.all([repo.listRequests(garageId, view, t), repo.bundle(garageId, t), repo.countTodo(garageId)]);
     const days = [...new Set(rows.filter((r) => r.status === "pending").map((r) => r.day))];
     const bookings = days.length ? (await Promise.all(days.map((d) => repo.bookings(garageId, d, d)))).flat() : [];
-    const plans = await calendar.planInfo(garageId, rows.filter((r) => r.slot_id === NIL_SLOT).map((r) => r.id));
+    const usePlan = (r) => r.slot_id === NIL_SLOT || calendar.advanced(b); // mode avancé : l'affectation remplace le créneau
+    const plans = await calendar.planInfo(garageId, rows.filter(usePlan).map((r) => r.id));
     return json(
       200,
       {
@@ -541,9 +543,9 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
         todo,
         requests: rows.map((r) => {
           const v = garageView(r);
-          if (r.slot_id === NIL_SLOT) {
+          if (usePlan(r) && plans.has(r.id)) {
             const plan = plans.get(r.id);
-            if (plan) v.plan = plan;
+            if (plan) v.plan = { ...plan, proposed: !plan.fixed && !!b.calendar && b.calendar.autoAssign === false }; // affectation à confirmer
           } else if (r.status === "pending") {
             const slot = slotInfo(r, b, bookings);
             if (slot) v.slot = slot;

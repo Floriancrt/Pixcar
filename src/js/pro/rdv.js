@@ -22,6 +22,8 @@ const longDay = (iso) => dayLabel(iso);
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const plural = (n, one, many = one + "s") => `${n} ${n > 1 ? many : one}`;
 const svcText = (list) => list.map((s) => s.label).join(" + ");
+// mode avancé : qui fait l'intervention, sur quel poste (« proposé » quand l'affectation est à confirmer)
+const planText = (p) => (p ? [p.staff.length ? `${p.proposed ? "Proposé" : "Affecté"} : ${p.staff.join(", ")}` : "", p.posts.join(", ")].filter(Boolean).join(" · ") : "");
 
 export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, goPanel, onTodo }) {
   let garageId = null;
@@ -96,7 +98,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
     const d = new Date(p.day + "T12:00:00Z");
     const fmt = (o) => d.toLocaleDateString("fr-FR", { timeZone: "UTC", ...o });
     const c = r.client;
-    const slot = r.slot ? `Créneau « ${r.slot.name} »${r.slot.capacity > 1 ? ` · encore ${plural(r.slot.left, "place")} sur ${r.slot.capacity} à cette heure` : ""}` : "";
+    const slot = r.slot ? `Créneau « ${r.slot.name} »${r.slot.capacity > 1 ? ` · encore ${plural(r.slot.left, "place")} sur ${r.slot.capacity} à cette heure` : ""}` : planText(r.plan);
     return el(
       "article",
       { class: "rq-card", "data-id": r.id, "aria-labelledby": `rq-${r.id}` },
@@ -105,7 +107,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
         "div",
         { class: "rq-main" },
         el("div", { class: "rq-head" }, el("h2", { id: `rq-${r.id}`, text: `${svcText(r.services)}, ${p.label}` }), el("span", { class: "rq-limit" }, icon("i-clock"), `À traiter avant ${shortInstant(r.deadline)}`)),
-        p.mode === "drop" ? el("p", { class: "rq-slot", text: `Voiture déposée entre ${timeLabel(minOf(p.start))} et ${timeLabel(minOf(p.until))}, rendue vers ${timeLabel(minOf(p.end))}` }) : null,
+        p.mode === "drop" ? el("p", { class: "rq-slot", text: `Voiture déposée entre ${timeLabel(minOf(p.start))} et ${timeLabel(minOf(p.until))}, rendue vers ${timeLabel(minOf(p.end))}` }) : p.back ? el("p", { class: "rq-slot", text: `Voiture rendue vers ${timeLabel(minOf(p.back))}` }) : null,
         slot ? el("p", { class: "rq-slot", text: slot }) : null,
         el(
           "ul",
@@ -286,6 +288,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
 
   function renderAgenda() {
     const a = agenda;
+    renderMode();
     const tgl = $("agEnabled");
     tgl.setAttribute("aria-checked", String(a.open));
     say("agStateText", stateText());
@@ -296,6 +299,19 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
     renderClosures();
     for (const s of document.querySelectorAll("#dash-agenda [data-setting]")) s.value = String(a.settings[s.dataset.setting]);
     renderNotify();
+  }
+
+  // simple (semaine type en créneaux) ou avancé (ressources de l'atelier, calendar.js) ; la semaine type reste enregistrée
+  function renderMode() {
+    const c = agenda.calendar || { mode: "simple", started: false };
+    const adv = c.mode === "advanced";
+    $("agWeekBox").hidden = adv;
+    say("agModeText", adv ? "Avancé : les horaires proposés viennent de vos mécaniciens, de vos postes et du temps de chaque prestation." : "Simple : votre semaine type en créneaux, chacun avec un nombre de voitures.");
+    say("agModeHelp", adv ? "Votre semaine type reste enregistrée : elle reprend si vous revenez au mode simple (Mon atelier › Contrôles)." : "Le mode avancé tient compte de vos mécaniciens, de leurs absences et compétences, de vos ponts et postes. Un assistant vous guide ; rien ne change pour vos clients avant l'activation.");
+    $("agModeGo").textContent = adv ? "Gérer l'atelier" : c.started ? "Reprendre la configuration" : "Passer au mode avancé";
+    $("agModeGo").className = adv ? "btn small" : "btn primary small";
+    const lead = document.querySelector("#dash-agenda .rv-top .lead");
+    lead.textContent = adv ? "Quand votre atelier peut prendre une voiture : Pixcar calcule les horaires avec vos ressources (Mon atelier)." : "Quand vous pouvez prendre une voiture, et pour quelles prestations. Pixcar ne propose aux automobilistes que des horaires pris dans ces créneaux.";
   }
 
   function renderMissing() {
@@ -724,6 +740,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
   $("slotCapMinus").addEventListener("click", () => step(-1));
   $("slotCapPlus").addEventListener("click", () => step(1));
   $("agAddClosure").addEventListener("click", () => openClosure(null));
+  $("agModeGo").addEventListener("click", () => goPanel("calendar"));
   $("closForm").addEventListener("submit", saveClosure);
   $("closClose").addEventListener("click", () => $("closDlg").close());
   $("closDelete").addEventListener("click", deleteClosure);

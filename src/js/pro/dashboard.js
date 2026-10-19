@@ -4,6 +4,7 @@
 import { INCLUDES, PRICE_KINDS, PRO_SERVICES, VEHICLES, announcedDetail, announcedText, parseProPrice, serviceLabel } from "../shared/pro-prices.js";
 import { createGarageView } from "./garage.js";
 import { createRdvViews } from "./rdv.js";
+import { createCalendarViews } from "./calendar.js";
 
 const LONG = { day: "numeric", month: "long", year: "numeric" };
 const DAY_MONTH = { day: "numeric", month: "long" };
@@ -39,6 +40,8 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
 
   // rendez-vous en ligne (rdv.js) : présents seulement quand l'API les a ouverts (data.rdv)
   const rdv = createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name) => panel(name), onTodo: setTodo });
+  // calendrier avancé (calendar.js) : ouvert depuis Disponibilités
+  const cal = createCalendarViews({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name) => panel(name) });
   function setTodo(n) {
     const c = $("rqCount");
     c.hidden = !n;
@@ -59,6 +62,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
       return;
     }
     rdv.reset();
+    cal.reset();
     const on = !!data.rdv;
     for (const b of document.querySelectorAll(".dash-link[data-rdv]")) b.hidden = !on;
     $("dashNav").classList.toggle("has-rdv", on);
@@ -71,8 +75,8 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
 
   // ---- onglets du tableau de bord : « Tableau de bord » (et « Mes prix », plus bas sur le même écran), « Mon garage », « Demandes »,
   // « Disponibilités »
-  const BODIES = { top: "dash-top", prices: "dash-top", garage: "dash-garage", requests: "dash-requests", agenda: "dash-agenda" };
-  const TITLES = { top: "dashTitle", garage: "mgTitle", requests: "rqTitle", agenda: "agTitle" };
+  const BODIES = { top: "dash-top", prices: "dash-top", garage: "dash-garage", requests: "dash-requests", agenda: "dash-agenda", calendar: "dash-calendar" };
+  const TITLES = { top: "dashTitle", garage: "mgTitle", requests: "rqTitle", agenda: "agTitle", calendar: "calTitle" };
   async function panel(name, { focus = true } = {}) {
     more(false);
     if (name !== "top" && name !== "prices") {
@@ -81,6 +85,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
         if (name === "garage") await garage.open(data.garage.id, { verifiedAt: data.garage.verifiedAt });
         if (name === "requests") await rdv.openRequests(data.garage.id, { focus: false });
         if (name === "agenda") await rdv.openAgenda(data.garage.id, { focus: false });
+        if (name === "calendar") await cal.open(data.garage.id, { focus: false });
       } catch (e) {
         if (!apiProblem(e)) alertBox(e.message);
         return;
@@ -88,7 +93,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     }
     for (const id of new Set(Object.values(BODIES))) $(id).hidden = id !== BODIES[name];
     for (const b of document.querySelectorAll(".dash-link[data-panel]")) {
-      if (b.dataset.panel === name) b.setAttribute("aria-current", "true");
+      if (b.dataset.panel === (name === "calendar" ? "agenda" : name)) b.setAttribute("aria-current", "true");
       else b.removeAttribute("aria-current");
     }
     if (name === "prices") {
@@ -334,6 +339,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
   $("addPrice").addEventListener("click", () => openEditor(null));
   $("confirmAll").addEventListener("click", confirmAll);
   for (const b of document.querySelectorAll(".dash-link[data-panel]")) b.addEventListener("click", () => panel(b.dataset.panel));
+  $("calBack").addEventListener("click", () => panel("agenda"));
   $("dashMore").addEventListener("click", () => more($("dashMore").getAttribute("aria-expanded") !== "true"));
   $("dashNav").addEventListener("keydown", (e) => e.key === "Escape" && more(false));
   $("dashRqGo").addEventListener("click", () => panel("requests"));

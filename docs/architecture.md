@@ -127,6 +127,11 @@ Schéma : `db/migrations/001_init.sql`, pour PostgreSQL 14 ou plus **et** pour A
 | `write_log` | empreinte de l'adresse IP (64 caractères hexadécimaux), instant (limitation des écritures) | 30 jours |
 | `upstream_cache` | dernières réponses d'Overpass | 14 jours |
 
+Les migrations suivantes ajoutent l'Espace Pro (`002_pro.sql` à `004_pro_garage.sql`), les rendez-vous en ligne (`005_rdv.sql`,
+[rendez-vous.md](rendez-vous.md)) et le calendrier avancé (`006_calendar.sql` : réglages, mécaniciens, compétences, postes, exigences
+des prestations, absences, affectations, ordres de réparation, historique ; [calendrier-avance.md](calendrier-avance.md)). Le moteur de
+planification (`src/js/shared/plan.js`) est partagé par l'API et la page Pro, comme celui des horaires (`src/js/shared/rdv.js`).
+
 Les `CHECK` de la base répètent la validation de l'API : **même une erreur de l'API ne peut pas y inscrire un prix négatif ou une note de 9**. Index : lecture d'une zone (`garages_area_idx`, `repairs_garage_service_idx`, index partiels sur `approved`), unicité anti-doublon, file de modération, limitation.
 
 **Migrations** : `server/migrate.mjs` applique les fichiers `NNN_nom.sql` pas encore appliqués, chacun dans une transaction, sous un **verrou consultatif pris sur une connexion dédiée** (plusieurs instances qui démarrent ensemble : une seule migre, les autres attendent, 120 s au plus). Une migration qui échoue est annulée en entier et libère le verrou. Règle de déploiement : une migration doit rester **compatible avec la version précédente de l'API** (ajouter avant d'utiliser, supprimer après), pour qu'un déploiement progressif ne casse rien. *Sur Aurora DSQL, la migration procède autrement (tableau ci-dessous).*

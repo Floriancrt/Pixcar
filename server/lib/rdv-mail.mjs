@@ -16,7 +16,7 @@ const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const carText = (r) => [r.car, r.car_year, r.plate].filter(Boolean).join(" · ");
 const dropText = (r) => (r.mode === "drop" ? `voiture déposée entre ${timeLabel(r.start_min)} et ${timeLabel(Math.min(r.start_min + 60, r.end_min))}, rendue vers ${timeLabel(r.end_min)}` : r.slot_id === NIL_SLOT ? `voiture rendue vers ${timeLabel(r.end_min)}` : "");
 // mode avancé : qui fait l'intervention, et sur quel poste (e-mails au garage)
-const planText = (p) => (p ? [p.staff.length ? `Affecté à ${p.staff.join(", ")}` : "", p.posts.length ? p.posts.join(", ") : ""].filter(Boolean).join(" · ") : "");
+const planText = (p) => (p ? [p.staff.length ? `${p.proposed ? "Proposé à" : "Affecté à"} ${p.staff.join(", ")}` : "", p.posts.length ? p.posts.join(", ") : ""].filter(Boolean).join(" · ") : "");
 
 // ---------------------------------------------------------------- briques HTML
 function layout({ title, aside, body, foot }) {

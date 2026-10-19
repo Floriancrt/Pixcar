@@ -419,7 +419,17 @@
         </div>
       </div>
       <div class="rv-alert" id="agMissing" hidden></div>
-      <section class="mg-panel" aria-labelledby="agWeekTitle">
+      <section class="mg-panel cal-mode" id="agMode" aria-labelledby="agModeTitle">
+        <div class="mg-head">
+          <div>
+            <h2 id="agModeTitle">Mode du calendrier</h2>
+            <p class="sub" id="agModeText"></p>
+          </div>
+          <button type="button" class="btn small" id="agModeGo"></button>
+        </div>
+        <p class="help" id="agModeHelp"></p>
+      </section>
+      <section class="mg-panel" id="agWeekBox" aria-labelledby="agWeekTitle">
         <div class="mg-head">
           <div>
             <h2 id="agWeekTitle">Ma semaine type</h2>
@@ -467,6 +477,16 @@
         <p class="field-err" id="agNotifyErr" hidden></p>
       </section>
       <p class="sr-only" id="agLive" role="status" aria-live="polite"></p>
+    </div>
+    <!-- Calendrier avancé (docs/calendrier-avance.md, lot 3a) : assistant en six étapes, puis les mêmes écrans pour modifier -->
+    <div class="dash-body" id="dash-calendar" hidden>
+      <p class="cal-back"><button type="button" class="link-btn" id="calBack"><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg>Disponibilités</button></p>
+      <h1 id="calTitle" tabindex="-1">Calendrier avancé</h1>
+      <p class="lead" id="calLead"></p>
+      <ol class="cal-steps" id="calSteps" aria-label="Étapes"></ol>
+      <div class="cal-body" id="calBody"></div>
+      <div class="cal-foot" id="calFoot"></div>
+      <p class="sr-only" id="calLive" role="status" aria-live="polite"></p>
     </div>
   </section>
 
@@ -607,6 +627,10 @@
       <button class="link-btn danger" type="button" id="slotDelete" hidden>Supprimer le créneau</button>
     </div>
   </form>
+</dialog>
+
+<dialog class="sheet wide" id="calDlg" aria-labelledby="calDlgTitle">
+  <form id="calForm" novalidate></form>
 </dialog>
 
 <dialog class="sheet" id="closDlg" aria-labelledby="closDlgTitle">

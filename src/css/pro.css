@@ -2984,3 +2984,342 @@ input[type="url"] {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- calendrier avancé (docs/calendrier-avance.md, lot 3a) : mode, assistant, fiches ---------- */
+.cal-mode .mg-head {
+  align-items: center;
+}
+.cal-back {
+  margin: 0 0 8px;
+}
+.cal-back .link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cal-steps {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin: 18px 0;
+  padding: 0;
+  list-style: none;
+}
+.cal-steps button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 0;
+  border-top: 3px solid var(--line);
+  border-radius: 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.cal-steps span {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--card-2);
+  font-size: 0.8rem;
+}
+.cal-steps .done button {
+  border-top-color: var(--ok);
+}
+.cal-steps .done span {
+  background: var(--ok);
+  color: #fff;
+}
+.cal-steps .cur button {
+  border-top-color: var(--btn);
+  color: var(--ink);
+}
+.cal-steps .cur span {
+  background: var(--ink);
+  color: #fff;
+}
+.cal-steps button:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+@media (max-width: 899px) {
+  .cal-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 479px) {
+  .cal-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.cal-head {
+  margin: 0 0 12px;
+}
+.cal-head h2 {
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+.cal-head h2:focus {
+  outline: none;
+}
+.cal-head h2:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.cal-body .mg-panel {
+  margin-bottom: 14px;
+}
+.cal-body h3 {
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+.cal-foot,
+.cal-activate,
+.cal-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.cal-foot {
+  justify-content: flex-end;
+  margin: 16px 0;
+}
+.cal-list,
+.cal-unav,
+.cal-mini,
+.cal-problems,
+.cal-conflicts,
+.cal-skills {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cal-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cal-item:last-child {
+  border-bottom: 0;
+}
+.cal-item-main {
+  display: grid;
+  flex: 1 1 280px;
+  gap: 4px;
+  min-width: 0;
+}
+.cal-item-main p {
+  margin: 0;
+}
+.cal-item-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.cal-item-sub {
+  color: var(--ink-2);
+  font-size: 0.92rem;
+}
+.cal-item-acts {
+  display: flex;
+  gap: 8px;
+}
+.cal-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cal-tag {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--card-2);
+  color: var(--ink-2);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.cal-unav li,
+.cal-mini li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0;
+  color: var(--ink-2);
+  font-size: 0.92rem;
+}
+.cal-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+.cal-skills li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 12px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 999px;
+  font-weight: 700;
+}
+.cal-skills small {
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+.cal-skills .icon-btn {
+  width: 32px;
+  height: 32px;
+}
+.cal-skills .icon-btn.armed {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.cal-skill-form input[type="text"] {
+  flex: 1 1 200px;
+}
+.cal-inline-check {
+  margin: 0;
+  align-items: center;
+}
+.cal-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.cal-field .help,
+.sheet .help {
+  margin: 0;
+}
+.cal-checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0 12px;
+}
+.cal-checks legend {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+  font-weight: 800;
+}
+.cal-checks .check {
+  margin-top: 8px;
+}
+.cal-skill {
+  display: grid;
+  gap: 4px;
+}
+.cal-until {
+  display: grid;
+  gap: 4px;
+  margin-left: 30px;
+  color: var(--ink-3);
+  font-size: 0.85rem;
+}
+.cal-hours {
+  margin-top: 8px;
+}
+.cal-row3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 479px) {
+  .cal-row3 {
+    grid-template-columns: 1fr;
+  }
+}
+.cal-num {
+  font-variant-numeric: tabular-nums;
+}
+.cal-set {
+  margin: 12px 0 0;
+  padding: 0;
+  border: 0;
+}
+.cal-set legend {
+  font-weight: 800;
+}
+.cal-vehicles {
+  margin-top: 14px;
+}
+.cal-vehicles summary {
+  min-height: 44px;
+  padding: 10px 0;
+  font-weight: 800;
+  cursor: pointer;
+}
+.cal-vrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 110px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.cal-vrow.head {
+  color: var(--ink-3);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.cal-auto {
+  border-bottom: 1px solid var(--line);
+}
+.cal-problems li,
+.cal-conflicts li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cal-problems .ic {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--warn-ink);
+}
+.cal-problems .bad {
+  color: var(--red);
+  font-weight: 700;
+}
+.cal-problems .bad .ic {
+  color: var(--red);
+}
+.cal-conflicts li {
+  display: grid;
+  gap: 2px;
+}
+.cal-fail {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--warn-ink);
+  border-radius: 12px;
+  background: var(--warn-soft);
+}
+.cal-fail p {
+  margin: 0;
+}
+.cal-fail .btn {
+  justify-self: start;
+}
+.cal-activate {
+  margin: 18px 0 8px;
+}
+.cal-activate .help {
+  flex: 1 1 260px;
+}

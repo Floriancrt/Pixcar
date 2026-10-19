@@ -105,3 +105,26 @@ déplace aucune affectation : l'API renvoie les rendez-vous concernés (conflits
 
 Côté automobiliste, `GET /v1/rdv/garages/:id/times` accepte `vehicle=` et répond `needVehicle: true` (avec la liste des types) quand
 il le faut ; chaque horaire du mode avancé porte `end` (restitution prévue) et la réponse `auto: true` quand la confirmation est immédiate.
+
+## Confidentialité
+
+Texte de confidentialité (`src/partials/legal.html`) : côté automobiliste, le type de véhicule (demandé seulement quand une prestation
+a une durée par type), l'heure de restitution, l'affectation visible du seul garage et la confirmation immédiate de certaines
+prestations ; côté garage, les mécaniciens (un prénom suffit, pas de compte), compétences et certifications datées, absences (aucun
+motif médical demandé : la fiche le rappelle), postes, affectations et historique de 12 mois. Pour les données de son personnel, Pixcar
+agit pour le compte du garage.
+
+Conservation : les affectations partent dès qu'une demande se termine (refus, expiration, annulation) ; l'intervention (type de
+véhicule, heures prévues) reste avec la demande anonymisée puis part avec elle (24 mois) ; l'historique part au bout de 12 mois
+(purge quotidienne) ; le retrait d'un rattachement efface tout le calendrier du garage, par lots (`pro-revoke`).
+
+## Avant la mise en ligne du lot 3a
+
+- **Go de l'utilisateur** pour fusionner `calendrier-avance` dans `main`, déployer l'API et publier le site (trois étapes distinctes).
+- Déploiement de l'API : migration `006_calendar.sql` (10 tables, 11 index `ASYNC`) par l'opération `migrate`, droits du rôle
+  d'exécution sur les nouvelles tables (`ensureRuntimeRole`), puis `selfcheck` (30 contrôles, dont celui du calendrier) et `smoke`.
+  Aucune nouvelle ressource AWS. L'API doit précéder le site : l'ancienne page ignore les nouveaux champs (`auto`, `needVehicle`,
+  `end`, `plan`).
+- Texte de confidentialité : relecture par un juriste (mécaniciens : sous-traitance pour le compte du garage, information du personnel).
+- Essai de bout en bout avec le garage d'essai : assistant, activation, réservation en mode avancé (avec et sans confirmation
+  immédiate), déplacement, absence en conflit, retour au mode simple.

@@ -49,6 +49,11 @@ tags:
       Rendez-vous en ligne (docs/rendez-vous.md, lot 2). Côté garage : compte de l'Espace Pro, garage rattaché. Côté automobiliste : sans
       compte, code à 6 chiffres par e-mail avant tout envoi, puis un jeton de suivi passé dans l'en-tête `x-rdv-token` (jamais dans
       l'adresse : les journaux notent le chemin). Ces routes répondent `404 rdv_disabled` tant que `RDV_ENABLED` ne vaut pas 1.
+  - name: Calendrier
+    description: |
+      Calendrier avancé (docs/calendrier-avance.md, lot 3a) : mécaniciens, compétences, postes et équipements, exigences des prestations,
+      absences ; activation avec les rendez-vous déjà pris, retour au mode simple, déplacement contrôlé. Mêmes droits que les routes
+      « Rendez-vous » du garage.
   - name: Exploitation
 
 paths:
@@ -882,6 +887,298 @@ paths:
         "404": { $ref: "#/components/responses/RdvNotFound" }
         "409": { $ref: "#/components/responses/RdvState" }
         "422": { $ref: "#/components/responses/RdvInvalid" }
+  # ---------------------------------------------------------------- calendrier avancé (docs/calendrier-avance.md, lot 3a)
+  /v1/pro/garages/{id}/rdv/requests/{request}/move:
+    post:
+      tags: [Calendrier]
+      summary: "Déplacer ou réaffecter un rendez-vous (mode avancé) : `{ day, time, staff?, station?, confirm? }`"
+      description: |
+        Même heure, autre mécanicien ou autre poste : sans prévenir le client. Autre heure : refusé tant que `confirm` n'est pas `true`
+        (409 `confirm`), puis le client reçoit un e-mail avec le nouveau fichier d'agenda. Un conflit (ressource prise, absente, hors de ses
+        heures…) renvoie 409 `conflict` avec `reasons` et `alternatives` ; rien n'est modifié.
+      operationId: calMove
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: request, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalMoveInput" } } } }
+      responses:
+        "200": { description: La demande à jour., content: { application/json: { schema: { $ref: "#/components/schemas/RdvGarageRequest" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Conflit (`conflict`, avec `reasons` et `alternatives`), confirmation du changement d'heure attendue (`confirm`), rendez-vous passé ou clos (`state`), mode simple (`simple_mode`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/calendar:
+    get:
+      tags: [Calendrier]
+      summary: "Tout l'état du calendrier avancé : mode, réglages, mécaniciens, compétences, postes, exigences des prestations, contrôles, conflits"
+      operationId: calState
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/CalState" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+  /v1/pro/garages/{id}/rdv/calendar/start:
+    post:
+      tags: [Calendrier]
+      summary: Ouvrir l'assistant (réglages, compétences proposées, exigences par défaut des prestations faites) ; relançable sans effet
+      operationId: calStart
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/CalState" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+  /v1/pro/garages/{id}/rdv/calendar/settings:
+    put:
+      tags: [Calendrier]
+      summary: "Réglages : `{ receptionMin?, returnMin?, loadPct?, maxDay?, autoAssign?, step? }`"
+      operationId: calSettings
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalSettingsInput" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/CalState" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/calendar/staff:
+    post:
+      tags: [Calendrier]
+      summary: Ajouter un mécanicien (30 au plus)
+      operationId: calStaffCreate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalStaffInput" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/CalSaved" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Déjà 30 mécaniciens (`too_many`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/calendar/staff/{staff}:
+    put:
+      tags: [Calendrier]
+      summary: Modifier une fiche (la désactiver n'efface rien ; ses rendez-vous à venir passent en conflit)
+      operationId: calStaffUpdate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: staff, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalStaffInput" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/CalSaved" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+    delete:
+      tags: [Calendrier]
+      summary: Supprimer une fiche (refusé tant qu'elle a des rendez-vous à venir)
+      operationId: calStaffDelete
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: staff, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { $ref: "#/components/responses/CalState" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Rendez-vous à venir (`in_use`, avec `uses`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/rdv/calendar/skills:
+    post:
+      tags: [Calendrier]
+      summary: "Ajouter une compétence ou une habilitation : `{ label, cert? }` (40 au plus)"
+      operationId: calSkillCreate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalSkillInput" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/CalSaved" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Déjà 40 compétences (`too_many`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/calendar/skills/{skill}:
+    put:
+      tags: [Calendrier]
+      summary: Renommer une compétence
+      operationId: calSkillUpdate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: skill, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalSkillInput" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/CalSaved" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+    delete:
+      tags: [Calendrier]
+      summary: Supprimer une compétence (retirée des fiches et des exigences)
+      operationId: calSkillDelete
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: skill, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { $ref: "#/components/responses/CalState" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+  /v1/pro/garages/{id}/rdv/calendar/resources:
+    post:
+      tags: [Calendrier]
+      summary: Ajouter un poste ou un équipement (30 au plus)
+      operationId: calResourceCreate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalResourceInput" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/CalSaved" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Déjà 30 postes (`too_many`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/calendar/resources/{resource}:
+    put:
+      tags: [Calendrier]
+      summary: Modifier un poste (indisponible n'efface rien ; ses rendez-vous à venir passent en conflit)
+      operationId: calResourceUpdate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: resource, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalResourceInput" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/CalSaved" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+    delete:
+      tags: [Calendrier]
+      summary: Supprimer un poste (refusé tant qu'il a des rendez-vous à venir)
+      operationId: calResourceDelete
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: resource, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { $ref: "#/components/responses/CalState" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Rendez-vous à venir (`in_use`, avec `uses`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/rdv/calendar/services/{service}:
+    put:
+      tags: [Calendrier]
+      summary: Exigences d'une prestation que le garage fait (Mon garage)
+      operationId: calService
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: service, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalReq" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/CalState" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Prestation pas déclarée comme faite (`not_offered`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/calendar/unavail:
+    post:
+      tags: [Calendrier]
+      summary: "Absence d'un mécanicien ou indisponibilité d'un poste ; renvoie les rendez-vous touchés (`touched`), jamais déplacés"
+      operationId: calUnavailCreate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalUnavailInput" } } } }
+      responses:
+        "200": { description: "L'état, avec l'identifiant créé (`saved`) et les rendez-vous à venir touchés (`touched`).", content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/CalState" }, { type: object, required: [saved, touched], properties: { saved: { type: string, format: uuid }, touched: { type: array, items: { type: string, format: uuid } } } }] } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Déjà 300 absences à venir (`too_many`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/calendar/unavail/{unavail}:
+    delete:
+      tags: [Calendrier]
+      summary: Retirer une absence ou une indisponibilité
+      operationId: calUnavailDelete
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: unavail, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { $ref: "#/components/responses/CalState" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+  /v1/pro/garages/{id}/rdv/calendar/check:
+    post:
+      tags: [Calendrier]
+      summary: "Contrôles avant activation et affectation proposée des rendez-vous à venir (rien n'est écrit) : `{ placements? }`"
+      operationId: calCheck
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/CalPlacementsInput" } } } }
+      responses:
+        "200":
+          description: Contrôles, rendez-vous placés et rendez-vous sans place (avec les raisons).
+          content: { application/json: { schema: { type: object, required: [readiness, placed, failed], properties: { readiness: { $ref: "#/components/schemas/CalReadiness" }, placed: { type: array, items: { $ref: "#/components/schemas/CalAppointment" } }, failed: { type: array, items: { $ref: "#/components/schemas/CalAppointment" } } } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/calendar/activate:
+    post:
+      tags: [Calendrier]
+      summary: "Passer en mode avancé (ou recalculer les affectations) : chaque rendez-vous à venir est affecté, ou l'activation attend (`unplaced`)"
+      operationId: calActivate
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/CalPlacementsInput" } } } }
+      responses:
+        "200": { description: "L'état, avec le nombre de rendez-vous affectés (`placed`).", content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/CalState" }, { type: object, required: [placed], properties: { placed: { type: integer, minimum: 0 } } }] } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Assistant pas ouvert (`not_started`), point bloquant (`not_ready`, avec `readiness`), rendez-vous sans place (`unplaced`, avec `failed`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/RdvInvalid" }
+  /v1/pro/garages/{id}/rdv/calendar/simple:
+    post:
+      tags: [Calendrier]
+      summary: "Revenir au mode simple : chaque rendez-vous à venir est rattaché à un créneau compatible, ou rien ne change (`unplaced`)"
+      operationId: calSimple
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/CalState" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Des rendez-vous n'entrent dans aucun créneau (`unplaced`, avec `failed`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/rdv/calendar/agenda:
+    get:
+      tags: [Calendrier]
+      summary: Rendez-vous d'une période (42 jours au plus), avec leurs affectations et leur intervention
+      operationId: calAgenda
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Les rendez-vous de la période.
+          content: { application/json: { schema: { type: object, required: [from, to, appointments], properties: { from: { type: string, format: date }, to: { type: string, format: date }, appointments: { type: array, items: { $ref: "#/components/schemas/CalAgendaItem" } } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { $ref: "#/components/responses/RdvNotFound" }
   /v1/rdv/garages/{id}/times:
     get:
       tags: [Rendez-vous]
@@ -1027,6 +1324,12 @@ components:
       description: Base momentanément indisponible. Réessayer ; la page garde la déclaration et la renvoie.
       headers: { Retry-After: { schema: { type: integer } } }
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    CalState:
+      description: L'état du calendrier avancé.
+      content: { application/json: { schema: { $ref: "#/components/schemas/CalState" } } }
+    CalSaved:
+      description: "L'état, avec l'identifiant de la fiche enregistrée (`saved`)."
+      content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/CalState" }, { type: object, required: [saved], properties: { saved: { type: string, format: uuid } } }] } } }
     RdvAgenda:
       description: Les disponibilités du garage.
       content: { application/json: { schema: { $ref: "#/components/schemas/RdvAgenda" } } }
@@ -1121,6 +1424,7 @@ components:
           required: [services]
           properties:
             services: { type: array, items: { type: string } }
+            auto: { type: array, items: { type: string }, description: "Celles que le garage confirme aussitôt (calendrier avancé)." }
     RdvSettings:
       type: object
       required: [minDelayH, horizonDays, stepMin, holidays]
@@ -1167,6 +1471,158 @@ components:
         first: { type: string, format: date }
         last: { type: string, format: date, description: "Absent : un seul jour. 90 jours au plus." }
         label: { type: string, maxLength: 60 }
+    CalHours:
+      type: object
+      nullable: true
+      description: "Horaires propres (format de ProHours) ; null : ceux du garage."
+    CalServiceList:
+      type: array
+      nullable: true
+      items: { type: string }
+      description: "Prestations (identifiants du catalogue) ; null : toutes."
+    CalSettingsInput:
+      type: object
+      properties:
+        receptionMin: { type: integer, minimum: 0, maximum: 60, description: "Accueil du véhicule avant les travaux, par 5 min." }
+        returnMin: { type: integer, minimum: 0, maximum: 60, description: "Entre le véhicule prêt et la restitution annoncée, par 5 min." }
+        loadPct: { type: integer, minimum: 50, maximum: 100, description: "Part de la capacité des mécaniciens ouverte en ligne, par 5 %." }
+        maxDay: { type: integer, minimum: 0, maximum: 50, description: "Rendez-vous en ligne par jour (0 : sans limite)." }
+        autoAssign: { type: boolean, description: "Faux : l'affectation des mécaniciens est proposée, à confirmer." }
+        step: { type: integer, minimum: 0, maximum: 6, description: Dernière étape de l'assistant enregistrée. }
+    CalStaffInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 60 }
+        active: { type: boolean }
+        hours: { $ref: "#/components/schemas/CalHours" }
+        services: { $ref: "#/components/schemas/CalServiceList" }
+        skills: { type: array, items: { type: object, required: [id], properties: { id: { type: string, format: uuid }, until: { type: string, format: date, nullable: true } } } }
+    CalSkillInput:
+      type: object
+      required: [label]
+      properties:
+        label: { type: string, minLength: 2, maxLength: 50 }
+        cert: { type: boolean, description: Habilitation (date de fin par mécanicien). }
+    CalResourceInput:
+      type: object
+      required: [name, type]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 40 }
+        type: { type: string, enum: [lift, quick, tyre, diag, align, clim, other] }
+        active: { type: boolean }
+        hours: { $ref: "#/components/schemas/CalHours" }
+        services: { $ref: "#/components/schemas/CalServiceList" }
+    CalReq:
+      type: object
+      required: [labour]
+      properties:
+        online: { type: boolean }
+        labour: { type: integer, minimum: 5, maximum: 600, description: "Main-d'œuvre, par 5 min (par pneu ou par roue pour ces prestations)." }
+        shared: { type: integer, minimum: 0, maximum: 120, description: Temps commun compté une fois quand plusieurs prestations se font ensemble. }
+        immob: { type: integer, minimum: 5, maximum: 720, description: "Immobilisation du poste (au moins la main-d'œuvre)." }
+        staffN: { type: integer, minimum: 1, maximum: 3 }
+        skills: { type: array, items: { type: string, format: uuid } }
+        stations: { type: array, items: { type: string }, description: "Types de poste possibles ; vide : sans poste." }
+        tools: { type: array, items: { type: string }, description: Équipements en plus, pendant la main-d'œuvre. }
+        margin: { type: integer, minimum: 0, maximum: 60 }
+        auto: { type: boolean, description: "Confirmation automatique (impossible avec `parts`)." }
+        parts: { type: boolean }
+        partsH: { type: integer, enum: [0, 24, 48, 72, 120, 168] }
+        drop: { type: boolean, description: Le client laisse sa voiture. }
+        vehicles: { type: object, description: "Durées par type de véhicule : `{ suv: { labour, immob } }`." }
+    CalUnavailInput:
+      type: object
+      required: [target, targetId, kind, first]
+      properties:
+        target: { type: string, enum: [staff, resource] }
+        targetId: { type: string, format: uuid }
+        kind: { type: string, enum: [absence, leave, training, maintenance, breakdown, other] }
+        first: { type: string, format: date }
+        last: { type: string, format: date }
+        from: { type: string, example: "14:00", description: "Facultatif ; sans heure : journées entières." }
+        to: { type: string, example: "18:00" }
+        label: { type: string, maxLength: 60 }
+    CalPlacementsInput:
+      type: object
+      properties:
+        placements: { type: array, items: { type: object, required: [requestId], properties: { requestId: { type: string, format: uuid }, staff: { type: array, items: { type: string, format: uuid } }, station: { type: string, format: uuid, nullable: true } } } }
+    CalMoveInput:
+      type: object
+      required: [day, time]
+      properties:
+        day: { type: string, format: date }
+        time: { type: string, example: "14:00" }
+        staff: { type: array, items: { type: string, format: uuid }, description: Mécaniciens choisis (sinon le moteur choisit). }
+        station: { type: string, format: uuid, nullable: true }
+        confirm: { type: boolean, description: Exigé quand l'heure change (le client est prévenu). }
+    CalUnavail:
+      type: object
+      required: [id, target, targetId, kind, label, first, last, from, to, text]
+      properties:
+        id: { type: string, format: uuid }
+        target: { type: string, enum: [staff, resource] }
+        targetId: { type: string, format: uuid }
+        kind: { type: string }
+        label: { type: string }
+        first: { type: string, format: date }
+        last: { type: string, format: date }
+        from: { type: string }
+        to: { type: string }
+        text: { type: string, example: "Formation : ven. 23 oct. (14:00–18:00)" }
+    CalReadiness:
+      type: object
+      required: [ok, ready, problems]
+      properties:
+        ok: { type: boolean, description: L'activation est possible. }
+        ready: { type: array, items: { type: string }, description: Prestations proposées en ligne. }
+        problems: { type: array, items: { type: object, required: [text, blocking], properties: { service: { type: string }, text: { type: string }, blocking: { type: boolean } } } }
+    CalAppointment:
+      type: object
+      required: [id, status, when, services, client, car]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string }
+        when: { type: object, required: [day, label, start, end, mode], properties: { day: { type: string, format: date }, label: { type: string }, start: { type: string }, end: { type: string }, mode: { type: string } } }
+        services: { $ref: "#/components/schemas/RdvServices" }
+        client: { type: string }
+        car: { type: string }
+        staff: { type: array, items: { type: string } }
+        posts: { type: array, items: { type: string } }
+        workStart: { type: string }
+        back: { type: string }
+        reasons: { type: array, items: { type: string } }
+    CalAgendaItem:
+      allOf:
+        - { $ref: "#/components/schemas/CalAppointment" }
+        - type: object
+          required: [plate, vehicle, work, plan]
+          properties:
+            plate: { type: string }
+            vehicle: { type: string }
+            work: { type: object, nullable: true, properties: { start: { type: string, format: date-time, nullable: true }, ready: { type: string, format: date-time, nullable: true }, back: { type: string, format: date-time, nullable: true }, labour: { type: integer, nullable: true }, status: { type: string } } }
+            plan: { type: array, items: { type: object, required: [target, id, name, role, start, end, fixed], properties: { target: { type: string, enum: [staff, resource] }, id: { type: string, format: uuid }, name: { type: string }, role: { type: string, enum: [labour, station, tool] }, start: { type: string, format: date-time }, end: { type: string, format: date-time }, fixed: { type: boolean } } } }
+    CalState:
+      type: object
+      required: [today, mode, step, started, settings, booking, enabled, notify, hours, closures, staff, skills, resources, services, readiness, conflicts, catalogs]
+      properties:
+        today: { type: string, format: date }
+        mode: { type: string, enum: [simple, advanced] }
+        step: { type: integer, minimum: 0, maximum: 6 }
+        started: { type: boolean }
+        settings: { type: object, required: [receptionMin, returnMin, loadPct, maxDay, autoAssign], properties: { receptionMin: { type: integer }, returnMin: { type: integer }, loadPct: { type: integer }, maxDay: { type: integer }, autoAssign: { type: boolean } } }
+        booking: { $ref: "#/components/schemas/RdvSettings" }
+        enabled: { type: boolean }
+        notify: { type: string, description: "Adresse vérifiée qui reçoit les demandes (vide : aucune)." }
+        hours: { $ref: "#/components/schemas/ProHours" }
+        closures: { type: array, items: { type: object, required: [id, first, last, label], properties: { id: { type: string, format: uuid }, first: { type: string, format: date }, last: { type: string, format: date }, label: { type: string } } } }
+        staff: { type: array, items: { type: object, required: [id, name, active, hours, services, skills, unavail], properties: { id: { type: string, format: uuid }, name: { type: string }, active: { type: boolean }, hours: { $ref: "#/components/schemas/CalHours" }, services: { $ref: "#/components/schemas/CalServiceList" }, position: { type: integer }, skills: { type: array, items: { type: object, required: [id, until], properties: { id: { type: string, format: uuid }, until: { type: string, format: date, nullable: true } } } }, unavail: { type: array, items: { $ref: "#/components/schemas/CalUnavail" } } } } }
+        skills: { type: array, items: { type: object, required: [id, label, cert], properties: { id: { type: string, format: uuid }, label: { type: string }, cert: { type: boolean } } } }
+        resources: { type: array, items: { type: object, required: [id, name, type, active, hours, services, unavail], properties: { id: { type: string, format: uuid }, name: { type: string }, type: { type: string }, active: { type: boolean }, hours: { $ref: "#/components/schemas/CalHours" }, services: { $ref: "#/components/schemas/CalServiceList" }, position: { type: integer }, unavail: { type: array, items: { $ref: "#/components/schemas/CalUnavail" } } } } }
+        services: { type: array, items: { type: object, required: [id, label, group, unit, minutes, req], properties: { id: { type: string }, label: { type: string }, group: { type: string }, unit: { type: string }, minutes: { type: integer, nullable: true }, req: { allOf: [{ $ref: "#/components/schemas/CalReq" }], nullable: true } } } }
+        readiness: { $ref: "#/components/schemas/CalReadiness" }
+        conflicts: { type: array, items: { $ref: "#/components/schemas/CalAppointment" }, description: "Rendez-vous à venir dont une affectation ne tient plus (absence, maintenance, fiche désactivée) ; jamais déplacés." }
+        catalogs: { type: object, required: [types, kinds, vehicles, partsDelays, limits], properties: { types: { type: array, items: { type: object } }, kinds: { type: array, items: { type: object } }, vehicles: { type: array, items: { type: object } }, partsDelays: { type: array, items: { type: integer } }, limits: { type: object } } }
     RdvAgenda:
       type: object
       required: [today, enabled, paused, open, missing, settings, slots, closures, holidays, hours, services, notify, garage, todo]
@@ -1185,6 +1641,7 @@ components:
         notify: { type: object, required: [email], properties: { email: { type: string }, pending: { type: string }, codeLive: { type: boolean } } }
         garage: { type: object, required: [name, addr, phone], properties: { name: { type: string }, addr: { type: string }, phone: { type: string } } }
         todo: { type: integer, minimum: 0 }
+        calendar: { type: object, required: [mode, started], properties: { mode: { type: string, enum: [simple, advanced] }, started: { type: boolean } }, description: "Mode du calendrier (docs/calendrier-avance.md)." }
     RdvWhen:
       type: object
       required: [day, label, start, end, mode, startsAt, endsAt]
@@ -1195,6 +1652,7 @@ components:
         end: { type: string }
         mode: { type: string, enum: [hour, drop] }
         until: { type: string, description: "Dépôt : fin de la fenêtre d'arrivée." }
+        back: { type: string, description: "Calendrier avancé, à l'heure : restitution prévue." }
         startsAt: { type: string, format: date-time }
         endsAt: { type: string, format: date-time }
     RdvServices:
@@ -1214,6 +1672,7 @@ components:
         deadline: { type: string, format: date-time, nullable: true }
         deadlineText: { type: string }
         slot: { type: object, properties: { name: { type: string }, capacity: { type: integer }, left: { type: integer } } }
+        plan: { type: object, required: [staff, posts, fixed], properties: { staff: { type: array, items: { type: string } }, posts: { type: array, items: { type: string } }, fixed: { type: boolean }, proposed: { type: boolean, description: Affectation proposée, à confirmer. } }, description: "Calendrier avancé : qui fait l'intervention, sur quel poste." }
         reason: { type: string }
         reasonText: { type: string }
         note: { type: string }
@@ -1226,6 +1685,10 @@ components:
         services: { $ref: "#/components/schemas/RdvServices" }
         deadline: { type: string, format: date-time, description: "Heure limite de réponse du garage si la demande partait maintenant." }
         deadlineText: { type: string, example: "lundi 20 octobre à 12:00" }
+        auto: { type: boolean, description: "Calendrier avancé : la demande serait confirmée tout de suite." }
+        needVehicle: { type: boolean, description: "Calendrier avancé : la durée dépend du véhicule ; redemander avec `vehicle` (days est vide)." }
+        vehicle: { type: string }
+        vehicles: { type: array, items: { type: object, required: [id, label], properties: { id: { type: string }, label: { type: string } } } }
         days:
           type: array
           items:
@@ -1244,6 +1707,7 @@ components:
         day: { type: string, format: date }
         time: { type: string, example: "08:30" }
         drop: { type: boolean, description: L'horaire choisi est un dépôt du véhicule. }
+        vehicle: { type: string, enum: [city, compact, sedan, suv, van], description: "Calendrier avancé, quand la durée en dépend." }
         name: { type: string, maxLength: 80 }
         email: { type: string }
         phone: { type: string }

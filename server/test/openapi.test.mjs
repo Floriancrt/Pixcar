@@ -17,8 +17,9 @@ const FORMATS = { uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 function check(schema, value, at = "$") {
   schema = resolve(schema);
   const errors = [];
+  if (value === null && schema.nullable) return [];
   if (schema.allOf) return schema.allOf.flatMap((s) => check(s, value, at));
-  if (value === null) return schema.nullable ? [] : [`${at} : null non permis`];
+  if (value === null) return [`${at} : null non permis`];
   const type = Array.isArray(value) ? "array" : Number.isInteger(value) ? "integer" : typeof value;
   const okType = !schema.type || schema.type === type || (schema.type === "number" && type === "integer");
   if (!okType) return [`${at} : ${schema.type} attendu, reçu ${type}`];
@@ -322,6 +323,94 @@ describe("docs/openapi.yaml ↔ API", () => {
     }
   });
 
+  test("the calendar routes answer with documented statuses and shapes", async () => {
+    const { parseContactRows } = await import("../lib/contact.mjs");
+    const { parisInstant } = await import("../../src/js/shared/rdv.js");
+    const clock = parisInstant("2026-10-19", 600);
+    const app = await makeApp({ env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1", RDV_ENABLED: "1", READ_LIMIT_PER_MINUTE: "100000" }, now: () => clock });
+    const keep = t;
+    t = app;
+    try {
+      const gid = "aaaaaaaa-0000-4000-8000-000000000001";
+      await app.app.pro.repo.upsertContacts(parseContactRows([{ id: gid, name: "Garage Dupont", lat: 43.2174, lon: 1.1014, emails: ["contact@garage-dupont.fr"] }]).rows, "doc");
+      await app.db.query(
+        "INSERT INTO pro_claims (id, account_id, garage_id, siret, status, channel, holder_name, holder_role, target_hash, target_hint, verified_at) VALUES ($1, 'dev-doc', $2, '73282932000074', 'verified', 'email', 'C D', 'manager', $3, 'x', now())",
+        [crypto.randomUUID(), gid, "a".repeat(64)],
+      );
+      const me = { "x-pro-dev-account": "doc" };
+      const G = `/v1/pro/garages/${gid}/rdv`;
+      const C = "/v1/pro/garages/{id}/rdv/calendar";
+      const code = (to) => /code (\d{6})/.exec(app.app.pro.senders.outbox.filter((m) => m.target === to).at(-1).subject)[1];
+      const week = Object.fromEntries(["mo", "tu", "we", "th", "fr"].map((d) => [d, [["08:00", "12:00"], ["14:00", "18:00"]]]));
+      await app.call("PUT", `/v1/pro/garages/${gid}/profile`, { headers: me, body: { hours: week } });
+      await app.call("PUT", `/v1/pro/garages/${gid}/services/plaq_av`, { headers: me, body: { offered: true, minutes: 60 } });
+      await app.call("POST", `${G}/notify`, { headers: me, body: { email: "atelier@garage-dupont.fr" } });
+      await app.call("POST", `${G}/notify/code`, { headers: me, body: { code: code("atelier@garage-dupont.fr") } });
+      await call("GET", C, `${G}/calendar`, { headers: me, status: 200 });
+      await call("GET", C, `${G}/calendar`, { status: 401 });
+      await call("POST", `${C}/activate`, `${G}/calendar/activate`, { headers: me, status: 409 });
+      const st = JSON.parse((await call("POST", `${C}/start`, `${G}/calendar/start`, { headers: me, status: 200 })).text);
+      await call("PUT", `${C}/settings`, `${G}/calendar/settings`, { headers: me, body: { receptionMin: 0 }, status: 200 });
+      await call("PUT", `${C}/settings`, `${G}/calendar/settings`, { headers: me, body: { receptionMin: 7 }, status: 422 });
+      await call("POST", `${C}/activate`, `${G}/calendar/activate`, { headers: me, status: 409 }); // pas de mécanicien
+      const brakes = st.skills.find((k) => k.label === "Freinage").id;
+      const paul = JSON.parse((await call("POST", `${C}/staff`, `${G}/calendar/staff`, { headers: me, body: { name: "Paul", skills: [brakes] }, status: 200 })).text).saved;
+      await call("POST", `${C}/staff`, `${G}/calendar/staff`, { headers: me, body: { name: "P" }, status: 422 });
+      await call("PUT", `${C}/staff/{staff}`, `${G}/calendar/staff/${paul}`, { headers: me, body: { name: "Paul", skills: [brakes] }, status: 200 });
+      await call("PUT", `${C}/staff/{staff}`, `${G}/calendar/staff/${crypto.randomUUID()}`, { headers: me, body: { name: "Paul" }, status: 404 });
+      const tmp = JSON.parse((await call("POST", `${C}/staff`, `${G}/calendar/staff`, { headers: me, body: { name: "Léa" }, status: 200 })).text).saved;
+      await call("DELETE", `${C}/staff/{staff}`, `${G}/calendar/staff/${tmp}`, { headers: me, status: 200 });
+      await call("DELETE", `${C}/staff/{staff}`, `${G}/calendar/staff/${tmp}`, { headers: me, status: 404 });
+      const sk = JSON.parse((await call("POST", `${C}/skills`, `${G}/calendar/skills`, { headers: me, body: { label: "Géométrie" }, status: 200 })).text).saved;
+      await call("POST", `${C}/skills`, `${G}/calendar/skills`, { headers: me, body: { label: "G" }, status: 422 });
+      await call("PUT", `${C}/skills/{skill}`, `${G}/calendar/skills/${sk}`, { headers: me, body: { label: "Géométrie 3D" }, status: 200 });
+      await call("PUT", `${C}/skills/{skill}`, `${G}/calendar/skills/${sk}`, { headers: me, body: {}, status: 422 });
+      await call("DELETE", `${C}/skills/{skill}`, `${G}/calendar/skills/${sk}`, { headers: me, status: 200 });
+      await call("DELETE", `${C}/skills/{skill}`, `${G}/calendar/skills/${sk}`, { headers: me, status: 404 });
+      const lift = JSON.parse((await call("POST", `${C}/resources`, `${G}/calendar/resources`, { headers: me, body: { name: "Pont n°1", type: "lift" }, status: 200 })).text).saved;
+      await call("POST", `${C}/resources`, `${G}/calendar/resources`, { headers: me, body: { name: "Pont", type: "x" }, status: 422 });
+      await call("PUT", `${C}/resources/{resource}`, `${G}/calendar/resources/${lift}`, { headers: me, body: { name: "Pont n°1", type: "lift" }, status: 200 });
+      await call("PUT", `${C}/resources/{resource}`, `${G}/calendar/resources/${lift}`, { headers: me, body: { name: "", type: "lift" }, status: 422 });
+      const spare = JSON.parse((await call("POST", `${C}/resources`, `${G}/calendar/resources`, { headers: me, body: { name: "Pont n°2", type: "lift" }, status: 200 })).text).saved;
+      await call("DELETE", `${C}/resources/{resource}`, `${G}/calendar/resources/${spare}`, { headers: me, status: 200 });
+      await call("DELETE", `${C}/resources/{resource}`, `${G}/calendar/resources/${spare}`, { headers: me, status: 404 });
+      await call("PUT", `${C}/services/{service}`, `${G}/calendar/services/plaq_av`, { headers: me, body: { labour: 90, skills: [brakes], stations: ["lift"] }, status: 200 });
+      await call("PUT", `${C}/services/{service}`, `${G}/calendar/services/plaq_av`, { headers: me, body: { labour: 7 }, status: 422 });
+      await call("PUT", `${C}/services/{service}`, `${G}/calendar/services/vidange`, { headers: me, body: { labour: 30 }, status: 409 });
+      const un = JSON.parse((await call("POST", `${C}/unavail`, `${G}/calendar/unavail`, { headers: me, body: { target: "staff", targetId: paul, kind: "leave", first: "2026-11-02" }, status: 200 })).text).saved;
+      await call("POST", `${C}/unavail`, `${G}/calendar/unavail`, { headers: me, body: { target: "staff", targetId: paul, kind: "maintenance", first: "2026-11-02" }, status: 422 });
+      await call("DELETE", `${C}/unavail/{unavail}`, `${G}/calendar/unavail/${un}`, { headers: me, status: 200 });
+      await call("DELETE", `${C}/unavail/{unavail}`, `${G}/calendar/unavail/${un}`, { headers: me, status: 404 });
+      await call("POST", `${C}/check`, `${G}/calendar/check`, { headers: me, body: {}, status: 200 });
+      await call("POST", `${C}/check`, `${G}/calendar/check`, { headers: me, body: { placements: "x" }, status: 422 });
+      await call("POST", `${C}/activate`, `${G}/calendar/activate`, { headers: me, body: { placements: [{ requestId: "pas-un-id" }] }, status: 422 });
+      await call("POST", `${C}/activate`, `${G}/calendar/activate`, { headers: me, status: 200 });
+      await app.call("PUT", `${G}/settings`, { headers: me, body: { enabled: true, minDelayH: 0 } });
+      // une demande en mode avancé, puis le calendrier, le déplacement, le retour au simple
+      const body = { garageId: gid, services: [{ id: "plaq_av" }], day: "2026-10-21", time: "08:00", name: "Julien Roux", email: "julien.roux@example.com", phone: "06 39 98 12 34", car: "Peugeot 208", year: 2019 };
+      await call("GET", "/v1/rdv/garages/{id}/times", `/v1/rdv/garages/${gid}/times?services=plaq_av`, { status: 200 });
+      const d = JSON.parse((await call("POST", "/v1/rdv/requests", "/v1/rdv/requests", { body, status: 201 })).text);
+      await call("POST", "/v1/rdv/requests/{id}/code", `/v1/rdv/requests/${d.id}/code`, { body: { code: code("julien.roux@example.com") }, status: 200 });
+      await call("GET", "/v1/pro/garages/{id}/rdv/requests", `${G}/requests?view=todo`, { headers: me, status: 200 }); // avec plan
+      await call("GET", `${C}/agenda`, `${G}/calendar/agenda?from=2026-10-21&to=2026-10-21`, { headers: me, status: 200 });
+      await call("GET", `${C}/agenda`, `${G}/calendar/agenda?from=2026-10-21&to=2027-10-21`, { headers: me, status: 400 });
+      const M = "/v1/pro/garages/{id}/rdv/requests/{request}/move";
+      await call("POST", M, `${G}/requests/${d.id}/move`, { headers: me, body: { day: "2026-10-21", time: "14:00" }, status: 409 }); // confirmer
+      await call("POST", M, `${G}/requests/${d.id}/move`, { headers: me, body: { day: "2026-10-24", time: "08:00", confirm: true }, status: 409 }); // samedi : fermé
+      await call("POST", M, `${G}/requests/${d.id}/move`, { headers: me, body: { day: "x" }, status: 422 });
+      await call("POST", M, `${G}/requests/${crypto.randomUUID()}/move`, { headers: me, body: { day: "2026-10-21", time: "14:00" }, status: 404 });
+      await call("POST", M, `${G}/requests/${d.id}/move`, { headers: me, body: { day: "2026-10-21", time: "14:00", confirm: true }, status: 200 });
+      await call("DELETE", `${C}/staff/{staff}`, `${G}/calendar/staff/${paul}`, { headers: me, status: 409 }); // engagé
+      await call("POST", `${C}/simple`, `${G}/calendar/simple`, { headers: me, status: 409 }); // aucun créneau
+      await app.call("POST", `${G}/slots`, { headers: me, body: { name: "Journée", days: ["mo", "tu", "we", "th", "fr"], start: "08:00", end: "18:00", capacity: 1, services: ["plaq_av"] } });
+      await call("POST", `${C}/simple`, `${G}/calendar/simple`, { headers: me, status: 200 });
+      await call("GET", "/v1/pro/garages/{id}/rdv", G, { headers: me, status: 200 }); // avec calendar
+    } finally {
+      t = keep;
+      await app.close();
+    }
+  });
+
   test("no route exists that the document does not mention", async () => {
     const documented = new Set(Object.entries(doc.paths).flatMap(([p, ops]) => Object.keys(ops).map((m) => `${m.toUpperCase()} ${p}`)));
     assert.deepEqual([...documented].sort(), [
@@ -339,6 +428,14 @@ describe("docs/openapi.yaml ↔ API", () => {
       "GET /v1/pro/garages/{id}/rdv/requests", "POST /v1/pro/garages/{id}/rdv/requests/{request}/accept", "POST /v1/pro/garages/{id}/rdv/requests/{request}/decline",
       "POST /v1/pro/garages/{id}/rdv/requests/{request}/cancel", "GET /v1/rdv/garages/{id}/times", "POST /v1/rdv/requests", "POST /v1/rdv/requests/{id}/code",
       "POST /v1/rdv/requests/{id}/resend", "GET /v1/rdv/me", "POST /v1/rdv/me/cancel", "GET /v1/rdv/action", "POST /v1/rdv/action/accept", "POST /v1/rdv/action/decline",
+    ]).concat([
+      "POST /v1/pro/garages/{id}/rdv/requests/{request}/move", "GET /v1/pro/garages/{id}/rdv/calendar", "POST /v1/pro/garages/{id}/rdv/calendar/start",
+      "PUT /v1/pro/garages/{id}/rdv/calendar/settings", "POST /v1/pro/garages/{id}/rdv/calendar/staff", "PUT /v1/pro/garages/{id}/rdv/calendar/staff/{staff}",
+      "DELETE /v1/pro/garages/{id}/rdv/calendar/staff/{staff}", "POST /v1/pro/garages/{id}/rdv/calendar/skills", "PUT /v1/pro/garages/{id}/rdv/calendar/skills/{skill}",
+      "DELETE /v1/pro/garages/{id}/rdv/calendar/skills/{skill}", "POST /v1/pro/garages/{id}/rdv/calendar/resources", "PUT /v1/pro/garages/{id}/rdv/calendar/resources/{resource}",
+      "DELETE /v1/pro/garages/{id}/rdv/calendar/resources/{resource}", "PUT /v1/pro/garages/{id}/rdv/calendar/services/{service}", "POST /v1/pro/garages/{id}/rdv/calendar/unavail",
+      "DELETE /v1/pro/garages/{id}/rdv/calendar/unavail/{unavail}", "POST /v1/pro/garages/{id}/rdv/calendar/check", "POST /v1/pro/garages/{id}/rdv/calendar/activate",
+      "POST /v1/pro/garages/{id}/rdv/calendar/simple", "GET /v1/pro/garages/{id}/rdv/calendar/agenda",
     ]).sort());
     // et chaque méthode non documentée d'une route documentée est refusée en 405
     for (const [method, path] of [["PUT", "/v1/repairs"], ["DELETE", "/v1/repairs"], ["POST", "/v1/overpass"], ["POST", "/healthz"], ["GET", `/v1/repairs/${repair().id}`]]) {

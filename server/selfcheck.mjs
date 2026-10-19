@@ -8,6 +8,7 @@ import { createRepo } from "./repo.mjs";
 import { createProRepo } from "./pro-repo.mjs";
 import { createRdvRepo } from "./rdv-repo.mjs";
 import { addDays, freeTimes, parisInstant, parisParts } from "../src/js/shared/rdv.js";
+import { defaultReq, parseResource, parseSkill, parseStaff, parseUnavail } from "../src/js/shared/plan.js";
 
 const TEST_IP = "5e1fc4ec".repeat(8);
 const LAT = 0.5; // plein Atlantique : aucune vraie zone d'utilisateurs
@@ -20,6 +21,8 @@ const INDEXES = [
   "rdv_slots_garage_idx", "rdv_closures_garage_idx", "rdv_requests_garage_day_idx", "rdv_requests_status_deadline_idx", "rdv_requests_status_day_idx",
   "rdv_requests_email_idx", "rdv_requests_client_token_idx", "rdv_requests_garage_token_idx", "rdv_events_ip_idx", "rdv_events_email_idx", "rdv_events_at_idx",
   "rdv_mails_due_idx", "rdv_mails_request_idx",
+  "rdv_staff_garage_idx", "rdv_skills_garage_idx", "rdv_staff_skills_garage_idx", "rdv_resources_garage_idx", "rdv_unavail_garage_idx", "rdv_assignments_garage_day_idx",
+  "rdv_assignments_request_idx", "rdv_assignments_target_idx", "rdv_work_orders_garage_idx", "rdv_history_garage_idx", "rdv_history_at_idx",
 ];
 
 export async function selfcheck(db, { log = () => {} } = {}) {
@@ -353,18 +356,70 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     })));
     expect((await rdv.getSettings(proGarage2)).version === before + 2, "compteur incrémenté deux fois");
   });
+  let calIds = null;
+  await check("Calendrier avancé : réglages, compétence, mécanicien (jsonb, compétence datée), poste, exigences, absence, affectations et intervention (transaction), lecture groupée, conflits, historique", async () => {
+    const q0 = await rdv.getRequest(rdvId);
+    const at = parisInstant(q0.day, 480);
+    const end = at + 45 * 6e4;
+    calIds = await rdv.tx(async (r) => {
+      const c = r.cal;
+      const cal = await c.saveCalendar(proGarage2, acc("c"), { step: 3, receptionMin: 0, autoAssign: false });
+      expect(cal.mode === "simple" && cal.step === 3 && cal.receptionMin === 0 && cal.autoAssign === false && cal.returnMin === 15, "réglages : " + JSON.stringify(cal));
+      const skill = await c.saveSkill(proGarage2, null, parseSkill({ label: "Auto-contrôle", cert: true }).value);
+      const staff = await c.saveStaff(proGarage2, null, parseStaff({ name: "Auto", skills: [{ id: skill, until: addDays(nextMonday, 365) }] }, { skillIds: new Set([skill]) }).value);
+      const lift = await c.saveResource(proGarage2, null, parseResource({ name: "Pont n°1", type: "lift" }).value);
+      await c.saveReq(proGarage2, "vidange", { ...defaultReq("vidange", 45), skills: [skill], vehicles: { suv: 60 } });
+      await c.replaceAssignments(proGarage2, rdvId, [
+        { target: "staff", targetId: staff, role: "labour", day: q0.day, start: at, end },
+        { target: "resource", targetId: lift, role: "station", day: q0.day, start: at, end },
+      ]);
+      await c.saveWorkOrder(proGarage2, rdvId, { vehicle: "suv", workStart: at, workEnd: end, readyAt: end, returnAt: end + 15 * 6e4, labour: 45, immob: 45 });
+      await c.log(proGarage2, acc("c"), "staff", staff, "auto-contrôle");
+      return { skill, staff, lift };
+    });
+    const w = await rdv.tx(async (r) => ({
+      data: await r.cal.load(proGarage2, nextMonday, addDays(nextMonday, 28)),
+      uses: await r.cal.futureUses(proGarage2, calIds.staff),
+      order: await r.cal.workOrder(rdvId),
+      mine: await r.cal.assignmentsOf(proGarage2, [rdvId]),
+      history: await r.cal.history(proGarage2),
+    }));
+    const p = w.data.staff[0];
+    expect(w.data.staff.length === 1 && p.name === "Auto" && p.hours === null && p.skills[0].id === calIds.skill && p.skills[0].until === addDays(nextMonday, 365), "mécanicien relu : " + JSON.stringify(p));
+    expect(w.data.skills[0].cert === true && w.data.resources[0].type === "lift", "compétence et poste relus");
+    expect(w.data.reqs.vidange.labour === 45 && w.data.reqs.vidange.skills[0] === calIds.skill && w.data.reqs.vidange.vehicles.suv === 60, "exigences relues (jsonb) : " + JSON.stringify(w.data.reqs.vidange));
+    expect(w.data.busy.length === 2 && w.data.busy.every((b) => b.status === "pending" && b.start === at && b.end === end), "affectations relues avec l'état de la demande (LEFT JOIN) : " + JSON.stringify(w.data.busy));
+    expect(w.uses === 1 && w.mine.length === 2, "mécanicien engagé par 1 rendez-vous");
+    expect(w.order.vehicle === "suv" && w.order.status === "planned" && w.order.returnAt === end + 15 * 6e4, "intervention relue : " + JSON.stringify(w.order));
+    expect(w.history.length === 1 && w.history[0].refId === calIds.staff, "historique relu");
+    const un = parseUnavail({ target: "staff", targetId: calIds.staff, kind: "training", first: q0.day }, { staffIds: new Set([calIds.staff]), resourceIds: new Set(), nowMs: rdvClock });
+    expect(!un.error, "absence : " + JSON.stringify(un));
+    const hit = await rdv.tx(async (r) => {
+      const id = await r.cal.createUnavail(proGarage2, un.value);
+      return { id, conflicts: await r.cal.conflicts(proGarage2, [calIds.staff], parisInstant(q0.day, 0), parisInstant(addDays(q0.day, 1), 0)), n: await r.cal.countUnavail(proGarage2) };
+    });
+    expect(hit.n === 1 && hit.conflicts.length === 1 && hit.conflicts[0] === rdvId, "absence enregistrée, rendez-vous signalé en conflit : " + JSON.stringify(hit));
+  });
   await check("Rendez-vous : heure limite passée (expiration, série sans réponse), effacement des coordonnées, purge par lots", async () => {
     rdvClock = parisInstant(addDays(nextMonday, 1), 725); // mardi 12:05
     const due = await rdv.dueExpiries(10);
     expect(due.some((x) => x.id === rdvId), "demande à expirer");
     expect(await rdv.tx((r) => r.expire(rdvId, proGarage2, 3)), "expirée");
     expect((await rdv.getRequest(rdvId)).status === "expired" && (await rdv.getSettings(proGarage2)).missed === 1, "série sans réponse : 1");
+    if (calIds) expect((await count("SELECT count(*) AS n FROM rdv_assignments WHERE request_id = $1", [rdvId])) === 0, "affectations libérées à l'expiration");
     rdvClock += 8 * 864e5;
     const out = await rdv.purge();
     expect(out.rdvAnonymized >= 1, "coordonnées effacées : " + JSON.stringify(out));
     const row = (await db.query("SELECT name, email, phone, client_token_hash, anonymized_at FROM rdv_requests WHERE id = $1", [rdvId])).rows[0];
     expect(row.name === "" && row.email === "" && row.client_token_hash === null && row.anonymized_at, "ligne anonyme");
     expect((await rdv.tx((r) => r.revoke(proGarage2))) === 0 && !(await rdv.getSettings(proGarage2)), "retrait : réglages, créneaux et fermetures partent");
+    if (calIds) {
+      const gone = await rdv.cal.revoke(proGarage2);
+      const left = await rdv.tx(async (r) => ({ cal: await r.cal.getCalendar(proGarage2), staff: await r.cal.countStaff(proGarage2), skills: await r.cal.countSkills(proGarage2), res: await r.cal.countResources(proGarage2) }));
+      // réglages, compétence, mécanicien, lien de compétence, poste, exigence, absence, intervention, historique (les affectations sont déjà parties)
+      expect(gone === 9 && !left.cal && left.staff + left.skills + left.res === 0, `retrait du calendrier par lots : ${gone} lignes, reste ${JSON.stringify(left)}`);
+      expect((await count("SELECT count(*) AS n FROM rdv_work_orders WHERE garage_id = $1", [proGarage2])) === 0, "intervention retirée");
+    }
   });
   await check("Espace Pro : purge des visites de plus de 60 jours ; retrait d'un rattachement : ses prix et sa fiche partent avec lui", async () => {
     await pro.recordVisit({ garageId: proGarage2, day: new Date(Date.now() - 70 * 864e5).toISOString().slice(0, 10), kind: "view", visitor: randomHex(32) });
@@ -383,6 +438,7 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     await db.query("DELETE FROM pro_visits WHERE garage_id IN ($1, $2)", [proGarage, proGarage2]);
     for (const table of ["pro_profiles", "pro_profile_changes", "pro_services"]) await db.query(`DELETE FROM ${table} WHERE garage_id IN ($1, $2)`, [proGarage, proGarage2]);
     for (const table of ["rdv_settings", "rdv_slots", "rdv_closures", "rdv_requests", "rdv_mails"]) await db.query(`DELETE FROM ${table} WHERE garage_id IN ($1, $2)`, [proGarage, proGarage2]);
+    for (const g of [proGarage, proGarage2]) await rdv.cal.revoke(g);
     await db.query("DELETE FROM rdv_events WHERE ip_hash = $1", [TEST_IP]);
     await db.query("DELETE FROM repairs WHERE garage_id = $1", [ovt]);
     await db.query("DELETE FROM garages WHERE id = $1", [ovt]);

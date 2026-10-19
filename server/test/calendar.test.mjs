@@ -226,7 +226,7 @@ describe("Calendrier avancé", () => {
     assert.equal(dup.body.error.code, "time_taken");
     // validation par le garage, puis le calendrier
     const list = (await pro("GET", "/rdv/requests?view=todo")).body.requests;
-    assert.deepEqual(list[0].plan, { staff: ["Paul"], posts: ["Pont n°1"], fixed: false });
+    assert.deepEqual(list[0].plan, { staff: ["Paul"], posts: ["Pont n°1"], fixed: false, proposed: false });
     assert.equal((await pro("POST", `/rdv/requests/${one.id}/accept`)).status, 200);
     const ag = (await pro("GET", `/rdv/calendar/agenda?from=${WED}&to=${WED}`)).body.appointments;
     assert.deepEqual(ag.map((a) => [a.status, a.when.start, a.client, a.work.labour, a.plan.length]), [["confirmed", "09:00", "Julien Roux", 90, 2]]);

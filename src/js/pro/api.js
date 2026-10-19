@@ -58,5 +58,21 @@ export function createProApi({ base, token, fetchImpl = (...a) => fetch(...a) })
     notifyCode: (id, code) => call("POST", `${rdv(id)}/notify/code`, { code }),
     requests: (id, view) => call("GET", `${rdv(id)}/requests?view=${encodeURIComponent(view)}`),
     decide: (id, request, act, body) => call("POST", `${rdv(id)}/requests/${encodeURIComponent(request)}/${act}`, body || {}),
+    // calendrier avancé (docs/calendrier-avance.md, lot 3a)
+    calendar: (id) => call("GET", `${rdv(id)}/calendar`),
+    calStart: (id) => call("POST", `${rdv(id)}/calendar/start`),
+    calSettings: (id, body) => call("PUT", `${rdv(id)}/calendar/settings`, body),
+    saveStaff: (id, staff, body) => call(staff ? "PUT" : "POST", `${rdv(id)}/calendar/staff${staff ? "/" + encodeURIComponent(staff) : ""}`, body),
+    deleteStaff: (id, staff) => call("DELETE", `${rdv(id)}/calendar/staff/${encodeURIComponent(staff)}`),
+    saveSkill: (id, skill, body) => call(skill ? "PUT" : "POST", `${rdv(id)}/calendar/skills${skill ? "/" + encodeURIComponent(skill) : ""}`, body),
+    deleteSkill: (id, skill) => call("DELETE", `${rdv(id)}/calendar/skills/${encodeURIComponent(skill)}`),
+    saveResource: (id, res, body) => call(res ? "PUT" : "POST", `${rdv(id)}/calendar/resources${res ? "/" + encodeURIComponent(res) : ""}`, body),
+    deleteResource: (id, res) => call("DELETE", `${rdv(id)}/calendar/resources/${encodeURIComponent(res)}`),
+    saveReq: (id, service, body) => call("PUT", `${rdv(id)}/calendar/services/${encodeURIComponent(service)}`, body),
+    saveUnavail: (id, body) => call("POST", `${rdv(id)}/calendar/unavail`, body),
+    deleteUnavail: (id, u) => call("DELETE", `${rdv(id)}/calendar/unavail/${encodeURIComponent(u)}`),
+    calCheck: (id, body) => call("POST", `${rdv(id)}/calendar/check`, body || {}),
+    calActivate: (id, body) => call("POST", `${rdv(id)}/calendar/activate`, body || {}),
+    calSimple: (id) => call("POST", `${rdv(id)}/calendar/simple`),
   };
 }

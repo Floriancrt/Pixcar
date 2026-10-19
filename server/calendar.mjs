@@ -135,6 +135,7 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
         settings: { receptionMin: cal.receptionMin, returnMin: cal.returnMin, loadPct: cal.loadPct, maxDay: cal.maxDay, autoAssign: cal.autoAssign },
         booking: settingsOf(b),
         enabled: !!(b.settings && b.settings.enabled),
+        notify: (b.settings && b.settings.notifyEmail) || "",
         hours: (b.profile && b.profile.hours) || null,
         closures: b.closures.map((c) => ({ id: c.id, first: c.first, last: c.last, label: c.label })),
         staff: data.staff.map((m) => ({ ...m, unavail: unavailOf(m.id) })),
