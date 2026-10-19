@@ -227,8 +227,11 @@ le garage lui est annoncé par e-mail.
 
 ## Avant la mise en ligne des améliorations du Planning
 
-- Site seulement (aucune modification de l'API ni de la base) : fusion dans `main` puis publication sur `gh-pages`, chacune après le go
-  de l'utilisateur.
+- Site seulement (aucune modification de l'API ni de la base) : fusion dans `main` (avance rapide, `74402b4`) et poussée, puis
+  publication sur `gh-pages` (`e46f4e9`) : **faites le 19 octobre 2026**, chacune après le go de l'utilisateur
+  (`docs/exploitation.md` section 2, publication (9)).
+- Essai avec le garage d'essai : menu replié et déplié, vue d'ensemble et charge sur une vraie semaine, menu « Nouveau » (absence d'un
+  mécanicien : rendez-vous « En conflit »), filtres, week-end, sur ordinateur et téléphone.
 
 ## Avant la mise en ligne du lot 3b
 
