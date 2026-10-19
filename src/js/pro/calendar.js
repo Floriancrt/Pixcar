@@ -79,7 +79,7 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
     );
     const [key, name, sub] = STEPS[cur - 1];
     const body = { garage: stepGarage, staff: stepStaff, resources: stepResources, services: stepServices, booking: stepBooking, check: stepCheck }[key]();
-    $("calBody").replaceChildren(el("div", { class: "cal-head" }, el("h2", { id: "calStepTitle", tabindex: "-1", text: `${cur}. ${cur === 6 && advanced() ? "Contrôles et conflits" : name}` }), el("p", { class: "sub", text: sub })), ...body);
+    $("calBody").replaceChildren(el("div", { class: "cal-head" }, el("h2", { id: "calStepTitle", tabindex: "-1", text: `${cur}. ${cur === 6 && advanced() ? "Contrôles et conflits" : name}` }), el("p", { class: "sub", text: sub })), ...body.filter((b) => b != null));
     const foot = [];
     if (cur > 1) foot.push(el("button", { type: "button", class: "btn", onclick: () => go(cur - 1).catch(fail) }, "Précédent"));
     if (cur < 6) foot.push(el("button", { type: "button", class: "btn primary", id: "calNext", onclick: () => go(cur + 1, { save: true }).catch(fail) }, advanced() ? "Suivant" : "Continuer"));
@@ -234,7 +234,7 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
     const del = onDelete ? el("button", { type: "button", class: "link-btn danger", id: "calDel", onclick: () => remove(onDelete, deleteLabel) }, deleteLabel) : null;
     form.replaceChildren(
       el("div", { class: "sheet-head" }, el("div", {}, eyebrow ? el("p", { class: "eyebrow", text: eyebrow }) : null, el("h2", { id: "calDlgTitle", text: title })), el("button", { type: "button", class: "icon-btn", "aria-label": "Fermer", onclick: () => $("calDlg").close() }, icon("i-close"))),
-      ...fields,
+      ...fields.filter((f) => f != null),
       el("p", { class: "field-err", id: "calErr", role: "alert", hidden: true }),
       el("div", { class: "sheet-actions" }, el("button", { class: "btn primary", type: "submit", id: "calSave" }, "Enregistrer"), el("button", { class: "btn", type: "button", onclick: () => $("calDlg").close() }, "Annuler"), del),
     );

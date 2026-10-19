@@ -462,7 +462,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
         el("span", { class: "t", text: minutesText(minutes.get(x.id)) + (x.unit ? ` ${x.unit}` : "") }),
       ),
     );
-    box.replaceChildren(el("legend", { id: "slotSvcsTitle", text: "Prestations acceptées" }), ...items, items.length ? null : el("p", { class: "help", text: "Aucune prestation n'a encore de temps moyen : renseignez-les dans Mon garage › Prestations effectuées." }));
+    box.replaceChildren(el("legend", { id: "slotSvcsTitle", text: "Prestations acceptées" }), ...items, ...(items.length ? [] : [el("p", { class: "help", text: "Aucune prestation n'a encore de temps moyen : renseignez-les dans Mon garage › Prestations effectuées." })]));
   }
   function slotDraft() {
     return {

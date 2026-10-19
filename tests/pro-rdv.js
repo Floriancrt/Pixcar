@@ -146,6 +146,7 @@ const NOTIFY = "atelier@garage-demo.fr";
   await page.waitForSelector("#slotDlg[open]");
   const days = await page.$$eval("#slotDays input", (els) => els.map((e) => `${e.value}:${e.checked ? 1 : 0}${e.disabled ? "x" : ""}`));
   check("new slot: weekdays checked, Saturday offered but unchecked, Sunday closed (cannot be chosen, and said why)", days.join() === "mo:1,tu:1,we:1,th:1,fr:1,sa:0,su:0x" && /Dimanche : le garage est fermé/.test(await text(page, "#slotDaysHelp")), days.join() + " " + (await text(page, "#slotDaysHelp")));
+  check("the slot sheet shows no stray « null »", !/\bnull\b/.test(await page.$eval("#slotSvcs", (f) => f.innerText)));
   const svcs = await page.$$eval("#slotSvcs .ag-svc", (els) => els.map((e) => [e.dataset.id, e.querySelector("input").checked, e.querySelector("input").disabled, e.querySelector(".why").textContent]));
   check("services with an average time are listed; a 4 h 30 job does not fit a 4 h slot (greyed out, with the reason)", svcs.length === 3 && svcs.find((s) => s[0] === "distribution")[2] && /Plus longue que le créneau \(4 h\)/.test(svcs.find((s) => s[0] === "distribution")[3]) && (await text(page, "#slotSvcsTitle")) === "Prestations acceptées · 2 sur 3", JSON.stringify(svcs));
   let preview = await text(page, "#slotPreview");

@@ -135,6 +135,7 @@ const NOTIFY = "atelier@garage-demo.fr";
   check("step 2: no mechanic yet, eight proposed skills (two qualifications)", /Aucun mécanicien pour l'instant/.test(await text(page, "#calBody")) && (await page.$$eval(".cal-skills li", (l) => l.length)) === 8 && (await page.$$eval(".cal-skills li small", (l) => l.length)) === 2);
   await page.click("#calAddStaff");
   await page.waitForSelector("#calDlg[open] #calStaffName");
+  check("the new mechanic sheet shows no stray « null »", !/\bnull\b/.test(await page.$eval("#calForm", (f) => f.innerText)));
   await axe(page, "fiche d'un mécanicien");
   await page.click("#calSave");
   await page.waitForFunction(() => !document.getElementById("calErr").hidden);
@@ -153,6 +154,7 @@ const NOTIFY = "atelier@garage-demo.fr";
   // une absence, puis retirée
   await page.click('.cal-item[data-id] button:has-text("Absence")');
   await page.waitForSelector("#calDlg[open] #calUnKind");
+  check("the absence sheet shows no stray « null »", !/\bnull\b/.test(await page.$eval("#calForm", (f) => f.innerText)));
   await axe(page, "absence d'un mécanicien");
   const kinds = await page.$$eval("#calUnKind option", (o) => o.map((x) => x.textContent));
   check("absence: the reasons fit a person (no maintenance), dates from today", kinds.join() === "Absence,Congés,Formation,Autre", kinds.join());
@@ -179,6 +181,7 @@ const NOTIFY = "atelier@garage-demo.fr";
   // ---- 3. équipements
   await page.click("#calAddRes");
   await page.waitForSelector("#calDlg[open] #calResName");
+  check("the resource sheet shows no stray « null »", !/\bnull\b/.test(await page.$eval("#calForm", (f) => f.innerText)));
   await page.fill("#calResName", "Pont n°1");
   await axe(page, "fiche d'un poste");
   await page.click("#calSave");
