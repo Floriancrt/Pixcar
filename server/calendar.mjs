@@ -264,10 +264,16 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
     const data = await repo.cal.load(garageId, today(), today());
     const p = P.parseUnavail(body, { staffIds: new Set(data.staff.map((x) => x.id)), resourceIds: new Set(data.resources.map((x) => x.id)), nowMs: now() });
     if (p.error) return invalid(p);
+    const who = [...data.staff, ...data.resources].find((x) => x.id === p.value.targetId);
+    // une même personne (ou un même poste) n'est pas absente deux fois au même moment : la période déjà saisie est nommée
+    const clash = data.unavail.find((u) => u.targetId === p.value.targetId && u.start < p.value.end && u.end > p.value.start);
+    if (clash) {
+      const staff = p.value.target === "staff";
+      return apiError(409, "overlap", `${who ? who.name : staff ? "Ce mécanicien" : "Ce poste"} est déjà ${staff ? "absent" : "indisponible"} sur cette période (${unavailView(clash).text}). Choisissez d'autres dates ou heures, ou retirez d'abord cette ${staff ? "absence" : "indisponibilité"}.`, { field: "first", overlap: unavailView(clash) });
+    }
     if ((await repo.cal.countUnavail(garageId)) >= P.MAX_UNAVAIL) return apiError(409, "too_many", `${P.MAX_UNAVAIL} absences et indisponibilités à venir au plus.`);
     const id = await repo.tx(async (r) => {
       const out = await r.cal.createUnavail(garageId, p.value);
-      const who = [...data.staff, ...data.resources].find((x) => x.id === p.value.targetId);
       await r.cal.log(garageId, sub, "unavail", out, unavailView({ ...p.value, id: out }).text.replace(/^/, `${who ? who.name : ""} · `));
       return out;
     });

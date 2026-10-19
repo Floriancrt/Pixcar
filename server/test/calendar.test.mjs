@@ -128,6 +128,21 @@ describe("Calendrier avancé", () => {
     // une absence se saisit en jours ou en heures, et se relit telle quelle
     s = (await pro("POST", "/rdv/calendar/unavail", { target: "staff", targetId: paul, kind: "training", first: "2026-10-23", from: "14:00", to: "18:00", label: "Formation clim" })).body;
     assert.deepEqual(s.staff[0].unavail.map((u) => [u.first, u.last, u.from, u.to, u.text]), [["2026-10-23", "2026-10-23", "14:00", "18:00", "Formation clim : ven. 23 oct. (14:00–18:00)"]]);
+    // une seconde absence qui chevauche la première est refusée, la période déjà saisie nommée ; bout à bout, ou pour un autre, elle passe
+    const twice = await pro("POST", "/rdv/calendar/unavail", { target: "staff", targetId: paul, kind: "absence", first: "2026-10-23", from: "15:00", to: "16:00" });
+    assert.equal(twice.status, 409);
+    assert.equal(twice.body.error.code, "overlap");
+    assert.equal(twice.body.error.message, "Paul est déjà absent sur cette période (Formation clim : ven. 23 oct. (14:00–18:00)). Choisissez d'autres dates ou heures, ou retirez d'abord cette absence.");
+    assert.equal(twice.body.error.overlap.id, s.staff[0].unavail[0].id);
+    assert.equal((await pro("POST", "/rdv/calendar/unavail", { target: "staff", targetId: paul, kind: "leave", first: "2026-10-22", last: "2026-10-23" })).body.error.code, "overlap", "des journées entières qui couvrent la première");
+    const next = (await pro("POST", "/rdv/calendar/unavail", { target: "staff", targetId: paul, kind: "absence", first: "2026-10-23", from: "18:00", to: "19:00" })).body;
+    assert.equal(next.staff[0].unavail.length, 2, "bout à bout : acceptée");
+    const down = await pro("POST", "/rdv/calendar/unavail", { target: "resource", targetId: lift, kind: "maintenance", first: "2026-10-23", from: "14:00", to: "18:00" });
+    assert.equal(down.status, 200, "le poste, au même moment : accepté");
+    const twiceDown = await pro("POST", "/rdv/calendar/unavail", { target: "resource", targetId: lift, kind: "breakdown", first: "2026-10-23" });
+    assert.equal(twiceDown.body.error.message, "Pont n°1 est déjà indisponible sur cette période (Maintenance : ven. 23 oct. (14:00–18:00)). Choisissez d'autres dates ou heures, ou retirez d'abord cette indisponibilité.");
+    await pro("DELETE", `/rdv/calendar/unavail/${down.body.resources[0].unavail[0].id}`);
+    await pro("DELETE", `/rdv/calendar/unavail/${next.staff[0].unavail[1].id}`);
     assert.equal((await pro("DELETE", `/rdv/calendar/unavail/${s.staff[0].unavail[0].id}`)).body.staff[0].unavail.length, 0);
     // tant que le mode simple reste actif, les horaires viennent des créneaux
     assert.deepEqual(timesOn(await times()), ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30"]);

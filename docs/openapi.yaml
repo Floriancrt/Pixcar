@@ -1103,7 +1103,7 @@ paths:
         "200": { description: "L'état, avec l'identifiant créé (`saved`) et les rendez-vous à venir touchés (`touched`).", content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/CalState" }, { type: object, required: [saved, touched], properties: { saved: { type: string, format: uuid }, touched: { type: array, items: { type: string, format: uuid } } } }] } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
-        "409": { description: "Déjà 300 absences à venir (`too_many`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "La période chevauche une absence ou indisponibilité déjà saisie pour ce mécanicien ou ce poste (`overlap` : le message la nomme, `overlap` la décrit) ; ou déjà 300 absences à venir (`too_many`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
   /v1/pro/garages/{id}/rdv/calendar/unavail/{unavail}:
     delete:

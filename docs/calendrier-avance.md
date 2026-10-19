@@ -82,6 +82,11 @@ les horaires encore libres. Sur DSQL, le conflit est rejoué (`withRetry`).
 **Jamais de déplacement automatique.** Une absence, une maintenance, un mécanicien désactivé ou un poste indisponible n'efface et ne
 déplace aucune affectation : l'API renvoie les rendez-vous concernés (conflits) pour que le garage décide.
 
+**Pas deux absences au même moment.** Une absence (ou une indisponibilité de poste) qui chevauche une autre déjà saisie pour le même
+mécanicien (ou le même poste) est refusée (409 `overlap`) : le message nomme la période existante, à modifier ou retirer d'abord. Bout
+à bout, ou pour un autre mécanicien ou poste, elle passe. Ajouté le 19 octobre 2026 sur signalement de l'utilisateur : une seconde
+absence identique était acceptée et se dessinait exactement sur la première dans le Planning, sans aucun avertissement.
+
 **Heure de Paris.** Les calculs se font en minutes de la journée (heure murale de Paris) puis sont convertis en instants
 (`parisInstant`) : les changements d'heure sont respectés.
 
