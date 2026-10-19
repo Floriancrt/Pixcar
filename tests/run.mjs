@@ -35,7 +35,7 @@ const SUITES = [
   { name: "pro", cmd: ["node", "tests/pro.js"] }, // Espace Pro (dist/pro/) : construit lui-même son site, vraie API, Cognito simulé
   { name: "prordv", cmd: ["node", "tests/pro-rdv.js"] }, // Espace Pro, rendez-vous en ligne : Disponibilités et Demandes ; construit lui-même son site, vraie API
   { name: "procal", cmd: ["node", "tests/pro-calendar.js"] }, // Espace Pro, calendrier avancé : assistant, activation, Demandes affectées, retour au mode simple ; construit lui-même son site, vraie API
-  { name: "proplan", cmd: ["node", "tests/pro-planning.js"] }, // Espace Pro, Planning : vues, fiche, déplacer (clavier, glisser), confirmation, création rapide, filtres, mois ; construit lui-même son site, vraie API
+  { name: "proplan", cmd: ["node", "tests/pro-planning.js"] }, // Espace Pro, Planning : barre latérale, vue d'ensemble et charge, vues, blocs enrichis, fiche, déplacer (clavier, glisser), menu Nouveau, absence, filtres, week-end, mois ; construit lui-même son site (comme la version publiée), vraie API
   { name: "rdvbook", cmd: ["node", "tests/rdv-book.js"] }, // rendez-vous en ligne côté automobiliste : fenêtre du comparateur, page rendez-vous/ ; construit lui-même son site, vraie API
   { name: "propublic", cmd: ["node", "tests/pro-public.js", FILE] }, // Espace Pro côté comparateur : badge, « Annoncé », fiche, tri, visites ; vraie API, tuiles de la table simulées
   { name: "prerender", cmd: ["node", "tests/prerender.js", FILE] },

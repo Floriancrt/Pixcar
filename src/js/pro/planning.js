@@ -1,9 +1,12 @@
-// Espace Pro, écran « Planning » (docs/calendrier-avance.md, lot 3b ; mode avancé seulement) : cinq vues sur les rendez-vous Pixcar, les
-// rendez-vous pris hors Pixcar et les créneaux bloqués — Jour (une colonne par mécanicien ou par poste), Semaine (une par jour ouvert),
-// Mois (grille de six semaines), Par mécanicien et Par poste (une colonne par jour). Un bloc s'ouvre (fiche : détail, déplacer ou
-// réaffecter au clavier, appeler, annuler) ou se glisse (souris ; doigt après un appui long ; pas de 15 min). L'API contrôle tout avant
-// d'enregistrer : un conflit donne sa cause et d'autres horaires, un changement d'heure d'un rendez-vous client demande confirmation.
-// Que du TEXTE écrit dans la page.
+// Espace Pro, écran « Planning » (docs/calendrier-avance.md, lot 3b ; mode avancé seulement) : une vue d'ensemble (rendez-vous, charge
+// de l'atelier, mécaniciens, alertes) au-dessus de cinq vues — Jour (une colonne par mécanicien ou par poste), Semaine (une par jour
+// ouvert, week-end à la demande), Mois (six semaines), Par mécanicien et Par poste (une colonne par jour). Chaque colonne dit sa charge ;
+// la grille distingue le libre, ce qui n'est pas proposé en ligne (délai minimum, horizon, réservation fermée), l'indisponible (fermé,
+// hors horaires) et les absences. Trois informations séparées par bloc : la provenance (Pixcar, hors Pixcar, créneau bloqué), la
+// confirmation, l'alerte (conflit) ; et l'état de l'intervention quand il n'est plus « prévue ». Un bloc s'ouvre (fiche : détail,
+// déplacer ou réaffecter au clavier, appeler, annuler) ou se glisse (souris ; doigt après un appui long ; pas de 15 min). L'API contrôle
+// tout avant d'enregistrer. Données : GET …/calendar/agenda, GET …/calendar (horaires des mécaniciens et postes, fenêtre de réservation)
+// et GET …/requests?view=todo (heures limites). Que du TEXTE écrit dans la page.
 import { phoneText } from "../shared/garage-profile.js";
 import { GARAGE_CANCEL_REASONS, addDays, dayLabel, hm, minOf, parisParts, timeLabel, weekday } from "../shared/rdv.js";
 
@@ -14,28 +17,52 @@ const VIEWS = [
   ["staff", "Par mécanicien"],
   ["post", "Par poste"],
 ];
-const STATUS = {
-  pending: ["À confirmer", "i-clock"],
-  confirmed: ["Confirmé", "i-check"],
-  job: ["Hors Pixcar", "i-phone"],
-  hold: ["Bloqué", "i-lock"],
-  conflict: ["En conflit", "i-flag"],
-};
+// trois dimensions, séparées à l'écran : provenance, confirmation (et l'alerte), état de l'intervention (ordres de réparation, lot 3c)
+const ORIGIN = { pixcar: ["Pixcar", "i-globe"], job: ["Hors Pixcar", "i-phone"], hold: ["Créneau bloqué", "i-lock"] };
+const STATE = { pending: ["À confirmer", "i-clock"], confirmed: ["Confirmé", "i-check"], conflict: ["En conflit", "i-flag"] };
+const WORK = { planned: "Prévue", received: "Voiture reçue", in_progress: "En cours", waiting_parts: "En attente de pièces", suspended: "Suspendue", done: "Terminée", returned: "Rendue" };
 const WEEK = ["mo", "tu", "we", "th", "fr", "sa", "su"];
 const SNAP = 15; // pas du glisser-déposer, en minutes
-const PPM = 1; // pixels par minute dans les grilles horaires (CSS : --ppm)
 const HOLD_MS = 350; // appui long avant de glisser au doigt
 const ROLE = { labour: "main-d'œuvre", station: "poste", tool: "équipement" };
+let PPM = 1.5; // pixels par minute des grilles horaires (1 sur téléphone)
 const plural = (n, one, many = one + "s") => `${n} ${n > 1 ? many : one}`;
 const monday = (iso) => addDays(iso, -WEEK.indexOf(weekday(iso)));
 const dur = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? " " + String(m % 60).padStart(2, "0") : ""}` : `${m} min`);
+const hrs = (m) => (m ? dur(Math.round(m)) : "0 h");
 const range = (a, b) => `${timeLabel(a)}–${timeLabel(b)}`;
 const snap = (m, step = SNAP) => Math.round(m / step) * step;
+const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 // positions et tailles posées par le CSSOM : la politique de sécurité de la page publiée (style-src 'self') refuse l'attribut style
 const css = (node, props) => {
   for (const [k, v] of Object.entries(props)) node.style.setProperty(k, v);
   return node;
 };
+// intervalles de minutes [[a, b]] : réunion, intersection, différence, durée totale
+function merge(xs) {
+  const out = [];
+  for (const [a, b] of [...xs].filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0])) {
+    const last = out[out.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else out.push([a, b]);
+  }
+  return out;
+}
+function inter(A, B) {
+  const out = [];
+  for (const [a, b] of A) for (const [c, d] of B) if (Math.min(b, d) > Math.max(a, c)) out.push([Math.max(a, c), Math.min(b, d)]);
+  return merge(out);
+}
+function minus(A, B) {
+  let out = merge(A);
+  for (const [c, d] of merge(B))
+    out = out.flatMap(([a, b]) => (d <= a || c >= b ? [[a, b]] : [...(c > a ? [[a, c]] : []), ...(d < b ? [[d, b]] : [])]));
+  return out;
+}
+const total = (A) => merge(A).reduce((n, [a, b]) => n + b - a, 0);
+// horaires propres d'un mécanicien ou d'un poste ({ mo: [["08:00", "12:00"]] }) pour un jour donné
+const rangesOf = (hours, iso) => ((hours && hours[weekday(iso)]) || []).map(([a, b]) => [minOf(a), b === "24:00" ? 1440 : minOf(b)]);
 // une affectation de l'API (instants) → jour et minutes de Paris
 function rowOf(r) {
   const a = parisParts(Date.parse(r.start)), b = parisParts(Date.parse(r.end));
@@ -69,11 +96,14 @@ function lanes(segs) {
 export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, goPanel }) {
   let garageId = null;
   let data = null; // réponse de GET …/calendar/agenda
+  let st = null; // réponse de GET …/calendar (horaires des mécaniciens et postes, fenêtre de réservation, motifs d'absence)
+  let deadlines = new Map(); // demande à confirmer → heure limite (ms)
   let view = null;
   let anchor = null; // jour de référence (AAAA-MM-JJ)
   let dayBy = "staff"; // vue Jour : colonnes par mécanicien ou par poste
   let pickStaff = null, pickPost = null; // vues « Par mécanicien » et « Par poste »
-  const filters = { staff: "", post: "", service: "", status: "" };
+  let weekend = false; // week-end fermé affiché quand même
+  const filters = { staff: "", post: "", service: "", origin: "", state: "" };
   let sheet = null; // { item, mode, … } fiche ouverte
   let drag = null; // glisser-déposer en cours
   let swallowClick = false;
@@ -89,6 +119,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
   const postName = (id) => (data.resources.find((x) => x.id === id) || { name: "" }).name;
   const activeStaff = () => data.staff.filter((m) => m.active);
   const activePosts = () => data.resources.filter((x) => x.active);
+  const hoursOf = (id) => ((st && [...st.staff, ...st.resources].find((x) => x.id === id)) || { hours: null }).hours;
 
   // ================================================================= ouverture et chargement
   async function open(id, { focus = true } = {}) {
@@ -98,11 +129,12 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       anchor = null;
       pickStaff = pickPost = null;
       for (const k of Object.keys(filters)) filters[k] = "";
-      $("planFBox").open = !narrow(); // sur téléphone, les filtres sont repliés
+      showFilters(false);
     }
     view ||= narrow() ? "day" : "week";
     anchor ||= today();
-    if (!(await load())) return;
+    st = await api.calendar(id);
+    if (!(await load({ todo: true }))) return;
     render();
     if (focus) $("planTitle").focus();
   }
@@ -115,18 +147,21 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     const m = monday(anchor);
     return [m, addDays(m, 6)];
   }
-  async function load() {
+  // les heures limites des demandes à confirmer (toutes périodes) : relues à l'ouverture et après un changement, pas à chaque navigation
+  async function load({ todo = false } = {}) {
     const [from, to] = period();
     const n = ++loading;
-    const out = await api.calAgenda(garageId, from, to);
+    const [out, list] = await Promise.all([api.calAgenda(garageId, from, to), todo ? api.requests(garageId, "todo").catch(() => null) : null]);
     if (n !== loading) return false;
     data = out;
+    if (list) deadlines = new Map((list.requests || []).map((r) => [r.id, Date.parse(r.deadline)]));
     if (!pickStaff || !data.staff.some((m) => m.id === pickStaff)) pickStaff = (activeStaff()[0] || data.staff[0] || { id: null }).id;
     if (!pickPost || !data.resources.some((x) => x.id === pickPost)) pickPost = (activePosts()[0] || data.resources[0] || { id: null }).id;
     return true;
   }
-  async function reload(message) {
-    if (!(await load())) return;
+  async function reload(message, { state = false } = {}) {
+    if (state) st = await api.calendar(garageId);
+    if (!(await load({ todo: true }))) return;
     render();
     if (message) live(message);
   }
@@ -140,27 +175,37 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
   }
 
   // ================================================================= ce qui est affiché
-  // rendez-vous et blocs, sous une même forme
-  function items() {
+  // rendez-vous et blocs, sous une même forme (tous, sans les filtres : la charge et la vue d'ensemble les comptent tous)
+  function allItems() {
     const conf = new Map(data.conflicts.map((c) => [c.id, c.reasons]));
     const out = [];
     for (const a of data.appointments)
-      out.push({ id: a.id, type: "rdv", status: a.status, conflict: conf.get(a.id) || null, day: a.when.day, start: minOf(a.when.start), end: minOf(a.when.end), title: a.client || "Client", services: a.services, plan: a.plan.map(rowOf), src: a });
+      out.push({
+        id: a.id, type: "rdv", origin: "pixcar", state: a.status === "pending" ? "pending" : "confirmed", conflict: conf.get(a.id) || null,
+        day: a.when.day, start: minOf(a.when.start), end: minOf(a.when.end), title: a.client || "Client", services: a.services,
+        plan: a.plan.map(rowOf), work: (a.work && a.work.status) || null, deadline: deadlines.get(a.id) || null, src: a,
+      });
     for (const k of data.blocks)
-      out.push({ id: k.id, type: k.kind, status: k.kind, conflict: conf.get(k.id) || null, day: k.when.day, start: minOf(k.when.start), end: minOf(k.when.end), title: k.label || (k.kind === "job" ? "Rendez-vous hors Pixcar" : "Créneau bloqué"), services: k.services, plan: k.plan.map(rowOf), src: k });
-    return out.filter(match);
+      out.push({
+        id: k.id, type: k.kind, origin: k.kind, state: k.kind === "job" ? "confirmed" : null, conflict: conf.get(k.id) || null,
+        day: k.when.day, start: minOf(k.when.start), end: minOf(k.when.end), title: k.label || (k.kind === "job" ? "Rendez-vous hors Pixcar" : "Créneau bloqué"),
+        services: k.services, plan: k.plan.map(rowOf), work: null, deadline: null, src: k,
+      });
+    return out;
   }
+  const items = () => allItems().filter(match);
   function match(it) {
     if (filters.staff && !it.plan.some((r) => r.target === "staff" && r.id === filters.staff)) return false;
     if (filters.post && !it.plan.some((r) => r.target === "resource" && r.id === filters.post)) return false;
     if (filters.service && !it.services.some((s) => s.id === filters.service)) return false;
-    if (filters.status === "conflict") return !!it.conflict;
-    return !filters.status || it.status === filters.status;
+    if (filters.origin && it.origin !== filters.origin) return false;
+    if (filters.state === "conflict") return !!it.conflict;
+    return !filters.state || it.state === filters.state;
   }
   const svcText = (it) => it.services.map((s) => s.label).join(" + ");
   const peopleOf = (it) => [...new Set(it.plan.filter((r) => r.target === "staff").map((r) => r.name))];
   const postsOf = (it) => [...new Set(it.plan.filter((r) => r.target === "resource").map((r) => r.name))];
-  const openOn = (day) => (data.days.find((d) => d.day === day) || { open: [] }).open.map(([a, b]) => [minOf(a), minOf(b)]);
+  const openOn = (day) => (data.days.find((d) => d.day === day) || { open: [] }).open.map(([a, b]) => [minOf(a), b === "24:00" ? 1440 : minOf(b)]);
   // absences et maintenances d'un mécanicien ou d'un poste, ce jour-là (de leur début à leur fin, d'un seul tenant)
   function awayOn(targetId, day) {
     const out = [];
@@ -170,9 +215,46 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     }
     return out;
   }
+  // ---- charge : comme le moteur, heures d'ouverture ∩ horaires propres, moins les absences
+  const hoursFor = (x, day) => (x.active ? inter(openOn(day), hoursOf(x.id) ? rangesOf(hoursOf(x.id), day) : openOn(day)) : []);
+  const workOf = (x, day) => minus(hoursFor(x, day), awayOn(x.id, day).map((u) => [u.a, u.b]));
+  const rowsOn = (list, target, id, day, role = null) => list.flatMap((it) => it.plan.filter((r) => r.target === target && r.id === id && r.day === day && (!role || r.role === role)).map((r) => [r.a, r.b]));
+  function staffLoad(m, day, list = allItems()) {
+    return { planned: total(rowsOn(list, "staff", m.id, day, "labour")), avail: total(workOf(m, day)), absent: awayOn(m.id, day).length > 0 };
+  }
+  function postLoad(x, day, list = allItems()) {
+    return { planned: total(rowsOn(list, "resource", x.id, day)), avail: total(workOf(x, day)), down: awayOn(x.id, day).length > 0 };
+  }
+  function dayLoad(day, list = allItems()) {
+    let planned = 0, avail = 0;
+    for (const m of activeStaff()) {
+      const l = staffLoad(m, day, list);
+      planned += l.planned;
+      avail += l.avail;
+    }
+    return { planned, avail };
+  }
+  // minutes de ce jour où rien n'est proposé en ligne : réservation fermée, avant le délai minimum, au-delà de l'horizon
+  function noBook(day) {
+    if (!st || !st.enabled) return [[0, 1440]];
+    const first = parisParts(Date.now() + st.booking.minDelayH * 3600e3);
+    if (day < first.iso || day > addDays(data.today, st.booking.horizonDays)) return [[0, 1440]];
+    return day === first.iso ? [[0, first.min]] : [];
+  }
+  const pastOn = (day) => (day < data.today ? [[0, 1440]] : day === data.today ? [[0, parisParts(Date.now()).min]] : []);
+  // jours affichés en Semaine, Par mécanicien et Par poste : les jours ouverts ; le week-end fermé à la demande (ou s'il y a quelque chose)
+  function weekDays(list = items()) {
+    const [from] = period();
+    const week = Array.from({ length: 7 }, (_, i) => addDays(from, i));
+    const shown = week.filter((d) => weekend || openOn(d).length || list.some((it) => it.day === d));
+    return shown.length ? shown : week.slice(0, 5);
+  }
+  const hiddenWeekend = () => !weekend && ["sa", "su"].some((k) => !weekDays().some((d) => weekday(d) === k));
 
   // ================================================================= rendu
   function render() {
+    PPM = narrow() ? 1 : 1.5;
+    renderSummary();
     renderBar();
     renderFilters();
     renderLegend();
@@ -184,18 +266,74 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     grid.replaceChildren(view === "month" ? month() : timeGrid(columns()));
   }
 
+  // ---- vue d'ensemble de la période affichée (tout compté, sans les filtres)
+  function summaryDays() {
+    if (view === "day") return [anchor];
+    const [from, to] = period();
+    const out = [];
+    for (let d = from; d <= to; d = addDays(d, 1)) if (view !== "month" || d.slice(0, 7) === anchor.slice(0, 7)) out.push(d);
+    return out;
+  }
+  function renderSummary() {
+    const days = summaryDays(), set = new Set(days), list = allItems().filter((it) => set.has(it.day));
+    const appts = list.filter((it) => it.type !== "hold");
+    const pending = appts.filter((it) => it.state === "pending");
+    let planned = 0, avail = 0;
+    for (const d of days) {
+      const l = dayLoad(d);
+      planned += l.planned;
+      avail += l.avail;
+    }
+    const staff = activeStaff();
+    const absent = staff.filter((m) => days.some((d) => awayOn(m.id, d).length));
+    const conflicts = list.filter((it) => it.conflict);
+    const now = Date.now();
+    const urgent = pending.filter((it) => it.deadline && it.deadline > now && it.deadline - now < 24 * 3600e3).sort((a, b) => a.deadline - b.deadline);
+    const when = view === "day" ? (anchor === data.today ? "aujourd'hui" : dayLabel(anchor)) : view === "month" ? new Date(anchor + "T12:00:00Z").toLocaleDateString("fr-FR", { timeZone: "UTC", month: "long", year: "numeric" }) : days.includes(data.today) ? "cette semaine" : `semaine du ${dayLabel(days[0], { short: true })}`;
+    const deadlineText = (ms) => {
+      const p = parisParts(ms);
+      return p.iso === data.today ? `avant ${timeLabel(p.min)}` : `avant ${dayLabel(p.iso, { short: true })} ${timeLabel(p.min)}`;
+    };
+    const card = (key, title, ic, value, sub, onclick = null, extra = null) => {
+      const inner = [el("span", { class: "pl-card-l" }, el("span", { text: title }), icon(ic)), el("b", { class: "pl-card-v", text: value }), el("span", { class: "pl-card-s", text: sub }), extra].filter(Boolean);
+      return el("li", { class: `pl-card is-${key}` }, onclick ? el("button", { type: "button", class: "pl-card-btn", onclick }, ...inner) : el("div", { class: "pl-card-in" }, ...inner));
+    };
+    const meter = (p) => css(el("span", { class: `pl-meter${p > 100 ? " is-over" : p >= 85 ? " is-high" : ""}`, "aria-hidden": "true" }, css(el("i"), { width: `${Math.min(100, p)}%` })), {});
+    const load = pct(planned, avail);
+    $("planSummary").replaceChildren(
+      el("h2", { id: "planSumTitle", class: "pl-sumtitle", text: `Vue d'ensemble · ${when}` }),
+      el(
+        "ul",
+        { class: "pl-cards" },
+        card("rdv", "Rendez-vous", "i-calendar", String(appts.length), pending.length ? `${plural(pending.length, "à confirmer", "à confirmer")}` : "Aucun à confirmer", pending.length ? () => setFilter("state", "pending") : null),
+        card("load", "Charge atelier", "i-gauge", avail ? `${load} %` : "—", avail ? `${hrs(planned)} / ${hrs(avail)}` : "Atelier fermé", null, avail ? meter(load) : null),
+        view === "day"
+          ? card("staff", "Mécaniciens", "i-users", `${staff.length - absent.length}/${staff.length}`, absent.length ? `${plural(absent.length, "absent")} : ${absent.map((m) => m.name).join(", ")}` : "Tous présents")
+          : card("staff", "Mécaniciens", "i-users", String(staff.length), absent.length ? `${plural(absent.length, "absent")} sur la période` : "Aucune absence"),
+        card(
+          "alert",
+          "Alertes",
+          "i-alert",
+          String(conflicts.length + urgent.length),
+          conflicts.length || urgent.length ? [conflicts.length ? plural(conflicts.length, "conflit") : "", urgent.length ? `${urgent.length} à confirmer ${deadlineText(urgent[0].deadline)}` : ""].filter(Boolean).join(" · ") : "Rien à signaler",
+          conflicts.length ? () => setFilter("state", "conflict") : urgent.length ? () => setFilter("state", "pending") : null,
+        ),
+      ),
+    );
+  }
+
   function renderBar() {
     $("planViews").replaceChildren(
       ...VIEWS.map(([k, name]) => el("button", { type: "button", class: "pl-view", "aria-pressed": String(k === view), onclick: () => go(() => (view = k)) }, name)),
     );
-    const [from, to] = period();
-    const label =
-      view === "day"
-        ? dayLabel(anchor, { year: true })
-        : view === "month"
-          ? new Date(anchor + "T12:00:00Z").toLocaleDateString("fr-FR", { timeZone: "UTC", month: "long", year: "numeric" })
-          : `du ${dayLabel(from, { short: true })} au ${dayLabel(to, { short: true })}`;
-    $("planRange").textContent = label.charAt(0).toUpperCase() + label.slice(1);
+    let label;
+    if (view === "day") label = dayLabel(anchor, { year: true });
+    else if (view === "month") label = new Date(anchor + "T12:00:00Z").toLocaleDateString("fr-FR", { timeZone: "UTC", month: "long", year: "numeric" });
+    else {
+      const days = weekDays();
+      label = `du ${dayLabel(days[0], { short: true })} au ${dayLabel(days[days.length - 1], { short: true })}`;
+    }
+    $("planRange").textContent = cap(label);
     const step = view === "day" ? 1 : view === "month" ? 0 : 7;
     $("planPrev").onclick = () => go(() => (anchor = step ? addDays(anchor, -step) : shiftMonth(-1)));
     $("planNext").onclick = () => go(() => (anchor = step ? addDays(anchor, step) : shiftMonth(1)));
@@ -210,9 +348,20 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
           render();
         }),
       );
-    else if (view === "staff") pick.replaceChildren(selectBox("planWho", "Mécanicien", data.staff.map((m) => [m.id, m.name + (m.active ? "" : " (inactif)")]), pickStaff, (v) => ((pickStaff = v), render())));
-    else if (view === "post") pick.replaceChildren(selectBox("planWhich", "Poste", data.resources.map((x) => [x.id, x.name + (x.active ? "" : " (inactif)")]), pickPost, (v) => ((pickPost = v), render())));
-    else pick.replaceChildren();
+    else if (view === "staff") {
+      const m = data.staff.find((x) => x.id === pickStaff);
+      let p = 0, a = 0;
+      if (m) for (const d of weekDays(allItems())) (p += staffLoad(m, d).planned), (a += staffLoad(m, d).avail);
+      pick.replaceChildren(selectBox("planWho", "Mécanicien", data.staff.map((x) => [x.id, x.name + (x.active ? "" : " (inactif)")]), pickStaff, (v) => ((pickStaff = v), render())), el("span", { class: "pl-picksum", text: `Semaine : ${hrs(p)} planifiées sur ${hrs(a)}${a ? ` (${pct(p, a)} %)` : ""}` }));
+    } else if (view === "post") {
+      const x = data.resources.find((r) => r.id === pickPost);
+      let p = 0, a = 0;
+      if (x) for (const d of weekDays(allItems())) (p += postLoad(x, d).planned), (a += postLoad(x, d).avail);
+      pick.replaceChildren(selectBox("planWhich", "Poste", data.resources.map((r) => [r.id, r.name + (r.active ? "" : " (inactif)")]), pickPost, (v) => ((pickPost = v), render())), el("span", { class: "pl-picksum", text: `Semaine : occupé ${hrs(p)} sur ${hrs(a)}${a ? ` (${pct(p, a)} %)` : ""}` }));
+    } else pick.replaceChildren();
+    const we = $("planWeekend");
+    we.hidden = view === "day" || view === "month" || (!weekend && !hiddenWeekend());
+    we.textContent = weekend ? "Masquer le week-end" : "Afficher le week-end";
   }
   function shiftMonth(n) {
     const [y, m] = anchor.split("-").map(Number);
@@ -221,67 +370,110 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
   }
   function selectBox(id, labelText, options, value, onchange) {
     const s = el("select", { id }, ...options.map(([v, t]) => el("option", { value: v, text: t, selected: v === value })));
-    s.addEventListener("change", () => onchange(s.value));
+    s.addEventListener("change", () => {
+      onchange(s.value);
+      // la liste est redessinée avec le reste : le focus revient sur la nouvelle
+      if (!document.activeElement || document.activeElement === document.body) $(id) && $(id).focus();
+    });
     return el("span", { class: "pl-pick" }, el("label", { for: id, text: labelText }), s);
   }
+
+  // ---- filtres : une barre repliée (bouton « Filtres » et puces des filtres actifs), le détail sur demande
+  const FILTERS = () => [
+    ["staff", "planFStaff", "Mécanicien", data.staff.map((m) => [m.id, m.name])],
+    ["post", "planFPost", "Poste", data.resources.map((x) => [x.id, x.name])],
+    ["service", "planFService", "Prestation", data.services.map((s) => [s.id, s.label])],
+    ["origin", "planFOrigin", "Provenance", Object.entries(ORIGIN).map(([k, [t]]) => [k, t])],
+    ["state", "planFState", "État", Object.entries(STATE).map(([k, [t]]) => [k, t])],
+  ];
+  function showFilters(on) {
+    $("planFilters").hidden = !on;
+    $("planFToggle").setAttribute("aria-expanded", String(on));
+  }
+  function setFilter(key, value, { focus = null } = {}) {
+    filters[key] = value;
+    render();
+    const n = items().length;
+    live(Object.values(filters).some(Boolean) ? `Filtre appliqué : ${plural(n, "élément")} affiché${n > 1 ? "s" : ""}.` : "Filtres retirés.");
+    if (focus) ($(focus) || $("planFToggle")).focus();
+  }
   function renderFilters() {
-    const any = Object.values(filters).some(Boolean);
-    const n = Object.values(filters).filter(Boolean).length;
-    $("planFCount").textContent = n ? ` · ${n} actif${n > 1 ? "s" : ""}` : "";
-    const box = (id, labelText, key, options) =>
-      selectBox(id, labelText, [["", "Tous"], ...options], filters[key], (v) => {
-        filters[key] = v;
-        render();
-        const n = items().length;
-        live(Object.values(filters).some(Boolean) ? `Filtre appliqué : ${plural(n, "élément")} affiché${n > 1 ? "s" : ""}.` : "Filtres retirés.");
-      });
+    const defs = FILTERS();
+    const active = defs.filter(([k]) => filters[k]);
+    $("planFCount").hidden = !active.length;
+    $("planFCount").textContent = active.length ? String(active.length) : "";
+    $("planFToggle").setAttribute("aria-label", active.length ? `Filtres, ${plural(active.length, "actif")}` : "Filtres");
+    $("planChips").replaceChildren(
+      ...active.map(([k, , labelText, options]) => {
+        const text = `${labelText} : ${(options.find(([v]) => v === filters[k]) || ["", "?"])[1]}`;
+        return el("li", {}, el("button", { type: "button", class: "pl-chip", "aria-label": `Retirer le filtre ${text}`, onclick: () => setFilter(k, "", { focus: "planFToggle" }) }, text, icon("i-close")));
+      }),
+    );
     $("planFilters").replaceChildren(
-      ...[
-      box("planFStaff", "Mécanicien", "staff", data.staff.map((m) => [m.id, m.name])),
-      box("planFPost", "Poste", "post", data.resources.map((x) => [x.id, x.name])),
-      box("planFService", "Prestation", "service", data.services.map((s) => [s.id, s.label])),
-      box("planFStatus", "Statut", "status", Object.entries(STATUS).map(([k, [t]]) => [k, t])),
-      any
-        ? el("button", { type: "button", class: "link-btn", onclick: () => {
+      ...defs.map(([k, id, labelText, options]) => selectBox(id, labelText, [["", "Tous"], ...options], filters[k], (v) => setFilter(k, v))),
+      ...(active.length
+        ? [el("button", { type: "button", class: "link-btn", onclick: () => {
             for (const k of Object.keys(filters)) filters[k] = "";
             render();
             live("Filtres retirés.");
             $("planFStaff").focus();
-          } }, "Retirer les filtres")
-        : null,
-      ].filter(Boolean), // replaceChildren écrirait « null »
+          } }, "Retirer les filtres")]
+        : []),
     );
   }
+  // ---- légende : ce que disent les couleurs, groupé par information
   function renderLegend() {
-    $("planLegend").replaceChildren(...Object.entries(STATUS).map(([k, [t, ic]]) => el("li", { class: `pl-key st-${k}` }, icon(ic), t)));
+    const swatch = (cls, text) => el("li", {}, el("span", { class: `pl-sw ${cls}`, "aria-hidden": "true" }), text);
+    $("planLegend").replaceChildren(
+      el("li", { class: "pl-lg-t", text: "Rendez-vous" }),
+      ...Object.entries(STATE).map(([k, [t, ic]]) => el("li", {}, el("span", { class: `pl-pill is-${k}` }, icon(ic), t))),
+      el("li", { class: "pl-lg-t", text: "Provenance" }),
+      ...Object.entries(ORIGIN).map(([k, [t, ic]]) => el("li", {}, el("span", { class: `pl-tag or-${k}` }, icon(ic), t))),
+      el("li", { class: "pl-lg-t", text: "Créneaux" }),
+      swatch("sw-free", "Libre"),
+      swatch("sw-nobook", "Pas proposé en ligne"),
+      swatch("sw-off", "Fermé ou hors horaires"),
+      swatch("sw-away", "Absence ou maintenance"),
+    );
   }
 
-  // ---- colonnes des grilles horaires : { key, head, sub, day, staff?, post?, segs }
+  // ---- colonnes des grilles horaires : { key, head, sub, load, day, staff?, post?, segs, avail, away }
   function columns() {
-    const list = items();
-    const [from] = period();
-    const week = Array.from({ length: 7 }, (_, i) => addDays(from, i));
-    const shown = week.filter((d) => openOn(d).length || list.some((it) => it.day === d));
-    const days = shown.length ? shown : week.slice(0, 5);
+    const list = items(), all = allItems();
     const rowsFor = (pred) => list.flatMap((it) => it.plan.filter(pred).map((r) => ({ item: it, a: r.a, b: Math.max(r.b, r.a + 5), row: r })));
-    const head = (d) => [dayLabel(d, { short: true }), d === data.today ? "Aujourd'hui" : ""];
+    const todayText = (d) => (d === data.today ? "Aujourd'hui" : "");
+    const loadText = (l, verb = "") => (l.avail ? `${verb}${hrs(l.planned)} / ${hrs(l.avail)}` : "");
     if (view === "week")
-      return days.map((d) => ({ key: d, head: head(d)[0], sub: head(d)[1], day: d, segs: list.filter((it) => it.day === d).map((it) => ({ item: it, a: it.start, b: it.end > it.start ? it.end : 1440 })) }));
+      return weekDays(list).map((d) => {
+        const l = dayLoad(d, all), n = all.filter((it) => it.day === d && it.type !== "hold").length;
+        return { key: d, head: dayLabel(d, { short: true }), sub: todayText(d), load: l.avail ? { ...l, text: `${loadText(l)} · ${plural(n, "rdv", "rdv")}` } : { ...l, text: openOn(d).length ? "Personne" : "Fermé" }, day: d, avail: openOn(d), segs: list.filter((it) => it.day === d).map((it) => ({ item: it, a: it.start, b: it.end > it.start ? it.end : 1440 })) };
+      });
     if (view === "staff" || view === "post") {
-      const id = view === "staff" ? pickStaff : pickPost;
-      const target = view === "staff" ? "staff" : "resource";
-      return days.map((d) => ({ key: d, head: head(d)[0], sub: head(d)[1], day: d, [view === "staff" ? "staff" : "post"]: id, away: awayOn(id, d), segs: rowsFor((r) => r.target === target && r.id === id && r.day === d) }));
+      const isStaff = view === "staff";
+      const x = (isStaff ? data.staff : data.resources).find((r) => r.id === (isStaff ? pickStaff : pickPost));
+      if (!x) return [];
+      return weekDays(list).map((d) => {
+        const l = isStaff ? staffLoad(x, d, all) : postLoad(x, d, all);
+        const conflicts = all.filter((it) => it.day === d && it.conflict && it.plan.some((r) => r.id === x.id)).length;
+        const text = l.avail ? `${isStaff ? "" : "occupé "}${loadText(l)}${conflicts ? ` · ${plural(conflicts, "conflit")}` : ""}` : l.absent || l.down ? (isStaff ? "Absent" : "Indisponible") : "Fermé";
+        return { key: d, head: dayLabel(d, { short: true }), sub: todayText(d), load: { ...l, text }, day: d, [isStaff ? "staff" : "post"]: x.id, avail: hoursFor(x, d), away: awayOn(x.id, d), segs: rowsFor((r) => r.target === (isStaff ? "staff" : "resource") && r.id === x.id && r.day === d) };
+      });
     }
     // jour : une colonne par mécanicien (ou par poste), et « Sans affectation » s'il en faut une
     const d = anchor;
-    const target = dayBy === "staff" ? "staff" : "resource";
-    const pool = dayBy === "staff" ? data.staff : data.resources;
+    const byStaff = dayBy === "staff";
+    const target = byStaff ? "staff" : "resource";
+    const pool = byStaff ? data.staff : data.resources;
     const used = new Set(list.flatMap((it) => it.plan.filter((r) => r.target === target && r.day === d).map((r) => r.id)));
     const cols = pool
       .filter((x) => x.active || used.has(x.id))
-      .map((x) => ({ key: x.id, head: x.name, sub: x.active ? "" : "inactif", day: d, [dayBy === "staff" ? "staff" : "post"]: x.id, away: awayOn(x.id, d), segs: rowsFor((r) => r.target === target && r.id === x.id && r.day === d && (dayBy !== "staff" || r.role === "labour")) }));
+      .map((x) => {
+        const l = byStaff ? staffLoad(x, d, all) : postLoad(x, d, all);
+        const text = l.avail ? `${byStaff ? "" : "occupé "}${loadText(l)}` : l.absent || l.down ? (byStaff ? "Absent" : "Indisponible") : x.active ? "Hors horaires" : "inactif";
+        return { key: x.id, head: x.name, sub: "", load: { ...l, text }, day: d, [byStaff ? "staff" : "post"]: x.id, avail: hoursFor(x, d), away: awayOn(x.id, d), segs: rowsFor((r) => r.target === target && r.id === x.id && r.day === d && (!byStaff || r.role === "labour")) };
+      });
     const loose = list.filter((it) => it.day === d && !it.plan.some((r) => r.target === target && r.day === d));
-    if (loose.length) cols.push({ key: "none", head: "Sans affectation", sub: "", day: d, segs: loose.map((it) => ({ item: it, a: it.start, b: it.end > it.start ? it.end : 1440 })) });
+    if (loose.length) cols.push({ key: "none", head: "Sans affectation", sub: "", load: null, day: d, avail: openOn(d), segs: loose.map((it) => ({ item: it, a: it.start, b: it.end > it.start ? it.end : 1440 })) });
     return cols;
   }
 
@@ -298,38 +490,46 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     const px = (m) => `${(m - lo) * PPM}px`;
     const hours = [];
     for (let h = lo; h < hi; h += 60) hours.push(css(el("span", { text: `${h / 60}:00` }), { top: px(h) }));
-    const total = cols.reduce((n, c) => n + c.segs.length, 0);
+    const count = cols.reduce((n, c) => n + c.segs.length, 0);
+    const head = (c) => {
+      const p = c.load && c.load.avail ? pct(c.load.planned, c.load.avail) : null;
+      return el(
+        "div",
+        { class: "pl-colhead" + (c.day === data.today && view !== "day" ? " is-today" : "") },
+        el("b", { text: c.head }),
+        c.sub ? el("small", { text: c.sub }) : null,
+        c.load ? el("span", { class: "pl-load", text: c.load.text }) : null,
+        p !== null ? css(el("span", { class: `pl-meter${p > 100 ? " is-over" : p >= 85 ? " is-high" : ""}` }, css(el("i"), { width: `${Math.min(100, p)}%` })), {}) : null,
+      );
+    };
     const wrap = el(
       "div",
       { class: "pl-grid", "data-lo": String(lo), "data-hi": String(hi) },
-      el("div", { class: "pl-head", "aria-hidden": "true" }, el("span", { class: "pl-corner" }), ...cols.map((c) => el("div", { class: "pl-colhead" + (c.day === data.today && view !== "day" ? " is-today" : "") }, el("b", { text: c.head }), c.sub ? el("small", { text: c.sub }) : null))),
-      el(
-        "div",
-        { class: "pl-body" },
-        el("div", { class: "pl-times", "aria-hidden": "true" }, ...hours),
-        ...cols.map((c) => column(c, lo, hi, px)),
-      ),
+      el("div", { class: "pl-head", "aria-hidden": "true" }, el("span", { class: "pl-corner" }), ...cols.map(head)),
+      el("div", { class: "pl-body" }, el("div", { class: "pl-times", "aria-hidden": "true" }, ...hours), ...cols.map((c) => column(c, lo, hi, px))),
     );
-    css(wrap, { "--cols": String(cols.length), "--h": `${(hi - lo) * PPM}px` });
-    return el("div", { class: "pl-scroll" }, total ? null : el("p", { class: "pl-empty", text: Object.values(filters).some(Boolean) ? "Rien ne correspond aux filtres sur cette période." : "Rien de prévu sur cette période." }), wrap);
+    css(wrap, { "--cols": String(cols.length), "--h": `${(hi - lo) * PPM}px`, "--hour": `${60 * PPM}px` });
+    return el("div", { class: "pl-scroll" }, count ? null : el("p", { class: "pl-empty", text: Object.values(filters).some(Boolean) ? "Rien ne correspond aux filtres sur cette période." : "Rien de prévu sur cette période." }), wrap);
   }
   function column(c, lo, hi, px) {
-    const name = [c.head, view === "day" ? dayLabel(c.day) : c.staff ? staffName(c.staff) : c.post ? postName(c.post) : ""].filter(Boolean).join(", ");
+    const name = [c.head, view === "day" ? dayLabel(c.day) : c.staff ? staffName(c.staff) : c.post ? postName(c.post) : "", c.load ? c.load.text : ""].filter(Boolean).join(", ");
     const col = el("div", { class: "pl-col", role: "group", "aria-label": name, "data-day": c.day, "data-staff": c.staff || null, "data-post": c.post || null, "data-key": c.key });
-    // hors des heures d'ouverture : grisé
-    let t = lo;
-    for (const [a, b] of openOn(c.day)) {
-      if (a > t) col.append(css(el("div", { class: "pl-off" }), { top: px(t), height: `${(Math.min(a, hi) - t) * PPM}px` }));
-      t = Math.max(t, b);
-    }
-    if (t < hi) col.append(css(el("div", { class: "pl-off" }), { top: px(t), height: `${(hi - t) * PPM}px` }));
-    for (const u of c.away || []) {
-      const a = Math.max(u.a, lo), b = Math.min(u.b, hi);
-      if (b > a) col.append(css(el("div", { class: "pl-away", title: u.text }, el("span", { text: u.text })), { top: px(a), height: `${(b - a) * PPM}px` }));
-    }
+    const band = (cls, [a, b], title = "", text = "") => {
+      a = Math.max(a, lo);
+      b = Math.min(b, hi);
+      if (b > a) col.append(css(el("div", { class: cls, title: title || null }, text ? el("span", { text }) : null), { top: px(a), height: `${(b - a) * PPM}px` }));
+    };
+    // indisponible (fermé, hors horaires du mécanicien ou du poste), absences, passé, pas proposé en ligne : le reste est libre
+    const away = (c.away || []).map((u) => [u.a, u.b]);
+    for (const r of minus([[lo, hi]], merge([...c.avail, ...away]))) band("pl-off", r);
+    for (const u of c.away || []) band("pl-away", [u.a, u.b], u.text, u.text);
+    const open = minus(c.avail, away);
+    const past = inter(open, pastOn(c.day));
+    for (const r of past) band("pl-past", r);
+    for (const r of minus(inter(open, noBook(c.day)), past)) band("pl-nobook", r, "Pas proposé en ligne (délai minimum, horizon ou réservation fermée)");
     for (const s of lanes(c.segs)) col.append(block(s, c, px));
     col.addEventListener("click", (ev) => {
-      if (ev.target !== col && !ev.target.classList.contains("pl-off")) return;
+      if (ev.target !== col && !/\bpl-(off|past|nobook)\b/.test(ev.target.className)) return;
       if (swallowClick) return;
       const lo2 = Number(col.closest(".pl-grid").dataset.lo);
       const m = snap(lo2 + (ev.clientY - col.getBoundingClientRect().top) / PPM);
@@ -337,25 +537,48 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     });
     return col;
   }
+  // ---- un bloc : heure et durée, confirmation ; prestation ; voiture ; client et poste (ou mécanicien) ; provenance et intervention.
+  // Ce qui ne tient pas dans sa hauteur reste dans l'infobulle, le nom lu par les lecteurs d'écran et la fiche.
+  function blockText(it, s, c) {
+    const a = it.type === "rdv" ? it.src : null;
+    const vehicle = it.type === "job" && it.src.vehicle ? (data.vehicles.find((v) => v.id === it.src.vehicle) || { label: "" }).label : "";
+    const others = c.staff ? postsOf(it) : c.post ? peopleOf(it) : [...peopleOf(it), ...postsOf(it)];
+    const what = it.type === "hold" ? it.title : svcText(it) || it.title;
+    const car = a ? [a.car, a.plate].filter(Boolean).join(" · ") : vehicle;
+    const who = [it.type === "hold" ? "" : it.title, ...others].filter(Boolean).join(" · ");
+    const state = it.conflict ? "conflict" : it.state;
+    const work = it.work && it.work !== "planned" ? `Intervention : ${WORK[it.work] || it.work}` : "";
+    return { what, car, who, state, work, when: range(s.a, s.b), len: dur(s.b - s.a), role: s.row && s.row.role !== "labour" ? ROLE[s.row.role] : "" };
+  }
   function block(s, c, px) {
     const it = s.item;
-    const [stText, stIcon] = STATUS[it.status];
-    const who = c.staff ? postsOf(it) : peopleOf(it);
-    const when = s.row ? `${range(s.a, s.b)}${s.row.role !== "labour" ? ` (${ROLE[s.row.role]})` : ""}` : range(it.start, it.end > it.start ? it.end : 1440);
-    const label = [when, it.title, svcText(it), who.join(", "), stText, it.conflict ? "En conflit" : ""].filter(Boolean).join(", ");
+    const t = blockText(it, s, c);
+    const h = (s.b - s.a) * PPM;
+    const lines = h < 30 ? 1 : h < 52 ? 2 : h < 74 ? 3 : h < 96 ? 4 : 5;
+    const stateLabel = t.state ? STATE[t.state][0] : "";
+    const full = [`${t.when} (${t.len}${t.role ? `, ${t.role}` : ""})`, t.what, t.car, t.who, ORIGIN[it.origin][0], stateLabel, t.work].filter(Boolean);
+    // la ligne des personnes porte l'icône de la provenance (globe : Pixcar, téléphone : hors Pixcar, cadenas : créneau bloqué),
+    // pour qu'elle reste visible quand l'étiquette du bas ne tient pas
+    const whoLine = t.who ? el("span", { class: "pl-ev-l" }, icon(ORIGIN[it.origin][1]), t.who) : null;
+    const carLine = t.car ? el("span", { class: "pl-ev-l" }, icon("i-car"), t.car) : null;
+    const parts = [
+      el("span", { class: "pl-ev-h" }, el("b", { text: t.when }), el("span", { class: "pl-ev-d", text: t.len }), t.state && lines > 1 ? el("span", { class: `pl-pill is-${t.state}` }, icon(STATE[t.state][1]), el("span", { class: "pl-pill-t", text: stateLabel })) : null),
+      el("span", { class: "pl-ev-t", text: t.what }),
+      ...(lines === 3 ? [whoLine || carLine] : [carLine, whoLine]),
+      el("span", { class: "pl-ev-f" }, el("span", { class: `pl-tag or-${it.origin}` }, ORIGIN[it.origin][0]), t.work ? el("span", { class: "pl-tag", text: t.work.replace("Intervention : ", "") }) : null),
+    ].filter(Boolean);
     const b = el(
       "button",
       {
         type: "button",
-        class: `pl-ev st-${it.status}${it.conflict ? " is-conflict" : ""}${(s.b - s.a) * PPM < 34 ? " is-tiny" : (s.b - s.a) * PPM < 54 ? " is-short" : ""}`,
-        "aria-label": label,
+        class: `pl-ev st-${it.type === "hold" ? "hold" : it.state}${it.conflict ? " is-conflict" : ""}${lines === 1 ? " is-tiny" : ""}`,
+        "aria-label": full.join(", "),
+        title: full.join("\n"),
         "data-id": it.id,
       },
-      el("span", { class: "pl-ev-t" }, icon(it.conflict ? STATUS.conflict[1] : stIcon), el("b", { text: timeLabel(s.a) }), el("span", { text: it.title })),
-      el("span", { class: "pl-ev-s", text: [svcText(it), who.join(", ")].filter(Boolean).join(" · ") }),
-      el("span", { class: "pl-ev-st", text: it.conflict ? `${stText} · en conflit` : stText }),
+      ...(lines === 1 ? [el("span", { class: "pl-ev-h" }, icon(STATE[t.state] ? STATE[t.state][1] : ORIGIN[it.origin][1]), el("b", { text: timeLabel(s.a) }), el("span", { class: "pl-ev-t", text: t.what }))] : parts.slice(0, lines)),
     );
-    css(b, { top: px(s.a), height: `${Math.max(18, (s.b - s.a) * PPM - 2)}px`, "--lane": String(s.lane), "--lanes": String(s.lanes) });
+    css(b, { top: px(s.a), height: `${Math.max(18, h - 2)}px`, "--lane": String(s.lane), "--lanes": String(s.lanes) });
     b.addEventListener("click", () => {
       if (swallowClick) return;
       openSheet(it);
@@ -364,9 +587,9 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     return b;
   }
 
-  // ---- mois : six semaines, par jour le nombre et les trois premiers
+  // ---- mois : six semaines, par jour le nombre, la charge et les trois premiers
   function month() {
-    const list = items();
+    const list = items(), all = allItems();
     const [from] = period();
     const m = anchor.slice(0, 7);
     const grid = el("div", { class: "pl-month" }, ...WEEK.map((k, i) => el("span", { class: "pl-mhead", "aria-hidden": "true", text: dayLabel(addDays(from, i), { short: true }).split(" ")[0].replace(".", "") })));
@@ -375,13 +598,15 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       const day = list.filter((it) => it.day === d).sort((x, y) => x.start - y.start);
       const n = day.length;
       const closed = !openOn(d).length;
+      const l = dayLoad(d, all);
+      const p = l.avail ? pct(l.planned, l.avail) : null;
       grid.append(
         el(
           "button",
-          { type: "button", class: `pl-mday${d.slice(0, 7) !== m ? " is-out" : ""}${d === data.today ? " is-today" : ""}${closed ? " is-closed" : ""}`, "aria-label": `${dayLabel(d)} : ${n ? plural(n, "élément") : "rien"}${closed ? ", fermé" : ""}. Ouvrir le jour.`, onclick: () => go(() => ((anchor = d), (view = "day"))) },
-          el("b", { text: String(Number(d.slice(8))) }),
+          { type: "button", class: `pl-mday${d.slice(0, 7) !== m ? " is-out" : ""}${d === data.today ? " is-today" : ""}${closed ? " is-closed" : ""}`, "aria-label": `${dayLabel(d)} : ${n ? plural(n, "élément") : "rien"}${p !== null ? `, charge ${p} %` : ""}${closed ? ", fermé" : ""}. Ouvrir le jour.`, onclick: () => go(() => ((anchor = d), (view = "day"))) },
+          el("span", { class: "pl-mtop" }, el("b", { text: String(Number(d.slice(8))) }), p !== null && l.planned ? el("span", { class: "pl-mload", text: `${p} %` }) : null),
           n ? el("span", { class: "pl-mcount", text: plural(n, "élément") }) : null,
-          ...day.slice(0, 3).map((it) => el("span", { class: `pl-mitem st-${it.status}${it.conflict ? " is-conflict" : ""}` }, icon(it.conflict ? STATUS.conflict[1] : STATUS[it.status][1]), `${timeLabel(it.start)} ${it.title}`)),
+          ...day.slice(0, 3).map((it) => el("span", { class: `pl-mitem st-${it.type === "hold" ? "hold" : it.state}${it.conflict ? " is-conflict" : ""}` }, icon(it.conflict ? STATE.conflict[1] : it.state ? STATE[it.state][1] : ORIGIN.hold[1]), `${timeLabel(it.start)} ${it.title}`)),
           n > 3 ? el("span", { class: "pl-mmore", text: `+ ${n - 3}` }) : null,
         ),
       );
@@ -432,7 +657,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     if (drag.ghost.parentNode !== target.col) target.col.append(drag.ghost);
     const lo = Number(target.col.closest(".pl-grid").dataset.lo);
     drag.ghost.style.top = `${(target.min - lo) * PPM}px`;
-    drag.ghost.querySelector(".pl-ev-t b").textContent = timeLabel(target.min);
+    drag.ghost.querySelector(".pl-ev-h b").textContent = timeLabel(target.min);
   }
   function dropTarget(ev) {
     const col = document.elementsFromPoint(ev.clientX, ev.clientY).find((n) => n.classList && n.classList.contains("pl-col"));
@@ -530,7 +755,6 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
   function openSheet(it, opts = {}) {
     sheet = { item: it, mode: opts.mode || "view", armed: false };
     if (sheet.mode === "move") return moveForm(it, opts);
-    const [stText, stIcon] = STATUS[it.status];
     const a = it.type === "rdv" ? it.src : null;
     const k = it.type === "rdv" ? null : it.src;
     const facts = [];
@@ -545,9 +769,20 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       facts.push(kv("Travaux", `${timeLabel(w0.min)}${w1 ? "–" + timeLabel(w1.min) : ""}${a.work.labour ? ` (${dur(a.work.labour)} de main-d'œuvre)` : ""}`));
     }
     facts.push(kv(it.type === "hold" ? "Jusqu'à" : "Restitution", it.end > it.start ? timeLabel(it.end) : "fin de journée"));
+    if (it.deadline) {
+      const p = parisParts(it.deadline);
+      facts.push(kv("À confirmer avant", `${dayLabel(p.iso, { short: true })} à ${timeLabel(p.min)}`));
+    }
     const rows = it.plan.map((r) => el("li", {}, el("b", { text: r.name || "?" }), ` · ${ROLE[r.role]} · ${r.day !== it.day ? dayLabel(r.day, { short: true }) + " " : ""}${range(r.a, r.b)}${r.fixed ? " · choisi par vous" : ""}`));
     const body = [
-      el("p", { class: `pl-status st-${it.status}` }, icon(stIcon), stText),
+      el(
+        "p",
+        { class: "pl-status" },
+        el("span", { class: `pl-tag or-${it.origin}` }, icon(ORIGIN[it.origin][1]), ORIGIN[it.origin][0]),
+        it.state ? el("span", { class: `pl-pill is-${it.state}` }, icon(STATE[it.state][1]), STATE[it.state][0]) : null,
+        it.conflict ? el("span", { class: "pl-pill is-conflict" }, icon(STATE.conflict[1]), STATE.conflict[0]) : null,
+        it.type === "rdv" ? el("span", { class: "pl-tag", text: `Intervention : ${WORK[it.work || "planned"] || it.work}` }) : null,
+      ),
       it.conflict ? el("div", { class: "pl-conflict", role: "note" }, el("p", {}, icon("i-flag"), el("b", { text: "En conflit : " }), "une affectation ne tient plus. Déplacez ou réaffectez."), el("ul", {}, ...it.conflict.map((t) => el("li", { text: t })))) : null,
       el("ul", { class: "pl-facts" }, ...facts),
       rows.length ? el("h3", { text: "Affectations" }) : null,
@@ -561,7 +796,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     if (a && a.status === "pending") actions.push(el("button", { type: "button", class: "btn", onclick: () => (dlg().close(), goPanel("requests")) }, icon("i-inbox"), "Répondre dans Demandes"));
     if (!a && !past) actions.push(el("button", { type: "button", class: "btn", onclick: () => blockForm({ item: it }) }, icon("i-edit"), "Modifier"));
     if (!a) actions.push(el("button", { type: "button", class: "link-btn danger", id: "planDel", onclick: () => removeBlock(it) }, it.type === "job" ? "Supprimer ce rendez-vous" : "Supprimer ce créneau"));
-    frame(it.title, it.type === "rdv" ? "Rendez-vous Pixcar" : it.type === "job" ? "Rendez-vous hors Pixcar" : "Créneau bloqué", body, actions);
+    frame(it.title, it.type === "hold" ? "Planning" : "Rendez-vous", body, actions);
     $("planForm").onsubmit = (ev) => ev.preventDefault();
     const first = $("planMove") || $("planForm").querySelector("button.btn, a.btn");
     if (first) first.focus();
@@ -654,7 +889,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
   function blockForm({ item = null, at = null, problem = null, draft = null, refocus = null }) {
     const k = item ? item.src : null;
     const d = draft || {
-      kind: k ? k.kind : "job",
+      kind: k ? k.kind : at.kind || "job",
       label: k ? k.label : "",
       day: k ? k.when.day : at.day,
       start: k ? minOf(k.when.start) : at.start,
@@ -775,14 +1010,101 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     });
   }
 
+  // ---- absence d'un mécanicien, indisponibilité d'un poste (mêmes règles que dans Mon atelier ; rien n'est déplacé)
+  function unavailForm(target, { day = null } = {}) {
+    const pool = target === "staff" ? activeStaff() : activePosts();
+    if (!pool.length) return alertBox(target === "staff" ? "Ajoutez d'abord un mécanicien (Mon atelier)." : "Ajoutez d'abord un poste (Mon atelier).");
+    const kinds = ((st && st.catalogs && st.catalogs.kinds) || []).filter((k) => k.for === target || k.for === "both");
+    const d0 = day && day >= data.today ? day : data.today;
+    const who = target === "staff" ? (view === "staff" ? pickStaff : filters.staff || pool[0].id) : view === "post" ? pickPost : filters.post || pool[0].id;
+    frame(target === "staff" ? "Absence d'un mécanicien" : "Indisponibilité d'un poste", "Planning", [
+      el("label", { for: "planUnWho", text: target === "staff" ? "Mécanicien" : "Poste" }),
+      el("select", { id: "planUnWho" }, ...pool.map((x) => el("option", { value: x.id, text: x.name, selected: x.id === who }))),
+      el("label", { for: "planUnKind", text: "Motif" }),
+      el("select", { id: "planUnKind" }, ...kinds.map((k) => el("option", { value: k.id, text: k.label }))),
+      el("div", { class: "mg-row2" }, el("span", {}, el("label", { for: "planUnFirst", text: "Du" }), el("input", { id: "planUnFirst", type: "date", value: d0, min: data.today, required: true })), el("span", {}, el("label", { for: "planUnLast", text: "Au" }), el("input", { id: "planUnLast", type: "date", value: d0, min: data.today }))),
+      el("div", { class: "mg-row2" }, el("span", {}, el("label", { for: "planUnFrom", text: "À partir de" }), el("input", { id: "planUnFrom", type: "time", step: "300" })), el("span", {}, el("label", { for: "planUnTo", text: "Jusqu'à" }), el("input", { id: "planUnTo", type: "time", step: "300" }))),
+      el("p", { class: "help", text: "Sans heure : journées entières. Les rendez-vous déjà affectés ne bougent pas : ils apparaissent « En conflit » pour que vous décidiez." }),
+      el("label", { for: "planUnLabel" }, "Précision ", el("small", { text: "facultatif" })),
+      el("input", { id: "planUnLabel", type: "text", maxlength: "60", autocomplete: "off", "aria-describedby": "planUnHelp" }),
+      el("p", { class: "help", id: "planUnHelp", text: target === "staff" ? "N'indiquez pas de motif médical ni d'information personnelle : « Congés », « Formation » ou « Absence » suffisent." : "Par exemple : révision du pont, attente d'une pièce." }),
+    ], [
+      el("button", { type: "submit", class: "btn primary", id: "planUnSave" }, "Enregistrer"),
+      el("button", { type: "button", class: "btn", onclick: () => dlg().close() }, "Annuler"),
+    ]);
+    $("planForm").onsubmit = async (ev) => {
+      ev.preventDefault();
+      await busy($("planUnSave"), async () => {
+        try {
+          const first = $("planUnFirst").value;
+          const out = await api.saveUnavail(garageId, {
+            target,
+            targetId: $("planUnWho").value,
+            kind: $("planUnKind").value,
+            first,
+            last: $("planUnLast").value || first,
+            from: $("planUnFrom").value || undefined,
+            to: $("planUnTo").value || undefined,
+            label: $("planUnLabel").value.trim(),
+          });
+          dlg().close();
+          const n = (out.touched || []).length;
+          const what = target === "staff" ? "Absence enregistrée." : "Indisponibilité enregistrée.";
+          alertBox(n ? `${what} ${plural(n, "rendez-vous à venir est touché : il apparaît", "rendez-vous à venir sont touchés : ils apparaissent")} « En conflit » dans le planning.` : `${what} Aucun rendez-vous n'est touché.`, "info");
+          await reload(what);
+        } catch (e) {
+          if (e.status === 409 || e.status === 422) return err(e.message);
+          dlg().close();
+          fail(e);
+        }
+      });
+    };
+    $("planUnWho").focus();
+  }
+
   // ---- branchements
-  // « Nouveau » : le jour affiché (aujourd'hui s'il est dans la période), à 9:00 ou au prochain quart d'heure
-  $("planNew").addEventListener("click", () => {
+  // « Nouveau » : un petit menu ; le jour affiché (aujourd'hui s'il est dans la période), à 9:00 ou au prochain quart d'heure
+  const menu = () => $("planNewMenu");
+  function newMenu(on, { focus = true } = {}) {
+    menu().hidden = !on;
+    $("planNew").setAttribute("aria-expanded", String(on));
+    if (on && focus) menu().querySelector("button").focus();
+  }
+  function newAt() {
     const [from, to] = period();
     const base = view === "day" ? anchor : data.today >= from && data.today <= to ? data.today : from;
     const day = base < data.today ? data.today : base;
     const soon = Math.ceil((parisParts(Date.now()).min + 15) / SNAP) * SNAP;
-    openCreate({ day, start: day === data.today ? Math.min(Math.max(9 * 60, soon), 23 * 60) : 9 * 60, staff: view === "staff" ? pickStaff : null, post: view === "post" ? pickPost : null });
+    return { day, start: day === data.today ? Math.min(Math.max(9 * 60, soon), 23 * 60) : 9 * 60, staff: view === "staff" ? pickStaff : null, post: view === "post" ? pickPost : null };
+  }
+  $("planNew").addEventListener("click", () => newMenu(menu().hidden));
+  menu().addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-new]");
+    if (!b) return;
+    newMenu(false, { focus: false });
+    const at = newAt();
+    if (b.dataset.new === "job" || b.dataset.new === "hold") openCreate({ ...at, kind: b.dataset.new });
+    else unavailForm(b.dataset.new, { day: at.day });
+  });
+  menu().addEventListener("keydown", (ev) => {
+    const bs = [...menu().querySelectorAll("button")];
+    const i = bs.indexOf(document.activeElement);
+    if (ev.key === "Escape") {
+      newMenu(false);
+      $("planNew").focus();
+    } else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+      ev.preventDefault();
+      bs[(i + (ev.key === "ArrowDown" ? 1 : bs.length - 1)) % bs.length].focus();
+    }
+  });
+  document.addEventListener("click", (ev) => {
+    if (!menu().hidden && !ev.target.closest(".pl-new")) newMenu(false, { focus: false });
+  });
+  $("planFToggle").addEventListener("click", () => showFilters($("planFilters").hidden));
+  $("planWeekend").addEventListener("click", () => {
+    weekend = !weekend;
+    render();
+    live(weekend ? "Week-end affiché." : "Week-end masqué.");
   });
   // au doigt : une fois le glisser commencé (appui long), la page ne défile plus
   $("planGrid").addEventListener("touchmove", (ev) => drag && drag.on && ev.preventDefault(), { passive: false });

@@ -105,7 +105,7 @@ const NOTIFY = "atelier@garage-demo.fr";
   const { ctx, page, logs } = await newPage();
   await page.goto(`${srv.url}/pro/`);
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
-  const nav = await page.$$eval("#dashNav .dash-link", (els) => els.filter((e) => e.offsetParent).map((e) => e.innerText.trim()));
+  const nav = await page.$$eval("#dashNav .dash-link:not(.rail-toggle)", (els) => els.filter((e) => e.offsetParent).map((e) => e.innerText.trim()));
   check("with appointments open in the API, the menu offers « Demandes » and « Disponibilités » (nothing to answer yet)", nav.join("|") === "Tableau de bord|Demandes|Mon garage|Mes prix|Disponibilités|Voir Pixcar|Mes garages" && (await page.locator("#rqCount").isHidden()) && (await page.locator("#dashRq").isHidden()), nav.join("|"));
 
   // ---- Disponibilités : fermés, et ce qui manque
@@ -271,7 +271,7 @@ const NOTIFY = "atelier@garage-demo.fr";
     const m = await newPage({ width: 390, height: 844 });
     await m.page.goto(`${srv.url}/pro/`);
     await m.page.waitForSelector('[data-screen="dash"]:not([hidden])');
-    const bar = await m.page.$$eval("#dashNav .dash-link", (els) => els.filter((e) => e.offsetParent).map((e) => e.innerText.trim()));
+    const bar = await m.page.$$eval("#dashNav .dash-link:not(.rail-toggle)", (els) => els.filter((e) => e.offsetParent).map((e) => e.innerText.trim()));
     check("mobile: five buttons in the bottom bar (Mon garage, Voir Pixcar, Mes garages under « Plus »), « Créneaux » for short", bar.join("|") === "Tableau de bord|Demandes|Mes prix|Créneaux|Plus", bar.join("|"));
     await m.page.click("#dashMore");
     const menu = await m.page.$$eval("#dashNav .more-item", (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [e.textContent.trim(), Math.round(r.right), Math.round(r.bottom)]; }));

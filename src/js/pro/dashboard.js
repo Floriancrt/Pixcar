@@ -116,6 +116,34 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     window.scrollTo(0, 0);
     if (focus) $(TITLES[name]).focus();
   }
+  // ordinateur : barre latérale dépliée (libellés) ou repliée (icônes, libellé en infobulle) ; le choix est gardé dans ce navigateur
+  const RAIL = "pixcar-pro-rail";
+  function rail(min, { save = false } = {}) {
+    document.body.classList.toggle("rail-min", min);
+    const t = $("dashRail");
+    t.setAttribute("aria-expanded", String(!min));
+    $("dashRailText").textContent = min ? "Déplier le menu" : "Replier le menu";
+    for (const b of document.querySelectorAll("#dashNav .dash-link")) {
+      const label = b.querySelector("span:not(.dash-count):not(.narrow-only)");
+      if (min && label) b.title = label.textContent.trim();
+      else b.removeAttribute("title");
+    }
+    if (save)
+      try {
+        localStorage.setItem(RAIL, min ? "min" : "full");
+      } catch {
+        // stockage refusé (navigation privée…) : le choix vaut pour cette visite
+      }
+  }
+  let railMin = false;
+  try {
+    railMin = localStorage.getItem(RAIL) === "min";
+  } catch {
+    railMin = false;
+  }
+  rail(railMin);
+  $("dashRail").addEventListener("click", () => rail(!document.body.classList.contains("rail-min"), { save: true }));
+
   // téléphone, avec les rendez-vous : « Plus » ouvre Mon garage, Voir Pixcar et Mes garages au-dessus de la barre du bas
   function more(open) {
     $("dashNav").classList.toggle("more-open", open);

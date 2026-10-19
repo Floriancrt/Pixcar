@@ -121,8 +121,8 @@ Choix faits au début du lot (19 octobre 2026), dans le cadre des décisions ci-
 | Par mécanicien | une par jour de la semaine | la main-d'œuvre du mécanicien choisi |
 | Par poste | une par jour de la semaine | l'occupation du poste choisi |
 
-Chaque bloc montre l'heure, le client (ou le libellé), la prestation, la durée, le mécanicien et le statut (libellé et icône, pas
-seulement une couleur) : à confirmer, confirmé, hors Pixcar, bloqué, en conflit. Filtres : mécanicien, poste, prestation, statut.
+Chaque bloc montre l'heure et la durée, la confirmation, la prestation, la voiture, le client avec le mécanicien ou le poste, et la
+provenance (détail plus bas : « Améliorations du 19 octobre 2026 »). Filtres : mécanicien, poste, prestation, provenance, confirmation.
 
 **Interactions.** Un clic ouvre la fiche (client ou libellé, voiture, prestations, dépôt, travaux, restitution, affectations ; actions :
 déplacer, changer de mécanicien ou de poste, appeler, annuler). Glisser-déposer (souris, doigt ; pas de 15 min) : vers une autre heure,
@@ -158,11 +158,45 @@ note l'ajout, le déplacement ou la suppression d'un bloc sans son libellé.
   transmis au client) ; un bloc se modifie ou se supprime (second clic pour confirmer). Rien ne se déplace dans le passé.
 - **Création rapide** : clic sur une case vide (jour, heure au quart d'heure, mécanicien ou poste de la colonne) ou « Nouveau » (jour
   affiché, 9:00 ou le prochain quart d'heure aujourd'hui). Rendez-vous hors Pixcar par défaut.
-- **Écran** : 1 minute = 1 pixel, de la première à la dernière heure d'ouverture de la période ; heures fermées grisées, absences et
+- **Écran** : 1 minute = 1,5 pixel sur ordinateur (1 sur téléphone), de la première à la dernière heure d'ouverture de la période ; heures fermées grisées, absences et
   maintenances hachurées en rouge avec leur libellé ; blocs qui se chevauchent côte à côte. Semaine par défaut sur ordinateur, Jour sur
   téléphone, filtres repliés sur téléphone ; la grille défile dans son cadre, jamais la page. Le menu ne montre « Planning » qu'en mode
   avancé (`rdv.mode` dans `GET /v1/pro/garages/{id}`).
 - **Données** : l'agenda donne aussi le téléphone du client (pour « Appeler » depuis la fiche), comme « Demandes ».
+
+**Améliorations du 19 octobre 2026** (retours de l'utilisateur après la mise en ligne : tableau de priorités, maquettes d'une vue
+d'ensemble et d'un bloc enrichi, vidéo de la barre latérale). Tout est dans la page (`src/js/pro/planning.js`, `src/js/pro/dashboard.js`,
+`src/pro/index.html`, `src/css/pro.css`) : aucune route ni donnée nouvelle, l'API du lot 3b suffit.
+
+- **Barre latérale de l'Espace Pro** (ordinateur, 900 px et plus) : fixée tout à gauche sous le bandeau, sur toute la hauteur ; le
+  contenu prend le reste de la largeur. « Replier le menu » la réduit aux icônes (le libellé reste lu par les lecteurs d'écran et
+  s'affiche en infobulle) ; le choix est gardé dans ce navigateur (`localStorage`, clé `pixcar-pro-rail`). Planning a sa propre icône,
+  distincte de Disponibilités. Téléphone : la barre du bas ne change pas.
+- **Vue d'ensemble** en haut du Planning, comptée sur la période affichée (jour, semaine, mois), sans les filtres : **Rendez-vous**
+  (nombre, dont à confirmer), **Charge atelier** (heures de main-d'œuvre planifiées / heures disponibles des mécaniciens, en % avec une
+  jauge), **Mécaniciens** (présents / total en vue Jour, sinon absences sur la période), **Alertes** (conflits et demandes à confirmer
+  dont l'heure limite tombe dans les 24 heures). Les cartes Rendez-vous et Alertes filtrent le planning d'un clic.
+- **Charge** : heures disponibles d'un mécanicien = heures d'ouverture ∩ ses horaires, moins ses absences (comme le moteur) ; d'un poste,
+  de même avec ses maintenances. En Semaine, chaque jour affiche « planifié / disponible · n rdv » et une jauge ; en Jour, chaque
+  colonne (mécanicien ou poste) ; en Par mécanicien et Par poste, chaque jour (avec le nombre de conflits) et le total de la semaine à
+  côté du choix ; en Mois, le pourcentage de chaque jour.
+- **Créneaux** : libre (fond blanc), pas proposé en ligne (pointillé : réservation fermée, avant le délai minimum, au-delà de
+  l'horizon), fermé ou hors horaires (hachures grises), absence ou maintenance (hachures rouges avec le motif), passé (gris léger).
+- **Trois informations séparées** : la **confirmation** (pastille et fond du bloc : à confirmer en pointillé ambre, confirmé en vert),
+  la **provenance** (étiquette : Pixcar, Hors Pixcar, Créneau bloqué ; et l'icône de la ligne client : globe, téléphone, cadenas) et
+  l'**alerte** (« En conflit » : contour et pastille rouges). L'état de l'intervention (`work.status` : prévue, voiture reçue, en cours…)
+  est dans la fiche ; il reste « Prévue » tant que le lot 3c ne permet pas de le changer.
+- **Bloc enrichi** : heure et durée, pastille ; prestation ; voiture et immatriculation ; client · mécanicien · poste ; étiquette de
+  provenance. Les lignes posées dépendent de la hauteur du bloc (un bloc court garde l'heure, la prestation et le client) ; tout est
+  dans l'infobulle et le nom lu par les lecteurs d'écran, et la fiche s'ouvre au clic. Dans une colonne étroite (menu déplié), la
+  pastille garde son icône seule (règle `@container`).
+- **Filtres** repliés derrière un bouton « Filtres » (avec le nombre de filtres actifs) ; chaque filtre actif est une puce qui le retire.
+- **« Nouveau »** ouvre un menu (flèches, Échap) : rendez-vous pris hors Pixcar, créneau bloqué, absence d'un mécanicien,
+  indisponibilité d'un poste (mêmes règles que les fiches du lot 3a : les rendez-vous touchés apparaissent « En conflit »).
+- **Semaine** : une colonne par jour ouvert ; le week-end fermé est proposé par un bouton (« Afficher le week-end ») et s'affiche de
+  lui-même s'il porte un rendez-vous.
+- **Pas encore possible** (données absentes) : « Pièces disponibles » sur un bloc, les « retards » dans les alertes et la création d'une
+  intervention depuis « Nouveau » demandent le suivi des interventions (lot 3c).
 
 **API** (en plus du lot 3a) :
 
@@ -190,6 +224,11 @@ Lot 3b (blocs internes) : le libellé d'un bloc, qui peut contenir un nom, est e
 libellé. Les deux textes de confidentialité le disent (`src/partials/legal.html`, côté garage ; le pied de page de l'Espace Pro). Côté
 automobiliste, le texte précise que le garage voit son nom et son téléphone dans son planning et qu'un changement d'heure décidé par
 le garage lui est annoncé par e-mail.
+
+## Avant la mise en ligne des améliorations du Planning
+
+- Site seulement (aucune modification de l'API ni de la base) : fusion dans `main` puis publication sur `gh-pages`, chacune après le go
+  de l'utilisateur.
 
 ## Avant la mise en ligne du lot 3b
 

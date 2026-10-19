@@ -1,9 +1,12 @@
 // Espace Pro, écran Planning (docs/calendrier-avance.md, lot 3b) de bout en bout : page construite pour de bon, vraie API (PGlite), un garage
 // en mode avancé (deux mécaniciens, deux ponts), une demande confirmée, une à confirmer, un rendez-vous pris hors Pixcar, un créneau bloqué
-// et une absence. Parcours : le menu (Planning seulement en mode avancé) → semaine (statuts en mots et icônes, légende) → fiche d'un
-// rendez-vous (détail, appeler, déplacer au clavier : conflit avec d'autres horaires, puis confirmation et e-mail au client) → glisser-déposer
-// (vers un autre mécanicien ; vers une autre heure, avec la confirmation) → création rapide (refus expliqué, puis enregistrée) → filtres →
-// mois → par mécanicien (absence) et par poste → suppression d'un bloc, annulation d'un rendez-vous → tablette et téléphone ; axe.
+// et une absence. Parcours : la barre latérale (repliable, choix mémorisé) → le menu (Planning seulement en mode avancé) → semaine (vue
+// d'ensemble, charge par jour, blocs enrichis : confirmation, provenance et alerte séparées, légende, créneaux libres / pas proposés en
+// ligne / fermés) → fiche d'un rendez-vous (détail, appeler, déplacer au clavier : conflit avec d'autres horaires, puis confirmation et
+// e-mail au client) → glisser-déposer (vers un autre mécanicien ; vers une autre heure, avec la confirmation) → menu Nouveau (clavier) et
+// création rapide (refus expliqué, puis enregistrée) → absence par le menu Nouveau (rendez-vous touchés « En conflit ») → filtres repliés
+// et puces → carte d'alerte → week-end → mois → par mécanicien (heures planifiées, absence) et par poste → suppression d'un bloc,
+// annulation d'un rendez-vous → tablette et téléphone ; axe.
 //   node tests/pro-planning.js
 delete process.env.PIXCAR_ROOT;
 const { execFileSync } = require("child_process");
@@ -113,6 +116,9 @@ const NOTIFY = "atelier@garage-planning.fr";
   };
   const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, `pro-plan-${name}.png`), fullPage: true });
   const text = (page, sel) => page.$eval(sel, (e) => e.innerText.replace(/\s+/g, " ").trim());
+  // le texte tel qu'écrit (sans les majuscules de la mise en forme), un espace entre deux éléments
+  const words = (page, sel) => page.$eval(sel, (e) => { const w = document.createTreeWalker(e, NodeFilter.SHOW_TEXT), out = []; while (w.nextNode()) out.push(w.currentNode.textContent); return out.join(" ").replace(/\s+/g, " ").trim(); });
+  const ppm = (page) => page.$eval(".pl-grid", (g) => parseFloat(g.style.getPropertyValue("--hour")) / 60);
   const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   const agenda = async (from = monday(D1), to = R.addDays(monday(D1), 13)) => (await pro("GET", `/rdv/calendar/agenda?from=${from}&to=${to}`)).body;
   const live = (page, re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById("planLive").textContent), re.source);
@@ -124,11 +130,12 @@ const NOTIFY = "atelier@garage-planning.fr";
     const b = await page.locator(from).boundingBox();
     const col = await page.locator(toCol).boundingBox();
     const lo = Number(await page.$eval(".pl-grid", (g) => g.dataset.lo));
+    const k = await ppm(page);
     const x0 = b.x + Math.min(20, b.width / 2), y0 = b.y + 6;
     await page.mouse.move(x0, y0);
     await page.mouse.down();
     await page.mouse.move(x0 + 8, y0 + 8, { steps: 2 });
-    await page.mouse.move(col.x + col.width / 2, col.y + (minute - lo) + 6, { steps: 10 });
+    await page.mouse.move(col.x + col.width / 2, col.y + (minute - lo) * k + 6, { steps: 10 });
     await page.mouse.up();
   }
 
@@ -165,10 +172,32 @@ const NOTIFY = "atelier@garage-planning.fr";
   const away = await pro("POST", "/rdv/calendar/unavail", { target: "staff", targetId: lea, kind: "training", first: D2 });
   check("setup: two requests (one confirmed), a phone booking, a blocked slot, an absence", julien && marie && acc.status === 200 && job.saved && hold.saved && away.status === 200, JSON.stringify([acc.body, job, hold, away.body]));
 
-  const { ctx, page, logs } = await newPage();
+  const { ctx, page, logs } = await newPage({ width: 1440, height: 1000 });
   await page.goto(`${srv.url}/pro/`);
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
   check("advanced mode: Planning is in the menu, next to Demandes", await page.isVisible('.dash-link[data-panel="planning"]'));
+  // ---- barre latérale : fixée tout à gauche sous le bandeau, repliable en icônes, choix mémorisé
+  const rail = () => page.evaluate(() => {
+    const n = document.querySelector(".dash-nav").getBoundingClientRect(), m = document.querySelector(".pro-main").getBoundingClientRect(), t = document.querySelector(".pro-top").getBoundingClientRect();
+    const label = document.querySelector('.dash-link[data-panel="planning"] span:not(.dash-count)');
+    return { left: Math.round(n.left), top: Math.round(n.top), topbar: Math.round(t.bottom), width: Math.round(n.width), main: Math.round(m.left), height: Math.round(n.height), label: label ? label.getBoundingClientRect().width : -1 };
+  });
+  const r0 = await rail();
+  check("rail: fixed at the far left, under the top bar, full height", r0.left === 0 && r0.top === r0.topbar && r0.height >= 1000 - r0.topbar - 1 && r0.main >= r0.width, JSON.stringify(r0));
+  check("rail: expanded by default, with its labels and a « Replier le menu » button", r0.width >= 200 && r0.label > 20 && (await text(page, "#dashRail")) === "Replier le menu" && (await page.getAttribute("#dashRail", "aria-expanded")) === "true", JSON.stringify(r0));
+  await page.click("#dashRail");
+  await page.waitForFunction(() => document.querySelector(".dash-nav").getBoundingClientRect().width <= 80);
+  const r1 = await rail();
+  check("rail: folded to icons only, the content takes the room", r1.width <= 80 && r1.label <= 1 && r1.main < r0.main && (await page.getAttribute("#dashRail", "aria-expanded")) === "false" && (await words(page, "#dashRail")) === "Déplier le menu", JSON.stringify(r1));
+  check("rail folded: each link keeps its name (for screen readers, and as a tooltip)", await page.$eval('.dash-link[data-panel="planning"]', (a) => a.textContent.trim() === "Planning" && a.title === "Planning"), await page.$eval('.dash-link[data-panel="planning"]', (a) => a.outerHTML));
+  await axe(page, "barre latérale repliée");
+  await shot(page, "0-rail-replie");
+  await page.reload();
+  await page.waitForSelector('[data-screen="dash"]:not([hidden])');
+  check("rail: the choice is remembered on the next visit", (await rail()).width <= 80 && (await page.getAttribute("#dashRail", "aria-expanded")) === "false");
+  await page.click("#dashRail");
+  await page.waitForFunction(() => document.querySelector(".dash-nav").getBoundingClientRect().width >= 200);
+  check("rail: unfolded again", (await rail()).width >= 200 && (await page.evaluate(() => localStorage.getItem("pixcar-pro-rail"))) === "full");
   await page.click('.dash-link[data-panel="planning"]');
   await page.waitForSelector("#dash-planning:not([hidden]) .pl-grid");
   if (monday(D1) !== monday(today)) {
@@ -177,30 +206,59 @@ const NOTIFY = "atelier@garage-planning.fr";
   }
   check("the menu points at Planning, the week view is the default on a computer", (await page.getAttribute('.dash-link[data-panel="planning"]', "aria-current")) === "true" && (await page.getAttribute('.pl-view[aria-pressed="true"]', "aria-pressed")) === "true" && (await text(page, '.pl-view[aria-pressed="true"]')) === "Semaine");
   const weekCols = await page.$$eval(".pl-col", (c) => c.map((x) => x.dataset.day));
-  check("week: today's column says so", !weekColsHaveToday() || (await text(page, ".pl-colhead.is-today")).endsWith("Aujourd'hui"));
+  check("week: today's column says so", !weekColsHaveToday() || (await text(page, ".pl-colhead.is-today small")) === "Aujourd'hui");
   check("the page carries the published security policy (no inline style attribute allowed)", /(^|; )style-src 'self'(;|$)/.test(await page.$eval('meta[http-equiv="Content-Security-Policy"]', (m) => m.content)));
   const boxes = await page.$$eval(".pl-col", (c) => c.map((x) => { const r = x.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.height)]; }));
   check("week: the day columns sit side by side, as tall as the opening hours", boxes.length > 1 && boxes.every((b, i) => b[1] === boxes[0][1] && b[2] >= 480 && (i === 0 || b[0] > boxes[i - 1][0])), JSON.stringify(boxes));
-  check("week: one column per open day (Monday to Friday)", weekCols.length === 5 && weekCols.includes(D1) && weekCols.includes(D2), weekCols.join());
+  check("week: one column per open day (Monday to Friday), the closed week-end offered behind a button", weekCols.length === 5 && weekCols.includes(D1) && (await page.isVisible("#planWeekend")) && (await words(page, "#planWeekend")) === "Afficher le week-end", weekCols.join());
+  // vue d'ensemble : quatre cartes (rendez-vous, charge, mécaniciens, alertes), comptées sur la semaine affichée
+  const cards = await page.$$eval(".pl-card", (c) => c.map((x) => [...x.querySelectorAll(".pl-card-l, .pl-card-v, .pl-card-s")].map((n) => n.textContent.trim()).join(" ")));
+  check("overview: four cards, in words", cards.length === 4 && /^Rendez-vous 3 1 à confirmer$/.test(cards[0]) && /^Charge atelier \d+ % \d+ h( \d\d)? \/ \d+ h$/.test(cards[1]) && (weekCols.includes(D2) ? /^Mécaniciens 2 1 absent sur la période$/ : /^Mécaniciens 2 Aucune absence$/).test(cards[2]) && /^Alertes \d /.test(cards[3]), cards.join(" | "));
+  check("overview: its title names the period", /^Vue d'ensemble · (cette semaine|semaine du .+)$/.test(await words(page, "#planSumTitle")), await words(page, "#planSumTitle"));
+  // charge de l'atelier, comme la page doit la compter : heures de travail planifiées des mécaniciens / heures d'ouverture des mécaniciens présents
+  const ag0 = await agenda();
+  const weekSet = new Set(weekCols);
+  const labourMin = [...ag0.appointments, ...ag0.blocks].flatMap((x) => x.plan || []).filter((r) => r.target === "staff" && r.role === "labour" && weekSet.has(R.parisParts(Date.parse(r.start)).iso)).reduce((n, r) => n + (Date.parse(r.end) - Date.parse(r.start)) / 60000, 0);
+  const availMin = weekCols.length * 2 * 8 * 60 - (weekSet.has(D2) ? 8 * 60 : 0); // deux mécaniciens, 8 h par jour, Léa en formation le jour D2
+  check("overview: the workshop load is the mechanics' planned hours over their available hours", cards[1].startsWith(`Charge atelier ${Math.round((labourMin / availMin) * 100)} %`), `${cards[1]} / ${labourMin} min sur ${availMin}`);
+  // chaque jour : heures planifiées / disponibles et nombre de rendez-vous
+  const dayLoadText = (d) => text(page, `.pl-colhead:nth-child(${weekCols.indexOf(d) + 2}) .pl-load`);
+  check("week: each day shows its load and its bookings", /^\d+ h( \d\d)? \/ 16 h · 3 rdv$/.test(await dayLoadText(D1)), await dayLoadText(D1));
+  check("week: the day of Léa's training has 8 h available", !weekSet.has(D2) || /\/ 8 h · /.test(await dayLoadText(D2)), weekSet.has(D2) && (await dayLoadText(D2)));
   const ev = (id) => `.pl-ev[data-id="${id}"]`;
   const label = (id) => page.getAttribute(ev(id), "aria-label");
-  check("week: the confirmed request, in words (time, client, service, mechanic, status)", /^8:00–\d+:\d\d, Julien Roux, Vidange.*, (Paul|Léa), Confirmé$/.test(await label(julien)), await label(julien));
-  check("week: the pending request says « À confirmer »", /Marie Curie.*À confirmer$/.test(await label(marie)), await label(marie));
-  check("week: the phone booking says « Hors Pixcar », the blocked slot « Bloqué »", /^14:00–.*M\. Martin \(tél\.\).*Paul, Hors Pixcar$/.test(await label(job.saved)) && /^10:00–11:00, Livraison pièces, .*Bloqué$/.test(await label(hold.saved)), [await label(job.saved), await label(hold.saved)].join(" / "));
-  check("week: each block shows its status in words, not only a colour", (await text(page, `${ev(julien)} .pl-ev-st`)) === "Confirmé" && (await text(page, `${ev(hold.saved)} .pl-ev-st`)) === "Bloqué");
-  check("the legend lists the five statuses", (await text(page, "#planLegend")) === "À confirmer Confirmé Hors Pixcar Bloqué En conflit");
+  check("week: the confirmed request, in words (time and length, service, car, client and who, origin, confirmation)", /^8:00–\d+:\d\d \(\d.*\), Vidange.*, Peugeot 208 · EZ-108-BC, Julien Roux · (Paul|Léa) · Pont n°\d, Pixcar, Confirmé$/.test(await label(julien)), await label(julien));
+  check("week: the pending request says « À confirmer »", /Marie Curie.*, Pixcar, À confirmer$/.test(await label(marie)), await label(marie));
+  check("week: the phone booking says « Hors Pixcar », the blocked slot « Créneau bloqué »", /^14:00–.*, M\. Martin \(tél\.\) · Paul.*, Hors Pixcar, Confirmé$/.test(await label(job.saved)) && /^10:00–11:00 \(1 h\), Livraison pièces, Pont n°2, Créneau bloqué$/.test(await label(hold.saved)), [await label(job.saved), await label(hold.saved)].join(" / "));
+  check("week: the tooltip carries the same detail, one line each", (await page.getAttribute(ev(julien), "title")) === (await label(julien)).split(", ").join("\n"), await page.getAttribute(ev(julien), "title"));
+  const lines = await page.$eval(ev(julien), (b) => [...b.children].map((c) => c.className + ":" + [...c.childNodes].map((n) => n.textContent.trim()).filter(Boolean).join(" ")));
+  check("week: a one-hour block shows time, length and confirmation, the service, the car, the client and who", lines.length === 4 && lines[0] === "pl-ev-h:8:00–9:00 1 h Confirmé" && (await page.$eval(`${ev(julien)} .pl-ev-l:nth-child(4) use`, (u) => u.getAttribute("href"))) === "#i-globe" && (await page.$eval(`${ev(job.saved)} .pl-ev-l use`, (u) => u.getAttribute("href"))) === "#i-phone" && /^pl-ev-t:Vidange/.test(lines[1]) && /Peugeot 208 · EZ-108-BC$/.test(lines[2]) && /Julien Roux · /.test(lines[3]), lines.join(" | "));
+  const fits = () => page.$$eval(".pl-ev", (bs) => bs.filter((b) => b.scrollHeight > b.clientHeight + 1 || [...b.querySelectorAll(".pl-ev-h")].some((h) => h.scrollWidth > h.clientWidth + 1)).map((b) => b.getAttribute("aria-label")));
+  check("week: every line drawn fits in its block, in height and in width", (await fits()).length === 0, (await fits()).join(" / "));
+  check("week (menu unfolded, narrow columns): the confirmation keeps its icon, its words are in the tooltip", await page.$eval(`${ev(julien)} .pl-pill-t`, (t) => getComputedStyle(t).display === "none"));
+  check("week: confirmation and origin are two separate marks (pill and tag)", (await words(page, `${ev(julien)} .pl-pill`)) === "Confirmé" && (await words(page, `${ev(job.saved)} .pl-tag`)) === "Hors Pixcar" && (await words(page, `${ev(job.saved)} .pl-pill`)) === "Confirmé" && (await words(page, `${ev(marie)} .pl-pill`)) === "À confirmer" && !(await page.$(`${ev(hold.saved)} .pl-pill`)));
+  check("the legend groups confirmation, origin and slots", (await words(page, "#planLegend")) === "Rendez-vous À confirmer Confirmé En conflit Provenance Pixcar Hors Pixcar Créneau bloqué Créneaux Libre Pas proposé en ligne Fermé ou hors horaires Absence ou maintenance", await words(page, "#planLegend"));
   const top = async (id) => page.$eval(ev(id), (e) => parseFloat(e.style.top));
-  check("week: blocks sit at their hour (1 px per minute from the first hour shown)", (await top(job.saved)) - (await top(julien)) === 360, `${await top(julien)} → ${await top(job.saved)}`);
+  check("week: blocks sit at their hour (1.5 px per minute from the first hour shown)", (await top(job.saved)) - (await top(julien)) === 540, `${await top(julien)} → ${await top(job.saved)}`);
+  // créneaux : midi fermé, jours passés grisés ; aujourd'hui et demain, pas proposés en ligne si la réservation l'interdit (ici minDelayH 0)
+  const bands = await page.$eval(`.pl-col[data-day="${D1}"]`, (c) => [...c.querySelectorAll(".pl-off")].map((b) => [parseFloat(b.style.top), parseFloat(b.style.height)]));
+  check("week: the lunch break is drawn closed (12:00–14:00)", bands.some(([t, h]) => t === (12 * 60 - 8 * 60) * 1.5 && h === 120 * 1.5), JSON.stringify(bands));
   check("the planning shows no stray null / undefined", await noNull(page, "#dash-planning"), (await page.$eval("#dash-planning", (e) => e.innerText)).split("\n").filter((l) => /\b(null|undefined|NaN)\b/.test(l)).join(" | "));
   check("no page-wide horizontal scroll on a computer", (await overflow(page)) <= 0, await overflow(page));
   await axe(page, "planning · semaine");
   await shot(page, "1-semaine");
+  await page.click("#dashRail");
+  await page.waitForFunction(() => document.querySelector(".dash-nav").getBoundingClientRect().width <= 80);
+  check("week (menu folded, wider columns): the confirmation is written out, everything still fits", (await page.$eval(`${ev(julien)} .pl-pill-t`, (t) => getComputedStyle(t).display !== "none")) && (await fits()).length === 0, (await fits()).join(" / "));
+  await shot(page, "1-semaine-menu-replie");
+  await page.click("#dashRail");
+  await page.waitForFunction(() => document.querySelector(".dash-nav").getBoundingClientRect().width >= 200);
 
   // ---- fiche d'un rendez-vous, déplacement au clavier
   await page.click(ev(julien));
   await page.waitForSelector("#planDlg[open] #planMove");
   const sheet = await text(page, "#planForm");
-  check("sheet: client and phone, car, service, drop-off, work, return, assignments", /^Rendez-vous Pixcar Julien Roux Confirmé Client : Julien Roux · 06 39 98 12 34 Voiture : Peugeot 208 · EZ-108-BC/i.test(sheet) && /Dépôt : .* à 8:00/.test(sheet) && /Travaux : 8:00–8:45/.test(sheet) && /Affectations (Paul|Léa) · main-d'œuvre/.test(sheet) && /Pont n°\d · poste/.test(sheet), sheet);
+  check("sheet: origin, confirmation and work state apart; client and phone, car, service, drop-off, work, return, assignments", /^Rendez-vous Julien Roux Pixcar Confirmé Intervention : Prévue Client : Julien Roux · 06 39 98 12 34 Voiture : Peugeot 208 · EZ-108-BC/i.test(sheet) && /Dépôt : .* à 8:00/.test(sheet) && /Travaux : 8:00–8:45/.test(sheet) && /Affectations (Paul|Léa) · main-d'œuvre/.test(sheet) && /Pont n°\d · poste/.test(sheet), sheet);
   check("sheet: call and cancel are offered", (await page.getAttribute('#planForm a.btn[href^="tel:"]', "href")) === "tel:+33639981234" && /Annuler ce rendez-vous/.test(sheet));
   check("sheet: no stray null", await noNull(page, "#planForm"));
   await axe(page, "fiche d'un rendez-vous");
@@ -269,8 +327,19 @@ const NOTIFY = "atelier@garage-planning.fr";
   ag = await agenda();
   check("confirmed: the request moved to 11:00, still with the same mechanic", ag.appointments.find((a) => a.id === marie).when.start === "11:00" && ag.appointments.find((a) => a.id === marie).plan.some((r) => r.id === col && r.role === "labour"));
 
-  // ---- création rapide
+  // ---- menu « Nouveau » (clavier), puis création rapide
   await page.click("#planNew");
+  check("« Nouveau » opens a menu of four choices, focus on the first", (await page.getAttribute("#planNew", "aria-expanded")) === "true" && (await page.$$eval("#planNewMenu button", (b) => b.map((x) => x.textContent.trim()).join(" | "))) === "Rendez-vous pris hors Pixcar | Créneau bloqué | Absence d'un mécanicien | Indisponibilité d'un poste" && (await page.evaluate(() => document.activeElement.dataset.new)) === "job");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  check("the menu: arrows move between the choices", (await page.evaluate(() => document.activeElement.dataset.new)) === "staff");
+  await page.keyboard.press("Escape");
+  check("the menu: Escape closes it, focus back on « Nouveau »", (await page.isHidden("#planNewMenu")) && (await page.getAttribute("#planNew", "aria-expanded")) === "false" && (await page.evaluate(() => document.activeElement.id)) === "planNew");
+  await page.click("#planNew");
+  await page.click("#planTitle");
+  check("the menu: a click elsewhere closes it", await page.isHidden("#planNewMenu"));
+  await page.click("#planNew");
+  await page.click('#planNewMenu [data-new="job"]');
   await page.waitForSelector("#planDlg[open] #planLabel");
   check("quick creation: a phone booking by default, the day shown, no stray null", (await page.isChecked('input[name="planKind"][value="job"]')) && (await page.inputValue("#planDay")) === D1 && (await noNull(page, "#planForm")));
   await axe(page, "création rapide");
@@ -298,7 +367,7 @@ const NOTIFY = "atelier@garage-planning.fr";
   const meeting = ag.blocks.find((k) => k.label === "Réunion fournisseur");
   check("the blocked slot is saved and drawn", meeting && meeting.when.start === "16:30" && meeting.when.end === "17:30" && !!(await page.$(ev(meeting.id))), JSON.stringify(meeting));
   // clic sur une case vide : création au jour et à la colonne choisis
-  await page.locator(`.pl-col[data-staff="${paul}"]`).click({ position: { x: 20, y: 9 * 60 - Number(await page.$eval(".pl-grid", (g) => g.dataset.lo)) + 4 } });
+  await page.locator(`.pl-col[data-staff="${paul}"]`).click({ position: { x: 20, y: (9 * 60 - Number(await page.$eval(".pl-grid", (g) => g.dataset.lo))) * (await ppm(page)) + 4 } });
   await page.waitForSelector("#planDlg[open] #planLabel");
   check("a click on an empty cell opens the creation at that time, for that mechanic", (await page.inputValue("#planTime")) === "09:00" && (await page.inputValue("#planStaff")) === paul);
   await page.fill("#planLabel", "Mme Petit (comptoir)");
@@ -310,20 +379,63 @@ const NOTIFY = "atelier@garage-planning.fr";
   const petit = ag.blocks.find((k) => k.label === "Mme Petit (comptoir)");
   check("a phone booking is placed by the engine with the mechanic chosen, and no e-mail is sent", petit && petit.when.start === "09:00" && petit.plan.some((r) => r.id === paul && r.role === "labour"), JSON.stringify(petit));
 
-  // ---- filtres
+  // ---- filtres : repliés derrière un bouton, les filtres actifs en puces
   await page.click('.pl-view:has-text("Semaine")');
   await page.waitForSelector(`.pl-col[data-day="${D1}"]`);
-  await page.selectOption("#planFStatus", "hold");
+  check("filters: folded by default, one « Filtres » button", (await page.isHidden("#planFilters")) && (await page.getAttribute("#planFToggle", "aria-expanded")) === "false" && (await page.$$eval(".pl-chip", (c) => c.length)) === 0);
+  await page.click("#planFToggle");
+  check("filters: the button unfolds five filters (mechanic, post, service, origin, confirmation)", (await page.isVisible("#planFilters")) && (await page.$$eval("#planFilters select", (x) => x.map((s) => s.id).join())) === "planFStaff,planFPost,planFService,planFOrigin,planFState");
+  await page.selectOption("#planFOrigin", "hold");
   await live(page, /Filtre appliqué/);
   const shown = await page.$$eval(".pl-ev", (e) => e.map((x) => x.dataset.id).sort());
-  check("filter « Bloqué »: only the blocked slots", shown.join() === [hold.saved, meeting.id].sort().join(), shown.join());
-  await page.selectOption("#planFStatus", "");
+  check("filter « Créneau bloqué »: only the blocked slots", shown.join() === [hold.saved, meeting.id].sort().join(), shown.join());
+  check("an active filter shows as a chip, and the button counts it", (await words(page, "#planChips")) === "Provenance : Créneau bloqué" && (await words(page, "#planFCount")) === "1" && (await page.getAttribute("#planFToggle", "aria-label")) === "Filtres, 1 actif");
+  await page.selectOption("#planFOrigin", "");
   await page.selectOption("#planFStaff", lea);
   const leaOnly = await page.$$eval(".pl-ev", (e) => e.map((x) => x.dataset.id));
   check("filter « Léa »: only what Léa does", leaOnly.includes(job.saved) && !leaOnly.includes(petit.id), leaOnly.join());
-  await page.click('#planFilters .link-btn:has-text("Retirer les filtres")');
-  check("filters removed: everything is back, focus on the first filter", (await page.$$eval(".pl-ev", (e) => e.length)) === 6 && (await page.evaluate(() => document.activeElement.id)) === "planFStaff");
+  await page.selectOption("#planFState", "pending");
+  check("filter « À confirmer » with Léa: both apply", (await page.$$eval(".pl-ev", (e) => e.map((x) => x.dataset.id))).every((id) => id === marie) && (await page.$$eval(".pl-chip", (c) => c.length)) === 2);
   await axe(page, "planning · filtres");
+  await shot(page, "5-filtres");
+  await page.click('.pl-chip:has-text("État")');
+  check("a chip removes its filter, focus back on the « Filtres » button", (await page.$$eval(".pl-chip", (c) => c.length)) === 1 && (await page.evaluate(() => document.activeElement.id)) === "planFToggle");
+  await page.click('#planFilters .link-btn:has-text("Retirer les filtres")');
+  check("filters removed: everything is back, focus on the first filter", (await page.$$eval(".pl-ev", (e) => e.length)) === 6 && (await page.evaluate(() => document.activeElement.id)) === "planFStaff" && (await page.$$eval(".pl-chip", (c) => c.length)) === 0);
+  await page.click("#planFToggle");
+  check("filters: folded again", await page.isHidden("#planFilters"));
+
+  // ---- absence par le menu « Nouveau » : le rendez-vous de Julien (15:00) touché, « En conflit » ; la carte d'alerte filtre
+  await page.click("#planNew");
+  await page.click('#planNewMenu [data-new="staff"]');
+  await page.waitForSelector("#planDlg[open] #planUnWho");
+  check("absence form: mechanic, reason, dates and hours, no stray null", (await page.$$eval("#planUnKind option", (o) => o.map((x) => x.textContent).join())).includes("Formation") && (await noNull(page, "#planForm")));
+  await axe(page, "absence d'un mécanicien");
+  await page.selectOption("#planUnWho", jWho);
+  await page.fill("#planUnFirst", D1);
+  await page.fill("#planUnLast", D1);
+  await page.fill("#planUnFrom", "15:00");
+  await page.fill("#planUnTo", "15:30");
+  await page.click("#planUnSave");
+  await closed(page);
+  await live(page, /Absence enregistrée/);
+  check("the alert says which bookings it touches", /Absence enregistrée\. 1 rendez-vous à venir est touché : il apparaît « En conflit » dans le planning\./.test(await text(page, "#alert")), await text(page, "#alert"));
+  check("the touched booking is marked « En conflit » (pill, outline, words)", (await page.$eval(ev(julien), (b) => b.classList.contains("is-conflict"))) && (await words(page, `${ev(julien)} .pl-pill`)) === "En conflit" && /, En conflit$/.test(await label(julien)), await label(julien));
+  check("the absence is drawn on the day's load (an hour less: 15 h 30 available)", /\/ 15 h 30 · /.test(await dayLoadText(D1)), await dayLoadText(D1));
+  check("overview: the alert card counts the conflict", /^Alertes [1-9]\d* .*1 conflit/.test(await words(page, ".pl-card.is-alert")), await words(page, ".pl-card.is-alert"));
+  await page.click(".pl-card.is-alert .pl-card-btn");
+  check("the alert card shows the conflicts only", (await page.$$eval(".pl-ev", (e) => e.map((x) => x.dataset.id).join())) === julien && (await words(page, "#planChips")) === "État : En conflit", await words(page, "#planChips"));
+  await shot(page, "5-conflit");
+  await page.click(".pl-chip");
+  // week-end : fermé, masqué ; affiché à la demande, grisé
+  await page.click("#planWeekend");
+  await live(page, /Week-end affiché/);
+  const all7 = await page.$$eval(".pl-col", (c) => c.map((x) => x.dataset.day));
+  const sun = all7[6];
+  check("week-end shown: seven columns, Saturday and Sunday drawn closed", all7.length === 7 && R.weekday(sun) === "su" && (await page.$eval(`.pl-col[data-day="${sun}"]`, (c) => { const o = c.querySelector(".pl-off"); return !!o && Math.abs(o.getBoundingClientRect().height - c.getBoundingClientRect().height) < 2; })) && /Fermé/.test(await text(page, ".pl-colhead:nth-child(8) .pl-load")), all7.join());
+  check("the button now hides it", (await words(page, "#planWeekend")) === "Masquer le week-end" && (await page.evaluate(() => document.activeElement.id)) === "planWeekend");
+  await page.click("#planWeekend");
+  check("week-end hidden again", (await page.$$eval(".pl-col", (c) => c.length)) === 5);
 
   // ---- mois
   await page.click('.pl-view:has-text("Mois")');
@@ -340,6 +452,8 @@ const NOTIFY = "atelier@garage-planning.fr";
   await page.click('.pl-view:has-text("Par mécanicien")');
   await page.waitForSelector("#planWho");
   await page.selectOption("#planWho", lea);
+  check("by mechanic: the focus stays on the list after a choice", (await page.evaluate(() => document.activeElement.id)) === "planWho");
+  check("by mechanic: Léa's week in hours (planned over available)", /^Semaine : .+ planifiées sur 32 h \(\d+ %\)$/.test(await text(page, ".pl-picksum")), await text(page, ".pl-picksum"));
   check("by mechanic: Léa's absence is drawn on her day off, in words", /Formation/.test(await text(page, `.pl-col[data-day="${D2}"] .pl-away`)));
   await shot(page, "6-mecanicien");
   await page.click('.pl-view:has-text("Par poste")');
@@ -355,6 +469,7 @@ const NOTIFY = "atelier@garage-planning.fr";
   check("deleting asks to confirm", (await text(page, "#planDel")) === "Confirmer la suppression");
   await page.click("#planDel");
   await closed(page);
+  await live(page, /Supprimé/);
   check("the blocked slot is gone", !(await agenda()).blocks.some((k) => k.id === hold.saved) && !(await page.$(ev(hold.saved))));
   await page.click('.pl-view:has-text("Semaine")');
   await page.waitForSelector(ev(julien));
@@ -384,11 +499,12 @@ const NOTIFY = "atelier@garage-planning.fr";
     }
     await m.page.click('.dash-link[data-panel="planning"]');
     await m.page.waitForSelector("#dash-planning:not([hidden]) .pl-grid");
-    if (name === "telephone") check("phone: the day view is the default, the filters are folded", (await text(m.page, '.pl-view[aria-pressed="true"]')) === "Jour" && !(await m.page.$eval("#planFBox", (d) => d.open)));
+    if (name === "telephone") check("phone: the day view is the default, the filters are folded", (await text(m.page, '.pl-view[aria-pressed="true"]')) === "Jour" && (await m.page.isHidden("#planFilters")));
     check(`${name}: no page-wide horizontal scroll (the grid scrolls inside its box)`, (await overflow(m.page)) <= 0, await overflow(m.page));
     await axe(m.page, `planning · ${name}`);
     await shot(m.page, `7-${name}`);
     await m.page.click("#planNew");
+    await m.page.click('#planNewMenu [data-new="job"]');
     await m.page.waitForSelector("#planDlg[open] #planLabel");
     check(`${name}: the creation sheet fits the screen`, await m.page.evaluate(() => { const r = document.getElementById("planDlg").getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth + 1; }));
     await shot(m.page, `7-${name}-creation`);

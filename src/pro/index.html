@@ -42,6 +42,12 @@
   <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="18.5" cy="12" r="1.3" /></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" /></symbol>
   <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5" /></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><path d="M9.5 4.5v15" /></symbol>
+  <symbol id="i-planning" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2" /><path d="M8 3v4M16 3v4M7 11h6M10 15h7" /></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4.5 17a8 8 0 1 1 15 0" /><path d="m12 13 3.5-4" /></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3" /><path d="M3.5 19c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5" /><circle cx="16.5" cy="9.5" r="2.4" /><path d="M16.5 14.3c2.1 0 3.7 1.3 4.1 3.7" /></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 3 19.5h18z" /><path d="M12 10v4.5M12 17.2v.3" /></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 5.5h16l-6.2 7.3v5.4l-3.6 1.8v-7.2z" /></symbol>
   <symbol id="i-car" viewBox="0 0 24 24"><path d="M4 16.5V12l2-5h12l2 5v4.5M4 16.5h16M4 16.5V19h3v-2.5M17 16.5V19h3v-2.5M4 12h16" /><circle cx="7.5" cy="14" r=".6" /><circle cx="16.5" cy="14" r=".6" /></symbol>
 </svg>
 <a class="skip" href="#main">Aller au contenu</a>
@@ -309,13 +315,14 @@
     <nav class="dash-nav" id="dashNav" aria-label="Espace Pro">
       <button type="button" class="dash-link" data-panel="top" aria-current="true"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg><span>Tableau de bord</span></button>
       <button type="button" class="dash-link" data-panel="requests" data-rdv hidden><svg class="ic" aria-hidden="true"><use href="#i-inbox" /></svg><span>Demandes</span><span class="dash-count" id="rqCount" hidden></span></button>
-      <button type="button" class="dash-link" data-panel="planning" data-adv hidden><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg><span>Planning</span></button>
+      <button type="button" class="dash-link" data-panel="planning" data-adv hidden><svg class="ic" aria-hidden="true"><use href="#i-planning" /></svg><span>Planning</span></button>
       <button type="button" class="dash-link more-item" data-panel="garage"><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg><span>Mon garage</span></button>
       <button type="button" class="dash-link" data-panel="prices"><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg><span>Mes prix</span><span class="dash-count" id="dashDueCount" hidden></span></button>
       <button type="button" class="dash-link" data-panel="agenda" data-rdv hidden><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg><span class="wide-only">Disponibilités</span><span class="narrow-only">Créneaux</span></button>
       <a href="../" class="dash-link more-item" id="dashSite"><svg class="ic" aria-hidden="true"><use href="#i-eye" /></svg><span>Voir Pixcar</span></a>
       <button type="button" class="dash-link more-item" data-go="home"><svg class="ic" aria-hidden="true"><use href="#i-list" /></svg><span>Mes garages</span></button>
       <button type="button" class="dash-link more-btn" id="dashMore" aria-expanded="false" hidden><svg class="ic" aria-hidden="true"><use href="#i-more" /></svg><span>Plus</span></button>
+      <button type="button" class="dash-link rail-toggle" id="dashRail" aria-expanded="true"><svg class="ic" aria-hidden="true"><use href="#i-panel" /></svg><span id="dashRailText">Replier le menu</span></button>
     </nav>
     <div class="dash-body" id="dash-top">
       <p class="ok-badge small" id="dashVerified"></p>
@@ -481,13 +488,22 @@
     </div>
     <!-- Planning (docs/calendrier-avance.md, lot 3b ; mode avancé) : jour, semaine, mois, par mécanicien, par poste -->
     <div class="dash-body" id="dash-planning" hidden>
-      <div class="rv-top">
+      <div class="rv-top pl-top">
         <div>
           <h1 id="planTitle" tabindex="-1">Planning</h1>
-          <p class="lead">Vos rendez-vous Pixcar, ceux pris hors Pixcar et vos créneaux bloqués. Ouvrez un bloc pour le détail, ou glissez-le pour le déplacer.</p>
+          <p class="lead">Rendez-vous Pixcar et hors Pixcar, créneaux bloqués, absences, et la charge de votre atelier. Ouvrez un bloc pour le détail, ou glissez-le pour le déplacer.</p>
         </div>
-        <button type="button" class="btn primary small" id="planNew"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Nouveau</button>
+        <div class="pl-new">
+          <button type="button" class="btn primary small" id="planNew" aria-expanded="false" aria-controls="planNewMenu"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Nouveau</button>
+          <div class="pl-menu" id="planNewMenu" hidden>
+            <button type="button" data-new="job"><svg class="ic" aria-hidden="true"><use href="#i-phone" /></svg>Rendez-vous pris hors Pixcar</button>
+            <button type="button" data-new="hold"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg>Créneau bloqué</button>
+            <button type="button" data-new="staff"><svg class="ic" aria-hidden="true"><use href="#i-user" /></svg>Absence d'un mécanicien</button>
+            <button type="button" data-new="resource"><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg>Indisponibilité d'un poste</button>
+          </div>
+        </div>
       </div>
+      <section class="pl-summary" id="planSummary" aria-labelledby="planSumTitle"></section>
       <div class="pl-bar">
         <div class="pl-views" id="planViews" role="group" aria-label="Vue"></div>
         <div class="pl-nav">
@@ -498,11 +514,13 @@
         </div>
         <div class="pl-pickbox" id="planPick"></div>
       </div>
-      <details class="pl-fbox" id="planFBox">
-        <summary>Filtres<span id="planFCount"></span></summary>
-        <div class="pl-filters" id="planFilters" role="group" aria-label="Filtres"></div>
-      </details>
-      <ul class="pl-legend" id="planLegend" aria-label="Statuts"></ul>
+      <div class="pl-tools">
+        <button type="button" class="btn small pl-ftoggle" id="planFToggle" aria-expanded="false" aria-controls="planFilters"><svg class="ic" aria-hidden="true"><use href="#i-filter" /></svg>Filtres<span class="pl-fcount" id="planFCount" aria-hidden="true" hidden></span></button>
+        <ul class="pl-chips" id="planChips" aria-label="Filtres actifs"></ul>
+        <button type="button" class="btn small" id="planWeekend" hidden>Afficher le week-end</button>
+      </div>
+      <div class="pl-filters" id="planFilters" role="group" aria-label="Filtres" hidden></div>
+      <ul class="pl-legend" id="planLegend" aria-label="Légende"></ul>
       <div class="pl-wrap" id="planGrid"></div>
       <p class="sr-only" id="planLive" role="status" aria-live="polite"></p>
     </div>
