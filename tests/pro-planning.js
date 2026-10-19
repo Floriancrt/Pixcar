@@ -91,7 +91,8 @@ const NOTIFY = "atelier@garage-planning.fr";
   fs.cpSync(SRC, src, { recursive: true });
   fs.writeFileSync(path.join(src, "legal.json"), JSON.stringify(LEGAL));
   const env = { ...process.env, PIXCAR_API_BASE: api.url, PIXCAR_PRO_POOL: "eu-north-1_PixcarTest1", PIXCAR_PRO_CLIENT: "4pro0test1client2id3", PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "" };
-  execFileSync(process.execPath, [BUILD, "--only", "dist", "--src", src, "--out", path.join(OUT, "site")], { stdio: "pipe", env });
+  // construite comme la version publiée (--pages) : avec sa politique de sécurité dans la page (style-src 'self' refuse l'attribut style)
+  execFileSync(process.execPath, [BUILD, "--only", "dist", "--src", src, "--out", path.join(OUT, "site"), "--pages", "pixcar.fr"], { stdio: "pipe", env });
   srv.setRoot(path.join(OUT, "site", "dist"));
 
   const browser = await chromium.launch({ args: ["--proxy-server=direct://", "--proxy-bypass-list=*"] });
@@ -177,6 +178,9 @@ const NOTIFY = "atelier@garage-planning.fr";
   check("the menu points at Planning, the week view is the default on a computer", (await page.getAttribute('.dash-link[data-panel="planning"]', "aria-current")) === "true" && (await page.getAttribute('.pl-view[aria-pressed="true"]', "aria-pressed")) === "true" && (await text(page, '.pl-view[aria-pressed="true"]')) === "Semaine");
   const weekCols = await page.$$eval(".pl-col", (c) => c.map((x) => x.dataset.day));
   check("week: today's column says so", !weekColsHaveToday() || (await text(page, ".pl-colhead.is-today")).endsWith("Aujourd'hui"));
+  check("the page carries the published security policy (no inline style attribute allowed)", /(^|; )style-src 'self'(;|$)/.test(await page.$eval('meta[http-equiv="Content-Security-Policy"]', (m) => m.content)));
+  const boxes = await page.$$eval(".pl-col", (c) => c.map((x) => { const r = x.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.height)]; }));
+  check("week: the day columns sit side by side, as tall as the opening hours", boxes.length > 1 && boxes.every((b, i) => b[1] === boxes[0][1] && b[2] >= 480 && (i === 0 || b[0] > boxes[i - 1][0])), JSON.stringify(boxes));
   check("week: one column per open day (Monday to Friday)", weekCols.length === 5 && weekCols.includes(D1) && weekCols.includes(D2), weekCols.join());
   const ev = (id) => `.pl-ev[data-id="${id}"]`;
   const label = (id) => page.getAttribute(ev(id), "aria-label");

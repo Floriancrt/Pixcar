@@ -31,6 +31,11 @@ const monday = (iso) => addDays(iso, -WEEK.indexOf(weekday(iso)));
 const dur = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? " " + String(m % 60).padStart(2, "0") : ""}` : `${m} min`);
 const range = (a, b) => `${timeLabel(a)}–${timeLabel(b)}`;
 const snap = (m, step = SNAP) => Math.round(m / step) * step;
+// positions et tailles posées par le CSSOM : la politique de sécurité de la page publiée (style-src 'self') refuse l'attribut style
+const css = (node, props) => {
+  for (const [k, v] of Object.entries(props)) node.style.setProperty(k, v);
+  return node;
+};
 // une affectation de l'API (instants) → jour et minutes de Paris
 function rowOf(r) {
   const a = parisParts(Date.parse(r.start)), b = parisParts(Date.parse(r.end));
@@ -292,11 +297,11 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     hi = Math.min(1440, Math.max(lo + 60, Math.ceil(hi / 60) * 60));
     const px = (m) => `${(m - lo) * PPM}px`;
     const hours = [];
-    for (let h = lo; h < hi; h += 60) hours.push(el("span", { style: `top:${px(h)}`, text: `${h / 60}:00` }));
+    for (let h = lo; h < hi; h += 60) hours.push(css(el("span", { text: `${h / 60}:00` }), { top: px(h) }));
     const total = cols.reduce((n, c) => n + c.segs.length, 0);
     const wrap = el(
       "div",
-      { class: "pl-grid", style: `--cols:${cols.length};--h:${(hi - lo) * PPM}px`, "data-lo": String(lo), "data-hi": String(hi) },
+      { class: "pl-grid", "data-lo": String(lo), "data-hi": String(hi) },
       el("div", { class: "pl-head", "aria-hidden": "true" }, el("span", { class: "pl-corner" }), ...cols.map((c) => el("div", { class: "pl-colhead" + (c.day === data.today && view !== "day" ? " is-today" : "") }, el("b", { text: c.head }), c.sub ? el("small", { text: c.sub }) : null))),
       el(
         "div",
@@ -305,6 +310,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
         ...cols.map((c) => column(c, lo, hi, px)),
       ),
     );
+    css(wrap, { "--cols": String(cols.length), "--h": `${(hi - lo) * PPM}px` });
     return el("div", { class: "pl-scroll" }, total ? null : el("p", { class: "pl-empty", text: Object.values(filters).some(Boolean) ? "Rien ne correspond aux filtres sur cette période." : "Rien de prévu sur cette période." }), wrap);
   }
   function column(c, lo, hi, px) {
@@ -313,13 +319,13 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     // hors des heures d'ouverture : grisé
     let t = lo;
     for (const [a, b] of openOn(c.day)) {
-      if (a > t) col.append(el("div", { class: "pl-off", style: `top:${px(t)};height:${(Math.min(a, hi) - t) * PPM}px` }));
+      if (a > t) col.append(css(el("div", { class: "pl-off" }), { top: px(t), height: `${(Math.min(a, hi) - t) * PPM}px` }));
       t = Math.max(t, b);
     }
-    if (t < hi) col.append(el("div", { class: "pl-off", style: `top:${px(t)};height:${(hi - t) * PPM}px` }));
+    if (t < hi) col.append(css(el("div", { class: "pl-off" }), { top: px(t), height: `${(hi - t) * PPM}px` }));
     for (const u of c.away || []) {
       const a = Math.max(u.a, lo), b = Math.min(u.b, hi);
-      if (b > a) col.append(el("div", { class: "pl-away", style: `top:${px(a)};height:${(b - a) * PPM}px`, title: u.text }, el("span", { text: u.text })));
+      if (b > a) col.append(css(el("div", { class: "pl-away", title: u.text }, el("span", { text: u.text })), { top: px(a), height: `${(b - a) * PPM}px` }));
     }
     for (const s of lanes(c.segs)) col.append(block(s, c, px));
     col.addEventListener("click", (ev) => {
@@ -342,7 +348,6 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       {
         type: "button",
         class: `pl-ev st-${it.status}${it.conflict ? " is-conflict" : ""}${(s.b - s.a) * PPM < 34 ? " is-tiny" : (s.b - s.a) * PPM < 54 ? " is-short" : ""}`,
-        style: `top:${px(s.a)};height:${Math.max(18, (s.b - s.a) * PPM - 2)}px;--lane:${s.lane};--lanes:${s.lanes}`,
         "aria-label": label,
         "data-id": it.id,
       },
@@ -350,6 +355,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       el("span", { class: "pl-ev-s", text: [svcText(it), who.join(", ")].filter(Boolean).join(" · ") }),
       el("span", { class: "pl-ev-st", text: it.conflict ? `${stText} · en conflit` : stText }),
     );
+    css(b, { top: px(s.a), height: `${Math.max(18, (s.b - s.a) * PPM - 2)}px`, "--lane": String(s.lane), "--lanes": String(s.lanes) });
     b.addEventListener("click", () => {
       if (swallowClick) return;
       openSheet(it);
@@ -400,8 +406,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     g.removeAttribute("aria-label");
     g.setAttribute("aria-hidden", "true");
     g.classList.add("pl-ghost");
-    g.style.setProperty("--lane", "0");
-    g.style.setProperty("--lanes", "1");
+    css(g, { "--lane": "0", "--lanes": "1", top: drag.node.style.top, height: drag.node.style.height }); // le clone ne garde pas forcément l'attribut style
     drag.ghost = g;
     try {
       drag.node.setPointerCapture(drag.id);
