@@ -348,8 +348,9 @@ reporter au jour de la publication si elle a lieu plus tard.
 
 ## Avant la mise en ligne du lot 3c
 
-- Fusion de `lot3c-interventions` dans `main` (avance rapide) et poussée : **après le go de l'utilisateur**.
-- Déploiement de l'API : migration `008_pro_prefs.sql` (1 table, aucun index) par l'opération `migrate`, droits du rôle d'exécution
+- Fusion de `lot3c-interventions` dans `main` (avance rapide) et poussée : **faites le 24 octobre 2026** (go de l'utilisateur :
+  « Fusionne », puis « Pousse main » ; `main` = `d8880ce`).
+- Déploiement de l'API (**fait le 24 octobre 2026** par l'utilisateur dans la console AWS, `docs/exploitation.md` 10.15) : migration `008_pro_prefs.sql` (1 table, aucun index) par l'opération `migrate`, droits du rôle d'exécution
   sur la nouvelle table (`ensureRuntimeRole`), puis `selfcheck` (31 contrôles ; celui des rendez-vous note en plus un client absent, dont les
   affectations ne retiennent plus leurs ressources, met l'e-mail « prête » en file une seule fois, passe l'intervention d'un bloc à
   « Voiture reçue » et écrit puis relit des raccourcis) et `smoke`. Aucune nouvelle
