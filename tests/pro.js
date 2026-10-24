@@ -691,6 +691,7 @@ function fakeCognito() {
     const help = document.querySelector('#account [data-help]');
     return { crumb: document.getElementById("crumb").textContent, labels, gap: Math.round(nav.bottom - bottom.getBoundingClientRect().bottom), help: !!help && help.offsetWidth > 0 && help.getAttribute("aria-label"), initials: document.getElementById("navInitials").textContent, name: document.getElementById("navName").textContent };
   });
+  check("atelier shell: the side bar's logo is an image, not a link (maquette ; « Voir Pixcar » removed too)", await page.evaluate(() => { const l = document.querySelector(".dash-nav .m-side-logo"); return !l.closest("a") && !l.querySelector("a") && l.querySelector("svg").getAttribute("aria-label") === "Pixcar" && !document.getElementById("dashSite"); }));
   check("atelier shell: breadcrumb « Mon atelier / Tableau de bord », MON ATELIER on top and MON ESPACE with the user card at the bottom of the side bar, help button « Aide » in the top line", shell.crumb === "Mon atelier / Tableau de bord" && shell.labels.map((l) => l.t + ":" + l.low).join() === "MON ATELIER:false,MON ESPACE:true" && shell.gap >= 0 && shell.gap <= 24 && shell.help === "Aide" && shell.initials && shell.name, JSON.stringify(shell));
   await page.click("#account [data-help]");
   const helpOpen = await page.evaluate(() => document.getElementById("helpDlg").open);
