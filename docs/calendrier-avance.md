@@ -357,7 +357,8 @@ reporter au jour de la publication si elle a lieu plus tard.
   ressource AWS. **L'API doit précéder le site** : la nouvelle page appelle `…/calendar/work/:id` et `…/prefs` et lit `work` et
   `prefs`, que l'ancienne API ne connaît pas ; l'ancienne page fonctionne avec la nouvelle API (elle ignore ces champs et ne peut pas
   commencer une intervention).
-- Publication du site (Espace Pro, page de suivi du client) après l'API.
+- Publication du site (Espace Pro, page de suivi du client) après l'API : **faite le 24 octobre 2026** (`gh-pages` `e4da3a4`,
+  `docs/exploitation.md` section 2).
 - Essai avec le garage d'essai : tableau de bord sur ordinateur et téléphone (chiffres, filtres, actions rapides, demandes à
   confirmer ou refuser, équipe, postes, points d'attention, raccourcis personnalisés sur deux appareils), une intervention de bout en
   bout (Voiture reçue → En cours → Prête avec l'e-mail à l'adresse de l'utilisateur → Restituée) et la page de suivi du client, un client
