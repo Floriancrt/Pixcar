@@ -62,6 +62,14 @@ simple / avancée, Mon garage à onglets, prestations libres).
   utilisateur (initiales, nom, Gérant(e) / Salarié(e), PRO) ; fil d'Ariane et bouton d'aide « ? » au-dessus du titre (29 px) ; chiffres
   du tableau de bord en bandeau (libellé 9 px, valeur 20 px).
 
+- **Planning** (début de l'étape 2, 24 octobre 2026) : présenté comme l'agenda « Gestion d'atelier » de la maquette (bandeau de chiffres,
+  barre d'outils avec plein écran et recherche, 68 px par heure, blocs à filet coloré, pause déjeuner nommée, légende sous la grille) ;
+  détail dans `docs/calendrier-avance.md` (« Présentation du 24 octobre 2026 »). Le titre reste « Planning », le bouton « + Nouveau »
+  garde son menu (rendez-vous hors Pixcar, créneau bloqué, absence, indisponibilité) ; le choix Simple / Avancé et les onglets
+  Mécaniciens, Équipements, Interventions, Capacité de la maquette sont pour la suite de l'étape 2.
+- **Graisses** : la maquette met l'emphase à 650 et garde 700 pour les titres et les chiffres ; l'Espace Pro (hors accueil et
+  connexion, déjà conformes) suit la même règle depuis le 24 octobre 2026 (plus aucun 800).
+
 ### Écarts voulus avec la maquette
 
 | Écart | Raison |

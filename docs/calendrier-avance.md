@@ -227,6 +227,32 @@ d'ensemble et d'un bloc enrichi, vidéo de la barre latérale). Tout est dans la
 | `PUT …/calendar/blocks/:block` | modifie ou déplace un bloc ; mêmes contrôles |
 | `DELETE …/calendar/blocks/:block` | supprime un bloc et libère ses ressources |
 
+**Présentation du 24 octobre 2026** (demande de l'utilisateur, capture de l'agenda « Gestion d'atelier » de sa maquette à l'appui :
+« très ressemblant […] de manière globale ; la police est trop épaisse »). Mêmes fonctions et mêmes données ; seule la présentation
+change, plus trois outils de la maquette :
+- **En-tête** : « Planning » (29 px), une ligne d'explication (11 px), « + Nouveau » orange (même menu qu'avant).
+- **Bandeau de chiffres** à la place des quatre cartes (libellé 9 px, valeur 20 px, précision 9 px sur la même ligne) : Rendez-vous,
+  Charge atelier, Mécaniciens, Alertes, avec les mêmes renvois vers les filtres ; **× le masque**, « Afficher les indicateurs » le
+  rend (choix gardé dans le navigateur, `localStorage`, clé `pixcar-pro-plan-kpis`).
+- **Barre d'outils** : ‹ › et la période au format de la maquette (« 26 — 30 octobre 2026 »), « Aujourd'hui », les cinq vues en
+  segments, « Filtres », **« Plein écran »** (la barre latérale, le fil d'Ariane, le bandeau de chiffres et le pied de page s'effacent ;
+  Échap en sort), **recherche** « Client, véhicule, immatriculation… » (dans la période affichée, sans accents ni majuscules ;
+  l'immatriculation se trouve avec ou sans tirets). Le choix des colonnes, les filtres actifs et « Afficher le week-end » passent
+  en petites puces sous la barre.
+- **Grille** : 68 px par heure (au lieu de 90), trait à l'heure et à la demi-heure, heures « 08:00 » en 9 px, en-têtes de jours 11 px
+  et charge du jour en 8 px, aujourd'hui sur fond orange pâle, **pause déjeuner hachurée et nommée** (entre deux périodes d'ouverture ;
+  « Fermé » pour un jour sans ouverture).
+- **Blocs** : filet gauche de 3 px et fond teinté selon l'avancement (à confirmer orange, à venir bleu, en cours bleu soutenu, en
+  attente jaune pointillé, prête ou restituée vert, conflit rouge, créneau bloqué gris hachuré, client absent estompé) ; lignes : horaires
+  et icône de la provenance, prestation, voiture et avancement, client et affectations, « ! Conflit de ressource » ; autant de lignes que
+  la hauteur en permet (deux pour 45 min, trois pour une heure), le reste dans l'infobulle, le nom lu par les lecteurs d'écran et la
+  fiche (inchangés).
+- **Légende sous la grille** : avancement (pastilles), créneaux (pas proposé en ligne, fermé, absence), provenances et nombre de
+  rendez-vous de la période.
+- **Graisses** de tout l'Espace Pro hors accueil et connexion (déjà au gramme près de la maquette) : plus de 800, boutons et emphase à
+  650, 700 pour les titres et les chiffres. Sur le tableau de bord, la part du texte en 700 passe de 45 % à 10 % (maquette : 5 %, et
+  34 % en 650). Gris secondaires du Planning assombris pour le contraste AA (`#5f6571`, `#6a707b` au lieu de `#747b88`).
+
 ## Lot 3c : suivi des interventions, tableau de bord
 
 Choix faits au début du lot (19 octobre 2026), dans le cadre des décisions ci-dessus ; à revoir sur retour de l'utilisateur.

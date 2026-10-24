@@ -39,6 +39,12 @@
   <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6" /></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6" /></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M3 5h18M6 12h12M9 19h6" /><circle cx="8" cy="5" r="2" fill="currentColor" /><circle cx="16" cy="12" r="2" fill="currentColor" /></symbol>
+  <symbol id="i-full" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /></symbol>
+  <symbol id="i-unfull" viewBox="0 0 24 24"><path d="M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5" /></symbol>
+  <symbol id="i-find" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6" /><path d="m15 15 6 6" /></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></symbol>
   <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" /></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></symbol>
@@ -625,10 +631,12 @@
     </div>
     <!-- Planning (docs/calendrier-avance.md, lot 3b ; mode avancé) : jour, semaine, mois, par mécanicien, par poste -->
     <div class="dash-body" id="dash-planning" hidden>
-      <div class="rv-top pl-top">
+      <!-- Planning, à l'image de l'agenda « Gestion d'atelier » de la maquette (24 octobre 2026) : en-tête, bandeau de chiffres, barre
+           d'outils (période, vues, filtres, plein écran, recherche), grille, légende -->
+      <div class="pl-top">
         <div>
           <h1 id="planTitle" tabindex="-1">Planning</h1>
-          <p class="lead">Rendez-vous Pixcar et hors Pixcar, créneaux bloqués, absences, et la charge de votre atelier. Ouvrez un bloc pour le détail, ou glissez-le pour le déplacer.</p>
+          <p class="pl-sub">Vos rendez-vous et vos ressources. Ouvrez un bloc pour le détail, glissez-le pour le déplacer.</p>
         </div>
         <div class="pl-new">
           <button type="button" class="btn primary small" id="planNew" aria-expanded="false" aria-controls="planNewMenu"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Nouveau</button>
@@ -642,23 +650,26 @@
       </div>
       <section class="pl-summary" id="planSummary" aria-labelledby="planSumTitle"></section>
       <div class="pl-bar">
-        <div class="pl-views" id="planViews" role="group" aria-label="Vue"></div>
         <div class="pl-nav">
-          <button type="button" class="icon-btn" id="planPrev" aria-label="Période précédente"><svg class="ic" aria-hidden="true"><use href="#i-back" /></svg></button>
-          <button type="button" class="btn small" id="planToday">Aujourd'hui</button>
-          <button type="button" class="icon-btn" id="planNext" aria-label="Période suivante"><svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></button>
+          <button type="button" class="pl-icon" id="planPrev" aria-label="Période précédente"><svg class="ic" aria-hidden="true"><use href="#i-left" /></svg></button>
+          <button type="button" class="pl-icon" id="planNext" aria-label="Période suivante"><svg class="ic" aria-hidden="true"><use href="#i-right" /></svg></button>
           <h2 id="planRange"></h2>
+          <button type="button" class="pl-btn" id="planToday">Aujourd'hui</button>
         </div>
-        <div class="pl-pickbox" id="planPick"></div>
+        <span class="pl-spacer"></span>
+        <div class="pl-views" id="planViews" role="group" aria-label="Vue"></div>
+        <button type="button" class="pl-btn pl-ftoggle" id="planFToggle" aria-expanded="false" aria-controls="planFilters"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg>Filtres<span class="pl-fcount" id="planFCount" aria-hidden="true" hidden></span></button>
+        <button type="button" class="pl-btn" id="planFocus" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-full" /></svg><span id="planFocusText">Plein écran</span></button>
+        <label class="pl-search"><svg class="ic" aria-hidden="true"><use href="#i-find" /></svg><span class="sr-only">Rechercher dans la période affichée</span><input id="planSearch" type="search" placeholder="Client, véhicule, immatriculation…" autocomplete="off" spellcheck="false"></label>
       </div>
       <div class="pl-tools">
-        <button type="button" class="btn small pl-ftoggle" id="planFToggle" aria-expanded="false" aria-controls="planFilters"><svg class="ic" aria-hidden="true"><use href="#i-filter" /></svg>Filtres<span class="pl-fcount" id="planFCount" aria-hidden="true" hidden></span></button>
+        <div class="pl-pickbox" id="planPick"></div>
         <ul class="pl-chips" id="planChips" aria-label="Filtres actifs"></ul>
-        <button type="button" class="btn small" id="planWeekend" hidden>Afficher le week-end</button>
+        <button type="button" class="pl-btn" id="planWeekend" hidden>Afficher le week-end</button>
       </div>
       <div class="pl-filters" id="planFilters" role="group" aria-label="Filtres" hidden></div>
-      <ul class="pl-legend" id="planLegend" aria-label="Légende"></ul>
       <div class="pl-wrap" id="planGrid"></div>
+      <ul class="pl-legend" id="planLegend" aria-label="Légende"></ul>
       <p class="sr-only" id="planLive" role="status" aria-live="polite"></p>
     </div>
     <!-- Calendrier avancé (docs/calendrier-avance.md, lot 3a) : assistant en six étapes, puis les mêmes écrans pour modifier -->

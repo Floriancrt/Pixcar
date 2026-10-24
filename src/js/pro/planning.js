@@ -7,6 +7,9 @@
 // déplacer ou réaffecter au clavier, appeler, annuler) ou se glisse (souris ; doigt après un appui long ; pas de 15 min). L'API contrôle
 // tout avant d'enregistrer. Données : GET …/calendar/agenda, GET …/calendar (horaires des mécaniciens et postes, fenêtre de réservation)
 // et GET …/requests?view=todo (heures limites). Que du TEXTE écrit dans la page.
+// Présentation de l'agenda « Gestion d'atelier » de la maquette de l'utilisateur (24 octobre 2026) : bandeau de chiffres (masquable),
+// barre d'outils (période, vues, filtres, plein écran, recherche dans la période), 68 px par heure, blocs à filet coloré selon
+// l'avancement (à confirmer, à venir, en cours, en attente, prête, conflit), pause déjeuner nommée, légende sous la grille.
 import { phoneText } from "../shared/garage-profile.js";
 import { GARAGE_CANCEL_REASONS, addDays, dayLabel, hm, minOf, parisParts, timeLabel, weekday } from "../shared/rdv.js";
 import { workActions, workLabel } from "../shared/work.js";
@@ -28,7 +31,7 @@ const WEEK = ["mo", "tu", "we", "th", "fr", "sa", "su"];
 const SNAP = 15; // pas du glisser-déposer, en minutes
 const HOLD_MS = 350; // appui long avant de glisser au doigt
 const ROLE = { labour: "main-d'œuvre", station: "poste", tool: "équipement" };
-let PPM = 1.5; // pixels par minute des grilles horaires (1 sur téléphone)
+let PPM = 68 / 60; // pixels par minute des grilles horaires : 68 px par heure comme la maquette (1 px par minute sur téléphone)
 const plural = (n, one, many = one + "s") => `${n} ${n > 1 ? many : one}`;
 const monday = (iso) => addDays(iso, -WEEK.indexOf(weekday(iso)));
 const dur = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? " " + String(m % 60).padStart(2, "0") : ""}` : `${m} min`);
@@ -37,6 +40,22 @@ const range = (a, b) => `${timeLabel(a)}–${timeLabel(b)}`;
 const snap = (m, step = SNAP) => Math.round(m / step) * step;
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+// recherche : sans accents ni majuscules
+const fold = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+// bandeau de chiffres masqué (choix gardé dans ce navigateur)
+const STRIP_KEY = "pixcar-pro-plan-kpis";
+// teinte d'un bloc, comme la maquette : à confirmer (orange), à venir (bleu), en cours, en attente (jaune, pointillé), prête (vert),
+// conflit (rouge), créneau bloqué (gris), client absent (estompé)
+function toneOf(it) {
+  if (it.type === "hold") return "hold";
+  if (it.noShow) return "noshow";
+  if (it.conflict) return "conflict";
+  if (it.state === "pending") return "pending";
+  if (it.work === "done" || it.work === "returned") return "done";
+  if (it.work === "waiting_parts" || it.work === "suspended") return "wait";
+  if (it.work === "received" || it.work === "in_progress") return "live";
+  return "confirmed";
+}
 // côte à côte quand des blocs se chevauchent : couloir de chaque bloc et nombre de couloirs de son groupe
 function lanes(segs) {
   segs.sort((x, y) => x.a - y.a || y.b - x.b);
@@ -73,6 +92,8 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
   let pickStaff = null, pickPost = null; // vues « Par mécanicien » et « Par poste »
   let weekend = false; // week-end fermé affiché quand même
   const filters = { staff: "", post: "", service: "", origin: "", state: "" };
+  let query = ""; // recherche (client, véhicule, immatriculation, prestation), sans accents
+  let stripOff = null; // bandeau de chiffres masqué (lu une fois dans le navigateur)
   let sheet = null; // { item, mode, … } fiche ouverte
   let drag = null; // glisser-déposer en cours
   let swallowClick = false;
@@ -97,8 +118,10 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       anchor = null;
       pickStaff = pickPost = null;
       for (const k of Object.keys(filters)) filters[k] = "";
+      setQuery("");
       showFilters(false);
     }
+    focusMode(false);
     view ||= narrow() ? "day" : "week";
     anchor ||= today();
     st = await api.calendar(id);
@@ -146,7 +169,14 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
   // rendez-vous et blocs, sous une même forme (tous, sans les filtres : la charge et la vue d'ensemble les comptent tous)
   const allItems = () => K.itemsOf(data, deadlines);
   const items = () => allItems().filter(match);
+  // ce que la recherche lit d'un bloc : client ou libellé, prestations, voiture, immatriculation (avec ou sans tirets), type de véhicule
+  function hay(it) {
+    const a = it.type === "rdv" ? it.src : null;
+    const v = it.src && it.src.vehicle ? (data.vehicles.find((x) => x.id === it.src.vehicle) || { label: "" }).label : "";
+    return fold([it.title, svcText(it), a && a.car, a && a.plate, a && a.plate && a.plate.replace(/[\s-]/g, ""), v].filter(Boolean).join(" "));
+  }
   function match(it) {
+    if (query && !hay(it).includes(query)) return false;
     if (filters.staff && !it.plan.some((r) => r.target === "staff" && r.id === filters.staff)) return false;
     if (filters.post && !it.plan.some((r) => r.target === "resource" && r.id === filters.post)) return false;
     if (filters.service && !it.services.some((s) => s.id === filters.service)) return false;
@@ -204,7 +234,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
 
   // ================================================================= rendu
   function render() {
-    PPM = narrow() ? 1 : 1.5;
+    PPM = narrow() ? 1 : 68 / 60;
     renderSummary();
     renderBar();
     renderFilters();
@@ -245,32 +275,63 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       const p = parisParts(ms);
       return p.iso === data.today ? `avant ${timeLabel(p.min)}` : `avant ${dayLabel(p.iso, { short: true })} ${timeLabel(p.min)}`;
     };
-    const card = (key, title, ic, value, sub, onclick = null, extra = null) => {
-      const inner = [el("span", { class: "pl-card-l" }, el("span", { text: title }), icon(ic)), el("b", { class: "pl-card-v", text: value }), el("span", { class: "pl-card-s", text: sub }), extra].filter(Boolean);
+    // bandeau de chiffres de la maquette : libellé, valeur et précision sur une ligne ; un chiffre qui mène quelque part est un bouton
+    const card = (key, title, value, sub, onclick = null) => {
+      const inner = [el("span", { class: "pl-card-l", text: title }), el("span", { class: "pl-card-n" }, el("b", { class: "pl-card-v", text: value }), el("small", { class: "pl-card-s", text: sub }))];
       return el("li", { class: `pl-card is-${key}` }, onclick ? el("button", { type: "button", class: "pl-card-btn", onclick }, ...inner) : el("div", { class: "pl-card-in" }, ...inner));
     };
-    const meter = (p) => css(el("span", { class: `pl-meter${p > 100 ? " is-over" : p >= 85 ? " is-high" : ""}`, "aria-hidden": "true" }, css(el("i"), { width: `${Math.min(100, p)}%` })), {});
     const load = pct(planned, avail);
+    const title = el("h2", { id: "planSumTitle", class: "sr-only", text: `Vue d'ensemble · ${when}` });
+    if (stripHidden()) {
+      $("planSummary").replaceChildren(title, el("button", { type: "button", class: "pl-strip-show", id: "planStripShow", onclick: () => setStrip(true) }, "Afficher les indicateurs"));
+      return;
+    }
     $("planSummary").replaceChildren(
-      el("h2", { id: "planSumTitle", class: "pl-sumtitle", text: `Vue d'ensemble · ${when}` }),
+      title,
       el(
-        "ul",
-        { class: "pl-cards" },
-        card("rdv", "Rendez-vous", "i-calendar", String(appts.length), pending.length ? `${plural(pending.length, "à confirmer", "à confirmer")}` : "Aucun à confirmer", pending.length ? () => setFilter("state", "pending") : null),
-        card("load", "Charge atelier", "i-gauge", avail ? `${load} %` : "—", avail ? `${hrs(planned)} / ${hrs(avail)}` : "Atelier fermé", null, avail ? meter(load) : null),
-        view === "day"
-          ? card("staff", "Mécaniciens", "i-users", `${staff.length - absent.length}/${staff.length}`, absent.length ? `${plural(absent.length, "absent")} : ${absent.map((m) => m.name).join(", ")}` : "Tous présents")
-          : card("staff", "Mécaniciens", "i-users", String(staff.length), absent.length ? `${plural(absent.length, "absent")} sur la période` : "Aucune absence"),
-        card(
-          "alert",
-          "Alertes",
-          "i-alert",
-          String(conflicts.length + urgent.length),
-          conflicts.length || urgent.length ? [conflicts.length ? plural(conflicts.length, "conflit") : "", urgent.length ? `${urgent.length} à confirmer ${deadlineText(urgent[0].deadline)}` : ""].filter(Boolean).join(" · ") : "Rien à signaler",
-          conflicts.length ? () => setFilter("state", "conflict") : urgent.length ? () => setFilter("state", "pending") : null,
+        "div",
+        { class: "pl-strip" },
+        el(
+          "ul",
+          { class: "pl-cards" },
+          card("rdv", "Rendez-vous", String(appts.length), pending.length ? `${plural(pending.length, "à confirmer", "à confirmer")}` : "Aucun à confirmer", pending.length ? () => setFilter("state", "pending") : null),
+          card("load", "Charge atelier", avail ? `${load} %` : "—", avail ? `${hrs(planned)} / ${hrs(avail)}` : "Atelier fermé"),
+          view === "day"
+            ? card("staff", "Mécaniciens", `${staff.length - absent.length}/${staff.length}`, absent.length ? `${plural(absent.length, "absent")} : ${absent.map((m) => m.name).join(", ")}` : "Tous présents")
+            : card("staff", "Mécaniciens", String(staff.length), absent.length ? `${plural(absent.length, "absent")} sur la période` : "Aucune absence"),
+          card(
+            "alert",
+            "Alertes",
+            String(conflicts.length + urgent.length),
+            conflicts.length || urgent.length ? [conflicts.length ? plural(conflicts.length, "conflit") : "", urgent.length ? `${urgent.length} à confirmer ${deadlineText(urgent[0].deadline)}` : ""].filter(Boolean).join(" · ") : "Rien à signaler",
+            conflicts.length ? () => setFilter("state", "conflict") : urgent.length ? () => setFilter("state", "pending") : null,
+          ),
         ),
+        el("button", { type: "button", class: "pl-icon pl-strip-hide", id: "planStripHide", "aria-label": "Masquer les indicateurs", onclick: () => setStrip(false) }, icon("i-close")),
       ),
     );
+  }
+  function stripHidden() {
+    if (stripOff === null) {
+      try {
+        stripOff = localStorage.getItem(STRIP_KEY) === "hidden";
+      } catch {
+        stripOff = false;
+      }
+    }
+    return stripOff;
+  }
+  function setStrip(on) {
+    stripOff = !on;
+    try {
+      if (on) localStorage.removeItem(STRIP_KEY);
+      else localStorage.setItem(STRIP_KEY, "hidden");
+    } catch {
+      // stockage refusé : le choix ne vaut que pour cet affichage
+    }
+    renderSummary();
+    live(on ? "Indicateurs affichés." : "Indicateurs masqués.");
+    $(on ? "planStripHide" : "planStripShow").focus();
   }
 
   function renderBar() {
@@ -280,10 +341,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     let label;
     if (view === "day") label = dayLabel(anchor, { year: true });
     else if (view === "month") label = new Date(anchor + "T12:00:00Z").toLocaleDateString("fr-FR", { timeZone: "UTC", month: "long", year: "numeric" });
-    else {
-      const days = weekDays();
-      label = `du ${dayLabel(days[0], { short: true })} au ${dayLabel(days[days.length - 1], { short: true })}`;
-    }
+    else label = spanLabel(weekDays());
     $("planRange").textContent = cap(label);
     const step = view === "day" ? 1 : view === "month" ? 0 : 7;
     $("planPrev").onclick = () => go(() => (anchor = step ? addDays(anchor, -step) : shiftMonth(-1)));
@@ -313,6 +371,15 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     const we = $("planWeekend");
     we.hidden = view === "day" || view === "month" || (!weekend && !hiddenWeekend());
     we.textContent = weekend ? "Masquer le week-end" : "Afficher le week-end";
+  }
+  // « 19 — 23 octobre 2026 » ; « 28 septembre — 2 octobre 2026 » ; d'une année sur l'autre, les deux années
+  function spanLabel(days) {
+    const f = (d, o) => new Date(d + "T12:00:00Z").toLocaleDateString("fr-FR", { timeZone: "UTC", ...o });
+    const a = days[0], b = days[days.length - 1];
+    const end = f(b, { day: "numeric", month: "long", year: "numeric" });
+    if (a === b) return end;
+    if (a.slice(0, 7) === b.slice(0, 7)) return `${Number(a.slice(8))} — ${end}`;
+    return `${f(a, a.slice(0, 4) === b.slice(0, 4) ? { day: "numeric", month: "long" } : { day: "numeric", month: "long", year: "numeric" })} — ${end}`;
   }
   function shiftMonth(n) {
     const [y, m] = anchor.split("-").map(Number);
@@ -372,19 +439,23 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
         : []),
     );
   }
-  // ---- légende : ce que disent les couleurs, groupé par information
+  // ---- légende sous la grille, comme la maquette : l'avancement (pastilles de couleur), les créneaux, puis la provenance et le nombre
   function renderLegend() {
-    const swatch = (cls, text) => el("li", {}, el("span", { class: `pl-sw ${cls}`, "aria-hidden": "true" }), text);
+    const dot = (tone, text) => el("li", {}, el("i", { class: `pl-dot tone-${tone}`, "aria-hidden": "true" }), text);
+    const sw = (cls, text) => el("li", {}, el("span", { class: `pl-sw ${cls}`, "aria-hidden": "true" }), text);
+    const n = items().filter((it) => it.type !== "hold").length;
     $("planLegend").replaceChildren(
-      el("li", { class: "pl-lg-t", text: "Rendez-vous" }),
-      ...Object.entries(STATE).map(([k, [t, ic]]) => el("li", {}, el("span", { class: `pl-pill is-${k}` }, icon(ic), t))),
-      el("li", { class: "pl-lg-t", text: "Provenance" }),
-      ...Object.entries(ORIGIN).map(([k, [t, ic]]) => el("li", {}, el("span", { class: `pl-tag or-${k}` }, icon(ic), t))),
-      el("li", { class: "pl-lg-t", text: "Créneaux" }),
-      swatch("sw-free", "Libre"),
-      swatch("sw-nobook", "Pas proposé en ligne"),
-      swatch("sw-off", "Fermé ou hors horaires"),
-      swatch("sw-away", "Absence ou maintenance"),
+      dot("pending", "À confirmer"),
+      dot("confirmed", "À venir"),
+      dot("live", "En cours"),
+      dot("wait", "En attente"),
+      dot("done", "Prête"),
+      dot("conflict", "En conflit"),
+      dot("hold", "Créneau bloqué"),
+      sw("sw-nobook", "Pas proposé en ligne"),
+      sw("sw-off", "Fermé"),
+      sw("sw-away", "Absence ou maintenance"),
+      el("li", { class: "pl-lg-r" }, icon(ORIGIN.pixcar[1]), ORIGIN.pixcar[0], " · ", icon(ORIGIN.job[1]), ORIGIN.job[0], ` · ${plural(n, "rendez-vous", "rendez-vous")}`),
     );
   }
 
@@ -441,7 +512,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     hi = Math.min(1440, Math.max(lo + 60, Math.ceil(hi / 60) * 60));
     const px = (m) => `${(m - lo) * PPM}px`;
     const hours = [];
-    for (let h = lo; h < hi; h += 60) hours.push(css(el("span", { text: `${h / 60}:00` }), { top: px(h) }));
+    for (let h = lo; h < hi; h += 60) hours.push(css(el("span", { text: hm(h) }), { top: px(h) }));
     const count = cols.reduce((n, c) => n + c.segs.length, 0);
     const head = (c) => {
       const p = c.load && c.load.avail ? pct(c.load.planned, c.load.avail) : null;
@@ -462,7 +533,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     );
     css(wrap, { "--cols": String(cols.length), "--h": `${(hi - lo) * PPM}px`, "--hour": `${60 * PPM}px` });
     // atteignable au clavier : la grille défile dans sa boîte, même quand aucun rendez-vous (bouton) ne s'y trouve
-    return el("div", { class: "pl-scroll", tabindex: "0", role: "region", "aria-label": "Grille du planning" }, count ? null : el("p", { class: "pl-empty", text: Object.values(filters).some(Boolean) ? "Rien ne correspond aux filtres sur cette période." : "Rien de prévu sur cette période." }), wrap);
+    return el("div", { class: "pl-scroll", tabindex: "0", role: "region", "aria-label": "Grille du planning" }, count ? null : el("p", { class: "pl-empty", text: query ? "Aucun rendez-vous ne correspond à la recherche sur cette période." : Object.values(filters).some(Boolean) ? "Rien ne correspond aux filtres sur cette période." : "Rien de prévu sur cette période." }), wrap);
   }
   function column(c, lo, hi, px) {
     const name = [c.head, view === "day" ? dayLabel(c.day) : c.staff ? staffName(c.staff) : c.post ? postName(c.post) : "", c.load ? c.load.text : ""].filter(Boolean).join(", ");
@@ -474,7 +545,10 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     };
     // indisponible (fermé, hors horaires du mécanicien ou du poste), absences, passé, pas proposé en ligne : le reste est libre
     const away = (c.away || []).map((u) => [u.a, u.b]);
-    for (const r of minus([[lo, hi]], merge([...c.avail, ...away]))) band("pl-off", r);
+    // entre deux périodes d'ouverture : « Pause déjeuner » (maquette) ; colonne sans ouverture : « Fermé »
+    const opens = merge(c.avail);
+    const named = ([a, b]) => (!opens.length ? "Fermé" : opens.length > 1 && a >= opens[0][1] && b <= opens[opens.length - 1][0] && !away.some(([x, y]) => x < b && y > a) ? "Pause déjeuner" : "");
+    for (const r of minus([[lo, hi]], merge([...c.avail, ...away]))) band("pl-off", r, "", named(r));
     for (const u of c.away || []) band("pl-away", [u.a, u.b], u.text, u.text);
     const open = minus(c.avail, away);
     const past = inter(open, pastOn(c.day));
@@ -504,33 +578,39 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     const stay = it.type !== "hold" && (it.start !== s.a || it.end !== s.b) ? `dépôt ${timeLabel(it.start)} · restitution ${it.end > it.start ? timeLabel(it.end) : "fin de journée"}` : "";
     return { what, car, who, state, work, stay, when: range(s.a, s.b), len: dur(s.b - s.a), role: s.row && s.row.role !== "labour" ? ROLE[s.row.role] : "" };
   }
+  // un bloc, comme la maquette : horaires et provenance (icône) ; prestation ; voiture et avancement ; client, mécanicien et poste ;
+  // alerte. Autant de lignes que sa hauteur en permet, le reste dans l'infobulle, le nom lu par les lecteurs d'écran et la fiche.
   function block(s, c, px) {
     const it = s.item;
     const t = blockText(it, s, c);
     const h = (s.b - s.a) * PPM;
-    const lines = h < 30 ? 1 : h < 52 ? 2 : h < 74 ? 3 : h < 96 ? 4 : 5;
+    // hauteurs de la maquette : marges 13 px, lignes de 11 à 13 px séparées de 4 px ; le bloc fait 2 px de moins que sa durée
+    // (deux lignes dès 43 px, trois dès 58, quatre dès 73, cinq dès 88)
+    const lines = h < 43 ? 1 : h < 58 ? 2 : h < 73 ? 3 : h < 88 ? 4 : 5;
     const stateLabel = t.state ? STATE[t.state][0] : "";
     const full = [`${t.when} (${t.len}${t.role ? `, ${t.role}` : ""})`, t.what, t.car, t.who, ORIGIN[it.origin][0], stateLabel, t.work, t.stay && cap(t.stay)].filter(Boolean);
-    // la ligne des personnes porte l'icône de la provenance (globe : Pixcar, téléphone : hors Pixcar, cadenas : créneau bloqué),
-    // pour qu'elle reste visible quand l'étiquette du bas ne tient pas
-    const whoLine = t.who ? el("span", { class: "pl-ev-l" }, icon(ORIGIN[it.origin][1]), t.who) : null;
-    const carLine = t.car ? el("span", { class: "pl-ev-l" }, icon("i-car"), t.car) : null;
+    // l'avancement dit en mots : l'intervention quand elle a commencé, sinon la confirmation
+    const status = it.type === "hold" ? "" : it.conflict ? STATE.conflict[0] : it.work && it.work !== "planned" ? workLabel(it.work) : stateLabel;
+    const top = el("span", { class: "pl-ev-h" }, el("b", { text: `${hm(s.a)}–${s.b >= 1440 ? "24:00" : hm(s.b)}` }), icon(ORIGIN[it.origin][1]));
+    const sub = [t.car, status].filter(Boolean).join(" · ");
     const parts = [
-      el("span", { class: "pl-ev-h" }, el("b", { text: t.when }), el("span", { class: "pl-ev-d", text: t.len }), t.state && lines > 1 ? el("span", { class: `pl-pill is-${t.state}` }, icon(STATE[t.state][1]), el("span", { class: "pl-pill-t", text: stateLabel })) : null),
+      top,
       el("span", { class: "pl-ev-t", text: t.what }),
-      ...(lines === 3 ? [whoLine || carLine] : [carLine, whoLine]),
-      el("span", { class: "pl-ev-f" }, el("span", { class: `pl-tag or-${it.origin}` }, ORIGIN[it.origin][0]), t.work ? el("span", { class: "pl-tag", text: t.work.replace("Intervention : ", "") }) : null),
+      sub ? el("span", { class: "pl-ev-s", text: sub }) : null,
+      t.who ? el("span", { class: "pl-ev-w", text: t.who }) : null,
+      it.conflict ? el("span", { class: "pl-ev-a", text: "! Conflit de ressource" }) : null,
     ].filter(Boolean);
+    const tone = toneOf(it);
     const b = el(
       "button",
       {
         type: "button",
-        class: `pl-ev st-${it.type === "hold" ? "hold" : it.state}${it.conflict ? " is-conflict" : ""}${it.noShow ? " is-noshow" : ""}${lines === 1 ? " is-tiny" : ""}`,
+        class: `pl-ev tone-${tone} st-${it.type === "hold" ? "hold" : it.state}${it.conflict ? " is-conflict" : ""}${it.noShow ? " is-noshow" : ""}${lines === 1 ? " is-tiny" : ""}`,
         "aria-label": full.join(", "),
         title: full.join("\n"),
         "data-id": it.id,
       },
-      ...(lines === 1 ? [el("span", { class: "pl-ev-h" }, icon(STATE[t.state] ? STATE[t.state][1] : ORIGIN[it.origin][1]), el("b", { text: timeLabel(s.a) }), el("span", { class: "pl-ev-t", text: t.what }))] : parts.slice(0, lines)),
+      ...(lines === 1 ? [el("span", { class: "pl-ev-h" }, el("b", { text: hm(s.a) }), el("span", { class: "pl-ev-t", text: t.what }))] : parts.slice(0, lines)),
     );
     css(b, { top: px(s.a), height: `${Math.max(18, h - 2)}px`, "--lane": String(s.lane), "--lanes": String(s.lanes) });
     b.addEventListener("click", () => {
@@ -560,7 +640,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
           { type: "button", class: `pl-mday${d.slice(0, 7) !== m ? " is-out" : ""}${d === data.today ? " is-today" : ""}${closed ? " is-closed" : ""}`, "aria-label": `${dayLabel(d)} : ${n ? plural(n, "élément") : "rien"}${p !== null ? `, charge ${p} %` : ""}${closed ? ", fermé" : ""}. Ouvrir le jour.`, onclick: () => go(() => ((anchor = d), (view = "day"))) },
           el("span", { class: "pl-mtop" }, el("b", { text: String(Number(d.slice(8))) }), p !== null && l.planned ? el("span", { class: "pl-mload", text: `${p} %` }) : null),
           n ? el("span", { class: "pl-mcount", text: plural(n, "élément") }) : null,
-          ...day.slice(0, 3).map((it) => el("span", { class: `pl-mitem st-${it.type === "hold" ? "hold" : it.state}${it.conflict ? " is-conflict" : ""}` }, icon(it.conflict ? STATE.conflict[1] : it.state ? STATE[it.state][1] : ORIGIN.hold[1]), `${timeLabel(it.start)} ${it.title}`)),
+          ...day.slice(0, 3).map((it) => el("span", { class: `pl-mitem tone-${toneOf(it)} st-${it.type === "hold" ? "hold" : it.state}${it.conflict ? " is-conflict" : ""}` }, icon(it.conflict ? STATE.conflict[1] : it.state ? STATE[it.state][1] : ORIGIN.hold[1]), `${timeLabel(it.start)} ${it.title}`)),
           n > 3 ? el("span", { class: "pl-mmore", text: `+ ${n - 3}` }) : null,
         ),
       );
@@ -612,7 +692,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     if (drag.ghost.parentNode !== target.col) target.col.append(drag.ghost);
     const lo = Number(target.col.closest(".pl-grid").dataset.lo);
     drag.ghost.style.top = `${(target.min - lo) * PPM}px`;
-    drag.ghost.querySelector(".pl-ev-h b").textContent = timeLabel(target.min);
+    drag.ghost.querySelector(".pl-ev-h b").textContent = hm(target.min);
   }
   function dropTarget(ev) {
     const col = document.elementsFromPoint(ev.clientX, ev.clientY).find((n) => n.classList && n.classList.contains("pl-col"));
@@ -1105,6 +1185,36 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     if (!menu().hidden && !ev.target.closest(".pl-new")) newMenu(false, { focus: false });
   });
   $("planFToggle").addEventListener("click", () => showFilters($("planFilters").hidden));
+  // recherche dans la période affichée : client ou libellé, voiture, immatriculation, prestation (sans accents ni majuscules)
+  function setQuery(text) {
+    query = fold(text.trim());
+    if ($("planSearch").value !== text) $("planSearch").value = text;
+  }
+  $("planSearch").addEventListener("input", () => {
+    setQuery($("planSearch").value);
+    if (!data) return;
+    render();
+    const n = items().length;
+    live(query ? (n ? `${plural(n, "élément")} correspond${n > 1 ? "ent" : ""} à la recherche.` : "Rien ne correspond à la recherche sur cette période.") : "Recherche effacée.");
+  });
+  // plein écran (maquette) : la barre latérale, le fil d'Ariane, le bandeau de chiffres et le pied de page s'effacent ; Échap en sort
+  function focusMode(on) {
+    document.body.classList.toggle("pl-focus", on);
+    $("planFocus").setAttribute("aria-pressed", String(on));
+    $("planFocusText").textContent = on ? "Quitter le plein écran" : "Plein écran";
+    $("planFocus").querySelector("use").setAttribute("href", on ? "#i-unfull" : "#i-full");
+  }
+  $("planFocus").addEventListener("click", () => {
+    const on = !document.body.classList.contains("pl-focus");
+    focusMode(on);
+    live(on ? "Plein écran. Échap pour en sortir." : "Plein écran quitté.");
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape" || !document.body.classList.contains("pl-focus") || $("dash-planning").hidden || dlg().open || !menu().hidden || drag) return;
+    focusMode(false);
+    live("Plein écran quitté.");
+    $("planFocus").focus();
+  });
   $("planWeekend").addEventListener("click", () => {
     weekend = !weekend;
     render();
@@ -1124,6 +1234,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       garageId = id;
       pickStaff = pickPost = null;
       for (const k of Object.keys(filters)) filters[k] = "";
+      setQuery("");
       showFilters(false);
     }
     view = "day";
