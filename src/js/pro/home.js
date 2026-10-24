@@ -192,7 +192,7 @@ export function createHome({ api, $, el, icon, alertBox, busy, apiProblem, goPan
     }
     if (mode === "simple" && rdvState) {
       if (!rdvState.notify || !rdvState.notify.email) out.push({ tone: "amber", icon: "i-mail", title: "Adresse de notification à vérifier", sub: "Sans elle, les demandes de rendez-vous ne vous arrivent pas.", go: () => goPanel("agenda") });
-      else if (!rdvState.enabled) out.push({ tone: "blue", icon: "i-calendar", title: "Rendez-vous en ligne fermés", sub: "Ouvrez-les dans Disponibilités quand vous êtes prêt.", go: () => goPanel("agenda") });
+      else if (!rdvState.enabled) out.push({ tone: "blue", icon: "i-calendar", title: "Rendez-vous en ligne fermés", sub: "Ouvrez-les dans Mon garage › Horaires quand vous êtes prêt.", go: () => goPanel("agenda") });
     }
     if (pricesDue.length) out.push({ tone: "amber", icon: "i-tag", title: `${plural(pricesDue.length, "prix", "prix")} à confirmer`, sub: "Sans confirmation, ils sont marqués « ancien » sur Pixcar.", go: () => goPanel("prices") });
     return out.map((p, i) => ({ ...p, i })).sort((a, b) => TONE_ORDER[a.tone] - TONE_ORDER[b.tone] || a.i - b.i);
@@ -260,7 +260,7 @@ export function createHome({ api, $, el, icon, alertBox, busy, apiProblem, goPan
         { key: "today", tone: "blue", ic: "i-calendar", value: items.length, label: "Rendez-vous aujourd'hui", sub: items.length ? `${items.filter((it) => it.state === "confirmed").length} confirmé(s)` : "Aucun pour l'instant", onclick: () => goPanel("requests") },
         { key: "todo", tone: "orange", ic: "i-inbox", value: todo.length, label: "Demandes à traiter", sub: todo.length ? "Répondez avant l'heure limite" : "Tout est à jour", onclick: () => goPanel("requests") },
         { key: "views", tone: "green", ic: "i-eye", value: v.recent, label: "Vues de la fiche · 30 j", sub: evolution(v) || "Sur Pixcar", onclick: () => goPanel("prices") },
-        { key: "fresh", tone: "violet", ic: "i-tag", value: freshText(), label: "Prix à jour", sub: "Prestations & tarifs", onclick: () => goPanel("prices") },
+        { key: "fresh", tone: "violet", ic: "i-tag", value: freshText(), label: "Prix à jour", sub: "Mon garage › Prestations", onclick: () => goPanel("prices") },
         alert,
       ];
     } else {
@@ -268,7 +268,7 @@ export function createHome({ api, $, el, icon, alertBox, busy, apiProblem, goPan
       cards = [
         { key: "views", tone: "blue", ic: "i-eye", value: v.views.recent, label: "Vues de la fiche · 30 j", sub: evolution(v.views) || "Sur Pixcar", onclick: () => goPanel("prices") },
         { key: "calls", tone: "orange", ic: "i-phone", value: v.calls.recent, label: "Clics « Appeler » · 30 j", sub: evolution(v.calls) || "Depuis votre fiche", onclick: () => goPanel("prices") },
-        { key: "fresh", tone: "green", ic: "i-tag", value: freshText(), label: "Prix à jour", sub: "Prestations & tarifs", onclick: () => goPanel("prices") },
+        { key: "fresh", tone: "green", ic: "i-tag", value: freshText(), label: "Prix à jour", sub: "Mon garage › Prestations", onclick: () => goPanel("prices") },
         { key: "garage", tone: "violet", ic: "i-garage", value: g.prices.length, label: "Prix annoncés", sub: "Visibles sur Pixcar", onclick: () => goPanel("prices") },
         alert,
       ];
@@ -444,7 +444,7 @@ export function createHome({ api, $, el, icon, alertBox, busy, apiProblem, goPan
     else
       list = [
         card(true, "i-tag", "Annoncer un prix", "Visible sur Pixcar", () => goPanel("prices", { add: true })),
-        card(false, "i-garage", "Mon garage", "Coordonnées, horaires", () => goPanel("garage")),
+        card(false, "i-settings", "Mon garage", "Horaires, prestations, fiche", () => goPanel("garage")),
       ];
     $("dbActions").replaceChildren(...list);
   }
@@ -533,7 +533,7 @@ export function createHome({ api, $, el, icon, alertBox, busy, apiProblem, goPan
               el("span", { class: "db-team-pct" }, el("b", { text: avail ? `${p} %` : "—" }), el("small", { text: avail ? `${hrs(planned)} / ${hrs(avail)}` : "" })),
             );
           })
-        : [el("li", { class: "db-empty", text: "Aucun mécanicien actif : ajoutez-les dans Équipe et postes." })]),
+        : [el("li", { class: "db-empty", text: "Aucun mécanicien actif : ajoutez-les dans Mon garage › Ressources." })]),
     );
   }
 
@@ -565,7 +565,7 @@ export function createHome({ api, $, el, icon, alertBox, busy, apiProblem, goPan
               el("span", { class: "db-post-st" }, el("span", { class: `db-chip tone-${s.tone}`, text: s.chip }), s.sub ? el("small", { text: s.sub }) : null),
             );
           })
-        : [el("li", { class: "db-empty", text: "Aucun poste : ajoutez-les dans Équipe et postes." })]),
+        : [el("li", { class: "db-empty", text: "Aucun poste : ajoutez-les dans Mon garage › Ressources." })]),
     );
   }
 

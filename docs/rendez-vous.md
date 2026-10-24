@@ -220,7 +220,9 @@ semble partir, rien n'est envoyé. Un horaire n'est retenu qu'après le code, ca
 
 - Espace Pro : « Demandes » (à traiter, à venir, passées ; accepter, refuser, annuler, appeler ; export vers l'agenda) juste après le
   tableau de bord, « Disponibilités » (interrupteur, semaine type, volet du créneau avec aperçu, fermetures, règles, adresse de
-  notification) après « Mes prix ». Sur téléphone, la semaine type devient une liste par jour.
+  notification) après « Mes prix ». Sur téléphone, la semaine type devient une liste par jour. Depuis le 24 octobre 2026, Disponibilités
+  n'est plus un écran du menu : son contenu est dans Mon garage › Horaires (et le mode du calendrier dans Mon garage › Modules), voir
+  `docs/calendrier-avance.md` (« Panneau du rendez-vous et Mon garage en rubriques »).
 - Comparateur : étiquette « Rendez-vous en ligne » sous le badge « Garage vérifié », bloc « Prendre rendez-vous » dans la fiche après
   les prix annoncés (« Choisir un horaire »). Les prochains horaires ne sont pas montrés dans la fiche : il faudrait un appel à l'API à
   chaque fiche ouverte et du code de plus dans le comparateur ; ils s'affichent dès l'ouverture de la fenêtre. La fenêtre (horaire,

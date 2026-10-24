@@ -274,7 +274,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
     alertBox("");
     await loadAgenda(id);
     renderAgenda();
-    if (focus) $("agTitle").focus();
+    if (focus) $("agOnlineTitle").focus();
   }
   const put = (out) => {
     agenda = { ...out, garageId };
@@ -299,7 +299,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
     renderMissing();
     renderWeek();
     renderClosures();
-    for (const s of document.querySelectorAll("#dash-agenda [data-setting]")) s.value = String(a.settings[s.dataset.setting]);
+    for (const s of document.querySelectorAll("#agRulesBox [data-setting]")) s.value = String(a.settings[s.dataset.setting]);
     renderNotify();
   }
 
@@ -307,13 +307,15 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
   function renderMode() {
     const c = agenda.calendar || { mode: "simple", started: false };
     const adv = c.mode === "advanced";
+    // en mode avancé, la semaine type et les règles laissent la place aux réglages du calendrier avancé (mêmes délais, plus les marges)
     $("agWeekBox").hidden = adv;
+    $("agRulesBox").hidden = adv;
     say("agModeText", adv ? "Avancé : les horaires proposés viennent de vos mécaniciens, de vos postes et du temps de chaque prestation." : "Simple : votre semaine type en créneaux, chacun avec un nombre de voitures.");
-    say("agModeHelp", adv ? "Votre semaine type reste enregistrée : elle reprend si vous revenez au mode simple (Mon atelier › Contrôles)." : "Le mode avancé tient compte de vos mécaniciens, de leurs absences et compétences, de vos ponts et postes. Un assistant vous guide ; rien ne change pour vos clients avant l'activation.");
-    $("agModeGo").textContent = adv ? "Gérer l'atelier" : c.started ? "Reprendre la configuration" : "Passer au mode avancé";
+    say("agModeHelp", adv ? "Votre semaine type reste enregistrée : elle reprend si vous revenez au mode simple (Mon garage › Modules)." : "Le mode avancé tient compte de vos mécaniciens, de leurs absences et compétences, de vos ponts et postes. Un assistant vous guide ; rien ne change pour vos clients avant l'activation.");
+    $("agModeGo").textContent = adv ? "Mécaniciens et postes" : c.started ? "Reprendre la configuration" : "Passer au mode avancé";
     $("agModeGo").className = adv ? "btn small" : "btn primary small";
-    const lead = document.querySelector("#dash-agenda .rv-top .lead");
-    lead.textContent = adv ? "Quand votre atelier peut prendre une voiture : Pixcar calcule les horaires avec vos ressources (Mon atelier)." : "Quand vous pouvez prendre une voiture, et pour quelles prestations. Pixcar ne propose aux automobilistes que des horaires pris dans ces créneaux.";
+    const lead = $("agLead");
+    lead.textContent = adv ? "Quand votre atelier peut prendre une voiture : Pixcar calcule les horaires avec vos mécaniciens et vos postes (Ressources)." : "Quand vous pouvez prendre une voiture, et pour quelles prestations. Pixcar ne propose aux automobilistes que des horaires pris dans ces créneaux.";
   }
 
   function renderMissing() {
@@ -322,7 +324,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
     const items = [];
     if (a.paused) items.push(el("li", {}, el("b", { text: "En pause : " }), "3 demandes de suite sont restées sans réponse avant leur heure limite. Réactivez les rendez-vous avec l'interrupteur quand vous pouvez répondre."));
     const todo = {
-      hours: ["Renseignez vos horaires d'ouverture", "Mon garage", () => goPanel("garage")],
+      hours: ["Renseignez vos horaires d'ouverture", "Les renseigner", () => $("mgHoursEdit").click()],
       notify: ["Indiquez l'adresse qui recevra les demandes", "Plus bas", () => $("agNotifyEmail").focus()],
       slots: ["Ajoutez un créneau à votre semaine type", "Ajouter un créneau", () => openSlot(null)],
     };
@@ -330,7 +332,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
       const [text, label, go] = todo[k];
       items.push(el("li", {}, el("span", { text: text + " " }), el("button", { type: "button", class: "link-btn", onclick: go, text: label === "Plus bas" ? "Aller à l'adresse" : label })));
     }
-    if (!a.garage.phone) items.push(el("li", { class: "soft" }, "Votre téléphone n'apparaît pas dans les e-mails aux clients : demandez-le dans ", el("button", { type: "button", class: "link-btn", onclick: () => goPanel("garage"), text: "Mon garage" }), "."));
+    if (!a.garage.phone) items.push(el("li", { class: "soft" }, "Votre téléphone n'apparaît pas dans les e-mails aux clients : demandez-le dans ", el("button", { type: "button", class: "link-btn", onclick: () => goPanel("garage", { tab: "profile" }), text: "Fiche Pixcar" }), "."));
     box.hidden = !items.length;
     box.replaceChildren(...(a.missing.length ? [el("p", { text: "Pour ouvrir les rendez-vous en ligne :" })] : []), el("ul", {}, ...items));
   }
@@ -727,7 +729,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
   $("whyClose").addEventListener("click", () => $("whyDlg").close());
   $("agEnabled").addEventListener("click", (e) => setting({ enabled: !agenda.open }, e.currentTarget));
   $("agHolidays").addEventListener("click", (e) => setting({ holidays: !agenda.settings.holidays }, e.currentTarget));
-  for (const s of document.querySelectorAll("#dash-agenda [data-setting]")) s.addEventListener("change", () => setting({ [s.dataset.setting]: Number(s.value) }));
+  for (const s of document.querySelectorAll("#agRulesBox [data-setting]")) s.addEventListener("change", () => setting({ [s.dataset.setting]: Number(s.value) }));
   $("agAddSlot").addEventListener("click", () => openSlot(null));
   $("slotForm").addEventListener("submit", saveSlot);
   $("slotForm").addEventListener("change", updateSlot);

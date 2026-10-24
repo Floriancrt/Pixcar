@@ -113,6 +113,8 @@ const NOTIFY = "atelier@garage-planning.fr";
     return { ctx, page, logs };
   }
   const axe = async (page, label) => {
+    // contrastes mesurés une fois les transitions finies (le panneau apparaît en fondu)
+    await page.waitForFunction(() => !document.getAnimations().some((a) => a instanceof CSSTransition));
     await page.evaluate(AXE);
     const r = await page.evaluate(async () => (await window.axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } })).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(" | ")}`));
     check(`axe: no violation on « ${label} »`, r.length === 0, r.join("\n"));
@@ -148,7 +150,7 @@ const NOTIFY = "atelier@garage-planning.fr";
     const { ctx, page } = await newPage();
     await page.goto(`${srv.url}/pro/`);
     await page.waitForSelector('[data-screen="dash"]:not([hidden])');
-    check("simple mode: no Planning in the menu, Disponibilités is there", (await page.isHidden('.dash-link[data-panel="planning"]')) && (await page.isVisible('.dash-link[data-panel="agenda"]')));
+    check("simple mode: no Planning in the menu, Mon garage is there", (await page.isHidden('.dash-link[data-panel="planning"]')) && (await page.isVisible('.dash-link[data-panel="garage"]')));
     await ctx.close();
   }
 
@@ -295,11 +297,43 @@ const NOTIFY = "atelier@garage-planning.fr";
   await page.click("#dashRail");
   await page.waitForFunction(() => document.querySelector(".dash-nav").getBoundingClientRect().width >= 200);
 
+  // ---- panneau d'un rendez-vous (demande du 24 octobre 2026) : il s'ajoute à droite de la grille, en transition, et la rétrécit sans la
+  // couvrir ; le bloc ouvert est mis en évidence ; Échap le referme et rend le focus au bloc ; aucune transition en mouvement réduit
+  const side = () => page.evaluate(() => {
+    const g = document.getElementById("planGrid").getBoundingClientRect(), dl = document.getElementById("planDlg"), d = dl.getBoundingClientRect(), sc = document.querySelector("#planGrid .pl-scroll");
+    return { grid: Math.round(g.width), gr: g.right, gt: g.top, left: d.left, right: d.right, bottom: d.bottom, width: Math.round(d.width), open: dl.open, modal: dl.matches(":modal"), vw: innerWidth, hscroll: sc.scrollWidth - sc.clientWidth, page: document.documentElement.scrollWidth - innerWidth };
+  });
+  const settle = () => page.waitForFunction(() => !document.getAnimations().length);
+  await settle(); // la barre latérale vient de se déplier : la marge du contenu est encore en transition
+  const wide = await side();
+  await page.click(ev(julien));
+  await page.waitForSelector("#planDlg[open] #planMove");
+  check("side panel: it slides in (the grid's width is animated)", await page.evaluate(() => document.getAnimations().some((a) => a.transitionProperty === "grid-template-columns")));
+  await settle();
+  const opened = await side();
+  check("side panel: non-modal, on the right of the grid, which shrinks instead of being covered", opened.open && !opened.modal && opened.left >= opened.gr + 8 && opened.right <= opened.vw && opened.grid <= wide.grid - 300 && opened.width >= 300, JSON.stringify({ wide, opened }));
+  check("side panel: the week still fits without scrolling sideways, nor the page", opened.hscroll <= 1 && opened.page <= 0 && (await fits()).length === 0, JSON.stringify(opened) + " / " + (await fits()).join(" / "));
+  check("side panel: the open appointment is highlighted in the grid", (await page.$$eval(".pl-ev.is-open", (b) => b.map((x) => x.dataset.id))).join() === julien);
+  await shot(page, "2-panneau");
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.getElementById("planDlg").open);
+  await settle();
+  const shut = await side();
+  check("side panel: Escape closes it, the grid takes its width back and the block gets the focus", shut.grid === wide.grid && (await page.evaluate(() => document.activeElement.dataset.id)) === julien && !(await page.$(".pl-ev.is-open")), JSON.stringify(shut));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.click(ev(julien));
+  await page.waitForSelector("#planDlg[open] #planMove");
+  check("side panel, reduced motion: no transition", await page.evaluate(() => !document.getAnimations().length && getComputedStyle(document.getElementById("planLayout")).transitionDuration.split(",").every((t) => parseFloat(t) === 0)));
+  await page.click("#planSideClose");
+  check("side panel, reduced motion: « Fermer » closes it at once", await page.evaluate(() => !document.getElementById("planDlg").open));
+  await page.emulateMedia({ reducedMotion: null });
+
   // ---- fiche d'un rendez-vous, déplacement au clavier
   await page.click(ev(julien));
   await page.waitForSelector("#planDlg[open] #planMove");
+  await settle();
   const sheet = await text(page, "#planForm");
-  check("sheet: origin, confirmation and work state apart; client and phone, car, service, drop-off, work, return, assignments", /^Rendez-vous Julien Roux Pixcar Confirmé Intervention : Prévue Client : Julien Roux · 06 39 98 12 34 Voiture : Peugeot 208 · EZ-108-BC/i.test(sheet) && /Dépôt : .* à 8:00/.test(sheet) && /Travaux : 8:00–8:45/.test(sheet) && /Affectations (Paul|Léa) · main-d'œuvre/.test(sheet) && /Pont n°\d · poste/.test(sheet), sheet);
+  check("sheet: origin, confirmation and work state apart; client and phone, car, service, drop-off, work, return, assignments", /^Rendez-vous Julien Roux Pixcar Confirmé Intervention : Prévue Client Julien Roux · 06 39 98 12 34 Voiture Peugeot 208 · EZ-108-BC/i.test(sheet) && /Dépôt .* à 8:00/.test(sheet) && /Travaux 8:00–8:45/.test(sheet) && /Affectations (Paul|Léa) · main-d'œuvre/.test(sheet) && /Pont n°\d · poste/.test(sheet), sheet);
   check("sheet: call and cancel are offered", (await page.getAttribute('#planForm a.btn[href^="tel:"]', "href")) === "tel:+33639981234" && /Annuler ce rendez-vous/.test(sheet));
   check("sheet: no stray null", await noNull(page, "#planForm"));
   await axe(page, "fiche d'un rendez-vous");
@@ -452,8 +486,8 @@ const NOTIFY = "atelier@garage-planning.fr";
   check("week: with Paul's work in sequence, the two blocks sit full width, not side by side", await page.$$eval(`${ev(leroy.id)}, ${ev(petit.id)}`, (b) => b.length === 2 && b.every((x) => x.style.getPropertyValue("--lanes") === "1")));
   await page.click(ev(leroy.id));
   await page.waitForSelector("#planDlg[open] #planMove");
-  check("the sheet gives drop-off, work and return", /Dépôt : .* à 9:00/.test(await text(page, "#planForm")) && /Travaux : 9:45–10:30/.test(await text(page, "#planForm")) && /Restitution : 10:45/.test(await text(page, "#planForm")), await text(page, "#planForm"));
-  await page.click('#planForm .icon-btn[aria-label="Fermer"]');
+  check("the sheet gives drop-off, work and return", /Dépôt .* à 9:00/.test(await text(page, "#planForm")) && /Travaux 9:45–10:30/.test(await text(page, "#planForm")) && /Restitution 10:45/.test(await text(page, "#planForm")), await text(page, "#planForm"));
+  await page.click('#planSideClose');
   await pro("DELETE", `/rdv/calendar/blocks/${leroy.id}`);
 
   // ---- filtres : repliés derrière un bouton, les filtres actifs en puces
@@ -586,7 +620,7 @@ const NOTIFY = "atelier@garage-planning.fr";
     if (name === "telephone") {
       // depuis la maquette « Parcours Atelier » (24 octobre 2026) : rail d'icônes de 64 px à gauche, plus de barre du bas ni de « Plus »
       const rail = await m.page.evaluate(() => ({ w: Math.round(document.getElementById("dashNav").getBoundingClientRect().width), left: Math.round(document.getElementById("dashNav").getBoundingClientRect().left) }));
-      check("phone: the 64 px icon rail on the left shows Planning and Disponibilités, no « Plus » menu", rail.w === 64 && rail.left === 0 && (await m.page.isVisible('.dash-link[data-panel="planning"]')) && (await m.page.isVisible('.dash-link[data-panel="agenda"]')) && (await m.page.isHidden("#dashMore")), JSON.stringify(rail));
+      check("phone: the 64 px icon rail on the left shows Planning and Mon garage, no « Plus » menu", rail.w === 64 && rail.left === 0 && (await m.page.isVisible('.dash-link[data-panel="planning"]')) && (await m.page.isVisible('.dash-link[data-panel="garage"]')) && (await m.page.isHidden("#dashMore")), JSON.stringify(rail));
     }
     await m.page.click('.dash-link[data-panel="planning"]');
     await m.page.waitForSelector("#dash-planning:not([hidden]) .pl-grid");
@@ -597,7 +631,9 @@ const NOTIFY = "atelier@garage-planning.fr";
     await m.page.click("#planNew");
     await m.page.click('#planNewMenu [data-new="job"]');
     await m.page.waitForSelector("#planDlg[open] #planLabel");
-    check(`${name}: the creation sheet fits the screen`, await m.page.evaluate(() => { const r = document.getElementById("planDlg").getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth + 1; }));
+    await m.page.waitForFunction(() => !document.getAnimations().length);
+    // pas la place à côté : le panneau se place au-dessus de la grille, qui reste visible en dessous (rien n'est recouvert)
+    check(`${name}: the creation panel fits the screen, above the grid, without covering it`, await m.page.evaluate(() => { const r = document.getElementById("planDlg").getBoundingClientRect(), g = document.getElementById("planGrid").getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth + 1 && r.bottom <= g.top && !document.getElementById("planDlg").matches(":modal"); }));
     await shot(m.page, `7-${name}-creation`);
     check(`${name}: no console error`, !m.logs.length, m.logs.join("\n"));
     await m.ctx.close();

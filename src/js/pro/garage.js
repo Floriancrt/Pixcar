@@ -33,7 +33,7 @@ const MINUTES = Array.from({ length: (MINUTES_MAX - MINUTES_MIN) / MINUTES_STEP 
 const TIMES = Array.from({ length: 97 }, (_, i) => `${String(Math.floor(i / 4)).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")}`);
 const timeLabel = (t) => t.replace(/^0(\d)/, "$1");
 
-export function createGarageView({ api, $, el, icon, alertBox, busy, apiProblem, prices, openPrice, onPricesChanged }) {
+export function createGarageView({ api, $, el, icon, alertBox, busy, apiProblem, prices, openPrice, onPricesChanged, onHoursChanged = () => {} }) {
   let garageId = null;
   let data = null; // réponse de GET /v1/pro/garages/:id/profile
   let registry = null; // réponse de GET …/registry, ou { error }
@@ -309,6 +309,7 @@ export function createGarageView({ api, $, el, icon, alertBox, busy, apiProblem,
         $("hoursDlg").close();
         renderHours();
         alertBox("Horaires enregistrés, visibles sur Pixcar.", "info");
+        onHoursChanged();
       } catch (e) {
         if (e.status === 401) {
           $("hoursDlg").close();

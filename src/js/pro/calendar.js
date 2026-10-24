@@ -1,6 +1,7 @@
 // Espace Pro, calendrier avancé (docs/calendrier-avance.md, lot 3a) : l'assistant en six étapes (garage, personnel, équipements,
-// prestations, réservation, vérification et activation), et les mêmes écrans pour modifier ensuite sans tout recommencer. Les fiches
-// (mécanicien, poste, prestation, absence) s'ouvrent dans un même volet, construit ici. Que du TEXTE écrit dans la page.
+// prestations, réservation, vérification et activation). Une fois le mode avancé actif, les mêmes réglages se rangent dans les rubriques
+// de Mon garage (mount : Horaires, Prestations, Ressources, Modules ; demande du 24 octobre 2026). Les fiches (mécanicien, poste,
+// prestation, absence) s'ouvrent dans un même volet, construit ici. Que du TEXTE écrit dans la page.
 import { DAYS, hoursText, parseHours } from "../shared/garage-profile.js";
 import { PRO_SERVICES } from "../shared/pro-prices.js";
 import { dayLabel, minOf, timeLabel } from "../shared/rdv.js";
@@ -27,15 +28,19 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
   let check = null; // réponse de POST …/calendar/check (étape 6)
   let placements = {}; // { requestId: { staff: [id], station } } choisis à la main à l'étape 6
   let dlg = null; // { kind, item, armed }
+  let host = null; // rubriques de Mon garage qui reçoivent les réglages (mode avancé) ; null : l'assistant
   const fail = (e) => {
     if (!apiProblem(e)) alertBox(e.message);
   };
-  const live = (text) => ($("calLive").textContent = text);
+  const live = (text) => ($(host ? "mgLive" : "calLive").textContent = text);
+  // après un enregistrement : le titre de l'étape dans l'assistant (dans Mon garage, le focus reste où il est)
+  const stepFocus = () => $("calStepTitle") && $("calStepTitle").focus();
   const advanced = () => st && st.mode === "advanced";
 
   // ================================================================= ouverture, étapes
   async function open(id, { focus = true, step = null } = {}) {
     garageId = id;
+    unmount(); // un seul exemplaire des réglages dans la page (mêmes identifiants)
     alertBox("");
     st = await api.calendar(id);
     if (!st.started) st = await api.calStart(id);
@@ -44,6 +49,20 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
     placements = {};
     render();
     if (focus) $("calTitle").focus();
+  }
+  // Mon garage, mode avancé : slots = { hours, services, resources, modules }, les conteneurs des rubriques
+  async function mount(id, slots) {
+    garageId = id;
+    host = slots;
+    for (const w of ["calSteps", "calBody", "calFoot"]) $(w).replaceChildren(); // l'assistant, s'il a servi : mêmes identifiants
+    st = await api.calendar(id);
+    check = null;
+    placements = {};
+    render();
+  }
+  function unmount() {
+    if (host) for (const node of Object.values(host)) node.replaceChildren();
+    host = null;
   }
   const put = (out) => {
     st = out;
@@ -60,11 +79,12 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
     cur = n;
     if (n === 6) await runCheck();
     render();
-    $("calStepTitle").focus();
+    stepFocus();
   }
 
   function render() {
     onMode(st.mode); // le menu montre « Planning » en mode avancé
+    if (host) return renderHost();
     $("calTitle").textContent = advanced() ? "Mon atelier" : "Calendrier avancé";
     $("calLead").textContent = advanced()
       ? "Le mode avancé est actif : les horaires proposés tiennent compte de vos mécaniciens, de vos postes et du temps de chaque prestation."
@@ -85,6 +105,29 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
     if (cur > 1) foot.push(el("button", { type: "button", class: "btn", onclick: () => go(cur - 1).catch(fail) }, "Précédent"));
     if (cur < 6) foot.push(el("button", { type: "button", class: "btn primary", id: "calNext", onclick: () => go(cur + 1, { save: true }).catch(fail) }, advanced() ? "Suivant" : "Continuer"));
     $("calFoot").replaceChildren(...foot);
+  }
+
+  // Mon garage : chaque rubrique reçoit ses sections, titres au niveau h2 (sous « Mon garage ») au lieu de h3 sous l'étape. Horaires :
+  // délais, marges et capacité en ligne ; Prestations : exigences et confirmation ; Ressources : mécaniciens, compétences, postes ;
+  // Modules : contrôles, conflits, recalcul et retour au mode simple.
+  function renderHost() {
+    if (!advanced()) return unmount();
+    const [, , delays] = stepGarage();
+    const [confirm, capacity] = stepBooking();
+    const fill = (node, list) => node.replaceChildren(...list.filter(Boolean).map(promote));
+    fill(host.hours, [delays, capacity]);
+    fill(host.services, [el("section", { class: "mg-panel", "aria-labelledby": "calSvcTitle" }, el("h3", { id: "calSvcTitle", text: "Ce que demande chaque prestation" }), el("p", { class: "sub", text: "Main-d'œuvre, immobilisation, compétences et postes : Pixcar en tient compte pour proposer des horaires." }), ...stepServices()), confirm]);
+    fill(host.resources, [...stepStaff(), ...stepResources()]);
+    fill(host.modules, stepCheck());
+  }
+  function promote(node) {
+    for (const h of node.querySelectorAll("h3")) {
+      const h2 = el("h2", {});
+      for (const a of h.attributes) h2.setAttribute(a.name, a.value);
+      h2.append(...h.childNodes);
+      h.replaceWith(h2);
+    }
+    return node;
   }
 
   // un petit menu de valeurs (minutes, pourcentages…)
@@ -121,8 +164,8 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
       el(
         "section",
         { class: "mg-panel", "aria-labelledby": "calClosTitle" },
-        el("div", { class: "mg-head" }, el("h3", { id: "calClosTitle", text: "Fermetures" }), el("button", { type: "button", class: "btn small", onclick: () => goPanel("agenda") }, "Gérer dans Disponibilités")),
-        soon.length ? el("ul", { class: "cal-mini" }, ...soon) : el("p", { class: "muted", text: "Aucune fermeture à venir. Les jours fériés sont réglés dans Disponibilités." }),
+        el("div", { class: "mg-head" }, el("h3", { id: "calClosTitle", text: "Fermetures" }), el("button", { type: "button", class: "btn small", onclick: () => goPanel("agenda") }, "Gérer dans Mon garage")),
+        soon.length ? el("ul", { class: "cal-mini" }, ...soon) : el("p", { class: "muted", text: "Aucune fermeture à venir. Les jours fériés se règlent dans Mon garage › Horaires." }),
       ),
       el(
         "section",
@@ -600,7 +643,7 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
         { class: "mg-panel", "aria-labelledby": "calAutoTitle" },
         el("div", { class: "mg-head" }, el("h3", { id: "calAutoTitle", text: "Confirmation" }), el("span", { class: "cal-bulk" }, el("button", { type: "button", class: "btn small", onclick: (ev) => setAuto(all, true, ev.currentTarget) }, "Tout en automatique"), el("button", { type: "button", class: "btn small", onclick: (ev) => setAuto(all, false, ev.currentTarget) }, "Tout à confirmer"))),
         el("p", { class: "help", text: "Automatique : le rendez-vous est confirmé dès la demande, les ressources sont réservées, vous êtes prévenu par e-mail. Une demande qui mêle une prestation à confirmer reste à confirmer." }),
-        ...(rows.length ? rows : [el("p", { class: "muted", text: "Réglez d'abord vos prestations (étape 4)." })]),
+        ...(rows.length ? rows : [el("p", { class: "muted", text: host ? "Réglez d'abord vos prestations, ci-dessus." : "Réglez d'abord vos prestations (étape 4)." })]),
       ),
       el(
         "section",
@@ -620,7 +663,7 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
         { class: "mg-panel", "aria-labelledby": "calNotifTitle" },
         el("h3", { id: "calNotifTitle", text: "Demandes et notifications" }),
         st.notify ? el("p", { class: "ag-notify-now" }, icon("i-check"), `Les demandes et les confirmations arrivent à ${st.notify}.`) : el("p", { class: "warn", text: "Aucune adresse ne reçoit encore les demandes." }),
-        el("button", { type: "button", class: "btn small", onclick: () => goPanel("agenda") }, st.notify ? "Changer d'adresse (Disponibilités)" : "Indiquer l'adresse (Disponibilités)"),
+        el("button", { type: "button", class: "btn small", onclick: () => goPanel("agenda") }, st.notify ? "Changer d'adresse (Mon garage › Horaires)" : "Indiquer l'adresse (Mon garage › Horaires)"),
       ),
     ];
   }
@@ -680,12 +723,12 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
           conflicts.length
             ? el("ul", { class: "cal-conflicts" }, ...conflicts)
             : el("p", { class: "muted", text: "Aucun : chaque rendez-vous à venir a un mécanicien et un poste disponibles." }),
-          conflicts.length ? el("p", { class: "help", text: "Rien n'a été déplacé. Réaffectez ou déplacez ces rendez-vous (calendrier, prochainement), ou annulez-les depuis Demandes : le client est prévenu." }) : null,
+          conflicts.length ? el("p", { class: "help", text: "Rien n'a été déplacé. Réaffectez ou déplacez ces rendez-vous dans le Planning, ou annulez-les depuis Demandes : le client est prévenu." }) : null,
         ),
         el(
           "section",
           { class: "mg-panel", "aria-labelledby": "calModeTitle" },
-          el("h3", { id: "calModeTitle", text: "Mode du calendrier" }),
+          el("h3", { id: "calModeTitle", text: host ? "Affectations et retour au mode simple" : "Mode du calendrier" }),
           el("p", { class: "help", text: "Revenir au mode simple rattache chaque rendez-vous à venir à un créneau de votre semaine type. Vos mécaniciens, postes et réglages restent enregistrés." }),
           el("div", { class: "rv-acts" }, el("button", { type: "button", class: "btn", id: "calRecompute", onclick: (ev) => activate(ev.currentTarget) }, "Recalculer les affectations"), el("button", { type: "button", class: "btn danger", id: "calToSimple", onclick: (ev) => toSimple(ev.currentTarget) }, "Revenir au mode simple")),
           el("div", { id: "calSimpleFail" }),
@@ -744,18 +787,23 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
       render();
       const still = check && check.failed.find((x) => x.id === f.id);
       live(still ? `Toujours impossible : ${still.reasons[0] || ""}` : "Placé.");
-      $("calStepTitle").focus();
+      stepFocus();
     });
   }
   async function activate(button) {
     await busy(button, async () => {
       try {
+        const first = !host; // depuis l'assistant : l'activation ; depuis Mon garage : « Recalculer les affectations »
         st = await api.calActivate(garageId, { placements: Object.entries(placements).map(([requestId, p]) => ({ requestId, ...p })) });
         placements = {};
         check = null;
+        const text = advanced() && st.placed !== undefined ? `Mode avancé actif. ${plural(st.placed, "rendez-vous à venir affecté", "rendez-vous à venir affectés")}.` : "Mode avancé actif.";
         render();
-        alertBox(advanced() && st.placed !== undefined ? `Mode avancé actif. ${plural(st.placed, "rendez-vous à venir affecté", "rendez-vous à venir affectés")}.` : "Mode avancé actif.", "info");
-        $("calStepTitle").focus();
+        // le mode avancé actif, ses réglages sont dans Mon garage : l'assistant s'y range
+        const moved = first && advanced();
+        if (moved) await goPanel("garage", { tab: "modules", focus: false });
+        alertBox(text, "info");
+        if (moved) $("mgTitle").focus();
       } catch (e) {
         if (e.status === 409 && e.details && e.details.failed) {
           check = { readiness: st.readiness, placed: [], failed: e.details.failed };
@@ -776,7 +824,7 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
       try {
         st = await api.calSimple(garageId);
         onMode(st.mode);
-        await goPanel("agenda");
+        await goPanel("garage", { tab: "modules" });
         alertBox("Mode simple : les horaires proposés viennent de nouveau de votre semaine type.", "info");
       } catch (e) {
         if (e.status === 409 && e.details && e.details.failed) {
@@ -790,5 +838,5 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
     });
   }
 
-  return { open, reset: () => (st = null) };
+  return { open, mount, unmount, reset: () => (st = null) };
 }

@@ -106,12 +106,14 @@ const NOTIFY = "atelier@garage-demo.fr";
   await page.goto(`${srv.url}/pro/`);
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
   const nav = await page.$$eval("#dashNav .dash-link:not(.rail-toggle)", (els) => els.filter((e) => e.offsetParent).map((e) => e.innerText.trim()));
-  check("with appointments open in the API, the menu offers « Demandes » and « Disponibilités » (nothing to answer yet)", nav.join("|") === "Tableau de bord|Demandes|Mon garage|Prestations & tarifs|Disponibilités|Mes garages" && (await page.locator("#rqCount").isHidden()) && (await page.locator("#dbRqCount").isHidden()) && (await text(page, "#dbRqEmpty")) === "Aucune demande en attente.", nav.join("|"));
+  check("with appointments open in the API, the menu offers « Demandes » (nothing to answer yet); Disponibilités and the prices are in Mon garage", nav.join("|") === "Tableau de bord|Demandes|Mon garage|Mes garages" && (await page.locator("#rqCount").isHidden()) && (await page.locator("#dbRqCount").isHidden()) && (await text(page, "#dbRqEmpty")) === "Aucune demande en attente.", nav.join("|"));
 
-  // ---- Disponibilités : fermés, et ce qui manque
-  await page.click('.dash-link[data-panel="agenda"]');
-  await page.waitForSelector("#dash-agenda:not([hidden])");
-  check("« Disponibilités »: the title has the focus, the menu says where we are", (await page.evaluate(() => document.activeElement.id)) === "agTitle" && (await page.getAttribute('.dash-link[data-panel="agenda"]', "aria-current")) === "true");
+  // ---- Disponibilités, dans Mon garage › Horaires (demande du 24 octobre 2026) : fermés, et ce qui manque
+  await page.click('.dash-link[data-panel="garage"]');
+  await page.waitForSelector("#dash-garage:not([hidden])");
+  const tabs = await page.$$eval("#mgTabs [role=tab]", (ts) => ts.filter((t) => !t.hidden).map((t) => t.querySelector("b").textContent + (t.getAttribute("aria-selected") === "true" ? "*" : "")));
+  check("Mon garage with appointments: Horaires (selected), Prestations, Ressources, Modules, Fiche Pixcar; the title has the focus, the menu says where we are", tabs.join("|") === "Horaires*|Prestations|Ressources|Modules|Fiche Pixcar" && (await page.evaluate(() => document.activeElement.id)) === "mgTitle" && (await page.getAttribute('.dash-link[data-panel="garage"]', "aria-current")) === "true", tabs.join("|"));
+  check("Horaires: opening hours, then online appointments, the typical week, closures, rules and the address, in that order", (await page.$$eval("#mgPanel-hours > section:not([hidden]) h2", (hs) => hs.map((h) => h.textContent))).join("|") === "Horaires d'ouverture|Rendez-vous en ligne|Ma semaine type|Fermetures et congés|Règles de réservation|Où recevoir les demandes");
   let missing = await text(page, "#agMissing");
   check("closed at first; what is missing is listed (address for the requests, a slot), hours are already there", (await text(page, "#agStateText")) === "Fermés" && (await page.getAttribute("#agEnabled", "aria-checked")) === "false" && /l'adresse qui recevra les demandes/.test(missing) && /Ajoutez un créneau/.test(missing) && !/horaires d'ouverture/.test(missing), missing);
   const week = await page.$$eval("#agWeek .ag-col", (cols) => cols.map((c) => [c.querySelector(".ag-col-head b").textContent, c.querySelector(".ag-col-head small").textContent, c.classList.contains("closed")]));
@@ -166,7 +168,7 @@ const NOTIFY = "atelier@garage-demo.fr";
   const cells = await page.$$eval("#agWeek .ag-slot", (els) => els.map((e) => e.getAttribute("aria-label")));
   check("saved: the slot appears on the five weekdays, each one a button that names it", cells.length === 5 && /^Entretien courant, lundi de 8:00 à 12:00, 2 voitures : modifier$/.test(cells[0]), cells.join(" / "));
   missing = await text(page, "#agMissing");
-  check("nothing is missing any more (only a hint: no published phone for the e-mails); the state still says closed until switched on", missing === "Votre téléphone n'apparaît pas dans les e-mails aux clients : demandez-le dans Mon garage." && (await text(page, "#agStateText")) === "Fermés", missing);
+  check("nothing is missing any more (only a hint: no published phone for the e-mails); the state still says closed until switched on", missing === "Votre téléphone n'apparaît pas dans les e-mails aux clients : demandez-le dans Fiche Pixcar." && (await text(page, "#agStateText")) === "Fermés", missing);
 
   // ouverture
   await page.click("#agEnabled");
@@ -273,13 +275,13 @@ const NOTIFY = "atelier@garage-demo.fr";
     await m.page.waitForSelector('[data-screen="dash"]:not([hidden])');
     // depuis la maquette « Parcours Atelier » (24 octobre 2026) : un rail d'icônes de 64 px à gauche remplace la barre du bas et son « Plus »
     const bar = await m.page.$$eval("#dashNav .dash-link:not(.rail-toggle)", (els) => els.filter((e) => e.offsetParent).map((e) => { const r = e.getBoundingClientRect(), t = [...e.querySelectorAll("span")].filter((x) => x.offsetParent && !x.classList.contains("dash-count")); return [e.innerText.trim(), Math.round(r.right), Math.round(r.bottom), Math.max(0, ...t.map((x) => x.getBoundingClientRect().width))]; }));
-    check("mobile: the 64 px icon rail lists every link (« Tarifs », « Créneaux » for short), names kept for screen readers but not shown, all inside the screen, no « Plus »", bar.map((x) => x[0]).join("|") === "Tableau de bord|Demandes|Mon garage|Tarifs|Créneaux|Mes garages" && bar.every(([, right, bottom, label]) => right <= 64 && bottom <= 844 && label <= 1) && (await m.page.locator("#dashMore").isHidden()), JSON.stringify(bar));
+    check("mobile: the 64 px icon rail lists every link, names kept for screen readers but not shown, all inside the screen, no « Plus »", bar.map((x) => x[0]).join("|") === "Tableau de bord|Demandes|Mon garage|Mes garages" && bar.every(([, right, bottom, label]) => right <= 64 && bottom <= 844 && label <= 1) && (await m.page.locator("#dashMore").isHidden()), JSON.stringify(bar));
     await shot(m.page, "4-mobile-rail");
     await m.page.click('#dashNav .dash-link[data-panel="garage"]');
     await m.page.waitForSelector("#dash-garage:not([hidden])");
     check("mobile: a link of the rail opens its screen", await m.page.locator("#dash-garage").isVisible());
-    await m.page.click('.dash-link[data-panel="agenda"]');
-    await m.page.waitForSelector("#dash-agenda:not([hidden])");
+    await m.page.click("#mgTab-hours");
+    await m.page.waitForSelector("#mgPanel-hours:not([hidden])");
     const list = await m.page.evaluate(() => ({ grid: getComputedStyle(document.getElementById("agWeek")).display, days: [...document.querySelectorAll("#agDays li")].map((li) => li.innerText.replace(/\s+/g, " ")) }));
     check("mobile « Disponibilités »: a list by day instead of the grid, the slot on weekdays, Sunday closed", list.grid === "none" && list.days.length === 7 && /^Lundi Entretien courant 8:00–12:00 · 2 voitures$/.test(list.days[0]) && /Samedi Aucun créneau/.test(list.days[5]) && /Dimanche Fermé/.test(list.days[6]), JSON.stringify(list));
     check("mobile « Disponibilités »: no horizontal scroll", (await overflow(m.page)) <= 0, await overflow(m.page));

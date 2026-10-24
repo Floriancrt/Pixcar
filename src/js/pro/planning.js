@@ -95,6 +95,9 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
   let query = ""; // recherche (client, véhicule, immatriculation, prestation), sans accents
   let stripOff = null; // bandeau de chiffres masqué (lu une fois dans le navigateur)
   let sheet = null; // { item, mode, … } fiche ouverte
+  let shown = null; // identifiant du rendez-vous ou du bloc dont le panneau parle (mis en évidence dans la grille)
+  let closing = 0; // fermeture du panneau en cours (minuterie)
+  let opener = null; // ce qui avait le focus avant l'ouverture du panneau
   let drag = null; // glisser-déposer en cours
   let swallowClick = false;
   let loading = 0; // numéro du dernier chargement : une réponse plus ancienne, arrivée après, est ignorée
@@ -122,6 +125,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       showFilters(false);
     }
     focusMode(false);
+    closeSide({ now: true, refocus: false });
     view ||= narrow() ? "day" : "week";
     anchor ||= today();
     st = await api.calendar(id);
@@ -241,7 +245,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     renderLegend();
     const grid = $("planGrid");
     if (!data.staff.length && !data.resources.length) {
-      grid.replaceChildren(el("p", { class: "empty", text: "Ajoutez d'abord vos mécaniciens et vos postes (Mon atelier)." }));
+      grid.replaceChildren(el("p", { class: "empty", text: "Ajoutez d'abord vos mécaniciens et vos postes (Mon garage › Ressources)." }));
       return;
     }
     grid.replaceChildren(view === "month" ? month() : timeGrid(columns()));
@@ -605,7 +609,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       "button",
       {
         type: "button",
-        class: `pl-ev tone-${tone} st-${it.type === "hold" ? "hold" : it.state}${it.conflict ? " is-conflict" : ""}${it.noShow ? " is-noshow" : ""}${lines === 1 ? " is-tiny" : ""}`,
+        class: `pl-ev tone-${tone} st-${it.type === "hold" ? "hold" : it.state}${it.conflict ? " is-conflict" : ""}${it.noShow ? " is-noshow" : ""}${lines === 1 ? " is-tiny" : ""}${shown === it.id ? " is-open" : ""}`,
         "aria-label": full.join(", "),
         title: full.join("\n"),
         "data-id": it.id,
@@ -759,7 +763,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       try {
         if (it.type === "rdv") await api.move(garageId, it.id, moveBody(it, change, confirm));
         else await api.saveBlock(garageId, it.id, moveBody(it, change, confirm));
-        if (dlg().open) dlg().close();
+        closeSide();
         const text = `${it.title} : ${dayLabel(change.day, { short: true })} à ${timeLabel(change.start)}.`;
         alertBox(it.type === "rdv" && (change.day !== it.day || change.start !== it.start) ? `Déplacé. ${text} Le client est prévenu par e-mail.` : `Enregistré. ${text}`, "info");
         await reload(`Enregistré. ${text}`);
@@ -772,20 +776,67 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
   }
 
   // ================================================================= fiche (détail, déplacer, annuler, bloc)
-  function frame(title, eyebrow, body, actions) {
+  // id : le rendez-vous ou le bloc dont parle le panneau (null pour une création)
+  function frame(title, eyebrow, body, actions, id = null) {
     $("planForm").replaceChildren(
-      el("div", { class: "sheet-head" }, el("div", {}, eyebrow ? el("p", { class: "eyebrow", text: eyebrow }) : null, el("h2", { id: "planDlgTitle", text: title })), el("button", { type: "button", class: "icon-btn", "aria-label": "Fermer", onclick: () => dlg().close() }, icon("i-close"))),
+      el("div", { class: "sheet-head" }, el("div", {}, eyebrow ? el("p", { class: "eyebrow", text: eyebrow }) : null, el("h2", { id: "planDlgTitle", text: title })), el("button", { type: "button", class: "icon-btn", id: "planSideClose", "aria-label": "Fermer le panneau", onclick: () => closeSide() }, icon("i-close"))),
       ...body.filter((b) => b != null),
       el("p", { class: "field-err", id: "planErr", role: "alert", hidden: true }),
       el("div", { class: "sheet-actions" }, ...actions.filter((a) => a != null)),
     );
-    if (!dlg().open) dlg().showModal();
+    shown = id;
+    openSide();
+  }
+
+  // ---- le panneau (demande du 24 octobre 2026) : il s'ajoute à droite de la grille et la rétrécit au lieu de la couvrir, pour garder
+  // le planning sous les yeux ; quand la place manque (téléphone, tablette), il se place au-dessus d'elle. Ouverture et fermeture en
+  // transition (aucune si le système demande moins d'animations) ; Échap ou « Fermer » le referment et rendent le focus.
+  const layout = () => $("planLayout");
+  const stacked = () => getComputedStyle(layout()).getPropertyValue("--pl-stacked").trim() === "1";
+  function openSide() {
+    clearTimeout(closing);
+    closing = 0;
+    const d = dlg();
+    if (!d.open) {
+      if (!d.contains(document.activeElement)) opener = document.activeElement;
+      d.show();
+      void layout().offsetWidth; // la transition part du panneau fermé
+    }
+    layout().classList.add("has-side");
+    mark();
+    if (stacked()) d.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }
+  function closeSide({ now = false, refocus = true } = {}) {
+    const d = dlg();
+    if (!d.open) return;
+    const inside = d.contains(document.activeElement) || document.activeElement === document.body;
+    layout().classList.remove("has-side");
+    shown = null;
+    mark();
+    const done = () => {
+      closing = 0;
+      d.close();
+    };
+    // durée de la transition (0 s quand le système demande moins d'animations)
+    const ms = now ? 0 : Math.max(0, ...getComputedStyle(layout()).transitionDuration.split(",").map((t) => parseFloat(t) * (t.trim().endsWith("ms") ? 1 : 1000)));
+    clearTimeout(closing);
+    if (ms) closing = setTimeout(done, ms + 20);
+    else done();
+    if (!refocus || !inside) return;
+    const back = opener && opener.isConnected && !d.contains(opener) ? opener : (opener && opener.dataset && opener.dataset.id && $("planGrid").querySelector(`.pl-ev[data-id="${opener.dataset.id}"]`)) || $("planTitle");
+    back.focus({ preventScroll: true });
+  }
+  const sideOpen = () => dlg().open && !closing;
+  // le bloc dont parle le panneau, mis en évidence dans la grille
+  function mark() {
+    for (const b of $("planGrid").querySelectorAll(".pl-ev")) b.classList.toggle("is-open", !!shown && b.dataset.id === shown);
   }
   function err(message) {
     $("planErr").textContent = message || "";
     $("planErr").hidden = !message;
   }
-  const kv = (k, ...v) => (v.some(Boolean) ? el("li", {}, el("b", { text: k + " : " }), ...v.filter((x) => x !== "" && x != null)) : null);
+  // détail en deux colonnes, comme le panneau de la maquette (intitulé au-dessus de la valeur)
+  const kv = (k, ...v) => (v.some(Boolean) ? el("div", {}, el("dt", { text: k }), el("dd", {}, ...v.filter((x) => x !== "" && x != null))) : null);
 
   function openSheet(it, opts = {}) {
     sheet = { item: it, mode: opts.mode || "view", armed: false };
@@ -822,7 +873,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
         it.work ? el("span", { class: `pl-tag wk-${it.work}`, text: `Intervention : ${workLabel(it.work)}` }) : null,
       ),
       it.conflict ? el("div", { class: "pl-conflict", role: "note" }, el("p", {}, icon("i-flag"), el("b", { text: "En conflit : " }), "une affectation ne tient plus. Déplacez ou réaffectez."), el("ul", {}, ...it.conflict.map((t) => el("li", { text: t })))) : null,
-      el("ul", { class: "pl-facts" }, ...facts),
+      el("dl", { class: "pl-facts" }, ...facts),
       progress(it),
       rows.length ? el("h3", { text: "Affectations" }) : null,
       rows.length ? el("ul", { class: "pl-rows" }, ...rows) : el("p", { class: "muted", text: "Pas encore d'affectation." }),
@@ -833,10 +884,10 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     if (!past && !started) actions.push(el("button", { type: "button", class: "btn primary", id: "planMove", onclick: () => openSheet(it, { mode: "move" }) }, icon("i-calendar"), "Déplacer ou réaffecter"));
     if (a && a.phone) actions.push(el("a", { class: "btn", href: `tel:${a.phone}` }, icon("i-phone"), "Appeler"));
     if (a && !past && !started && a.status === "confirmed") actions.push(el("button", { type: "button", class: "link-btn danger", onclick: () => cancelForm(it, "cancel") }, "Annuler ce rendez-vous"));
-    if (a && a.status === "pending") actions.push(el("button", { type: "button", class: "btn", onclick: () => (dlg().close(), goPanel("requests")) }, icon("i-inbox"), "Répondre dans Demandes"));
+    if (a && a.status === "pending") actions.push(el("button", { type: "button", class: "btn", onclick: () => (closeSide(), goPanel("requests")) }, icon("i-inbox"), "Répondre dans Demandes"));
     if (!a && !past) actions.push(el("button", { type: "button", class: "btn", onclick: () => blockForm({ item: it }) }, icon("i-edit"), "Modifier"));
     if (!a) actions.push(el("button", { type: "button", class: "link-btn danger", id: "planDel", onclick: () => removeBlock(it) }, it.type === "job" ? "Supprimer ce rendez-vous" : "Supprimer ce créneau"));
-    frame(it.title, it.type === "hold" ? "Planning" : "Rendez-vous", body, actions);
+    frame(it.title, it.type === "hold" ? "Planning" : "Rendez-vous", body, actions, it.id);
     $("planForm").onsubmit = (ev) => ev.preventDefault();
     const first = $("planMove") || $("planForm").querySelector("[data-work], button.btn, a.btn");
     if (first) first.focus();
@@ -868,10 +919,10 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
         await reload(text);
         alertBox(text, "info");
         const next = allItems().find((x) => x.id === it.id);
-        if (next && dlg().open) openSheet(next);
+        if (next && sideOpen()) openSheet(next);
       } catch (e) {
         if (e.status === 409 || e.status === 422) return err(e.message);
-        dlg().close();
+        closeSide();
         fail(e);
       }
     });
@@ -913,7 +964,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     frame(it.title, "Déplacer ou réaffecter", body, [
       el("button", { type: "submit", class: "btn primary", id: "planMvSave" }, shifted ? "Confirmer ces horaires" : confirmAsk ? "Confirmer et prévenir le client" : "Enregistrer"),
       el("button", { type: "button", class: "btn", onclick: () => openSheet(it) }, "Retour"),
-    ]);
+    ], it.id);
     $("planForm").onsubmit = (ev) => {
       ev.preventDefault();
       const day = $("planMvDay").value, start = minOf($("planMvTime").value);
@@ -937,7 +988,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     ], [
       el("button", { type: "submit", class: "btn primary", id: "planWhySave" }, "Annuler le rendez-vous"),
       el("button", { type: "button", class: "btn", onclick: () => openSheet(it) }, "Retour"),
-    ]);
+    ], it.id);
     $("planForm").onsubmit = async (ev) => {
       ev.preventDefault();
       const picked = $("planForm").querySelector('input[name="planWhy"]:checked');
@@ -945,12 +996,12 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       await busy($("planWhySave"), async () => {
         try {
           await api.decide(garageId, it.id, act, { reason: picked.value, note: $("planWhyNote").value.trim() });
-          dlg().close();
+          closeSide();
           alertBox(`Rendez-vous annulé. ${it.title} est prévenu(e) par e-mail, avec votre motif.`, "info");
           await reload("Rendez-vous annulé.");
         } catch (e) {
           if (e.status === 409 || e.status === 422) return err(e.message);
-          dlg().close();
+          closeSide();
           fail(e);
         }
       });
@@ -1002,7 +1053,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       el("div", { class: "mg-row2" }, el("span", {}, el("label", { for: "planDay", text: "Jour" }), el("input", { id: "planDay", type: "date", value: d.day, min: data.today, required: true })), el("span", {}, el("label", { for: "planTime", text: job ? "Dépôt à" : "De" }), el("input", { id: "planTime", type: "time", step: "300", value: hm(d.start), required: true }))),
       job ? null : el("label", { for: "planTo", text: "À" }),
       job ? null : el("input", { id: "planTo", type: "time", step: "300", value: hm(Math.min(d.end, 1435)), required: true }),
-      job ? el("fieldset", { class: "chips pl-svcs" }, el("legend", { text: "Prestations" }), ...(svc.length ? svc : [el("p", { class: "muted", text: "Aucune prestation n'a ses exigences (Mon atelier › Prestations)." })])) : null,
+      job ? el("fieldset", { class: "chips pl-svcs" }, el("legend", { text: "Prestations" }), ...(svc.length ? svc : [el("p", { class: "muted", text: "Aucune prestation n'a ses exigences (Mon garage › Prestations)." })])) : null,
       job && needVehicle ? el("label", { for: "planVehicle", text: "Type de véhicule" }) : null,
       job && needVehicle ? el("select", { id: "planVehicle" }, el("option", { value: "", text: "Choisir…" }), ...data.vehicles.map((v) => el("option", { value: v.id, text: v.label, selected: d.vehicle === v.id }))) : null,
       job
@@ -1023,8 +1074,8 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     ];
     frame(item ? item.title : at && at.arrived ? "Client déjà sur place" : "Nouveau", item ? (job ? "Modifier le rendez-vous hors Pixcar" : "Modifier le créneau bloqué") : "Planning", body, [
       el("button", { type: "submit", class: "btn primary", id: "planSave" }, shifted ? "Confirmer ces horaires" : "Enregistrer"),
-      el("button", { type: "button", class: "btn", onclick: () => (item ? openSheet(item) : dlg().close()) }, item ? "Retour" : "Annuler"),
-    ]);
+      el("button", { type: "button", class: "btn", onclick: () => (item ? openSheet(item) : closeSide()) }, item ? "Retour" : "Annuler"),
+    ], item ? item.id : null);
     $("planForm").onsubmit = async (ev) => {
       ev.preventDefault();
       const v = read();
@@ -1037,7 +1088,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       await busy($("planSave"), async () => {
         try {
           await api.saveBlock(garageId, item ? item.id : null, body);
-          dlg().close();
+          closeSide();
           const what = at && at.arrived ? "Client déjà sur place, voiture reçue" : v.kind === "job" ? "Rendez-vous hors Pixcar" : "Créneau bloqué";
           const w = confirmed && problem.details && problem.details.work;
           alertBox(`${what} ${item ? "modifié" : "ajouté"} : ${dayLabel(v.day, { short: true })} à ${timeLabel(v.start)}${w ? `, travaux de ${timeLabel(minOf(w.start))} à ${timeLabel(minOf(w.end))}` : ""}.`, "info");
@@ -1045,7 +1096,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
         } catch (e) {
           if (e.status === 409 && (e.code === "conflict" || e.code === "shifted")) return blockForm({ item, at, draft: v, problem: e, refocus: e.code === "shifted" ? "#planSave" : null });
           if (e.status === 409 || e.status === 422) return err(e.message);
-          dlg().close();
+          closeSide();
           fail(e);
         }
       });
@@ -1083,21 +1134,21 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     await busy(btn, async () => {
       try {
         await api.deleteBlock(garageId, it.id);
-        dlg().close();
+        closeSide();
         alertBox(`${it.type === "job" ? "Rendez-vous hors Pixcar" : "Créneau bloqué"} supprimé.`, "info");
         await reload("Supprimé.");
       } catch (e) {
         if (e.status === 409) return err(e.message);
-        dlg().close();
+        closeSide();
         fail(e);
       }
     });
   }
 
-  // ---- absence d'un mécanicien, indisponibilité d'un poste (mêmes règles que dans Mon atelier ; rien n'est déplacé)
+  // ---- absence d'un mécanicien, indisponibilité d'un poste (mêmes règles que dans Mon garage › Ressources ; rien n'est déplacé)
   function unavailForm(target, { day = null } = {}) {
     const pool = target === "staff" ? activeStaff() : activePosts();
-    if (!pool.length) return alertBox(target === "staff" ? "Ajoutez d'abord un mécanicien (Mon atelier)." : "Ajoutez d'abord un poste (Mon atelier).");
+    if (!pool.length) return alertBox(target === "staff" ? "Ajoutez d'abord un mécanicien (Mon garage › Ressources)." : "Ajoutez d'abord un poste (Mon garage › Ressources).");
     const kinds = ((st && st.catalogs && st.catalogs.kinds) || []).filter((k) => k.for === target || k.for === "both");
     const d0 = day && day >= data.today ? day : data.today;
     const who = target === "staff" ? (view === "staff" ? pickStaff : filters.staff || pool[0].id) : view === "post" ? pickPost : filters.post || pool[0].id;
@@ -1114,7 +1165,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       el("p", { class: "help", id: "planUnHelp", text: target === "staff" ? "N'indiquez pas de motif médical ni d'information personnelle : « Congés », « Formation » ou « Absence » suffisent." : "Par exemple : révision du pont, attente d'une pièce." }),
     ], [
       el("button", { type: "submit", class: "btn primary", id: "planUnSave" }, "Enregistrer"),
-      el("button", { type: "button", class: "btn", onclick: () => dlg().close() }, "Annuler"),
+      el("button", { type: "button", class: "btn", onclick: () => closeSide() }, "Annuler"),
     ]);
     $("planForm").onsubmit = async (ev) => {
       ev.preventDefault();
@@ -1131,14 +1182,14 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
             to: $("planUnTo").value || undefined,
             label: $("planUnLabel").value.trim(),
           });
-          dlg().close();
+          closeSide();
           const n = (out.touched || []).length;
           const what = target === "staff" ? "Absence enregistrée." : "Indisponibilité enregistrée.";
           alertBox(n ? `${what} ${plural(n, "rendez-vous à venir est touché : il apparaît", "rendez-vous à venir sont touchés : ils apparaissent")} « En conflit » dans le planning.` : `${what} Aucun rendez-vous n'est touché.`, "info");
           await reload(what);
         } catch (e) {
           if (e.status === 409 || e.status === 422) return err(e.message);
-          dlg().close();
+          closeSide();
           fail(e);
         }
       });
@@ -1209,8 +1260,14 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     focusMode(on);
     live(on ? "Plein écran. Échap pour en sortir." : "Plein écran quitté.");
   });
+  // Échap : d'abord le panneau, puis le plein écran
   document.addEventListener("keydown", (ev) => {
-    if (ev.key !== "Escape" || !document.body.classList.contains("pl-focus") || $("dash-planning").hidden || dlg().open || !menu().hidden || drag) return;
+    if (ev.key !== "Escape" || $("dash-planning").hidden || !menu().hidden || drag || document.querySelector("dialog[open]:not(#planDlg)")) return;
+    if (dlg().open) {
+      if (!closing) closeSide();
+      return;
+    }
+    if (!document.body.classList.contains("pl-focus")) return;
     focusMode(false);
     live("Plein écran quitté.");
     $("planFocus").focus();
@@ -1254,5 +1311,10 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     } else unavailForm(kind, { day: data.today });
   }
 
-  return { open, openDay, showItem, form, reset: () => (data = null) };
+  function reset() {
+    data = null;
+    closeSide({ now: true, refocus: false });
+  }
+
+  return { open, openDay, showItem, form, reset };
 }

@@ -1,8 +1,9 @@
 // Espace Pro, calendrier avancé (docs/calendrier-avance.md, lot 3a) de bout en bout : page construite pour de bon, vraie API (PGlite) avec
-// les rendez-vous ouverts en mode simple et une demande déjà prise, un compte connecté et un garage rattaché. Parcours : Disponibilités
-// (mode simple) → « Passer au mode avancé » → les six étapes (réglages, mécanicien avec compétences et absence, compétence ajoutée, pont,
-// exigences d'une prestation, confirmation automatique, contrôles et placement de la demande déjà prise) → activation → Disponibilités en
-// mode avancé, Demandes avec l'affectation, horaires publics selon les ressources → retour au mode simple ; tablette et téléphone ; axe.
+// les rendez-vous ouverts en mode simple et une demande déjà prise, un compte connecté et un garage rattaché. Parcours : Mon garage ›
+// Modules (mode simple) → « Passer au mode avancé » → les six étapes (réglages, mécanicien avec compétences et absence, compétence ajoutée,
+// pont, exigences d'une prestation, confirmation automatique, contrôles et placement de la demande déjà prise) → activation → Mon garage
+// en mode avancé (Horaires, Prestations, Ressources, Modules ; demande du 24 octobre 2026), Demandes avec l'affectation, horaires publics
+// selon les ressources → retour au mode simple ; tablette et téléphone ; axe.
 //   node tests/pro-calendar.js
 delete process.env.PIXCAR_ROOT;
 const { execFileSync } = require("child_process");
@@ -93,7 +94,9 @@ const NOTIFY = "atelier@garage-demo.fr";
     await ctx.route("**/*", (route) => (new URL(route.request().url()).hostname === "127.0.0.1" ? route.continue() : route.abort()));
     const page = await ctx.newPage();
     const logs = [];
-    page.on("console", (m) => ["error", "warning"].includes(m.type()) && !/status of (400|401|409|422)\b/.test(m.text()) && logs.push(`[${m.type()}] ${m.text()}`));
+    // le registre SIRENE n'a pas ce garage d'essai (sirene: null) : sa route répond 404, la page le dit (Mon garage › Fiche Pixcar)
+    const expected = (m) => /status of (400|401|409|422)\b/.test(m.text()) || (/status of 404\b/.test(m.text()) && /\/registry$/.test(m.location().url));
+    page.on("console", (m) => ["error", "warning"].includes(m.type()) && !expected(m) && logs.push(`[${m.type()}] ${m.text()}`));
     page.on("pageerror", (e) => logs.push("[pageerror] " + e.message));
     return { ctx, page, logs };
   }
@@ -112,15 +115,26 @@ const NOTIFY = "atelier@garage-demo.fr";
   const { ctx, page, logs } = await newPage();
   await page.goto(`${srv.url}/pro/`);
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
-  await page.click('.dash-link[data-panel="agenda"]');
-  await page.waitForSelector("#dash-agenda:not([hidden])");
-  check("Disponibilités, simple mode: the mode box explains both modes and offers the switch; the week is shown", /^Simple : votre semaine type en créneaux/.test(await text(page, "#agModeText")) && (await text(page, "#agModeGo")) === "Passer au mode avancé" && (await page.isVisible("#agWeekBox")));
+  const tab = async (pg, name) => {
+    if (await pg.isHidden("#dash-garage")) {
+      await pg.click('.dash-link[data-panel="garage"]');
+      await pg.waitForSelector("#dash-garage:not([hidden])");
+    }
+    await pg.click(`#mgTab-${name}`);
+    await pg.waitForSelector(`#mgPanel-${name}:not([hidden])`);
+  };
+  await tab(page, "modules");
+  const mods0 = await page.$$eval("#mgModules li", (ls) => ls.map((l) => l.innerText.replace(/\s+/g, " ").trim()));
+  check("Mon garage › Modules, simple mode: the mode box explains both modes and offers the switch; the four tools of the advanced mode, inactive", /^Simple : votre semaine type en créneaux/.test(await text(page, "#agModeText")) && (await text(page, "#agModeGo")) === "Passer au mode avancé" && mods0.length === 4 && mods0.every((m) => / Inactif$/.test(m)) && /^Mécaniciens Affectations/.test(mods0[0]), mods0.join(" | "));
+  check("simple mode: Ressources says they belong to the advanced mode; Horaires has the week and the rules", (await page.$eval("#mgResSimple", (e) => !e.hidden)) && (await page.$eval("#agWeekBox", (e) => !e.hidden)) && (await page.$eval("#agRulesBox", (e) => !e.hidden)) && (await page.$eval("#mgCalResources", (e) => !e.children.length)));
+  await axe(page, "Mon garage · Modules (simple)");
+  await shot(page, "0-modules-simple");
 
   // ---- 1. garage
   await page.click("#agModeGo");
   await page.waitForSelector("#dash-calendar:not([hidden]) #calStepTitle");
   const steps = await page.$$eval("#calSteps button", (els) => els.map((e) => e.innerText.replace(/\s+/g, " ").trim()));
-  check("the wizard opens on step 1 of 6, the menu still points at Disponibilités", steps.join("|") === "1 Garage|2 Personnel|3 Équipements|4 Prestations|5 Réservation|6 Vérification" && (await text(page, "#calStepTitle")) === "1. Garage" && (await page.getAttribute("#calSteps [data-step='1']", "aria-current")) === "step" && (await page.getAttribute('.dash-link[data-panel="agenda"]', "aria-current")) === "true", steps.join("|"));
+  check("the wizard opens on step 1 of 6, the menu still points at Mon garage", steps.join("|") === "1 Garage|2 Personnel|3 Équipements|4 Prestations|5 Réservation|6 Vérification" && (await text(page, "#calStepTitle")) === "1. Garage" && (await page.getAttribute("#calSteps [data-step='1']", "aria-current")) === "step" && (await page.getAttribute('.dash-link[data-panel="garage"]', "aria-current")) === "true" && (await text(page, "#crumb")) === "Mon atelier / Mon garage / Mode avancé", steps.join("|"));
   check("step 1: the opening hours, the pauses explained, closures, delays and margins", /lun\.–ven\. 8:00–12:00, 14:00–18:00/.test(await text(page, "#calBody")) && /le travail s'y interrompt et reprend après/.test(await text(page, "#calBody")) && (await page.inputValue("#calReception")) === "10" && (await page.inputValue("#calReturn")) === "15");
   await axe(page, "assistant · 1. Garage");
   await shot(page, "1-garage");
@@ -224,18 +238,37 @@ const NOTIFY = "atelier@garage-demo.fr";
   await axe(page, "assistant · 6. Vérification");
   await shot(page, "6-verification");
   await page.click("#calActivate");
-  await page.waitForFunction(() => document.getElementById("calTitle").textContent === "Mon atelier");
-  check("activated: « Mon atelier », the alert says how many appointments were affected", /Mode avancé actif\. 1 rendez-vous à venir affecté\./.test(await text(page, "#alert")) && (await state()).mode === "advanced", await text(page, "#alert"));
-  check("in advanced mode, step 6 becomes « Contrôles et conflits », with no conflict", (await text(page, "#calStepTitle")) === "6. Contrôles et conflits" && /Conflits · 0/.test(await text(page, "#calBody")));
-  await axe(page, "Mon atelier · Contrôles");
-
-  // ---- Disponibilités et Demandes en mode avancé ; horaires publics selon les ressources
-  await page.click("#calBack");
-  await page.waitForSelector("#dash-agenda:not([hidden])");
-  check("Disponibilités in advanced mode: the week is put aside (kept), the button leads to the workshop", /^Avancé :/.test(await text(page, "#agModeText")) && (await page.isHidden("#agWeekBox")) && (await text(page, "#agModeGo")) === "Gérer l'atelier");
+  await page.waitForSelector("#dash-garage:not([hidden]) #mgPanel-modules:not([hidden]) #calChkTitle");
+  check("activated: back in Mon garage › Modules, the alert says how many appointments were affected; the wizard is put away", /Mode avancé actif\. 1 rendez-vous à venir affecté\./.test(await text(page, "#alert")) && (await state()).mode === "advanced" && (await page.evaluate(() => document.activeElement.id)) === "mgTitle" && !(await page.$("#calBody > *")), await text(page, "#alert"));
+  const mods1 = await page.$$eval("#mgModules li", (ls) => ls.map((l) => l.innerText.replace(/\s+/g, " ").trim()));
+  check("Modules in advanced mode: the four tools active, each with « Ouvrir »; controls, no conflict, recompute and back to simple", mods1.every((m) => /Actif Ouvrir$/.test(m)) && /^Avancé :/.test(await text(page, "#agModeText")) && (await text(page, "#agModeGo")) === "Mécaniciens et postes" && /Conflits · 0/.test(await text(page, "#mgCalModules")) && (await page.isVisible("#calToSimple")) && (await page.isVisible("#calRecompute")), mods1.join(" | "));
+  check("the Planning is in the menu", await page.isVisible('.dash-link[data-panel="planning"]'));
+  await axe(page, "Mon garage · Modules (avancé)");
+  await shot(page, "7-modules-avance");
+  // les réglages du mode avancé, rangés dans les rubriques ; titres au niveau h2, sans doublon d'identifiant
+  const h2 = (sel) => page.$$eval(`${sel} h2`, (hs) => hs.filter((h) => h.offsetParent).map((h) => h.textContent));
+  await tab(page, "hours");
+  check("Horaires (advanced): opening hours, online appointments, closures, then delays and margins, online capacity, the address; no typical week nor rules", (await h2("#mgPanel-hours")).join("|") === "Horaires d'ouverture|Rendez-vous en ligne|Fermetures et congés|Délais et marges|Capacité en ligne|Où recevoir les demandes" && (await page.inputValue("#calReception")) === "0", (await h2("#mgPanel-hours")).join("|"));
+  await axe(page, "Mon garage · Horaires (avancé)");
+  await shot(page, "8-horaires-avance");
+  await tab(page, "services");
+  check("Prestations (advanced): announced prices, services done, what each service needs, confirmation", (await h2("#mgPanel-services")).join("|") === "Prix annoncés sur Pixcar|Prestations effectuées|Ce que demande chaque prestation|Confirmation" && (await page.getAttribute("#calAuto-vidange", "aria-checked")) === "true", (await h2("#mgPanel-services")).join("|"));
+  await axe(page, "Mon garage · Prestations (avancé)");
+  await tab(page, "resources");
+  check("Ressources (advanced): mechanics, skills, posts; Paul and the lift are there", (await h2("#mgPanel-resources")).join("|") === "Mécaniciens · 1|Compétences et habilitations|Postes et équipements · 1" && /Paul/.test(await text(page, "#mgCalResources")) && /Pont n°1/.test(await text(page, "#mgCalResources")), (await h2("#mgPanel-resources")).join("|"));
+  check("no id twice in the page", await page.evaluate(() => { const ids = [...document.querySelectorAll("[id]")].map((e) => e.id); return ids.length === new Set(ids).size; }));
+  await axe(page, "Mon garage · Ressources (avancé)");
+  await shot(page, "9-ressources-avance");
+  // une fiche ouverte d'ici s'enregistre et la liste suit (même volet que l'assistant)
+  await page.click('#mgCalResources .cal-item[data-id] button:has-text("Modifier")');
+  await page.waitForSelector("#calDlg[open] #calStaffName");
+  await page.fill("#calStaffName", "Paul R.");
+  await page.click("#calSave");
+  await closed(page);
+  check("a mechanic edited from Mon garage: saved, the list follows", /Paul R\./.test(await text(page, "#mgCalResources")) && (await state()).staff.some((m) => m.name === "Paul R."), await text(page, "#mgCalResources"));
   await page.click('.dash-link[data-panel="requests"]');
   await page.waitForSelector("#dash-requests:not([hidden]) .rq-card");
-  check("Demandes: the request shows who does it and where", /Affecté : Paul · Pont n°1/.test(await text(page, ".rq-card")), await text(page, ".rq-card"));
+  check("Demandes: the request shows who does it and where", /Affecté : Paul R\. · Pont n°1/.test(await text(page, ".rq-card")), await text(page, ".rq-card"));
   const pub = (await call("GET", `/v1/rdv/garages/${GARAGE}/times?services=vidange`)).body;
   check("public times now come from Paul and the lift (afternoons too), with a return time and immediate confirmation", pub.auto === true && pub.days[0].times.some((t) => t.t >= "14:00") && pub.days[0].times.every((t) => /^\d\d:\d\d$/.test(t.end)), JSON.stringify(pub.days[0]).slice(0, 300));
 
@@ -244,14 +277,14 @@ const NOTIFY = "atelier@garage-demo.fr";
     const m = await newPage({ width: w, height: h });
     await m.page.goto(`${srv.url}/pro/`);
     await m.page.waitForSelector('[data-screen="dash"]:not([hidden])');
-    await m.page.evaluate(() => document.querySelector('.dash-link[data-panel="agenda"]').click());
-    await m.page.waitForSelector("#dash-agenda:not([hidden])");
-    await m.page.click("#agModeGo");
-    await m.page.waitForSelector("#dash-calendar:not([hidden]) #calStepTitle");
-    await m.page.click("#calSteps [data-step='2']");
-    await m.page.waitForFunction(() => document.getElementById("calStepTitle").textContent === "2. Personnel");
-    check(`${name}: no horizontal scroll on the workshop`, (await overflow(m.page)) <= 0, await overflow(m.page));
-    await m.page.click('.cal-item[data-id] button:has-text("Modifier")');
+    await m.page.evaluate(() => document.querySelector('.dash-link[data-panel="garage"]').click());
+    await m.page.waitForSelector("#dash-garage:not([hidden])");
+    await m.page.click("#mgTab-resources");
+    await m.page.waitForSelector("#mgPanel-resources:not([hidden]) .cal-item");
+    check(`${name}: Mon garage › Ressources, the tabs in a row, no horizontal scroll`, (await overflow(m.page)) <= 0 && (await m.page.$eval("#mgTabs", (t) => getComputedStyle(t).display)) === "flex", await overflow(m.page));
+    await axe(m.page, `Mon garage · Ressources (${name})`);
+    await shot(m.page, `${name}-ressources`);
+    await m.page.click('#mgCalResources .cal-item[data-id] button:has-text("Modifier")');
     await m.page.waitForSelector("#calDlg[open] #calStaffName");
     check(`${name}: the sheet fits the screen`, await m.page.evaluate(() => { const r = document.getElementById("calDlg").getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth + 1; }));
     await shot(m.page, `${name}-fiche`);
@@ -259,18 +292,13 @@ const NOTIFY = "atelier@garage-demo.fr";
     await m.ctx.close();
   }
 
-  // ---- retour au mode simple
-  await page.click('.dash-link[data-panel="agenda"]');
-  await page.click("#agModeGo");
-  await page.waitForSelector("#dash-calendar:not([hidden]) #calStepTitle");
-  await page.click("#calSteps [data-step='6']");
-  await page.waitForSelector("#calToSimple");
+  // ---- retour au mode simple (Mon garage › Modules)
+  await tab(page, "modules");
   await page.click("#calToSimple");
   check("going back to simple asks to confirm", (await text(page, "#calToSimple")) === "Confirmer le retour au mode simple");
   await page.click("#calToSimple");
-  await page.waitForSelector("#dash-agenda:not([hidden])");
   await page.waitForFunction(() => /^Simple/.test(document.getElementById("agModeText").textContent));
-  check("back in simple mode: the week is back, the request kept its slot", (await page.isVisible("#agWeekBox")) && (await state()).mode === "simple" && (await text(page, "#alert")).startsWith("Mode simple"));
+  check("back in simple mode: still on Modules, the tools inactive, the week and the rules back, the advanced settings put away, the request kept its slot", (await page.isVisible("#mgPanel-modules")) && (await page.$eval("#agWeekBox", (e) => !e.hidden)) && (await page.$eval("#agRulesBox", (e) => !e.hidden)) && !(await page.$("#mgCalResources > *")) && (await page.isHidden('.dash-link[data-panel="planning"]')) && (await state()).mode === "simple" && (await text(page, "#alert")).startsWith("Mode simple"));
   check("no console error, no page error", !logs.length, logs.join("\n"));
 
   await ctx.close();

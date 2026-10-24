@@ -1,7 +1,8 @@
-// Espace Pro d'un garage rattaché : le menu et ses écrans. « Tableau de bord » (home.js, lot 3c) ; « Prestations & tarifs » (maquette 5
-// du 11 octobre 2026 : prix annoncés, prix payés par ses clients en lecture seule, visites de sa fiche, prix à confirmer, saisie d'un prix
-// avec son aperçu sur Pixcar) ; « Mon garage » (garage.js), Demandes et Disponibilités (rdv.js), calendrier avancé (calendar.js),
-// Planning (planning.js). Que du TEXTE écrit dans la page.
+// Espace Pro d'un garage rattaché : le menu et ses écrans. « Tableau de bord » (home.js, lot 3c) ; Planning (planning.js) ; Demandes
+// (rdv.js) ; « Mon garage », en rubriques comme la maquette (24 octobre 2026) : Horaires (garage.js, Disponibilités de rdv.js), Prestations
+// (prix annoncés — maquette 5 du 11 octobre 2026 : prix payés par ses clients en lecture seule, visites de sa fiche, prix à confirmer,
+// saisie d'un prix avec son aperçu sur Pixcar —, prestations faites), Ressources et Modules (calendrier avancé, calendar.js), Fiche Pixcar.
+// L'assistant du mode avancé (calendar.js) reste un écran à part. Que du TEXTE écrit dans la page.
 import { INCLUDES, PRICE_KINDS, PRO_SERVICES, VEHICLES, announcedDetail, announcedText, parseProPrice, serviceLabel } from "../shared/pro-prices.js";
 import { createGarageView } from "./garage.js";
 import { createRdvViews } from "./rdv.js";
@@ -39,21 +40,26 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
       data = await api.garage(data.garage.id);
       render();
     },
+    onHoursChanged: () => refreshGarage(),
   });
 
   // rendez-vous en ligne (rdv.js) : présents seulement quand l'API les a ouverts (data.rdv)
   const rdv = createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name) => panel(name), onTodo: setTodo });
-  // calendrier avancé (calendar.js) : ouvert depuis Disponibilités ; le planning (planning.js) n'existe qu'en mode avancé
+  // calendrier avancé (calendar.js) : l'assistant (mode simple), puis ses réglages dans Mon garage ; le planning (planning.js) n'existe
+  // qu'en mode avancé
   const cal = createCalendarViews({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name) => panel(name), onMode: setMode });
   const plan = createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name) => panel(name) });
   // tableau de bord (lot 3c) : ses liens ouvrent les autres écrans, parfois sur un jour, une fiche ou un formulaire
   const board = createHome({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name, opts) => panel(name, opts), decline: (id, r, done) => rdv.decline(id, r, done), onTodo: (n) => setTodo(n) });
-  // mode avancé : « Planning » apparaît ; sur téléphone il prend la place de « Créneaux », qui passe sous « Plus »
-  function setMode(mode) {
-    const adv = mode === "advanced" && !!(data && data.rdv);
+  // mode avancé : « Planning » apparaît ; Mon garage montre les ressources et les modules actifs
+  let mode = "simple";
+  function setMode(m) {
+    mode = m === "advanced" && !!(data && data.rdv) ? "advanced" : "simple";
+    const adv = mode === "advanced";
     for (const b of document.querySelectorAll(".dash-link[data-adv]")) b.hidden = !adv;
-    document.querySelector('.dash-link[data-panel="agenda"]').classList.toggle("more-item", adv);
     $("dashNav").classList.toggle("is-adv", adv);
+    $("mgResSimple").hidden = adv;
+    modules();
   }
   function setTodo(n) {
     const c = $("rqCount");
@@ -76,7 +82,8 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     cal.reset();
     plan.reset();
     const on = !!data.rdv;
-    for (const b of document.querySelectorAll(".dash-link[data-rdv]")) b.hidden = !on;
+    for (const b of document.querySelectorAll(".dash-link[data-rdv], #dash-garage [data-rdv]")) b.hidden = !on;
+    tab = "hours";
     $("dashNav").classList.toggle("has-rdv", on);
     $("dashMore").hidden = !on;
     setTodo(on ? data.rdv.todo : 0);
@@ -87,11 +94,13 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     show("dash", { focus });
   }
 
-  // ---- écrans : « Tableau de bord », « Prestations & tarifs », « Mon garage », « Demandes », « Disponibilités » (et le calendrier
-  // avancé), « Planning ». opts (depuis le tableau de bord) : planning { day, item, form: { kind, arrived } }, agenda { closure },
-  // prices { add } ; le formulaire ou la fiche s'ouvre une fois l'écran affiché.
-  const BODIES = { top: "dash-top", prices: "dash-prices", garage: "dash-garage", requests: "dash-requests", agenda: "dash-agenda", calendar: "dash-calendar", planning: "dash-planning" };
-  const TITLES = { top: "dashTitle", prices: "pricesTitle", garage: "mgTitle", requests: "rqTitle", agenda: "agTitle", calendar: "calTitle", planning: "planTitle" };
+  // ---- écrans : « Tableau de bord », « Planning », « Demandes », « Mon garage » (et l'assistant du mode avancé). opts (depuis le
+  // tableau de bord) : planning { day, item, form: { kind, arrived } }, garage { tab, closure, add } ; le formulaire ou la fiche s'ouvre
+  // une fois l'écran affiché. Les anciens écrans regroupés dans Mon garage gardent leur nom : « prices » (Prestations), « agenda »
+  // (Horaires) et, en mode avancé, « calendar » (Ressources).
+  const BODIES = { top: "dash-top", garage: "dash-garage", requests: "dash-requests", calendar: "dash-calendar", planning: "dash-planning" };
+  const TITLES = { top: "dashTitle", garage: "mgTitle", requests: "rqTitle", calendar: "calTitle", planning: "planTitle" };
+  const ALIASES = { prices: "services", agenda: "hours" };
   // coque de la maquette : la carte du garage et celle de l'utilisateur (nom, fonction, initiales) dans la barre latérale
   const ROLES = { manager: "Gérant(e)", employee: "Salarié(e)" };
   function profile() {
@@ -101,16 +110,17 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     $("navRole").textContent = ROLES[roleOf(data.garage.id)] || "Espace professionnel";
     $("navInitials").textContent = name ? name.split(/\s+/).slice(0, 2).map((w) => w[0].toUpperCase()).join("") : "PRO";
   }
-  // fil d'Ariane (en-tête de l'atelier)
-  const CRUMBS = { top: "Mon atelier / Tableau de bord", planning: "Mon atelier / Planning", requests: "Mon atelier / Demandes", garage: "Mon espace / Mon garage", prices: "Mon espace / Prestations & tarifs", agenda: "Mon espace / Disponibilités", calendar: "Mon espace / Disponibilités" };
+  // fil d'Ariane (en-tête de l'atelier) ; Mon garage ajoute sa rubrique (maquette : « Mon atelier / Mon garage / Modules »)
+  const CRUMBS = { top: "Mon atelier / Tableau de bord", planning: "Mon atelier / Planning", requests: "Mon atelier / Demandes", garage: "Mon atelier / Mon garage", calendar: "Mon atelier / Mon garage / Mode avancé" };
   async function panel(name, { focus = true, ...opts } = {}) {
+    if (ALIASES[name]) return panel("garage", { focus, ...opts, tab: ALIASES[name] });
+    if (name === "calendar" && mode === "advanced") return panel("garage", { focus, ...opts, tab: opts.tab || "resources" });
     more(false);
     alertBox("");
     try {
       if (name === "top") await board.open(data, { focus: false });
-      if (name === "garage") await garage.open(data.garage.id, { verifiedAt: data.garage.verifiedAt });
+      if (name === "garage") await openGarage();
       if (name === "requests") await rdv.openRequests(data.garage.id, { focus: false });
-      if (name === "agenda") await rdv.openAgenda(data.garage.id, { focus: false });
       if (name === "calendar") await cal.open(data.garage.id, { focus: false });
       if (name === "planning") await (opts.day || opts.item || opts.form ? plan.openDay(data.garage.id, opts.day || parisParts(Date.now()).iso) : plan.open(data.garage.id, { focus: false }));
     } catch (e) {
@@ -119,17 +129,108 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     }
     for (const id of new Set(Object.values(BODIES))) $(id).hidden = id !== BODIES[name];
     $("crumb").textContent = CRUMBS[name];
+    if (name === "garage") showTab(opts.tab || tab);
     for (const b of document.querySelectorAll(".dash-link[data-panel]")) {
-      if (b.dataset.panel === (name === "calendar" ? "agenda" : name)) b.setAttribute("aria-current", "true");
+      if (b.dataset.panel === (name === "calendar" ? "garage" : name)) b.setAttribute("aria-current", "true");
       else b.removeAttribute("aria-current");
     }
     window.scrollTo(0, 0);
     if (name === "planning" && opts.item && plan.showItem(opts.item)) return;
     if (name === "planning" && opts.form) return plan.form(opts.form.kind, opts.form);
-    if (name === "agenda" && opts.closure) return $("agAddClosure").click();
-    if (name === "prices" && opts.add) return openEditor(null);
+    if (name === "garage" && opts.closure) return $("agAddClosure").click();
+    if (name === "garage" && opts.add) return openEditor(null);
     if (focus) $(TITLES[name]).focus();
   }
+
+  // ---- Mon garage (maquette « Mon garage ») : en-tête, carte de l'établissement, rubriques en onglets verticaux (en ligne sur téléphone)
+  const TABS = { hours: "Horaires", services: "Prestations", resources: "Ressources", modules: "Modules", profile: "Fiche Pixcar" };
+  let tab = "hours";
+  // tout est chargé à l'ouverture : passer d'une rubrique à l'autre est immédiat
+  async function openGarage() {
+    const id = data.garage.id;
+    await garage.open(id, { verifiedAt: data.garage.verifiedAt });
+    if (data.rdv) {
+      await rdv.openAgenda(id, { focus: false });
+      await mountCal();
+    }
+    identity();
+    modules();
+  }
+  // en mode avancé, délais et capacité (Horaires), exigences des prestations (Prestations), mécaniciens et postes (Ressources),
+  // contrôles (Modules) viennent du calendrier avancé
+  async function mountCal() {
+    if (mode === "advanced") await cal.mount(data.garage.id, { hours: $("mgCalHours"), services: $("mgCalServices"), resources: $("mgCalResources"), modules: $("mgCalModules") });
+    else cal.unmount();
+  }
+  // horaires d'ouverture changés : la semaine type et le calendrier avancé, dans la même rubrique, en dépendent
+  async function refreshGarage() {
+    if (!data.rdv) return;
+    try {
+      await rdv.openAgenda(data.garage.id, { focus: false });
+      if (mode === "advanced") await mountCal();
+    } catch (e) {
+      if (!apiProblem(e)) alertBox(e.message);
+    }
+  }
+  function identity() {
+    const name = String(data.garage.holderName || "").trim();
+    const role = ROLES[roleOf(data.garage.id)];
+    $("mgIdName").textContent = data.garage.name || "Mon garage";
+    $("mgIdSub").textContent = ["Espace professionnel", [name, role && role.toLowerCase()].filter(Boolean).join(", ")].filter(Boolean).join(" · ");
+    $("mgScope").textContent = data.rdv ? "Paramètres communs aux modes Simple et Avancé" : "Les informations de votre fiche Pixcar et vos prix";
+  }
+  // les outils du mode avancé (maquette : Mécaniciens, Équipements, Suivi des interventions, Charge et capacité) : ils viennent ensemble
+  // avec le mode avancé, chacun mène à l'endroit où il se trouve
+  const MODULES = [
+    ["Mécaniciens", "Affectations, disponibilités et absences.", () => showTab("resources", { focus: true })],
+    ["Équipements", "Ponts, diagnostic et géométrie.", () => showTab("resources", { focus: true })],
+    ["Suivi des interventions", "Avancement des travaux et motifs d'attente.", () => panel("planning")],
+    ["Charge et capacité", "Synthèse calculée à partir des ressources activées.", () => panel("planning")],
+  ];
+  function modules() {
+    const adv = mode === "advanced";
+    $("mgModules").replaceChildren(
+      ...MODULES.map(([name, text, go]) =>
+        el(
+          "li",
+          { class: "mg-module" },
+          el("div", {}, el("b", { text: name }), el("small", { text })),
+          el("span", { class: `pill ${adv ? "ok" : "off"}`, text: adv ? "Actif" : "Inactif" }),
+          adv ? el("button", { type: "button", class: "btn small", "aria-label": `Ouvrir : ${name}`, onclick: go }, "Ouvrir") : null,
+        ),
+      ),
+    );
+  }
+  const tabButtons = () => [...document.querySelectorAll("#mgTabs [role=tab]")].filter((t) => !t.hidden);
+  function showTab(name, { focus = false } = {}) {
+    if (!TABS[name] || $(`mgTab-${name}`).hidden) name = "hours";
+    tab = name;
+    for (const t of document.querySelectorAll("#mgTabs [role=tab]")) {
+      const on = t.dataset.tab === name;
+      t.setAttribute("aria-selected", String(on));
+      t.tabIndex = on ? 0 : -1;
+      $(`mgPanel-${t.dataset.tab}`).hidden = !on;
+    }
+    $("crumb").textContent = `${CRUMBS.garage} / ${TABS[name]}`;
+    if (focus) $(`mgTab-${name}`).focus();
+  }
+  $("mgTabs").addEventListener("click", (ev) => {
+    const t = ev.target.closest("[role=tab]");
+    if (t) showTab(t.dataset.tab);
+  });
+  // clavier (motif « onglets » de l'ARIA) : flèches haut et bas (gauche et droite sur téléphone, où les onglets sont en ligne), début, fin
+  $("mgTabs").addEventListener("keydown", (ev) => {
+    const list = tabButtons();
+    const i = list.indexOf(document.activeElement);
+    if (i < 0) return;
+    const next = { ArrowDown: i + 1, ArrowRight: i + 1, ArrowUp: i - 1, ArrowLeft: i - 1, Home: 0, End: list.length - 1 }[ev.key];
+    if (next === undefined) return;
+    ev.preventDefault();
+    showTab(list[(next + list.length) % list.length].dataset.tab, { focus: true });
+  });
+  for (const b of document.querySelectorAll("[data-mg-tab]")) b.addEventListener("click", () => showTab(b.dataset.mgTab, { focus: true }));
+  // « Retour à l'atelier » : le planning en mode avancé, sinon le tableau de bord
+  $("mgBack").addEventListener("click", () => panel(mode === "advanced" ? "planning" : "top"));
   // ordinateur : barre latérale dépliée (libellés) ou repliée (icônes, libellé en infobulle) ; le choix est gardé dans ce navigateur
   const RAIL = "pixcar-pro-rail";
   function rail(min, { save = false } = {}) {
@@ -164,7 +265,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     $("dashMore").setAttribute("aria-expanded", String(open));
   }
 
-  // « Prestations & tarifs » (et le nombre de prix à confirmer dans le menu)
+  // prix annoncés (Mon garage › Prestations), et le nombre de prix à confirmer dans le menu et sur la rubrique
   function render() {
     const prices = data.prices.slice().sort((a, b) => (ORDER.get(a.service) ?? 99) - (ORDER.get(b.service) ?? 99));
     const due = prices.filter((p) => p.state === "due");
@@ -179,10 +280,11 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
       $("dashDueTitle").textContent = `${due.length} prix à confirmer avant le ${date(first, DAY_MONTH)}`;
       $("dashDueText").textContent = "Sans confirmation, ils seront marqués « ancien » sur Pixcar. Un clic suffit s'ils n'ont pas changé.";
     }
-    const count = $("dashDueCount");
-    count.hidden = !toConfirm;
-    count.textContent = toConfirm ? String(toConfirm) : "";
-    count.setAttribute("aria-label", `${toConfirm} à confirmer`);
+    for (const count of [$("dashDueCount"), $("mgDueCount")]) {
+      count.hidden = !toConfirm;
+      count.textContent = toConfirm ? String(toConfirm) : "";
+      count.setAttribute("aria-label", `${toConfirm} à confirmer`);
+    }
 
     // chiffres
     const v = data.visits;
@@ -389,7 +491,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
   $("addPrice").addEventListener("click", () => openEditor(null));
   $("confirmAll").addEventListener("click", confirmAll);
   for (const b of document.querySelectorAll(".dash-link[data-panel]")) b.addEventListener("click", () => panel(b.dataset.panel));
-  $("calBack").addEventListener("click", () => panel("agenda"));
+  $("calBack").addEventListener("click", () => panel("garage", { tab: "modules" }));
   $("dashMore").addEventListener("click", () => more($("dashMore").getAttribute("aria-expanded") !== "true"));
   $("dashNav").addEventListener("keydown", (e) => e.key === "Escape" && more(false));
   $("priceValue").addEventListener("input", (e) => {

@@ -234,6 +234,15 @@ function fakeCognito() {
     return p.evaluate(() => window.__curtain.join());
   };
   const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, `pro-${name}.png`), fullPage: true });
+  // Mon garage, rubrique par rubrique (maquette « Mon garage », 24 octobre 2026) : l'écran, puis l'onglet
+  const garageTab = async (pg, tab) => {
+    if (await pg.isHidden("#dash-garage")) {
+      await pg.click('.dash-link[data-panel="garage"]');
+      await pg.waitForSelector("#dash-garage:not([hidden])");
+    }
+    await pg.click(`#mgTab-${tab}`);
+    await pg.waitForSelector(`#mgPanel-${tab}:not([hidden])`);
+  };
   const EMAIL = "camille@garage-demo.fr";
 
   const { ctx, page, logs } = await newPage();
@@ -388,12 +397,11 @@ function fakeCognito() {
   );
   check("the steps are gone on the dashboard", await page.locator("#steps").isHidden());
   await axe(page, "tableau de bord vide (garage)");
-  // « Prestations & tarifs » : les prix et les statistiques de la fiche
-  await page.click('.dash-link[data-panel="prices"]');
-  await page.waitForSelector("#dash-prices:not([hidden])");
+  // Mon garage › Prestations (ex-« Prestations & tarifs ») : les prix et les statistiques de la fiche
+  await garageTab(page, "services");
   check(
-    "« Prestations & tarifs »: no price yet, zero visits, nothing to confirm",
-    (await page.locator("#noPrice").isVisible()) && (await page.textContent("#statViews")) === "0" && (await page.textContent("#statFresh")) === "—" && (await page.locator("#dashDue").isHidden()) && (await page.evaluate(() => document.activeElement.id)) === "pricesTitle",
+    "Mon garage › Prestations: no price yet, zero visits, nothing to confirm; the tab has the focus",
+    (await page.locator("#noPrice").isVisible()) && (await page.textContent("#statViews")) === "0" && (await page.textContent("#statFresh")) === "—" && (await page.locator("#dashDue").isHidden()) && (await page.evaluate(() => document.activeElement.id)) === "mgTab-services",
     await page.textContent("#statFresh"),
   );
   await axe(page, "prestations et tarifs (vide)");
@@ -448,11 +456,10 @@ function fakeCognito() {
   await axe(page, "mes garages");
   await page.click("#garageList button");
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
-  await page.click('.dash-link[data-panel="prices"]');
-  await page.waitForSelector("#dash-prices:not([hidden])");
+  await garageTab(page, "services");
   check(
-    "reloaded: « 1 prix à confirmer », 2 views (+100 %), 1 call, customers paid +9 % over the announced price (98 € against 89.50 €), the row « À confirmer »",
-    (await page.textContent("#dashDueTitle")).startsWith("1 prix à confirmer avant le") && (await page.textContent("#dashDueCount")) === "1" && (await page.textContent("#statViews")) === "2" && (await page.textContent("#statViewsDelta")) === "+100\u00a0%" &&
+    "reloaded: « 1 prix à confirmer » (in the menu and on the tab), 2 views (+100 %), 1 call, customers paid +9 % over the announced price (98 € against 89.50 €), the row « À confirmer »",
+    (await page.textContent("#dashDueTitle")).startsWith("1 prix à confirmer avant le") && (await page.textContent("#dashDueCount")) === "1" && (await page.textContent("#mgDueCount")) === "1" && (await page.textContent("#statViews")) === "2" && (await page.textContent("#statViewsDelta")) === "+100\u00a0%" &&
       (await page.textContent("#statCalls")) === "1" && (await page.textContent("#statPaid")) === "+9\u00a0%" && (await page.textContent("#priceRows .state")) === "À confirmer" && /98\u00a0€ médiane · 1/.test(await page.textContent("#priceRows .c-paid")),
     [await page.textContent("#dashDueTitle"), await page.textContent("#statViewsDelta"), await page.textContent("#statPaid"), await page.textContent("#priceRows .c-paid")].join(" | "),
   );
@@ -463,8 +470,40 @@ function fakeCognito() {
   check("« Tout confirmer »: nothing left to confirm, the row is up to date again", (await page.textContent("#alert")).includes("confirmé") && (await page.textContent("#priceRows .state")) !== "À confirmer");
 
   // ---- « Mon garage » : coordonnées (contacts privés jamais montrés), registre, horaires, changements relus, prestations et temps moyens
+  await page.click('.dash-link[data-panel="top"]');
+  await page.waitForSelector("#dash-top:not([hidden])");
   await page.click('.dash-link[data-panel="garage"]');
   await page.waitForSelector("#dash-garage:not([hidden])");
+  // comme la maquette : surtitre, sous-titre, « Retour à l'atelier », carte de l'établissement, rubriques en onglets verticaux ; sans
+  // rendez-vous en ligne, ni Ressources ni Modules
+  const mgHead = await page.evaluate(() => ({
+    eyebrow: document.querySelector("#dash-garage .mg-eyebrow").innerText,
+    sub: document.querySelector("#dash-garage .mg-subtitle").textContent,
+    back: document.getElementById("mgBack").textContent.trim(),
+    card: `${document.getElementById("mgIdName").textContent} | ${document.getElementById("mgIdSub").textContent} | ${document.getElementById("mgScope").textContent}`,
+    tabs: [...document.querySelectorAll("#mgTabs [role=tab]")].filter((t) => !t.hidden).map((t) => t.innerText.replace(/\s+/g, " ").trim() + (t.getAttribute("aria-selected") === "true" ? " *" : "")),
+    orient: document.getElementById("mgTabs").getAttribute("aria-orientation"),
+    crumb: document.getElementById("crumb").textContent,
+    side: [...document.querySelectorAll("#dashNav .dash-link:not([hidden])")].map((b) => b.querySelector("span").textContent),
+  }));
+  check(
+    "« Mon garage » like the maquette: eyebrow, subtitle, « Retour à l'atelier », the establishment card, vertical tabs (the one left last, Prestations, still selected), the crumb names the tab",
+    mgHead.eyebrow === "CONFIGURATION DE L'ÉTABLISSEMENT" && mgHead.sub === "Organisez votre établissement et définissez vos règles de réservation." && mgHead.back === "Retour à l'atelier" &&
+      /^Garage Démo Centre \| Espace professionnel · Camille Durand/.test(mgHead.card) && mgHead.tabs.join(" / ") === "Horaires Ouverture et capacité / Prestations Prix, durées et plages autorisées * / Fiche Pixcar Coordonnées et registre" &&
+      mgHead.orient === "vertical" && mgHead.crumb === "Mon atelier / Mon garage / Prestations",
+    JSON.stringify(mgHead),
+  );
+  check("the menu: « Prestations & tarifs » and « Disponibilités » are now in Mon garage", !mgHead.side.includes("Prestations & tarifs") && !mgHead.side.includes("Disponibilités") && mgHead.side.includes("Mon garage"), mgHead.side.join(" | "));
+  // clavier (motif « onglets ») : flèche bas, fin, début ; la rubrique suit
+  await page.focus("#mgTab-hours");
+  await page.keyboard.press("ArrowDown");
+  const kb1 = await page.evaluate(() => [document.activeElement.id, document.getElementById("mgPanel-services").hidden, document.getElementById("mgPanel-hours").hidden, document.getElementById("crumb").textContent].join());
+  await page.keyboard.press("End");
+  const kb2 = await page.evaluate(() => document.activeElement.id + "," + document.getElementById("mgTab-profile").getAttribute("aria-selected"));
+  await page.keyboard.press("Home");
+  const kb3 = await page.evaluate(() => document.activeElement.id + "," + document.getElementById("mgTab-hours").tabIndex + "," + document.getElementById("mgTab-services").tabIndex);
+  check("tabs by keyboard: arrows, Home and End move the selection and the focus; one tab stop", kb1 === "mgTab-services,false,true,Mon atelier / Mon garage / Prestations" && kb2 === "mgTab-profile,true" && kb3 === "mgTab-hours,0,-1", [kb1, kb2, kb3].join(" | "));
+  await page.focus("#mgTitle");
   const coords = async () => Object.fromEntries(await page.$$eval("#mgCoords li", (els) => els.map((e) => [e.dataset.field, e.querySelector(".mg-main").textContent.replace(/\s+/g, " ").trim()])));
   let c0 = await coords();
   check(
@@ -490,8 +529,14 @@ function fakeCognito() {
     v0.on === "true" && /Temps moyen à saisir/.test(v0.text) && /89,50/.test(v0.text) && d0.on === "true" && /Annoncer un prix/.test(d0.text) && g0.on === "false" && g0.sel && (await page.$$eval("#mgSvcRows tr[data-svc]", (els) => els.length)) === 17 && (await page.textContent("#mgSvcSummary")) === "2 sur 17 · temps moyen renseigné pour 0",
     JSON.stringify([v0, d0, g0, await page.textContent("#mgSvcSummary")]),
   );
-  await axe(page, "Mon garage");
+  await axe(page, "Mon garage · Horaires");
   await shot(page, "7b-mon-garage");
+  await garageTab(page, "services");
+  await axe(page, "Mon garage · Prestations");
+  await shot(page, "7b-mon-garage-prestations");
+  await garageTab(page, "profile");
+  await axe(page, "Mon garage · Fiche Pixcar");
+  await shot(page, "7b-mon-garage-fiche");
 
   // site internet : publié tout de suite ; une adresse refusée d'abord
   await page.click('#mgCoords li[data-field="website"] button');
@@ -559,6 +604,7 @@ function fakeCognito() {
   check("« Tableau de bord » in the menu: back to the top, focus on the greeting", (await page.evaluate(() => document.activeElement.id)) === "dashTitle" && (await page.locator("#dash-garage").isHidden()));
   await page.click('.dash-link[data-panel="garage"]');
   await page.waitForSelector("#dash-garage:not([hidden])");
+  check("reopened on the tab left last (Fiche Pixcar)", await page.isVisible("#mgPanel-profile"));
   c0 = await coords();
   check(
     "reopened: the approved name « Vérifié par Pixcar », the refused address with its reason, the old address still shown",
@@ -567,6 +613,7 @@ function fakeCognito() {
   );
 
   // horaires : copie du lundi, samedi matin, dimanche ouvert sans plage refusé
+  await garageTab(page, "hours");
   await page.click("#mgHoursEdit");
   await page.waitForSelector("#hoursDlg[open]");
   const hourOpts = await page.$$eval('#hoursDays select[data-day="mo"][data-slot="00"] option', (els) => els.map((o) => [o.value, o.textContent]));
@@ -615,6 +662,7 @@ function fakeCognito() {
   );
 
   // prestations : cocher, temps moyen, « Annoncer un prix » d'ici ; décocher une prestation qui a un prix demande confirmation
+  await garageTab(page, "services");
   await page.click('#mgSvcRows tr[data-svc="geo_av"] .tgl');
   await page.waitForFunction(() => document.querySelector('#mgSvcRows tr[data-svc="geo_av"] .tgl').getAttribute("aria-checked") === "true");
   check("ticked: the time select opens, « Temps moyen à saisir », the focus stays on the switch", !(await svcRow("geo_av")).sel && /Temps moyen à saisir/.test((await svcRow("geo_av")).text) && (await page.evaluate(() => document.activeElement.getAttribute("aria-label"))) === "Je fais : Parallélisme / géométrie avant");
@@ -655,9 +703,9 @@ function fakeCognito() {
   await page.click('#mgSvcRows tr[data-svc="diag"] .tgl');
   await page.waitForFunction(() => document.querySelector('#mgSvcRows tr[data-svc="diag"] .tgl').getAttribute("aria-checked") === "false");
   check("a service without a price is unticked at once", (await page.locator("#untickDlg[open]").count()) === 0 && JSON.stringify((await svcDb()).diag) === "[false,null]");
-  await page.click('.dash-link[data-panel="prices"]');
-  await page.waitForSelector("#dash-prices:not([hidden])");
-  check("« Prestations & tarifs » in the menu: its screen, focus on its heading", (await page.evaluate(() => document.activeElement.id)) === "pricesTitle" && (await page.getAttribute('.dash-link[data-panel="prices"]', "aria-current")) === "true");
+  await page.click("#mgBack");
+  await page.waitForSelector("#dash-top:not([hidden])");
+  check("« Retour à l'atelier » (simple mode): the dashboard, focus on its title", (await page.evaluate(() => document.activeElement.id)) === "dashTitle" && (await page.getAttribute('.dash-link[data-panel="top"]', "aria-current")) === "true");
 
   // déconnexion, puis reconnexion (compte existant : code de connexion)
   await page.click("#signOut");
@@ -749,17 +797,15 @@ function fakeCognito() {
     check("mobile dashboard: no horizontal scroll, the navigation sits at the bottom of the screen", dashOverflow <= 0 && nav.position === "fixed" && nav.bottom === 844, JSON.stringify({ dashOverflow, nav }));
     await axe(m.page, "tableau de bord (mobile)");
     await shot(m.page, "9-mobile-tableau");
-    await m.page.click('.dash-link[data-panel="prices"]');
-    await m.page.waitForSelector("#dash-prices:not([hidden])");
+    await garageTab(m.page, "services");
     const pricesOverflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    check("mobile « Tarifs » in the icon rail: the prices screen, no horizontal scroll", pricesOverflow <= 0, pricesOverflow);
-    await axe(m.page, "prestations et tarifs (mobile)");
+    const tabsRow = await m.page.$eval("#mgTabs", (t) => ({ display: getComputedStyle(t).display, h: Math.round(t.getBoundingClientRect().height) }));
+    check("mobile Mon garage › Prestations: the tabs in a row above the content, no horizontal scroll", pricesOverflow <= 0 && tabsRow.display === "flex" && tabsRow.h <= 60, JSON.stringify({ pricesOverflow, tabsRow }));
+    await axe(m.page, "Mon garage · Prestations (mobile)");
     await m.page.click("#priceRows button");
     await m.page.waitForSelector("#priceDlg[open]");
     await shot(m.page, "10-mobile-saisie");
     await m.page.click("#priceClose");
-    await m.page.click('.dash-link[data-panel="garage"]');
-    await m.page.waitForSelector("#dash-garage:not([hidden])");
     const mg = await m.page.evaluate(() => {
       const tr = document.querySelector('#mgSvcRows tr[data-svc="geo_av"]');
       return { over: document.documentElement.scrollWidth - window.innerWidth, row: getComputedStyle(tr).display, head: getComputedStyle(document.querySelector("#mgServices thead")).display, sw: Math.round(tr.querySelector(".tgl").getBoundingClientRect().height) };
@@ -767,6 +813,7 @@ function fakeCognito() {
     check("mobile « Mon garage »: no horizontal scroll, the services become cards (no table header), the switch at least 24 px tall", mg.over <= 0 && mg.row !== "table-row" && mg.head === "none" && mg.sw >= 24, JSON.stringify(mg));
     await axe(m.page, "Mon garage (mobile)");
     await shot(m.page, "11-mobile-mon-garage");
+    await garageTab(m.page, "hours");
     await m.page.click("#mgHoursEdit");
     await m.page.waitForSelector("#hoursDlg[open]");
     const hd = await m.page.$eval("#hoursDlg", (d) => ({ over: d.scrollWidth - d.clientWidth, w: Math.round(d.getBoundingClientRect().width) }));

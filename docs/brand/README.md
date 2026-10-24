@@ -69,6 +69,11 @@ simple / avancée, Mon garage à onglets, prestations libres).
   Mécaniciens, Équipements, Interventions, Capacité de la maquette sont pour la suite de l'étape 2.
 - **Graisses** : la maquette met l'emphase à 650 et garde 700 pour les titres et les chiffres ; l'Espace Pro (hors accueil et
   connexion, déjà conformes) suit la même règle depuis le 24 octobre 2026 (plus aucun 800).
+- **Mon garage** (24 octobre 2026) : la page « Mon garage » de la maquette (surtitre, carte de l'établissement, rubriques Horaires,
+  Prestations, Ressources, Modules en onglets verticaux, sections en cartes blanches) ; elle regroupe Disponibilités, Prestations &
+  tarifs et les réglages du mode avancé. **Planning** : la fiche d'un rendez-vous s'ouvre dans un panneau à droite qui rétrécit la
+  grille (au-dessus d'elle sur petit écran). Détail dans `docs/calendrier-avance.md` (« Panneau du rendez-vous et Mon garage en
+  rubriques »).
 
 ### Écarts voulus avec la maquette
 
@@ -80,7 +85,9 @@ simple / avancée, Mon garage à onglets, prestations libres).
 | Code à 6 **ou 8** chiffres (maquette : 6) | Cognito envoie 8 chiffres pour la connexion |
 | « Vos données » et « Aide à la connexion » ouvrent une fenêtre ; « Contact » ajouté au pied de page | Les liens de la maquette ne mènent nulle part |
 | Adresse du compte et « Se déconnecter » dans le fil d'Ariane | Indispensable ; absent de la maquette |
-| Barre latérale : les liens existants (Planning, Prestations & tarifs, Disponibilités, Mes garages, Replier le menu ; « Voir Pixcar » supprimé à la demande de l'utilisateur) | Les écrans de la maquette (Gestion d'atelier…) sont l'étape 2 |
+| Barre latérale : Tableau de bord, Planning (mode avancé), Demandes ; Mon garage, Mes garages, Replier le menu (« Voir Pixcar » supprimé, « Prestations & tarifs » et « Disponibilités » rangés dans Mon garage à la demande de l'utilisateur) | « Planning » garde son nom (maquette : « Gestion d'atelier ») ; « Mes garages » sert aux comptes qui ont plusieurs garages |
+| Mon garage : cinquième rubrique « Fiche Pixcar » (coordonnées, registre) ; modules « Actif » / « Inactif » sans case à cocher | Les coordonnées n'ont pas de place dans les quatre rubriques de la maquette ; l'API n'a pas de réglage par module (ils viennent avec le mode avancé) |
+| Planning : panneau du rendez-vous dans la page, à droite de la grille (maquette : volet par-dessus, à droite de l'écran) | Demande de l'utilisateur : garder le planning visible |
 | Rôle de la carte utilisateur : « Gérant(e) », « Salarié(e) » ou « Espace professionnel » (maquette : « Administrateur ») | C'est ce que l'API connaît |
 | Libellés « ESPACE PRO » et « Retour à l'accueil » sur une ligne sur téléphone (maquette : deux) | La maquette les coupe parce que le bouton « Tester la transition » prend la place |
 | Reproduit tel quel : « Aujourd'hui » à 24 px dans l'aperçu du planning sur téléphone (16 px sur ordinateur) | C'est ce que fait la maquette (sa règle mobile `.product-detail h3` s'applique aussi à ce titre) ; probablement involontaire, à confirmer |

@@ -41,6 +41,9 @@
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
   <symbol id="i-left" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6" /></symbol>
   <symbol id="i-right" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6" /></symbol>
+  <!-- réglages et outil : tracés de la maquette « Parcours Atelier » -->
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="m9 3-1 3-3 1-2 4 2 3 1 4 4 3 4-1 4-1 3-4-1-4-3-3-4-1Z" /><circle cx="12" cy="12" r="3" /></symbol>
+  <symbol id="i-tool" viewBox="0 0 24 24"><path d="m14 5 5-2-1 6-4 2-8 9-3-3 9-8Z" /></symbol>
   <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M3 5h18M6 12h12M9 19h6" /><circle cx="8" cy="5" r="2" fill="currentColor" /><circle cx="16" cy="12" r="2" fill="currentColor" /></symbol>
   <symbol id="i-full" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /></symbol>
   <symbol id="i-unfull" viewBox="0 0 24 24"><path d="M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5" /></symbol>
@@ -392,9 +395,7 @@
       <button type="button" class="dash-link" data-panel="requests" data-rdv hidden><svg class="ic" aria-hidden="true"><use href="#i-inbox" /></svg><span>Demandes</span><span class="dash-count" id="rqCount" hidden></span></button>
       <div class="m-nav-bottom">
         <p class="m-nav-label">MON ESPACE</p>
-        <button type="button" class="dash-link more-item" data-panel="garage"><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg><span>Mon garage</span></button>
-        <button type="button" class="dash-link" data-panel="prices"><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg><span class="wide-only">Prestations &amp; tarifs</span><span class="narrow-only">Tarifs</span><span class="dash-count" id="dashDueCount" hidden></span></button>
-        <button type="button" class="dash-link" data-panel="agenda" data-rdv hidden><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg><span class="wide-only">Disponibilités</span><span class="narrow-only">Créneaux</span></button>
+        <button type="button" class="dash-link more-item" data-panel="garage"><svg class="ic" aria-hidden="true"><use href="#i-settings" /></svg><span>Mon garage</span><span class="dash-count" id="dashDueCount" hidden></span></button>
         <button type="button" class="dash-link more-item" data-go="home"><svg class="ic" aria-hidden="true"><use href="#i-list" /></svg><span>Mes garages</span></button>
         <button type="button" class="dash-link more-btn" id="dashMore" aria-expanded="false" hidden><svg class="ic" aria-hidden="true"><use href="#i-more" /></svg><span>Plus</span></button>
         <button type="button" class="dash-link rail-toggle" id="dashRail" aria-expanded="true"><svg class="ic" aria-hidden="true"><use href="#i-panel" /></svg><span id="dashRailText">Replier le menu</span></button>
@@ -472,70 +473,201 @@
       </section>
       <p class="sr-only" id="dbLive" role="status" aria-live="polite"></p>
     </div>
-    <!-- Prestations & tarifs (avant le lot 3c : le tableau de bord) : prix annoncés, prix payés par les clients, visites de la fiche -->
-    <div class="dash-body" id="dash-prices" hidden>
-      <h1 id="pricesTitle" tabindex="-1">Prestations &amp; tarifs</h1>
-      <p class="lead">Vos prix annoncés sur Pixcar, à côté des prix payés par vos clients, et les visites de votre fiche.</p>
-      <div class="due" id="dashDue" role="status" hidden>
-        <svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg>
-        <div><b id="dashDueTitle"></b><span id="dashDueText"></span></div>
-        <button type="button" class="btn small dark" id="confirmAll">Tout confirmer</button>
-      </div>
-      <ul class="stats" aria-label="En chiffres">
-        <li><span class="stat-l">Vues de la fiche · 30 j</span><b class="stat-v" id="statViews"></b><span class="stat-d" id="statViewsDelta"></span></li>
-        <li><span class="stat-l">Clics « Appeler » · 30 j</span><b class="stat-v" id="statCalls"></b><span class="stat-d" id="statCallsDelta"></span></li>
-        <li><span class="stat-l">Prix à jour</span><b class="stat-v" id="statFresh"></b></li>
-        <li><span class="stat-l">Payé par vos clients</span><b class="stat-v" id="statPaid"></b><span class="stat-d" id="statPaidNote"></span></li>
-      </ul>
-      <div class="dash-head">
-        <h2>Mes prix</h2>
-        <button type="button" class="btn primary small" id="addPrice" aria-label="Ajouter une prestation"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter<span class="wide-only">&nbsp;une prestation</span></button>
-      </div>
-      <p class="empty" id="noPrice" hidden>Aucun prix annoncé pour l'instant. Ajoutez une première prestation : les automobilistes verront « Annoncé » à côté des prix payés par vos clients.</p>
-      <table class="prices" id="priceTable" hidden>
-        <caption class="sr-only">Vos prix annoncés</caption>
-        <thead><tr><th scope="col">Prestation</th><th scope="col">Type</th><th scope="col">Prix TTC</th><th scope="col">Inclus</th><th scope="col">Payé par vos clients</th><th scope="col">Mis à jour</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
-        <tbody id="priceRows"></tbody>
-      </table>
-      <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>« Payé par vos clients » vient des factures que vos clients déclarent sur Pixcar : vous ne pouvez ni le modifier ni le retirer. Vos prix annoncés restent à part et n'entrent pas dans les moyennes.</span></p>
-    </div>
-    <!-- Mon garage (docs/rendez-vous.md, lot 1) : coordonnées, registre officiel, horaires, prestations et temps moyens -->
-    <div class="dash-body" id="dash-garage" hidden>
-      <p class="ok-badge small" id="mgVerified"></p>
-      <h1 id="mgTitle" tabindex="-1">Mon garage</h1>
-      <p class="lead">Les informations de votre fiche Pixcar et les prestations que vous faites.</p>
-      <div class="mg-grid">
-        <section class="mg-panel" aria-labelledby="mgCoordTitle">
-          <h2 id="mgCoordTitle">Coordonnées</h2>
-          <ul class="mg-kv" id="mgCoords"></ul>
-        </section>
-        <section class="mg-panel soft" aria-labelledby="mgRegTitle">
-          <h2 id="mgRegTitle">Registre officiel</h2>
-          <dl class="mg-reg" id="mgRegistry"></dl>
-          <p class="mg-note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>Répertoire SIRENE de l'Insee. Ces informations ne se modifient pas ici.</span></p>
-        </section>
-      </div>
-      <section class="mg-panel" aria-labelledby="mgHoursTitle">
-        <div class="mg-head">
-          <h2 id="mgHoursTitle">Horaires d'ouverture</h2>
-          <button type="button" class="btn small" id="mgHoursEdit"><svg class="ic" aria-hidden="true"><use href="#i-edit" /></svg>Modifier</button>
-        </div>
-        <div class="mg-hours" id="mgHours"></div>
-        <p class="mg-note"><svg class="ic" aria-hidden="true"><use href="#i-info" /></svg><span>Publiés tout de suite sur votre fiche Pixcar, avec la mention « Communiqué par le garage ».</span></p>
-      </section>
-      <div class="dash-head">
+    <!-- Mon garage, comme la page « Mon garage » de la maquette (demande du 24 octobre 2026) : en-tête, carte de l'établissement, rubriques
+         en onglets verticaux. Elle regroupe ce qui était dans Mon garage (docs/rendez-vous.md, lot 1), Disponibilités (lot 2), Prestations
+         & tarifs (lot 3c) et le calendrier avancé (lot 3a, mode avancé) : Horaires (ouverture, rendez-vous en ligne, semaine type,
+         fermetures, règles), Prestations (prix annoncés, prestations faites et temps moyens, exigences en mode avancé), Ressources
+         (mécaniciens et postes, mode avancé), Modules (mode simple ou avancé, contrôles) et Fiche Pixcar (coordonnées, registre). -->
+    <div class="dash-body mg-page" id="dash-garage" hidden>
+      <div class="mg-top">
         <div>
-          <h2 id="mgSvcTitle">Prestations effectuées</h2>
-          <p class="sub" id="mgSvcSummary"></p>
+          <p class="mg-eyebrow">Configuration de l'établissement</p>
+          <h1 id="mgTitle" tabindex="-1">Mon garage</h1>
+          <p class="mg-subtitle">Organisez votre établissement et définissez vos règles de réservation.</p>
+        </div>
+        <button type="button" class="btn small mg-back" id="mgBack"><svg class="ic" aria-hidden="true"><use href="#i-left" /></svg>Retour à l'atelier</button>
+      </div>
+      <section class="mg-identity" aria-label="Établissement">
+        <span class="mg-mark" aria-hidden="true"><svg class="ic"><use href="#i-settings" /></svg></span>
+        <div class="mg-id-text">
+          <b id="mgIdName"></b>
+          <p id="mgIdSub"></p>
+          <p class="ok-badge small" id="mgVerified"></p>
+        </div>
+        <span class="mg-scope" id="mgScope"></span>
+      </section>
+      <div class="mg-layout">
+        <div class="mg-tabs" id="mgTabs" role="tablist" aria-label="Rubriques de mon garage" aria-orientation="vertical">
+          <button type="button" role="tab" id="mgTab-hours" data-tab="hours" aria-controls="mgPanel-hours" aria-selected="true"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg><span><b>Horaires</b><small>Ouverture et capacité</small></span><svg class="ic mg-tab-go" aria-hidden="true"><use href="#i-right" /></svg></button>
+          <button type="button" role="tab" id="mgTab-services" data-tab="services" aria-controls="mgPanel-services" aria-selected="false" tabindex="-1"><svg class="ic" aria-hidden="true"><use href="#i-tool" /></svg><span><b>Prestations</b><small>Prix, durées et plages autorisées</small></span><span class="dash-count" id="mgDueCount" hidden></span><svg class="ic mg-tab-go" aria-hidden="true"><use href="#i-right" /></svg></button>
+          <button type="button" role="tab" id="mgTab-resources" data-tab="resources" data-rdv aria-controls="mgPanel-resources" aria-selected="false" tabindex="-1" hidden><svg class="ic" aria-hidden="true"><use href="#i-users" /></svg><span><b>Ressources</b><small>Équipe et équipements</small></span><svg class="ic mg-tab-go" aria-hidden="true"><use href="#i-right" /></svg></button>
+          <button type="button" role="tab" id="mgTab-modules" data-tab="modules" data-rdv aria-controls="mgPanel-modules" aria-selected="false" tabindex="-1" hidden><svg class="ic" aria-hidden="true"><use href="#i-settings" /></svg><span><b>Modules</b><small>Outils du mode avancé</small></span><svg class="ic mg-tab-go" aria-hidden="true"><use href="#i-right" /></svg></button>
+          <button type="button" role="tab" id="mgTab-profile" data-tab="profile" aria-controls="mgPanel-profile" aria-selected="false" tabindex="-1"><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg><span><b>Fiche Pixcar</b><small>Coordonnées et registre</small></span><svg class="ic mg-tab-go" aria-hidden="true"><use href="#i-right" /></svg></button>
+        </div>
+        <div class="mg-content">
+          <!-- Horaires : ouverture (Mon garage), rendez-vous en ligne, semaine type, fermetures, règles et adresse (Disponibilités) ; en mode
+               avancé, délais, marges et capacité en ligne (calendar.js) au lieu de la semaine type et des règles -->
+          <div class="mg-panelset" role="tabpanel" id="mgPanel-hours" aria-labelledby="mgTab-hours">
+            <section class="mg-panel" aria-labelledby="mgHoursTitle">
+              <div class="mg-head">
+                <h2 id="mgHoursTitle">Horaires d'ouverture</h2>
+                <button type="button" class="btn small" id="mgHoursEdit"><svg class="ic" aria-hidden="true"><use href="#i-edit" /></svg>Modifier</button>
+              </div>
+              <div class="mg-hours" id="mgHours"></div>
+              <p class="mg-note"><svg class="ic" aria-hidden="true"><use href="#i-info" /></svg><span>Communs aux modes simple et avancé. Publiés tout de suite sur votre fiche Pixcar, avec la mention « Communiqué par le garage ».</span></p>
+            </section>
+            <section class="mg-panel" id="agOnline" data-rdv aria-labelledby="agOnlineTitle" hidden>
+              <div class="mg-head">
+                <div>
+                  <h2 id="agOnlineTitle">Rendez-vous en ligne</h2>
+                  <p class="sub" id="agLead"></p>
+                </div>
+                <div class="rv-switch">
+                  <button type="button" class="tgl" role="switch" id="agEnabled" aria-checked="false" aria-labelledby="agOnlineTitle" aria-describedby="agStateText"></button>
+                  <b id="agStateText"></b>
+                </div>
+              </div>
+              <div class="rv-alert" id="agMissing" hidden></div>
+            </section>
+            <section class="mg-panel" id="agWeekBox" data-rdv aria-labelledby="agWeekTitle" hidden>
+              <div class="mg-head">
+                <div>
+                  <h2 id="agWeekTitle">Ma semaine type</h2>
+                  <p class="sub">Elle se répète chaque semaine, sauf fermetures : chaque créneau dit combien de voitures vous prenez en même temps.</p>
+                </div>
+                <button type="button" class="btn primary small" id="agAddSlot" aria-label="Ajouter un créneau"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter<span class="wide-only">&nbsp;un créneau</span></button>
+              </div>
+              <ul class="ag-legend" id="agLegend"></ul>
+              <div class="ag-week" id="agWeek"></div>
+              <ul class="ag-days" id="agDays"></ul>
+            </section>
+            <section class="mg-panel" id="agClosBox" data-rdv aria-labelledby="agClosTitle" hidden>
+              <div class="mg-head">
+                <h2 id="agClosTitle">Fermetures et congés</h2>
+                <button type="button" class="btn small" id="agAddClosure"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter</button>
+              </div>
+              <ul class="ag-closures" id="agClosures"></ul>
+              <div class="ag-row">
+                <svg class="ic" aria-hidden="true"><use href="#i-flag" /></svg>
+                <span><b id="agHolLabel">Jours fériés</b><small id="agHolText"></small></span>
+                <button type="button" class="tgl" role="switch" id="agHolidays" aria-checked="true" aria-labelledby="agHolLabel" aria-describedby="agHolText"></button>
+              </div>
+            </section>
+            <section class="mg-panel" id="agRulesBox" data-rdv aria-labelledby="agRulesTitle" hidden>
+              <h2 id="agRulesTitle">Règles de réservation</h2>
+              <div class="ag-rule"><label for="agDelay">Délai minimum<small>avant un rendez-vous</small></label><select id="agDelay" data-setting="minDelayH"><option value="0">Aucun</option><option value="2">2 heures</option><option value="4">4 heures</option><option value="24">24 heures</option><option value="48">48 heures</option></select></div>
+              <div class="ag-rule"><label for="agHorizon">Jusqu'à<small>combien de temps à l'avance</small></label><select id="agHorizon" data-setting="horizonDays"><option value="7">1 semaine</option><option value="14">2 semaines</option><option value="21">3 semaines</option><option value="28">4 semaines</option></select></div>
+              <div class="ag-rule"><label for="agStep">Horaires proposés<small>pour les rendez-vous à l'heure</small></label><select id="agStep" data-setting="stepMin"><option value="15">toutes les 15 min</option><option value="30">toutes les 30 min</option><option value="60">toutes les heures</option></select></div>
+              <p class="mg-note"><svg class="ic" aria-hidden="true"><use href="#i-info" /></svg><span>Vous confirmez chaque demande : vous avez jusqu'à midi le jour d'ouverture suivant. Sans réponse, la demande est annulée et l'automobiliste prévenu.</span></p>
+            </section>
+            <div class="mg-cal" id="mgCalHours"></div>
+            <section class="mg-panel" id="agNotifyBox" data-rdv aria-labelledby="agNotifyTitle" hidden>
+              <h2 id="agNotifyTitle">Où recevoir les demandes</h2>
+              <p class="sub">Une adresse e-mail de l'atelier, privée : les automobilistes ne la voient jamais. Chaque demande y arrive avec les coordonnées du client et deux boutons, Accepter et Refuser.</p>
+              <p class="ag-notify-now" id="agNotifyNow" hidden></p>
+              <form class="ag-notify" id="agNotifyForm" novalidate>
+                <label for="agNotifyEmail">Adresse e-mail</label>
+                <div class="ag-inline"><input id="agNotifyEmail" type="email" autocomplete="email" inputmode="email" spellcheck="false" aria-describedby="agNotifyErr"><button class="btn small" type="submit" id="agNotifySend">Recevoir un code</button></div>
+              </form>
+              <form class="ag-notify" id="agNotifyCodeForm" novalidate hidden>
+                <label for="agNotifyCode">Code reçu à <b id="agNotifyTo"></b></label>
+                <div class="ag-inline"><input id="agNotifyCode" class="code-input small" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" spellcheck="false" aria-describedby="agNotifyErr"><button class="btn primary small" type="submit" id="agNotifyCheck">Valider</button></div>
+              </form>
+              <p class="field-err" id="agNotifyErr" hidden></p>
+            </section>
+          </div>
+          <!-- Prestations : prix annoncés sur Pixcar (ex-« Prestations & tarifs »), prestations faites et temps moyens ; en mode avancé, ce
+               que chaque prestation demande et sa confirmation (calendar.js) -->
+          <div class="mg-panelset" role="tabpanel" id="mgPanel-services" aria-labelledby="mgTab-services" hidden>
+            <section class="mg-panel" id="mgPrices" aria-labelledby="pricesTitle">
+              <div class="mg-head">
+                <div>
+                  <h2 id="pricesTitle">Prix annoncés sur Pixcar</h2>
+                  <p class="sub">À côté des prix payés par vos clients, avec les visites de votre fiche.</p>
+                </div>
+                <button type="button" class="btn primary small" id="addPrice" aria-label="Ajouter une prestation"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter<span class="wide-only">&nbsp;une prestation</span></button>
+              </div>
+              <div class="due" id="dashDue" role="status" hidden>
+                <svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg>
+                <div><b id="dashDueTitle"></b><span id="dashDueText"></span></div>
+                <button type="button" class="btn small dark" id="confirmAll">Tout confirmer</button>
+              </div>
+              <ul class="stats" aria-label="En chiffres">
+                <li><span class="stat-l">Vues de la fiche · 30 j</span><b class="stat-v" id="statViews"></b><span class="stat-d" id="statViewsDelta"></span></li>
+                <li><span class="stat-l">Clics « Appeler » · 30 j</span><b class="stat-v" id="statCalls"></b><span class="stat-d" id="statCallsDelta"></span></li>
+                <li><span class="stat-l">Prix à jour</span><b class="stat-v" id="statFresh"></b></li>
+                <li><span class="stat-l">Payé par vos clients</span><b class="stat-v" id="statPaid"></b><span class="stat-d" id="statPaidNote"></span></li>
+              </ul>
+              <p class="empty" id="noPrice" hidden>Aucun prix annoncé pour l'instant. Ajoutez une première prestation : les automobilistes verront « Annoncé » à côté des prix payés par vos clients.</p>
+              <table class="prices" id="priceTable" hidden>
+                <caption class="sr-only">Vos prix annoncés</caption>
+                <thead><tr><th scope="col">Prestation</th><th scope="col">Type</th><th scope="col">Prix TTC</th><th scope="col">Inclus</th><th scope="col">Payé par vos clients</th><th scope="col">Mis à jour</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
+                <tbody id="priceRows"></tbody>
+              </table>
+              <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>« Payé par vos clients » vient des factures que vos clients déclarent sur Pixcar : vous ne pouvez ni le modifier ni le retirer. Vos prix annoncés restent à part et n'entrent pas dans les moyennes.</span></p>
+            </section>
+            <section class="mg-panel" aria-labelledby="mgSvcTitle">
+              <div class="mg-head">
+                <div>
+                  <h2 id="mgSvcTitle">Prestations effectuées</h2>
+                  <p class="sub" id="mgSvcSummary"></p>
+                </div>
+              </div>
+              <table class="svc" id="mgServices">
+                <caption class="sr-only">Les prestations que vous faites, leur temps moyen et votre prix annoncé</caption>
+                <thead><tr><th scope="col">Prestation</th><th scope="col">Je la fais</th><th scope="col">Temps moyen</th><th scope="col">Prix annoncé</th></tr></thead>
+                <tbody id="mgSvcRows"></tbody>
+              </table>
+              <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg><span><b>Temps moyen</b> : le temps pendant lequel la voiture occupe votre atelier, pour une voiture courante. Il servira à proposer des horaires de rendez-vous ; les automobilistes ne le voient pas.</span></p>
+            </section>
+            <div class="mg-cal" id="mgCalServices"></div>
+          </div>
+          <!-- Ressources : mécaniciens, compétences, postes et équipements (calendar.js, mode avancé) -->
+          <div class="mg-panelset" role="tabpanel" id="mgPanel-resources" aria-labelledby="mgTab-resources" hidden>
+            <section class="mg-panel mg-empty" id="mgResSimple" aria-labelledby="mgResSimpleTitle">
+              <h2 id="mgResSimpleTitle">Équipe et équipements</h2>
+              <p class="sub">Vos mécaniciens et vos postes servent au mode avancé : Pixcar propose alors des horaires selon leurs disponibilités, leurs compétences et le temps de chaque prestation.</p>
+              <div class="info-box">En mode simple, la semaine type (Horaires) suffit : rien à renseigner ici.</div>
+              <button type="button" class="btn small" data-mg-tab="modules">Voir les modules</button>
+            </section>
+            <div class="mg-cal" id="mgCalResources"></div>
+          </div>
+          <!-- Modules : le mode (simple ou avancé), les outils qu'il apporte, contrôles et retour au mode simple (calendar.js) -->
+          <div class="mg-panelset" role="tabpanel" id="mgPanel-modules" aria-labelledby="mgTab-modules" hidden>
+            <section class="mg-panel cal-mode" id="agMode" aria-labelledby="agModeTitle">
+              <div class="mg-head">
+                <div>
+                  <h2 id="agModeTitle">Mode du calendrier</h2>
+                  <p class="sub" id="agModeText"></p>
+                </div>
+                <button type="button" class="btn small" id="agModeGo"></button>
+              </div>
+              <p class="help" id="agModeHelp"></p>
+            </section>
+            <section class="mg-panel" aria-labelledby="mgModTitle">
+              <h2 id="mgModTitle">Modules du mode avancé</h2>
+              <p class="sub">Le mode est un choix du garage : ses outils et leurs réglages restent enregistrés quand vous revenez au mode simple.</p>
+              <ul class="mg-modules" id="mgModules"></ul>
+              <div class="info-box">Les quatre outils s'activent ensemble, avec le mode avancé. Revenir au mode simple les masque sans rien effacer : mécaniciens, postes, affectations et règles restent enregistrés.</div>
+            </section>
+            <div class="mg-cal" id="mgCalModules"></div>
+          </div>
+          <!-- Fiche Pixcar : coordonnées (nom, adresse et téléphone relus par Pixcar ; site, e-mail publiés tout de suite), registre officiel -->
+          <div class="mg-panelset" role="tabpanel" id="mgPanel-profile" aria-labelledby="mgTab-profile" hidden>
+            <section class="mg-panel" aria-labelledby="mgCoordTitle">
+              <h2 id="mgCoordTitle">Coordonnées</h2>
+              <ul class="mg-kv" id="mgCoords"></ul>
+            </section>
+            <section class="mg-panel soft" aria-labelledby="mgRegTitle">
+              <h2 id="mgRegTitle">Registre officiel</h2>
+              <dl class="mg-reg" id="mgRegistry"></dl>
+              <p class="mg-note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>Répertoire SIRENE de l'Insee. Ces informations ne se modifient pas ici.</span></p>
+            </section>
+          </div>
         </div>
       </div>
-      <table class="svc" id="mgServices">
-        <caption class="sr-only">Les prestations que vous faites, leur temps moyen et votre prix annoncé</caption>
-        <thead><tr><th scope="col">Prestation</th><th scope="col">Je la fais</th><th scope="col">Temps moyen</th><th scope="col">Prix annoncé</th></tr></thead>
-        <tbody id="mgSvcRows"></tbody>
-      </table>
-      <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg><span><b>Temps moyen</b> : le temps pendant lequel la voiture occupe votre atelier, pour une voiture courante. Il servira à proposer des horaires de rendez-vous ; les automobilistes ne le voient pas.</span></p>
       <p class="sr-only" id="mgLive" role="status" aria-live="polite"></p>
+      <p class="sr-only" id="agLive" role="status" aria-live="polite"></p>
     </div>
     <!-- Demandes de rendez-vous (docs/rendez-vous.md, lot 2) : à traiter, à venir, passées -->
     <div class="dash-body" id="dash-requests" hidden>
@@ -555,79 +687,6 @@
       <p class="rv-tools" id="rqTools" hidden><button type="button" class="btn small" id="rqExport"><svg class="ic" aria-hidden="true"><use href="#i-download" /></svg>Exporter vers mon agenda</button></p>
       <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>Les coordonnées d'un client restent visibles jusqu'à 30 jours après son rendez-vous, puis sont effacées. Vous ne voyez jamais les automobilistes qui n'ont pas envoyé de demande.</span></p>
       <p class="sr-only" id="rqLive" role="status" aria-live="polite"></p>
-    </div>
-    <!-- Disponibilités : interrupteur, semaine type, fermetures, règles, adresse qui reçoit les demandes -->
-    <div class="dash-body" id="dash-agenda" hidden>
-      <div class="rv-top">
-        <div>
-          <h1 id="agTitle" tabindex="-1">Disponibilités</h1>
-          <p class="lead">Quand vous pouvez prendre une voiture, et pour quelles prestations. Pixcar ne propose aux automobilistes que des horaires pris dans ces créneaux.</p>
-        </div>
-        <div class="rv-switch">
-          <span id="agSwitchLabel">Rendez-vous en ligne</span>
-          <button type="button" class="tgl" role="switch" id="agEnabled" aria-checked="false" aria-labelledby="agSwitchLabel" aria-describedby="agStateText"></button>
-          <b id="agStateText"></b>
-        </div>
-      </div>
-      <div class="rv-alert" id="agMissing" hidden></div>
-      <section class="mg-panel cal-mode" id="agMode" aria-labelledby="agModeTitle">
-        <div class="mg-head">
-          <div>
-            <h2 id="agModeTitle">Mode du calendrier</h2>
-            <p class="sub" id="agModeText"></p>
-          </div>
-          <button type="button" class="btn small" id="agModeGo"></button>
-        </div>
-        <p class="help" id="agModeHelp"></p>
-      </section>
-      <section class="mg-panel" id="agWeekBox" aria-labelledby="agWeekTitle">
-        <div class="mg-head">
-          <div>
-            <h2 id="agWeekTitle">Ma semaine type</h2>
-            <p class="sub">Elle se répète chaque semaine, sauf fermetures.</p>
-          </div>
-          <button type="button" class="btn primary small" id="agAddSlot" aria-label="Ajouter un créneau"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter<span class="wide-only">&nbsp;un créneau</span></button>
-        </div>
-        <ul class="ag-legend" id="agLegend"></ul>
-        <div class="ag-week" id="agWeek"></div>
-        <ul class="ag-days" id="agDays"></ul>
-      </section>
-      <div class="mg-grid">
-        <section class="mg-panel" aria-labelledby="agClosTitle">
-          <div class="mg-head">
-            <h2 id="agClosTitle">Fermetures et congés</h2>
-            <button type="button" class="btn small" id="agAddClosure"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter</button>
-          </div>
-          <ul class="ag-closures" id="agClosures"></ul>
-          <div class="ag-row">
-            <svg class="ic" aria-hidden="true"><use href="#i-flag" /></svg>
-            <span><b id="agHolLabel">Jours fériés</b><small id="agHolText"></small></span>
-            <button type="button" class="tgl" role="switch" id="agHolidays" aria-checked="true" aria-labelledby="agHolLabel" aria-describedby="agHolText"></button>
-          </div>
-        </section>
-        <section class="mg-panel" aria-labelledby="agRulesTitle">
-          <h2 id="agRulesTitle">Règles de réservation</h2>
-          <div class="ag-rule"><label for="agDelay">Délai minimum<small>avant un rendez-vous</small></label><select id="agDelay" data-setting="minDelayH"><option value="0">Aucun</option><option value="2">2 heures</option><option value="4">4 heures</option><option value="24">24 heures</option><option value="48">48 heures</option></select></div>
-          <div class="ag-rule"><label for="agHorizon">Jusqu'à<small>combien de temps à l'avance</small></label><select id="agHorizon" data-setting="horizonDays"><option value="7">1 semaine</option><option value="14">2 semaines</option><option value="21">3 semaines</option><option value="28">4 semaines</option></select></div>
-          <div class="ag-rule"><label for="agStep">Horaires proposés<small>pour les rendez-vous à l'heure</small></label><select id="agStep" data-setting="stepMin"><option value="15">toutes les 15 min</option><option value="30">toutes les 30 min</option><option value="60">toutes les heures</option></select></div>
-          <p class="mg-note"><svg class="ic" aria-hidden="true"><use href="#i-info" /></svg><span>Vous confirmez chaque demande : vous avez jusqu'à midi le jour d'ouverture suivant. Sans réponse, la demande est annulée et l'automobiliste prévenu.</span></p>
-        </section>
-      </div>
-      <section class="mg-panel" aria-labelledby="agNotifyTitle">
-        <h2 id="agNotifyTitle">Où recevoir les demandes</h2>
-        <p class="sub">Une adresse e-mail de l'atelier, privée : les automobilistes ne la voient jamais. Chaque demande y arrive avec les coordonnées du client et deux boutons, Accepter et Refuser.</p>
-        <p class="ag-notify-now" id="agNotifyNow" hidden></p>
-        <form class="ag-notify" id="agNotifyForm" novalidate>
-          <label for="agNotifyEmail">Adresse e-mail</label>
-          <div class="ag-inline"><input id="agNotifyEmail" type="email" autocomplete="email" inputmode="email" spellcheck="false" aria-describedby="agNotifyErr"><button class="btn small" type="submit" id="agNotifySend">Recevoir un code</button></div>
-        </form>
-        <form class="ag-notify" id="agNotifyCodeForm" novalidate hidden>
-          <label for="agNotifyCode">Code reçu à <b id="agNotifyTo"></b></label>
-          <div class="ag-inline"><input id="agNotifyCode" class="code-input small" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" spellcheck="false" aria-describedby="agNotifyErr"><button class="btn primary small" type="submit" id="agNotifyCheck">Valider</button></div>
-        </form>
-        <p class="field-err" id="agNotifyErr" hidden></p>
-      </section>
-      <p class="sr-only" id="agLive" role="status" aria-live="polite"></p>
     </div>
     <!-- Planning (docs/calendrier-avance.md, lot 3b ; mode avancé) : jour, semaine, mois, par mécanicien, par poste -->
     <div class="dash-body" id="dash-planning" hidden>
@@ -668,13 +727,20 @@
         <button type="button" class="pl-btn" id="planWeekend" hidden>Afficher le week-end</button>
       </div>
       <div class="pl-filters" id="planFilters" role="group" aria-label="Filtres" hidden></div>
-      <div class="pl-wrap" id="planGrid"></div>
+      <!-- la grille et, à sa droite, le panneau d'un rendez-vous ou d'un formulaire : il la rétrécit au lieu de la couvrir (au-dessus d'elle
+           quand la place manque) ; boîte de dialogue non modale, le reste du planning reste utilisable -->
+      <div class="pl-layout" id="planLayout">
+        <div class="pl-wrap" id="planGrid"></div>
+        <dialog class="pl-side" id="planDlg" aria-labelledby="planDlgTitle">
+          <form id="planForm" novalidate></form>
+        </dialog>
+      </div>
       <ul class="pl-legend" id="planLegend" aria-label="Légende"></ul>
       <p class="sr-only" id="planLive" role="status" aria-live="polite"></p>
     </div>
     <!-- Calendrier avancé (docs/calendrier-avance.md, lot 3a) : assistant en six étapes, puis les mêmes écrans pour modifier -->
     <div class="dash-body" id="dash-calendar" hidden>
-      <p class="cal-back"><button type="button" class="link-btn" id="calBack"><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg>Disponibilités</button></p>
+      <p class="cal-back"><button type="button" class="link-btn" id="calBack"><svg class="ic" aria-hidden="true"><use href="#i-left" /></svg>Mon garage › Modules</button></p>
       <h1 id="calTitle" tabindex="-1">Calendrier avancé</h1>
       <p class="lead" id="calLead"></p>
       <ol class="cal-steps" id="calSteps" aria-label="Étapes"></ol>
@@ -827,10 +893,6 @@
       <button class="link-btn danger" type="button" id="slotDelete" hidden>Supprimer le créneau</button>
     </div>
   </form>
-</dialog>
-
-<dialog class="sheet wide" id="planDlg" aria-labelledby="planDlgTitle">
-  <form id="planForm" novalidate></form>
 </dialog>
 
 <dialog class="sheet wide" id="calDlg" aria-labelledby="calDlgTitle">

@@ -253,6 +253,41 @@ change, plus trois outils de la maquette :
   650, 700 pour les titres et les chiffres. Sur le tableau de bord, la part du texte en 700 passe de 45 % à 10 % (maquette : 5 %, et
   34 % en 650). Gris secondaires du Planning assombris pour le contraste AA (`#5f6571`, `#6a707b` au lieu de `#747b88`).
 
+**Panneau du rendez-vous et Mon garage en rubriques (24 octobre 2026)** — demande de l'utilisateur, capture de la page « Mon garage »
+de la maquette à l'appui : « regroupe tous les horaires, prestations, ressources et modules gestion avancée dans le garage comme sur la
+maquette » ; pour le planning, « à chaque fois que j'ouvre un rdv, un panneau sur la droite doit s'ajouter de manière fluide
+(transition) et rétrécir le planning (responsive), il ne doit pas couvrir le planning ».
+- **Panneau du Planning** : la fiche d'un rendez-vous ou d'un bloc, et les formulaires (déplacer, annuler, nouveau, absence), ne sont
+  plus une fenêtre par-dessus la grille mais une colonne à sa droite (`#planDlg`, boîte de dialogue non modale dans `#planLayout`) :
+  la grille se resserre (les jours descendent jusqu'à 84 px) en 0,28 s, le panneau apparaît en fondu et reste visible quand la page
+  défile (380 px de large, 330 px quand le planning fait moins de 1 100 px). Quand le planning fait moins de 760 px (tablette,
+  téléphone), le panneau se place **au-dessus** de la grille, qui reste visible en dessous. Le bloc ouvert est entouré dans la grille ;
+  en ouvrir un autre change le contenu du panneau sans le refermer. Échap ou « Fermer le panneau » le referme et rend le focus au bloc.
+  Aucune transition si le système demande moins d'animations. Présentation du panneau de la maquette : surtitre orange, titre de 18 px,
+  détail en deux colonnes (intitulé au-dessus de la valeur), affectations, actions en bas.
+- **Mon garage** devient l'écran de configuration de la maquette : surtitre « CONFIGURATION DE L'ÉTABLISSEMENT », titre, sous-titre,
+  « Retour à l'atelier » (le Planning en mode avancé, sinon le tableau de bord), carte de l'établissement (nom ; « Espace
+  professionnel · prénom nom, fonction » ; badge « Garage vérifié » ; « Paramètres communs aux modes Simple et Avancé »), et les
+  rubriques en onglets verticaux (en ligne sur tablette et téléphone ; flèches, début et fin au clavier ; la rubrique ouverte est
+  gardée le temps de la visite et nommée dans le fil d'Ariane « Mon atelier / Mon garage / … ») :
+  | Rubrique | Contenu | D'où il vient |
+  | --- | --- | --- |
+  | Horaires — Ouverture et capacité | horaires d'ouverture ; rendez-vous en ligne (interrupteur, ce qui manque) ; semaine type et règles de réservation (mode simple) ou délais, marges et capacité en ligne (mode avancé) ; fermetures et jours fériés ; adresse qui reçoit les demandes | Mon garage, Disponibilités, étapes 1 et 5 de l'assistant |
+  | Prestations — Prix, durées et plages autorisées | prix annoncés (chiffres de la fiche, prix à confirmer, tableau, saisie) ; prestations faites et temps moyens ; en mode avancé, ce que demande chaque prestation et sa confirmation | Prestations & tarifs, Mon garage, étapes 4 et 5 |
+  | Ressources — Équipe et équipements | mécaniciens, compétences et habilitations, postes et équipements (mode avancé ; en mode simple, une explication) | étapes 2 et 3 |
+  | Modules — Outils du mode avancé | mode du calendrier (passer au mode avancé, reprendre l'assistant) ; les quatre outils de la maquette (Mécaniciens, Équipements, Suivi des interventions, Charge et capacité), « Actif » ou « Inactif » avec un lien ; en mode avancé, contrôles, conflits, « Recalculer les affectations », « Revenir au mode simple » | Disponibilités, étape 6 |
+  | Fiche Pixcar — Coordonnées et registre | coordonnées relues ou publiées, registre SIRENE | Mon garage |
+  Le menu perd « Prestations & tarifs » et « Disponibilités » (comme la maquette : « Mon espace » ne garde que Mon garage, et Mes
+  garages) ; le nombre de prix à confirmer passe sur « Mon garage » et sur la rubrique Prestations. Les anciens noms d'écran restent
+  des raccourcis (tableau de bord, liens internes) : `prices` ouvre Prestations, `agenda` Horaires, `calendar` l'assistant en mode
+  simple et Ressources en mode avancé. L'assistant en six étapes reste un écran à part pour passer au mode avancé ; une fois activé,
+  il se range dans Mon garage › Modules.
+- **Écart voulu** : les modules de la maquette s'activent un par un ; ici ils viennent ensemble avec le mode avancé (l'API n'a pas de
+  réglage par module, et le moteur de planification se sert des mécaniciens et des postes ensemble). Des modules réglables un par un
+  demanderaient une préférence du garage côté API et de masquer les écrans correspondants : à décider.
+- **Écart voulu** : une cinquième rubrique, « Fiche Pixcar », garde les coordonnées et le registre, qui n'ont pas de place dans les
+  quatre rubriques de la maquette.
+
 ## Lot 3c : suivi des interventions, tableau de bord
 
 Choix faits au début du lot (19 octobre 2026), dans le cadre des décisions ci-dessus ; à revoir sur retour de l'utilisateur.

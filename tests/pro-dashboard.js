@@ -5,7 +5,8 @@
 // une demande à confirmer, un rendez-vous pris par téléphone. Parcours : cinq chiffres → liste du jour (états, menu d'actions au clavier,
 // voiture reçue, voiture prête avec le client prévenu par e-mail) → filtre par un chiffre → demandes à traiter (confirmer) → équipe et
 // postes → points d'attention → raccourcis personnalisés (gardés sur le compte) → client déjà sur place (formulaire du Planning) →
-// ouvrir dans le planning (fiche, avancement) → page de suivi du client → Prestations & tarifs → mode simple → téléphone ; axe.
+// ouvrir dans le planning (fiche, avancement) → page de suivi du client → prix annoncés (Mon garage › Prestations) → mode simple →
+// téléphone ; axe.
 //   node tests/pro-dashboard.js
 delete process.env.PIXCAR_ROOT;
 const { execFileSync } = require("child_process");
@@ -174,7 +175,7 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
   });
   await page.waitForSelector("#dbList .db-row");
   check("the dashboard is the first screen, with its title, the greeting and today's date", (await words(page, "#dashTitle")) === "Tableau de bord" && /^Bonjour Camille · Garage Démo Atelier/.test(await words(page, "#dashGarage")) && (await words(page, "#dbToday")) === "Mer. 4 nov. 2026", (await words(page, ".db-head")));
-  check("the menu says « Tableau de bord » and « Prestations & tarifs »", (await page.getAttribute('.dash-link[data-panel="top"]', "aria-current")) === "true" && (await words(page, '.dash-link[data-panel="prices"] .wide-only')) === "Prestations & tarifs");
+  check("the menu says « Tableau de bord »; the prices are in « Mon garage »", (await page.getAttribute('.dash-link[data-panel="top"]', "aria-current")) === "true" && !(await page.$('.dash-link[data-panel="prices"]')) && (await words(page, '.dash-link[data-panel="garage"]')) === "Mon garage");
   let k = await kpis(page);
   check("five figures: 6 vehicles expected (2 to receive, 1 to confirm, 1 off Pixcar), 2 in progress, 1 ready, the free capacity, the alerts", k.expected.v === "6" && k.expected.s === "2 à recevoir · 1 à confirmer · 1 hors Pixcar" && k.live.v === "2" && k.live.s === "Sur 6 véhicules aujourd'hui" && k.ready.v === "1" && k.capacity.v === "11 h 45" && k.alerts.v === "6" && k.alerts.l === "Alertes", JSON.stringify(k));
   check("the figures that filter the list say so (aria-pressed)", k.expected.p === "false" && k.live.p === "false" && k.ready.p === "false" && k.capacity.p === null);
@@ -241,7 +242,7 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
 
   // ---- raccourcis : trois par défaut, personnalisés, gardés sur le compte
   const shorts = () => page.$$eval("#dbShortcuts .db-short", (bs) => bs.map((b) => b.querySelector("b").textContent));
-  check("shortcuts: Planning, Prestations & tarifs, Disponibilités by default", JSON.stringify(await shorts()) === JSON.stringify(["Aller au planning", "Prestations & tarifs", "Disponibilités"]), JSON.stringify(await shorts()));
+  check("shortcuts: Planning, the announced prices, the hours and slots by default", JSON.stringify(await shorts()) === JSON.stringify(["Aller au planning", "Prix annoncés", "Horaires et créneaux"]), JSON.stringify(await shorts()));
   await page.click("#dbShortEdit");
   await page.waitForSelector("#shortDlg[open]");
   await page.uncheck('#shortList input[value="agenda"]');
@@ -250,7 +251,7 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
   await axe(page, "fenêtre des raccourcis");
   await page.click("#shortSave");
   await live(page, /Raccourcis enregistrés\./);
-  check("saved: in the order of the list", JSON.stringify(await shorts()) === JSON.stringify(["Aller au planning", "Demandes", "Prestations & tarifs", "Mon garage", "Équipe et postes", "Nouveau rendez-vous"]), JSON.stringify(await shorts()));
+  check("saved: in the order of the list", JSON.stringify(await shorts()) === JSON.stringify(["Aller au planning", "Demandes", "Prix annoncés", "Mon garage", "Équipe et postes", "Nouveau rendez-vous"]), JSON.stringify(await shorts()));
   check("kept on the account (the API has them)", JSON.stringify((await pro("GET", "")).body.prefs.shortcuts) === JSON.stringify(["planning", "requests", "prices", "garage", "team", "new"]));
   await page.click('#dbShortcuts [data-short="garage"]');
   await page.waitForSelector("#dash-garage:not([hidden])");
@@ -299,14 +300,14 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
     await c.ctx.close();
   }
 
-  // ---- Prestations & tarifs : l'ancien tableau de bord
+  // ---- prix annoncés (l'ancien tableau de bord, puis « Prestations & tarifs ») : Mon garage › Prestations, par le raccourci
   {
     const c = await newPage();
     await c.page.goto(`${srv.url}/pro/`);
     await c.page.waitForSelector("#dbList .db-row");
-    await c.page.click('.dash-link[data-panel="prices"]');
-    await c.page.waitForSelector("#dash-prices:not([hidden])");
-    check("« Prestations & tarifs »: its own screen, with the visits and the prices", (await words(c.page, "#pricesTitle")) === "Prestations & tarifs" && (await c.page.isVisible("#statViews")) && (await c.page.isVisible("#noPrice")) && (await c.page.isHidden("#dash-top")));
+    await c.page.click('#dbShortcuts [data-short="prices"]');
+    await c.page.waitForSelector("#mgPanel-services:not([hidden])");
+    check("« Prix annoncés »: Mon garage › Prestations, with the visits and the prices", (await words(c.page, "#pricesTitle")) === "Prix annoncés sur Pixcar" && (await c.page.isVisible("#statViews")) && (await c.page.isVisible("#noPrice")) && (await c.page.isHidden("#dash-top")) && (await words(c.page, "#crumb")) === "Mon atelier / Mon garage / Prestations");
     await c.ctx.close();
   }
 
