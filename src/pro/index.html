@@ -48,6 +48,11 @@
   <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3" /><path d="M3.5 19c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5" /><circle cx="16.5" cy="9.5" r="2.4" /><path d="M16.5 14.3c2.1 0 3.7 1.3 4.1 3.7" /></symbol>
   <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 3 19.5h18z" /><path d="M12 10v4.5M12 17.2v.3" /></symbol>
   <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 5.5h16l-6.2 7.3v5.4l-3.6 1.8v-7.2z" /></symbol>
+  <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M15.5 3.5a4.5 4.5 0 0 0-4.2 6.1l-7.1 7.1a2 2 0 0 0 2.8 2.8l7.1-7.1a4.5 4.5 0 0 0 6.1-4.2l-2.7 2.7-2.6-.6-.6-2.6z" /></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3 5.5 13.5H12L11 21l7.5-10.5H12z" /></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.2" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.2" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.2" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.2" /></symbol>
+  <symbol id="i-tyre" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><path d="M12 4v5M12 15v5M4 12h5M15 12h5" /></symbol>
+  <symbol id="i-screen" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="1.5" /><path d="M2.5 19h19" /></symbol>
   <symbol id="i-car" viewBox="0 0 24 24"><path d="M4 16.5V12l2-5h12l2 5v4.5M4 16.5h16M4 16.5V19h3v-2.5M17 16.5V19h3v-2.5M4 12h16" /><circle cx="7.5" cy="14" r=".6" /><circle cx="16.5" cy="14" r=".6" /></symbol>
 </svg>
 <a class="skip" href="#main">Aller au contenu</a>
@@ -317,26 +322,92 @@
       <button type="button" class="dash-link" data-panel="requests" data-rdv hidden><svg class="ic" aria-hidden="true"><use href="#i-inbox" /></svg><span>Demandes</span><span class="dash-count" id="rqCount" hidden></span></button>
       <button type="button" class="dash-link" data-panel="planning" data-adv hidden><svg class="ic" aria-hidden="true"><use href="#i-planning" /></svg><span>Planning</span></button>
       <button type="button" class="dash-link more-item" data-panel="garage"><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg><span>Mon garage</span></button>
-      <button type="button" class="dash-link" data-panel="prices"><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg><span>Mes prix</span><span class="dash-count" id="dashDueCount" hidden></span></button>
+      <button type="button" class="dash-link" data-panel="prices"><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg><span class="wide-only">Prestations &amp; tarifs</span><span class="narrow-only">Tarifs</span><span class="dash-count" id="dashDueCount" hidden></span></button>
       <button type="button" class="dash-link" data-panel="agenda" data-rdv hidden><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg><span class="wide-only">Disponibilités</span><span class="narrow-only">Créneaux</span></button>
       <a href="../" class="dash-link more-item" id="dashSite"><svg class="ic" aria-hidden="true"><use href="#i-eye" /></svg><span>Voir Pixcar</span></a>
       <button type="button" class="dash-link more-item" data-go="home"><svg class="ic" aria-hidden="true"><use href="#i-list" /></svg><span>Mes garages</span></button>
       <button type="button" class="dash-link more-btn" id="dashMore" aria-expanded="false" hidden><svg class="ic" aria-hidden="true"><use href="#i-more" /></svg><span>Plus</span></button>
       <button type="button" class="dash-link rail-toggle" id="dashRail" aria-expanded="true"><svg class="ic" aria-hidden="true"><use href="#i-panel" /></svg><span id="dashRailText">Replier le menu</span></button>
     </nav>
-    <div class="dash-body" id="dash-top">
-      <p class="ok-badge small" id="dashVerified"></p>
-      <h1 id="dashTitle" tabindex="-1"></h1>
-      <p class="lead dash-garage" id="dashGarage"></p>
+    <!-- Tableau de bord (docs/calendrier-avance.md, lot 3c) : chiffres du jour, l'atelier aujourd'hui, actions rapides, demandes à
+         traiter, équipe et postes, points d'attention, raccourcis personnalisables. Rempli par src/js/pro/home.js. -->
+    <div class="dash-body db" id="dash-top">
+      <div class="db-head">
+        <div>
+          <p class="ok-badge small" id="dashVerified"></p>
+          <h1 id="dashTitle" tabindex="-1">Tableau de bord</h1>
+          <p class="lead dash-garage" id="dashGarage"></p>
+        </div>
+        <p class="db-date"><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg><span><small>Aujourd'hui</small><b id="dbToday"></b></span></p>
+      </div>
+      <ul class="db-kpis" id="dbKpis" aria-label="Aujourd'hui en chiffres"></ul>
+      <div class="db-row2">
+        <section class="db-card db-today" id="dbTodayCard" aria-labelledby="dbTodayTitle">
+          <div class="db-card-h">
+            <h2 id="dbTodayTitle"><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg><span id="dbTodayText">Aujourd'hui à l'atelier</span></h2>
+            <button type="button" class="db-link" id="dbPlanLink">Voir le planning complet<svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></button>
+          </div>
+          <p class="db-filter" id="dbFilter" hidden></p>
+          <ul class="db-list" id="dbList"></ul>
+          <p class="db-empty" id="dbListEmpty" hidden></p>
+        </section>
+        <div class="db-side">
+          <section class="db-card" id="dbActionsCard" aria-labelledby="dbActionsTitle">
+            <div class="db-card-h"><h2 id="dbActionsTitle"><svg class="ic" aria-hidden="true"><use href="#i-bolt" /></svg>Actions rapides</h2></div>
+            <div class="db-actions" id="dbActions"></div>
+          </section>
+          <section class="db-card" id="dbRqCard" aria-labelledby="dbRqTitle" hidden>
+            <div class="db-card-h">
+              <h2 id="dbRqTitle"><svg class="ic" aria-hidden="true"><use href="#i-inbox" /></svg>Demandes à traiter<span class="dash-count" id="dbRqCount" hidden></span></h2>
+              <button type="button" class="db-link" id="dbRqLink">Voir toutes les demandes<svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></button>
+            </div>
+            <ul class="db-rq" id="dbRq"></ul>
+            <p class="db-empty" id="dbRqEmpty" hidden>Aucune demande en attente.</p>
+          </section>
+        </div>
+      </div>
+      <div class="db-row3">
+        <section class="db-card" id="dbTeamCard" aria-labelledby="dbTeamTitle" hidden>
+          <div class="db-card-h">
+            <h2 id="dbTeamTitle"><svg class="ic" aria-hidden="true"><use href="#i-users" /></svg>Équipe &amp; charge</h2>
+            <button type="button" class="db-link" data-goto="team">Gérer l'équipe</button>
+          </div>
+          <ul class="db-team" id="dbTeam"></ul>
+        </section>
+        <section class="db-card" id="dbPostsCard" aria-labelledby="dbPostsTitle" hidden>
+          <div class="db-card-h">
+            <h2 id="dbPostsTitle"><svg class="ic" aria-hidden="true"><use href="#i-wrench" /></svg>Postes &amp; équipements</h2>
+            <button type="button" class="db-link" data-goto="team">Gérer les postes</button>
+          </div>
+          <ul class="db-posts" id="dbPosts"></ul>
+        </section>
+        <section class="db-card" id="dbAlertsCard" aria-labelledby="dbAlertsTitle">
+          <div class="db-card-h">
+            <h2 id="dbAlertsTitle" tabindex="-1"><svg class="ic" aria-hidden="true"><use href="#i-alert" /></svg>Points d'attention</h2>
+            <button type="button" class="db-link" id="dbAlertsMore" aria-expanded="false" hidden>Voir tous les points</button>
+          </div>
+          <ul class="db-alerts" id="dbAlerts"></ul>
+          <p class="db-empty" id="dbAlertsEmpty" hidden>Rien à signaler : tout est en ordre.</p>
+        </section>
+      </div>
+      <section class="db-card db-shortcard" id="dbShortCard" aria-labelledby="dbShortTitle">
+        <div class="db-card-h">
+          <h2 id="dbShortTitle"><svg class="ic" aria-hidden="true"><use href="#i-grid" /></svg>Raccourcis utiles</h2>
+          <button type="button" class="db-link" id="dbShortEdit"><svg class="ic" aria-hidden="true"><use href="#i-edit" /></svg>Personnaliser</button>
+        </div>
+        <ul class="db-shortcuts" id="dbShortcuts"></ul>
+        <p class="db-empty" id="dbShortEmpty" hidden>Aucun raccourci : « Personnaliser » pour en choisir.</p>
+      </section>
+      <p class="sr-only" id="dbLive" role="status" aria-live="polite"></p>
+    </div>
+    <!-- Prestations & tarifs (avant le lot 3c : le tableau de bord) : prix annoncés, prix payés par les clients, visites de la fiche -->
+    <div class="dash-body" id="dash-prices" hidden>
+      <h1 id="pricesTitle" tabindex="-1">Prestations &amp; tarifs</h1>
+      <p class="lead">Vos prix annoncés sur Pixcar, à côté des prix payés par vos clients, et les visites de votre fiche.</p>
       <div class="due" id="dashDue" role="status" hidden>
         <svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg>
         <div><b id="dashDueTitle"></b><span id="dashDueText"></span></div>
         <button type="button" class="btn small dark" id="confirmAll">Tout confirmer</button>
-      </div>
-      <div class="due rq-due" id="dashRq" role="status" hidden>
-        <svg class="ic" aria-hidden="true"><use href="#i-inbox" /></svg>
-        <div><b id="dashRqTitle"></b><span>Répondez avant l'heure limite : sans réponse, la demande est annulée et le client prévenu.</span></div>
-        <button type="button" class="btn small dark" id="dashRqGo">Répondre</button>
       </div>
       <ul class="stats" aria-label="En chiffres">
         <li><span class="stat-l">Vues de la fiche · 30 j</span><b class="stat-v" id="statViews"></b><span class="stat-d" id="statViewsDelta"></span></li>
@@ -344,8 +415,8 @@
         <li><span class="stat-l">Prix à jour</span><b class="stat-v" id="statFresh"></b></li>
         <li><span class="stat-l">Payé par vos clients</span><b class="stat-v" id="statPaid"></b><span class="stat-d" id="statPaidNote"></span></li>
       </ul>
-      <div class="dash-head" id="dash-prices">
-        <h2 id="pricesTitle" tabindex="-1">Mes prix</h2>
+      <div class="dash-head">
+        <h2>Mes prix</h2>
         <button type="button" class="btn primary small" id="addPrice" aria-label="Ajouter une prestation"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter<span class="wide-only">&nbsp;une prestation</span></button>
       </div>
       <p class="empty" id="noPrice" hidden>Aucun prix annoncé pour l'instant. Ajoutez une première prestation : les automobilistes verront « Annoncé » à côté des prix payés par vos clients.</p>
@@ -719,6 +790,39 @@
     <button class="btn primary" type="submit" id="whySave"></button>
   </form>
 </dialog>
+<!-- Tableau de bord (lot 3c) : « Voiture prête » d'un rendez-vous Pixcar (le client est prévenu, case cochée par défaut) -->
+<dialog class="sheet" id="workDlg" aria-labelledby="workDlgTitle">
+  <form id="workForm" novalidate>
+    <div class="sheet-head">
+      <div>
+        <p class="eyebrow">Voiture prête</p>
+        <h2 id="workDlgTitle"></h2>
+      </div>
+      <button type="button" class="icon-btn" id="workClose" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button>
+    </div>
+    <p id="workDlgText"></p>
+    <label class="check"><input type="checkbox" id="workNotify" checked><span>Prévenir le client par e-mail que sa voiture est prête</span></label>
+    <p class="help">L'e-mail donne l'adresse du garage et ses prochaines heures d'ouverture. Il ne part qu'une fois par rendez-vous.</p>
+    <p class="field-err" id="workErr" role="alert" hidden></p>
+    <button class="btn primary" type="submit" id="workSave">Voiture prête</button>
+  </form>
+</dialog>
+<!-- Tableau de bord (lot 3c) : raccourcis choisis, gardés sur le compte pour ce garage -->
+<dialog class="sheet" id="shortDlg" aria-labelledby="shortDlgTitle">
+  <form id="shortForm" novalidate>
+    <div class="sheet-head">
+      <div>
+        <p class="eyebrow">Tableau de bord</p>
+        <h2 id="shortDlgTitle">Vos raccourcis</h2>
+      </div>
+      <button type="button" class="icon-btn" id="shortClose" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button>
+    </div>
+    <fieldset class="ag-reasons" id="shortList"><legend>Six au plus, dans cet ordre</legend></fieldset>
+    <p class="help" id="shortHelp">Gardés sur votre compte : vous les retrouvez sur tous vos appareils.</p>
+    <p class="field-err" id="shortErr" role="alert" hidden></p>
+    <button class="btn primary" type="submit" id="shortSave">Enregistrer</button>
+  </form>
+</dialog>
 
 <footer class="pro-foot">
   <details class="pro-privacy">
@@ -730,7 +834,7 @@
       <li><b>Vos prix annoncés</b> : publiés sur Pixcar avec la mention « Annoncé », sous votre responsabilité, avec leur date de mise à jour. Les statistiques de votre fiche (visites, clics « Appeler ») ne sont que des totaux : vous ne voyez jamais qui a consulté votre fiche.</li>
       <li><b>Votre fiche</b> (« Mon garage ») : les coordonnées et horaires que vous déclarez sont publiés sur Pixcar avec la mention « communiqués par le garage » ; un changement du nom, de l'adresse ou du téléphone est d'abord relu par Pixcar. Les temps moyens de vos prestations ne sont jamais montrés aux automobilistes. Tout est effacé quand le garage n'est plus rattaché à votre compte ; une demande de changement relue ou annulée, après 90 jours.</li>
       <li><b>Les rendez-vous en ligne</b> : vos créneaux, fermetures et règles servent à proposer des horaires aux automobilistes ; l'adresse qui reçoit les demandes n'est jamais montrée. Les coordonnées des clients qui vous demandent un rendez-vous vous sont transmises pour ce rendez-vous seulement, et effacées 30 jours après lui (7 jours après un refus, une annulation ou une expiration).</li>
-      <li><b>Le calendrier avancé et le planning</b> : vos mécaniciens (un prénom suffit), leurs compétences et absences, vos postes, l'affectation des rendez-vous et les blocs que vous ajoutez (rendez-vous pris hors Pixcar, créneaux bloqués) ne sont visibles que de vous. Le libellé d'un bloc, qui peut contenir un nom, est effacé 30 jours après lui, le bloc 24 mois après ; l'historique des changements, après 12 mois. Pour les données de votre personnel, Pixcar agit pour votre compte.</li>
+      <li><b>Le calendrier avancé et le planning</b> : vos mécaniciens (un prénom suffit), leurs compétences et absences, vos postes, l'affectation des rendez-vous et les blocs que vous ajoutez (rendez-vous pris hors Pixcar, créneaux bloqués) ne sont visibles que de vous. Le libellé d'un bloc, qui peut contenir un nom, est effacé 30 jours après lui, le bloc 24 mois après ; l'historique des changements, après 12 mois. L'état des interventions (voiture reçue, en cours, prête, restituée, client absent) suit le rendez-vous ou le bloc ; votre client voit l'avancement sur sa page de suivi (jamais « Client absent ») et reçoit l'e-mail « voiture prête » si vous laissez la case cochée. Les raccourcis du tableau de bord sont gardés sur votre compte pour ce garage. Pour les données de votre personnel, Pixcar agit pour votre compte.</li>
       <li>Accès, rectification, effacement : <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>.</li>
     </ul>
   </details>

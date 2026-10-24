@@ -338,6 +338,30 @@ libellé. Les deux textes de confidentialité le disent (`src/partials/legal.htm
 automobiliste, le texte précise que le garage voit son nom et son téléphone dans son planning et qu'un changement d'heure décidé par
 le garage lui est annoncé par e-mail.
 
+Lot 3c (suivi des interventions, tableau de bord) : l'état de l'intervention (`status`, `status_at`, `no_show_at`) suit la demande
+ou le bloc et part avec lui ; l'historique note le changement sans donnée de client. Côté automobiliste, le texte dit que le garage
+peut noter l'avancement, visible sur la page de suivi, qu'un e-mail « voiture prête » part sauf si le garage décoche la case, et
+qu'une absence n'est vue que du garage (la relance « prix payé » ne part pas) ; la liste des e-mails comprend « voiture prête ».
+Côté garage (les deux textes) : l'état des interventions et les raccourcis du tableau de bord, gardés sur le compte pour ce garage
+(`pro_prefs`, aucune donnée personnelle, effacés avec le rattachement). Date du texte : 24 octobre 2026 (`src/legal.json`), à
+reporter au jour de la publication si elle a lieu plus tard.
+
+## Avant la mise en ligne du lot 3c
+
+- Fusion de `lot3c-interventions` dans `main` (avance rapide) et poussée : **après le go de l'utilisateur**.
+- Déploiement de l'API : migration `008_pro_prefs.sql` (1 table, aucun index) par l'opération `migrate`, droits du rôle d'exécution
+  sur la nouvelle table (`ensureRuntimeRole`), puis `selfcheck` (31 contrôles ; celui des rendez-vous note en plus un client absent, dont les
+  affectations ne retiennent plus leurs ressources, met l'e-mail « prête » en file une seule fois, passe l'intervention d'un bloc à
+  « Voiture reçue » et écrit puis relit des raccourcis) et `smoke`. Aucune nouvelle
+  ressource AWS. **L'API doit précéder le site** : la nouvelle page appelle `…/calendar/work/:id` et `…/prefs` et lit `work` et
+  `prefs`, que l'ancienne API ne connaît pas ; l'ancienne page fonctionne avec la nouvelle API (elle ignore ces champs et ne peut pas
+  commencer une intervention).
+- Publication du site (Espace Pro, page de suivi du client) après l'API.
+- Essai avec le garage d'essai : tableau de bord sur ordinateur et téléphone (chiffres, filtres, actions rapides, demandes à
+  confirmer ou refuser, équipe, postes, points d'attention, raccourcis personnalisés sur deux appareils), une intervention de bout en
+  bout (Voiture reçue → En cours → Prête avec l'e-mail à l'adresse de l'utilisateur → Restituée) et la page de suivi du client, un client
+  absent, le mode simple.
+
 ## Avant la mise en ligne des améliorations du Planning
 
 - Site seulement (aucune modification de l'API ni de la base) : fusion dans `main` (avance rapide, `74402b4`) et poussée, puis

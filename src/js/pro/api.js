@@ -79,5 +79,8 @@ export function createProApi({ base, token, fetchImpl = (...a) => fetch(...a) })
     move: (id, request, body) => call("POST", `${rdv(id)}/requests/${encodeURIComponent(request)}/move`, body),
     saveBlock: (id, block, body) => call(block ? "PUT" : "POST", `${rdv(id)}/calendar/blocks${block ? "/" + encodeURIComponent(block) : ""}`, body),
     deleteBlock: (id, block) => call("DELETE", `${rdv(id)}/calendar/blocks/${encodeURIComponent(block)}`),
+    // lot 3c : état d'une intervention, raccourcis du tableau de bord
+    work: (id, ref, body) => call("POST", `${rdv(id)}/calendar/work/${encodeURIComponent(ref)}`, body),
+    putPrefs: (id, body) => call("PUT", `/v1/pro/garages/${encodeURIComponent(id)}/prefs`, body),
   };
 }

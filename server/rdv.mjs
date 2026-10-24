@@ -856,7 +856,10 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     if (st === "confirmed") {
       const o = await repo.cal.workOrder(r.id);
       const state = W.workState(o);
-      if (W.clientWorkLabel(state)) view.progress = { status: state, label: W.clientWorkLabel(state), at: isoOf(o.statusAt), atText: o.statusAt ? R.instantLabel(o.statusAt) : "" };
+      if (W.clientWorkLabel(state)) {
+        view.progress = { status: state, label: W.clientWorkLabel(state), at: isoOf(o.statusAt), atText: o.statusAt ? R.instantLabel(o.statusAt) : "" };
+        view.canCancel = false; // la voiture est au garage : on appelle le garage
+      }
     }
     return view;
   }

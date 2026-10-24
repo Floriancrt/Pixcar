@@ -222,7 +222,7 @@ async function home({ auto = false } = {}) {
       { class: "garage-item" + (verified ? " ok" : "") },
       el("div", { class: "gi-main" }, el("b", { text: c.garageName || "Garage" }), c.garageAddr ? el("span", { class: "muted", text: c.garageAddr }) : null),
       verified
-        ? el("span", { class: "gi-act" }, el("span", { class: "pill ok" }, icon("i-check"), "Vérifié"), el("button", { type: "button", class: "btn small", onclick: () => dashboard.open(c.garageId) }, icon("i-tag"), "Mes prix"))
+        ? el("span", { class: "gi-act" }, el("span", { class: "pill ok" }, icon("i-check"), "Vérifié"), el("button", { type: "button", class: "btn small", onclick: () => dashboard.open(c.garageId) }, icon("i-home"), "Tableau de bord"))
         : el("button", { type: "button", class: "btn small", onclick: () => resumeClaim(c) }, "Saisir le code"),
     );
     list.append(item);

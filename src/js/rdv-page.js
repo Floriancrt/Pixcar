@@ -83,6 +83,8 @@ const STATUS = {
   expired: ["Sans réponse", "off"],
   cancelled: ["Annulé", "off"],
 };
+// étape de l'intervention montrée au client : reçue, travaux (en cours, en attente de pièces, en attente), prête, restituée
+const PROGRESS = { received: 0, in_progress: 1, waiting_parts: 1, suspended: 1, done: 2, returned: 3 };
 function client(v) {
   if ($("rvCancel")) $("rvCancel").remove();
   const past = v.past === true;
@@ -100,8 +102,12 @@ function client(v) {
           ? ["Rendez-vous annulé", `${v.garage.name} sera fermé ce jour-là.`]
           : [`Annulé par ${v.garage.name}`, v.reasonText ? `Motif : ${v.reasonText.toLowerCase()}${v.note ? ` — « ${v.note} »` : ""}.` : ""],
   };
-  const [title, lead] = titles[v.status] || ["Votre demande", ""];
-  show(label, tone, title, lead);
+  let [title, lead] = titles[v.status] || ["Votre demande", ""];
+  // lot 3c : l'avancement de l'intervention, dès « Voiture reçue »
+  const pg = v.status === "confirmed" ? v.progress : null;
+  const stage = pg ? PROGRESS[pg.status] : -1;
+  if (pg) [title, lead] = stage === 2 ? ["Votre voiture est prête", `Vous pouvez venir la chercher chez ${v.garage.name}.`] : stage === 3 ? ["Voiture restituée", `Merci de votre visite chez ${v.garage.name}.`] : ["Votre voiture est au garage", `${pg.label}, mis à jour le ${pg.atText}.`];
+  show(pg ? pg.label : label, pg ? "ok" : tone, title, lead);
   $("rvCard").replaceChildren(
     el("p", { class: "rv-when" }, el("b", { text: whenText(v.when) }), el("span", { text: svcText(v) })),
     el(
@@ -116,11 +122,12 @@ function client(v) {
   steps([
     ["Demande envoyée", v.sentText ? `le ${v.sentText}` : "", "done"],
     v.status === "pending" ? ["Réponse du garage", `au plus tard le ${v.deadlineText}`, "cur"] : ["Réponse du garage", v.status === "confirmed" ? `acceptée ${decided}` : v.status === "declined" ? `refusée ${decided}` : v.status === "expired" ? "aucune" : decided, v.status === "confirmed" ? "done" : "off"],
-    ["Rendez-vous", v.when.label, v.status === "confirmed" ? (past ? "done" : "cur") : "off"],
+    ["Rendez-vous", v.when.label, v.status === "confirmed" ? (past || pg ? "done" : "cur") : "off"],
+    ...(pg ? ["Voiture reçue", stage === 1 ? pg.label : "Travaux", "Prête", "Restituée"].map((s, i) => [s, i === stage ? `le ${pg.atText}` : "", i < stage || stage === 3 ? "done" : i === stage ? "cur" : "off"]) : []),
   ]);
   const acts = [];
   if (v.status === "confirmed" && !past) {
-    acts.push(el("button", { type: "button", class: "btn primary small", onclick: () => ics(v) }, icon("download"), "Ajouter à mon agenda"));
+    if (!pg) acts.push(el("button", { type: "button", class: "btn primary small", onclick: () => ics(v) }, icon("download"), "Ajouter à mon agenda"));
     const dest = Number.isFinite(v.garage.lat) ? `${v.garage.lat},${v.garage.lon}` : v.garage.addr || v.garage.name;
     acts.push(el("a", { class: "btn small", href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`, target: "_blank", rel: "noopener" }, icon("pin"), "Itinéraire"));
   }

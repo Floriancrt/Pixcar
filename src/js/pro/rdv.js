@@ -198,8 +198,9 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
   }
 
   // ---- motif d'un refus ou d'une annulation
-  function openWhy(r, act) {
-    deciding = { r, act };
+  // onDone : appelé après la décision (ou son refus par l'API) au lieu de recharger la liste (tableau de bord, lot 3c)
+  function openWhy(r, act, onDone = null) {
+    deciding = { r, act, onDone };
     const list = act === "decline" ? DECLINE_REASONS : GARAGE_CANCEL_REASONS;
     $("whyDlgKind").textContent = act === "decline" ? "Refuser la demande" : "Annuler le rendez-vous";
     $("whyDlgTitle").textContent = `${svcText(r.services)}, ${r.when.label}`;
@@ -220,13 +221,14 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
       $("whyErr").hidden = false;
       return;
     }
-    const { r, act } = deciding;
+    const { r, act, onDone } = deciding;
+    const after = () => (onDone ? onDone() : showView(view));
     await busy($("whySave"), async () => {
       try {
         await api.decide(garageId, r.id, act, { reason: picked.value, note: $("whyNote").value.trim() });
         $("whyDlg").close();
         alertBox(act === "decline" ? `Demande refusée. ${r.client.name} est prévenu(e) par e-mail, avec votre motif.` : `Rendez-vous annulé. ${r.client.name} est prévenu(e) par e-mail, avec votre motif.`, "info");
-        await showView(view);
+        await after();
       } catch (e) {
         if (e.status === 422) {
           $("whyErr").textContent = e.message;
@@ -236,7 +238,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
         $("whyDlg").close();
         if (e.status === 409) {
           alertBox(e.message);
-          return showView(view);
+          return after();
         }
         fail(e);
       }
@@ -749,6 +751,11 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
   $("agNotifyCode").addEventListener("input", (e) => (e.target.value = e.target.value.replace(/[^\d\s]/g, "")));
 
   return {
+    // refus d'une demande depuis le tableau de bord (lot 3c) : même fenêtre de motif, puis onDone
+    decline(id, r, onDone) {
+      garageId = id;
+      openWhy(r, "decline", onDone);
+    },
     openRequests,
     openAgenda,
     reset() {

@@ -70,10 +70,13 @@ const NOTIFY = "atelier@garage-planning.fr";
     const m = outbox.filter((x) => x.channel === "rdv" && x.target === to && /code (\d{6})/.test(x.subject)).at(-1);
     return m && /code (\d{6})/.exec(m.subject)[1];
   };
-  // deux jours ouvrés à venir (après-demain au plus tôt : l'heure limite de réponse d'une demande doit rester à venir) : D1 et le suivant
+  // deux jours ouvrés à venir : D1, le jour ouvré qui suit le prochain (l'heure limite de réponse d'une demande, midi du prochain jour
+  // ouvré, tombe avant : un samedi ou un vendredi, « après-demain » serait ce jour-là et le matin ne serait pas proposé), et le suivant
   const today = R.parisParts(Date.now()).iso;
   const workday = (iso) => !["sa", "su"].includes(R.weekday(iso));
-  let D1 = R.addDays(today, 2);
+  let next = R.addDays(today, 1);
+  while (!workday(next)) next = R.addDays(next, 1);
+  let D1 = R.addDays(next, 1);
   while (!workday(D1)) D1 = R.addDays(D1, 1);
   let D2 = R.addDays(D1, 1);
   while (!workday(D2)) D2 = R.addDays(D2, 1);
@@ -302,10 +305,15 @@ const NOTIFY = "atelier@garage-planning.fr";
   await page.click('.pl-view:has-text("Jour")');
   await page.waitForSelector("#planBy");
   if ((await page.$eval("#planRange", (e) => e.textContent)) !== R.dayLabel(D1, { year: true }).replace(/^./, (c) => c.toUpperCase())) {
-    while (!(await page.$(`.pl-col[data-day="${D1}"]`))) {
-      await page.click("#planNext");
+    // le jour affiché peut être avant ou après D1 (le déplacement vers un samedi fermé a pu y mener la vue)
+    const seen = [];
+    for (let i = 0; i < 14 && !(await page.$(`.pl-col[data-day="${D1}"]`)); i++) {
+      const shown = await page.$eval(".pl-col[data-day]", (c) => c.dataset.day);
+      seen.push(shown);
+      await page.click(shown < D1 ? "#planNext" : "#planPrev");
       await page.waitForTimeout(150);
     }
+    if (!(await page.$(`.pl-col[data-day="${D1}"]`))) throw new Error(`day view: ${D1} never shown (${seen.join(" / ")})`);
   }
   const dayCols = await page.$$eval(".pl-colhead b", (h) => h.map((x) => x.textContent));
   check("day view: one column per mechanic", dayCols.join() === "Paul,Léa", dayCols.join());

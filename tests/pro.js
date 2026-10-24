@@ -349,13 +349,21 @@ function fakeCognito() {
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
   const today = new Date().toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", day: "numeric", month: "long", year: "numeric" });
   check(
-    "dashboard: hello by first name, the garage, verified today, no price yet, zero visits",
-    (await page.textContent("#dashTitle")) === "Bonjour Camille" && (await page.textContent("#dashGarage")).startsWith("Garage Démo Centre") && (await page.textContent("#dashVerified")).includes(today) &&
-      (await page.locator("#noPrice").isVisible()) && (await page.textContent("#statViews")) === "0" && (await page.textContent("#statFresh")) === "—" && (await page.locator("#dashDue").isHidden()),
-    [await page.textContent("#dashTitle"), await page.textContent("#dashVerified")].join(" | "),
+    "dashboard: its title, hello by first name with the garage, verified today",
+    (await page.textContent("#dashTitle")) === "Tableau de bord" && (await page.textContent("#dashGarage")).startsWith("Bonjour Camille · Garage Démo Centre") && (await page.textContent("#dashVerified")).includes(today),
+    [await page.textContent("#dashTitle"), await page.textContent("#dashGarage"), await page.textContent("#dashVerified")].join(" | "),
   );
   check("the steps are gone on the dashboard", await page.locator("#steps").isHidden());
   await axe(page, "tableau de bord vide (garage)");
+  // « Prestations & tarifs » : les prix et les statistiques de la fiche
+  await page.click('.dash-link[data-panel="prices"]');
+  await page.waitForSelector("#dash-prices:not([hidden])");
+  check(
+    "« Prestations & tarifs »: no price yet, zero visits, nothing to confirm",
+    (await page.locator("#noPrice").isVisible()) && (await page.textContent("#statViews")) === "0" && (await page.textContent("#statFresh")) === "—" && (await page.locator("#dashDue").isHidden()) && (await page.evaluate(() => document.activeElement.id)) === "pricesTitle",
+    await page.textContent("#statFresh"),
+  );
+  await axe(page, "prestations et tarifs (vide)");
   // ajout d'un prix : le formulaire contrôle avant l'API, l'aperçu suit la saisie
   await page.click("#addPrice");
   await page.waitForSelector("#priceDlg[open]");
@@ -403,10 +411,12 @@ function fakeCognito() {
   await page.click('.dash-link[data-go="home"]');
   await page.waitForSelector('[data-screen="home"]:not([hidden])');
   const items = await page.$$eval("#garageList li", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").trim()));
-  check("« Mes garages » lists the garage as verified, with « Mes prix »", items.length === 1 && /Garage Démo Centre.*Vérifié.*Mes prix/.test(items[0]), items.join(" / "));
+  check("« Mes garages » lists the garage as verified, with « Tableau de bord »", items.length === 1 && /Garage Démo Centre.*Vérifié.*Tableau de bord/.test(items[0]), items.join(" / "));
   await axe(page, "mes garages");
   await page.click("#garageList button");
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
+  await page.click('.dash-link[data-panel="prices"]');
+  await page.waitForSelector("#dash-prices:not([hidden])");
   check(
     "reloaded: « 1 prix à confirmer », 2 views (+100 %), 1 call, customers paid +9 % over the announced price (98 € against 89.50 €), the row « À confirmer »",
     (await page.textContent("#dashDueTitle")).startsWith("1 prix à confirmer avant le") && (await page.textContent("#dashDueCount")) === "1" && (await page.textContent("#statViews")) === "2" && (await page.textContent("#statViewsDelta")) === "+100\u00a0%" &&
@@ -613,8 +623,8 @@ function fakeCognito() {
   await page.waitForFunction(() => document.querySelector('#mgSvcRows tr[data-svc="diag"] .tgl').getAttribute("aria-checked") === "false");
   check("a service without a price is unticked at once", (await page.locator("#untickDlg[open]").count()) === 0 && JSON.stringify((await svcDb()).diag) === "[false,null]");
   await page.click('.dash-link[data-panel="prices"]');
-  await page.waitForSelector("#dash-top:not([hidden])");
-  check("« Mes prix » in the menu: back to the dashboard, focus on the prices heading", (await page.evaluate(() => document.activeElement.id)) === "pricesTitle" && (await page.getAttribute('.dash-link[data-panel="prices"]', "aria-current")) === "true");
+  await page.waitForSelector("#dash-prices:not([hidden])");
+  check("« Prestations & tarifs » in the menu: its screen, focus on its heading", (await page.evaluate(() => document.activeElement.id)) === "pricesTitle" && (await page.getAttribute('.dash-link[data-panel="prices"]', "aria-current")) === "true");
 
   // déconnexion, puis reconnexion (compte existant : code de connexion)
   await page.click("#signOut");
@@ -630,7 +640,7 @@ function fakeCognito() {
   check("sign-in code: 8 digits (Cognito), typed with a space, kept whole and fully visible; the screen does not promise 6 digits", signin.length === 8 && fit.value.replace(/\D/g, "") === signin && !fit.clipped && !/6 chiffres/.test(fit.lead), JSON.stringify(fit));
   await page.click('#otpForm button[type="submit"]');
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
-  check("sign in again by e-mail code: an account with one verified garage lands on its dashboard, under the name Pixcar approved", (await page.textContent("#dashGarage")).startsWith("Garage Démo du Centre"), await page.textContent("#dashGarage"));
+  check("sign in again by e-mail code: an account with one verified garage lands on its dashboard, under the name Pixcar approved", (await page.textContent("#dashGarage")).startsWith("Bonjour Camille · Garage Démo du Centre"), await page.textContent("#dashGarage"));
 
   // « Gérer mon garage » avec une adresse déjà inscrite : on bascule sur la connexion
   await page.click("#signOut");
@@ -681,6 +691,11 @@ function fakeCognito() {
     check("mobile dashboard: no horizontal scroll, the navigation sits at the bottom of the screen", dashOverflow <= 0 && nav.position === "fixed" && nav.bottom === 844, JSON.stringify({ dashOverflow, nav }));
     await axe(m.page, "tableau de bord (mobile)");
     await shot(m.page, "9-mobile-tableau");
+    await m.page.click('.dash-link[data-panel="prices"]');
+    await m.page.waitForSelector("#dash-prices:not([hidden])");
+    const pricesOverflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    check("mobile « Tarifs » in the bottom bar: the prices screen, no horizontal scroll", pricesOverflow <= 0, pricesOverflow);
+    await axe(m.page, "prestations et tarifs (mobile)");
     await m.page.click("#priceRows button");
     await m.page.waitForSelector("#priceDlg[open]");
     await shot(m.page, "10-mobile-saisie");

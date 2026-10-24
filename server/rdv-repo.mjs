@@ -318,7 +318,8 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
       async cancelByClient(id, reason) {
         const r = await one(
           `UPDATE rdv_requests SET status = 'cancelled', cancelled_by = 'client', reason = $2, decided_at = $3::timestamptz
-           WHERE id = $1 AND status IN ('pending', 'confirmed') AND starts_at > $3::timestamptz AND (status = 'confirmed' OR deadline > $3::timestamptz) RETURNING ${REQUEST_COLUMNS}`,
+           WHERE id = $1 AND status IN ('pending', 'confirmed') AND starts_at > $3::timestamptz AND (status = 'confirmed' OR deadline > $3::timestamptz)
+             AND NOT EXISTS (SELECT 1 FROM rdv_work_orders w WHERE w.request_id = $1 AND w.status <> 'planned') RETURNING ${REQUEST_COLUMNS}`,
           [id, reason, T()],
         );
         if (!r) return null;

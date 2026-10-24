@@ -9,6 +9,10 @@
 // et GET …/requests?view=todo (heures limites). Que du TEXTE écrit dans la page.
 import { phoneText } from "../shared/garage-profile.js";
 import { GARAGE_CANCEL_REASONS, addDays, dayLabel, hm, minOf, parisParts, timeLabel, weekday } from "../shared/rdv.js";
+import { workActions, workLabel } from "../shared/work.js";
+import * as K from "./workshop.js";
+
+const { css, inter, merge, minus, total } = K;
 
 const VIEWS = [
   ["day", "Jour"],
@@ -20,7 +24,6 @@ const VIEWS = [
 // trois dimensions, séparées à l'écran : provenance, confirmation (et l'alerte), état de l'intervention (ordres de réparation, lot 3c)
 const ORIGIN = { pixcar: ["Pixcar", "i-globe"], job: ["Hors Pixcar", "i-phone"], hold: ["Créneau bloqué", "i-lock"] };
 const STATE = { pending: ["À confirmer", "i-clock"], confirmed: ["Confirmé", "i-check"], conflict: ["En conflit", "i-flag"] };
-const WORK = { planned: "Prévue", received: "Voiture reçue", in_progress: "En cours", waiting_parts: "En attente de pièces", suspended: "Suspendue", done: "Terminée", returned: "Rendue" };
 const WEEK = ["mo", "tu", "we", "th", "fr", "sa", "su"];
 const SNAP = 15; // pas du glisser-déposer, en minutes
 const HOLD_MS = 350; // appui long avant de glisser au doigt
@@ -34,40 +37,6 @@ const range = (a, b) => `${timeLabel(a)}–${timeLabel(b)}`;
 const snap = (m, step = SNAP) => Math.round(m / step) * step;
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-// positions et tailles posées par le CSSOM : la politique de sécurité de la page publiée (style-src 'self') refuse l'attribut style
-const css = (node, props) => {
-  for (const [k, v] of Object.entries(props)) node.style.setProperty(k, v);
-  return node;
-};
-// intervalles de minutes [[a, b]] : réunion, intersection, différence, durée totale
-function merge(xs) {
-  const out = [];
-  for (const [a, b] of [...xs].filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0])) {
-    const last = out[out.length - 1];
-    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
-    else out.push([a, b]);
-  }
-  return out;
-}
-function inter(A, B) {
-  const out = [];
-  for (const [a, b] of A) for (const [c, d] of B) if (Math.min(b, d) > Math.max(a, c)) out.push([Math.max(a, c), Math.min(b, d)]);
-  return merge(out);
-}
-function minus(A, B) {
-  let out = merge(A);
-  for (const [c, d] of merge(B))
-    out = out.flatMap(([a, b]) => (d <= a || c >= b ? [[a, b]] : [...(c > a ? [[a, c]] : []), ...(d < b ? [[d, b]] : [])]));
-  return out;
-}
-const total = (A) => merge(A).reduce((n, [a, b]) => n + b - a, 0);
-// horaires propres d'un mécanicien ou d'un poste ({ mo: [["08:00", "12:00"]] }) pour un jour donné
-const rangesOf = (hours, iso) => ((hours && hours[weekday(iso)]) || []).map(([a, b]) => [minOf(a), b === "24:00" ? 1440 : minOf(b)]);
-// une affectation de l'API (instants) → jour et minutes de Paris
-function rowOf(r) {
-  const a = parisParts(Date.parse(r.start)), b = parisParts(Date.parse(r.end));
-  return { ...r, day: a.iso, a: a.min, b: b.iso === a.iso ? b.min : 1440 };
-}
 // côte à côte quand des blocs se chevauchent : couloir de chaque bloc et nombre de couloirs de son groupe
 function lanes(segs) {
   segs.sort((x, y) => x.a - y.a || y.b - x.b);
@@ -119,7 +88,6 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
   const postName = (id) => (data.resources.find((x) => x.id === id) || { name: "" }).name;
   const activeStaff = () => data.staff.filter((m) => m.active);
   const activePosts = () => data.resources.filter((x) => x.active);
-  const hoursOf = (id) => ((st && [...st.staff, ...st.resources].find((x) => x.id === id)) || { hours: null }).hours;
 
   // ================================================================= ouverture et chargement
   async function open(id, { focus = true } = {}) {
@@ -176,23 +144,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
 
   // ================================================================= ce qui est affiché
   // rendez-vous et blocs, sous une même forme (tous, sans les filtres : la charge et la vue d'ensemble les comptent tous)
-  function allItems() {
-    const conf = new Map(data.conflicts.map((c) => [c.id, c.reasons]));
-    const out = [];
-    for (const a of data.appointments)
-      out.push({
-        id: a.id, type: "rdv", origin: "pixcar", state: a.status === "pending" ? "pending" : "confirmed", conflict: conf.get(a.id) || null,
-        day: a.when.day, start: minOf(a.when.start), end: minOf(a.when.end), title: a.client || "Client", services: a.services,
-        plan: a.plan.map(rowOf), work: (a.work && a.work.status) || null, deadline: deadlines.get(a.id) || null, src: a,
-      });
-    for (const k of data.blocks)
-      out.push({
-        id: k.id, type: k.kind, origin: k.kind, state: k.kind === "job" ? "confirmed" : null, conflict: conf.get(k.id) || null,
-        day: k.when.day, start: minOf(k.when.start), end: minOf(k.when.end), title: k.label || (k.kind === "job" ? "Rendez-vous hors Pixcar" : "Créneau bloqué"),
-        services: k.services, plan: k.plan.map(rowOf), work: null, deadline: null, src: k,
-      });
-    return out;
-  }
+  const allItems = () => K.itemsOf(data, deadlines);
   const items = () => allItems().filter(match);
   function match(it) {
     if (filters.staff && !it.plan.some((r) => r.target === "staff" && r.id === filters.staff)) return false;
@@ -212,20 +164,12 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
   }
   const peopleOf = (it) => [...new Set(it.plan.filter((r) => r.target === "staff").map((r) => r.name))];
   const postsOf = (it) => [...new Set(it.plan.filter((r) => r.target === "resource").map((r) => r.name))];
-  const openOn = (day) => (data.days.find((d) => d.day === day) || { open: [] }).open.map(([a, b]) => [minOf(a), b === "24:00" ? 1440 : minOf(b)]);
-  // absences et maintenances d'un mécanicien ou d'un poste, ce jour-là (de leur début à leur fin, d'un seul tenant)
-  function awayOn(targetId, day) {
-    const out = [];
-    for (const u of data.unavail) {
-      if (u.targetId !== targetId || day < u.first || day > u.last) continue;
-      out.push({ a: day === u.first && u.from ? minOf(u.from) : 0, b: day === u.last && u.to ? minOf(u.to) : 1440, text: u.text });
-    }
-    return out;
-  }
-  // ---- charge : comme le moteur, heures d'ouverture ∩ horaires propres, moins les absences
-  const hoursFor = (x, day) => (x.active ? inter(openOn(day), hoursOf(x.id) ? rangesOf(hoursOf(x.id), day) : openOn(day)) : []);
-  const workOf = (x, day) => minus(hoursFor(x, day), awayOn(x.id, day).map((u) => [u.a, u.b]));
-  const rowsOn = (list, target, id, day, role = null) => list.flatMap((it) => it.plan.filter((r) => r.target === target && r.id === id && r.day === day && (!role || r.role === role)).map((r) => [r.a, r.b]));
+  const openOn = (day) => K.openOn(data, day);
+  const awayOn = (targetId, day) => K.awayOn(data, targetId, day);
+  // ---- charge : comme le moteur, heures d'ouverture ∩ horaires propres, moins les absences (un client absent ne compte plus)
+  const hoursFor = (x, day) => K.hoursFor(data, st, x, day);
+  const workOf = (x, day) => K.workOf(data, st, x, day);
+  const rowsOn = K.rowsOn;
   function staffLoad(m, day, list = allItems()) {
     return { planned: total(rowsOn(list, "staff", m.id, day, "labour")), avail: total(workOf(m, day)), absent: awayOn(m.id, day).length > 0 };
   }
@@ -517,7 +461,8 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       el("div", { class: "pl-body" }, el("div", { class: "pl-times", "aria-hidden": "true" }, ...hours), ...cols.map((c) => column(c, lo, hi, px))),
     );
     css(wrap, { "--cols": String(cols.length), "--h": `${(hi - lo) * PPM}px`, "--hour": `${60 * PPM}px` });
-    return el("div", { class: "pl-scroll" }, count ? null : el("p", { class: "pl-empty", text: Object.values(filters).some(Boolean) ? "Rien ne correspond aux filtres sur cette période." : "Rien de prévu sur cette période." }), wrap);
+    // atteignable au clavier : la grille défile dans sa boîte, même quand aucun rendez-vous (bouton) ne s'y trouve
+    return el("div", { class: "pl-scroll", tabindex: "0", role: "region", "aria-label": "Grille du planning" }, count ? null : el("p", { class: "pl-empty", text: Object.values(filters).some(Boolean) ? "Rien ne correspond aux filtres sur cette période." : "Rien de prévu sur cette période." }), wrap);
   }
   function column(c, lo, hi, px) {
     const name = [c.head, view === "day" ? dayLabel(c.day) : c.staff ? staffName(c.staff) : c.post ? postName(c.post) : "", c.load ? c.load.text : ""].filter(Boolean).join(", ");
@@ -555,7 +500,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     const car = a ? [a.car, a.plate].filter(Boolean).join(" · ") : vehicle;
     const who = [it.type === "hold" ? "" : it.title, ...others].filter(Boolean).join(" · ");
     const state = it.conflict ? "conflict" : it.state;
-    const work = it.work && it.work !== "planned" ? `Intervention : ${WORK[it.work] || it.work}` : "";
+    const work = it.work && it.work !== "planned" ? `Intervention : ${workLabel(it.work)}` : "";
     const stay = it.type !== "hold" && (it.start !== s.a || it.end !== s.b) ? `dépôt ${timeLabel(it.start)} · restitution ${it.end > it.start ? timeLabel(it.end) : "fin de journée"}` : "";
     return { what, car, who, state, work, stay, when: range(s.a, s.b), len: dur(s.b - s.a), role: s.row && s.row.role !== "labour" ? ROLE[s.row.role] : "" };
   }
@@ -580,7 +525,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       "button",
       {
         type: "button",
-        class: `pl-ev st-${it.type === "hold" ? "hold" : it.state}${it.conflict ? " is-conflict" : ""}${lines === 1 ? " is-tiny" : ""}`,
+        class: `pl-ev st-${it.type === "hold" ? "hold" : it.state}${it.conflict ? " is-conflict" : ""}${it.noShow ? " is-noshow" : ""}${lines === 1 ? " is-tiny" : ""}`,
         "aria-label": full.join(", "),
         title: full.join("\n"),
         "data-id": it.id,
@@ -625,7 +570,8 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
 
   // ================================================================= glisser-déposer
   function startDrag(ev, node, seg, col) {
-    if (ev.button !== 0 || seg.item.day < data.today) return;
+    // une intervention commencée (voiture reçue…) ne se déplace plus (lot 3c)
+    if (ev.button !== 0 || seg.item.day < data.today || (seg.item.work && seg.item.work !== "planned")) return;
     const r = node.getBoundingClientRect();
     drag = { node, seg, col, x: ev.clientX, y: ev.clientY, dy: ev.clientY - r.top, id: ev.pointerId, on: false, timer: null, touch: ev.pointerType === "touch" };
     if (drag.touch) drag.timer = setTimeout(() => drag && begin(), HOLD_MS);
@@ -793,25 +739,62 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
         el("span", { class: `pl-tag or-${it.origin}` }, icon(ORIGIN[it.origin][1]), ORIGIN[it.origin][0]),
         it.state ? el("span", { class: `pl-pill is-${it.state}` }, icon(STATE[it.state][1]), STATE[it.state][0]) : null,
         it.conflict ? el("span", { class: "pl-pill is-conflict" }, icon(STATE.conflict[1]), STATE.conflict[0]) : null,
-        it.type === "rdv" ? el("span", { class: "pl-tag", text: `Intervention : ${WORK[it.work || "planned"] || it.work}` }) : null,
+        it.work ? el("span", { class: `pl-tag wk-${it.work}`, text: `Intervention : ${workLabel(it.work)}` }) : null,
       ),
       it.conflict ? el("div", { class: "pl-conflict", role: "note" }, el("p", {}, icon("i-flag"), el("b", { text: "En conflit : " }), "une affectation ne tient plus. Déplacez ou réaffectez."), el("ul", {}, ...it.conflict.map((t) => el("li", { text: t })))) : null,
       el("ul", { class: "pl-facts" }, ...facts),
+      progress(it),
       rows.length ? el("h3", { text: "Affectations" }) : null,
       rows.length ? el("ul", { class: "pl-rows" }, ...rows) : el("p", { class: "muted", text: "Pas encore d'affectation." }),
     ];
     const past = it.day < data.today;
     const actions = [];
-    if (!past) actions.push(el("button", { type: "button", class: "btn primary", id: "planMove", onclick: () => openSheet(it, { mode: "move" }) }, icon("i-calendar"), "Déplacer ou réaffecter"));
+    const started = !!it.work && it.work !== "planned";
+    if (!past && !started) actions.push(el("button", { type: "button", class: "btn primary", id: "planMove", onclick: () => openSheet(it, { mode: "move" }) }, icon("i-calendar"), "Déplacer ou réaffecter"));
     if (a && a.phone) actions.push(el("a", { class: "btn", href: `tel:${a.phone}` }, icon("i-phone"), "Appeler"));
-    if (a && !past && a.status === "confirmed") actions.push(el("button", { type: "button", class: "link-btn danger", onclick: () => cancelForm(it, "cancel") }, "Annuler ce rendez-vous"));
+    if (a && !past && !started && a.status === "confirmed") actions.push(el("button", { type: "button", class: "link-btn danger", onclick: () => cancelForm(it, "cancel") }, "Annuler ce rendez-vous"));
     if (a && a.status === "pending") actions.push(el("button", { type: "button", class: "btn", onclick: () => (dlg().close(), goPanel("requests")) }, icon("i-inbox"), "Répondre dans Demandes"));
     if (!a && !past) actions.push(el("button", { type: "button", class: "btn", onclick: () => blockForm({ item: it }) }, icon("i-edit"), "Modifier"));
     if (!a) actions.push(el("button", { type: "button", class: "link-btn danger", id: "planDel", onclick: () => removeBlock(it) }, it.type === "job" ? "Supprimer ce rendez-vous" : "Supprimer ce créneau"));
     frame(it.title, it.type === "hold" ? "Planning" : "Rendez-vous", body, actions);
     $("planForm").onsubmit = (ev) => ev.preventDefault();
-    const first = $("planMove") || $("planForm").querySelector("button.btn, a.btn");
+    const first = $("planMove") || $("planForm").querySelector("[data-work], button.btn, a.btn");
     if (first) first.focus();
+  }
+
+  // ---- avancement de l'intervention (lot 3c) : les passages possibles ; « Voiture prête » d'un rendez-vous Pixcar prévient le client
+  // par e-mail, case cochée par défaut. Du jour du rendez-vous à 30 jours après ; « Client absent » une fois l'heure de dépôt passée.
+  const workable = (it) => !!it.work && it.state === "confirmed" && it.day <= data.today && it.day >= addDays(data.today, -30);
+  function progress(it) {
+    if (!workable(it)) return null;
+    const started = it.day < data.today || parisParts(Date.now()).min >= it.start;
+    const acts = workActions(it.work).filter((x) => x.to !== "no_show" || started);
+    if (!acts.length) return null;
+    const ready = it.type === "rdv" && acts.some((x) => x.to === "done");
+    return el(
+      "div",
+      { class: "pl-work" },
+      el("h3", { text: "Avancement" }),
+      el("div", { class: "pl-work-acts" }, ...acts.map((x) => el("button", { type: "button", class: x.back ? "link-btn" : x.to === "done" ? "btn primary small" : "btn small", "data-work": x.to, onclick: (ev) => setWork(it, x.to, ev.currentTarget) }, x.label))),
+      ready ? el("label", { class: "check pl-notify" }, el("input", { type: "checkbox", id: "planNotify", checked: true }), el("span", { text: "Prévenir le client par e-mail quand la voiture est prête" })) : null,
+    );
+  }
+  async function setWork(it, to, button) {
+    const body = { status: to, ...(to === "done" && it.type === "rdv" ? { notify: !!($("planNotify") && $("planNotify").checked) } : {}) };
+    await busy(button, async () => {
+      try {
+        const out = await api.work(garageId, it.id, body);
+        const text = `${it.title} : ${workLabel(out.work.noShow ? "no_show" : out.work.status)}${out.notified ? ", client prévenu par e-mail" : ""}.`;
+        await reload(text);
+        alertBox(text, "info");
+        const next = allItems().find((x) => x.id === it.id);
+        if (next && dlg().open) openSheet(next);
+      } catch (e) {
+        if (e.status === 409 || e.status === 422) return err(e.message);
+        dlg().close();
+        fail(e);
+      }
+    });
   }
 
   // déplacer au clavier : jour, heure, mécanicien, poste ; puis les retours de l'API (confirmation, conflit et autres horaires)
@@ -932,7 +915,8 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     const alts = (problem && problem.details && problem.details.alternatives) || [];
     const shifted = problem && problem.code === "shifted";
     const body = [
-      item ? null : el("fieldset", { class: "ag-reasons pl-kind" }, el("legend", { text: "Quoi ?" }), radio("job", "Rendez-vous pris hors Pixcar (téléphone, comptoir)"), radio("hold", "Créneau bloqué (réunion, livraison, essai…)")),
+      item || (at && at.arrived) ? null : el("fieldset", { class: "ag-reasons pl-kind" }, el("legend", { text: "Quoi ?" }), radio("job", "Rendez-vous pris hors Pixcar (téléphone, comptoir)"), radio("hold", "Créneau bloqué (réunion, livraison, essai…)")),
+      at && at.arrived ? el("p", { class: "pl-ask" }, icon("i-car"), "Client déjà sur place : la voiture est notée « reçue » dès l'enregistrement.") : null,
       el("label", { for: "planLabel" }, "Libellé ", el("small", { text: job ? "40 caractères, sans donnée sensible ; effacé 30 jours après" : "40 caractères" })),
       el("input", { id: "planLabel", type: "text", maxlength: "40", value: d.label, placeholder: job ? "M. Martin, Clio" : "Livraison pièces", autocomplete: "off", required: true }),
       el("div", { class: "mg-row2" }, el("span", {}, el("label", { for: "planDay", text: "Jour" }), el("input", { id: "planDay", type: "date", value: d.day, min: data.today, required: true })), el("span", {}, el("label", { for: "planTime", text: job ? "Dépôt à" : "De" }), el("input", { id: "planTime", type: "time", step: "300", value: hm(d.start), required: true }))),
@@ -957,7 +941,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
         : null,
       el("p", { class: "help", text: job ? "Placé comme une demande (mêmes ressources, mêmes contrôles), sans les règles de la réservation en ligne. Aucun e-mail n'est envoyé." : "Refusé si un rendez-vous ou un autre bloc occupe déjà ces mécaniciens ou postes. Pour une absence ou une maintenance, utilisez leurs fiches." }),
     ];
-    frame(item ? item.title : "Nouveau", item ? (job ? "Modifier le rendez-vous hors Pixcar" : "Modifier le créneau bloqué") : "Planning", body, [
+    frame(item ? item.title : at && at.arrived ? "Client déjà sur place" : "Nouveau", item ? (job ? "Modifier le rendez-vous hors Pixcar" : "Modifier le créneau bloqué") : "Planning", body, [
       el("button", { type: "submit", class: "btn primary", id: "planSave" }, shifted ? "Confirmer ces horaires" : "Enregistrer"),
       el("button", { type: "button", class: "btn", onclick: () => (item ? openSheet(item) : dlg().close()) }, item ? "Retour" : "Annuler"),
     ]);
@@ -965,7 +949,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       ev.preventDefault();
       const v = read();
       const body = { kind: v.kind, label: v.label, day: v.day, time: hm(v.start) };
-      if (v.kind === "job") Object.assign(body, { services: v.services, vehicle: v.vehicle || null, staff: v.staff, station: v.posts[0] || null });
+      if (v.kind === "job") Object.assign(body, { services: v.services, vehicle: v.vehicle || null, staff: v.staff, station: v.posts[0] || null, ...(at && at.arrived && !item ? { received: true } : {}) });
       // la confirmation ne vaut que pour ce qui a été annoncé : si le formulaire a changé, l'API redemande
       const confirmed = shifted && JSON.stringify(v) === JSON.stringify(d);
       if (confirmed) body.confirm = true;
@@ -974,7 +958,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
         try {
           await api.saveBlock(garageId, item ? item.id : null, body);
           dlg().close();
-          const what = v.kind === "job" ? "Rendez-vous hors Pixcar" : "Créneau bloqué";
+          const what = at && at.arrived ? "Client déjà sur place, voiture reçue" : v.kind === "job" ? "Rendez-vous hors Pixcar" : "Créneau bloqué";
           const w = confirmed && problem.details && problem.details.work;
           alertBox(`${what} ${item ? "modifié" : "ajouté"} : ${dayLabel(v.day, { short: true })} à ${timeLabel(v.start)}${w ? `, travaux de ${timeLabel(minOf(w.start))} à ${timeLabel(minOf(w.end))}` : ""}.`, "info");
           await reload(`${what} enregistré.`);
@@ -1132,5 +1116,32 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     if (ev.key === "Escape" && drag) cancelDrag();
   });
 
-  return { open, reset: () => (data = null) };
+  // depuis le tableau de bord (lot 3c) : la vue Jour d'une date (openDay, pendant le chargement de l'écran), puis, l'écran affiché, la
+  // fiche d'un rendez-vous (showItem) ou un formulaire de création sur aujourd'hui (form : job, hold, staff, resource ; arrived : client
+  // déjà sur place, au prochain multiple de 5 minutes)
+  async function openDay(id, day) {
+    if (garageId !== id) {
+      garageId = id;
+      pickStaff = pickPost = null;
+      for (const k of Object.keys(filters)) filters[k] = "";
+      showFilters(false);
+    }
+    view = "day";
+    anchor = day;
+    await open(id, { focus: false });
+  }
+  function showItem(itemId) {
+    const it = data ? allItems().find((x) => x.id === itemId) : null;
+    if (it) openSheet(it);
+    return !!it;
+  }
+  function form(kind, { arrived = false } = {}) {
+    if (!data) return;
+    if (kind === "job" || kind === "hold") {
+      const now = parisParts(Date.now()).min;
+      openCreate(arrived ? { day: data.today, start: Math.min(1435, (Math.floor(now / 5) + 1) * 5), kind: "job", arrived: true } : { ...newAt(), kind });
+    } else unavailForm(kind, { day: data.today });
+  }
+
+  return { open, openDay, showItem, form, reset: () => (data = null) };
 }

@@ -1,18 +1,20 @@
-// Espace Pro, tableau de bord d'un garage rattaché (maquette 5 du 11 octobre 2026) : prix annoncés, prix payés par ses clients (lecture
-// seule), visites de sa fiche, prix à confirmer, saisie d'un prix avec son aperçu sur Pixcar ; et l'onglet « Mon garage » (garage.js).
-// Que du TEXTE écrit dans la page.
+// Espace Pro d'un garage rattaché : le menu et ses écrans. « Tableau de bord » (home.js, lot 3c) ; « Prestations & tarifs » (maquette 5
+// du 11 octobre 2026 : prix annoncés, prix payés par ses clients en lecture seule, visites de sa fiche, prix à confirmer, saisie d'un prix
+// avec son aperçu sur Pixcar) ; « Mon garage » (garage.js), Demandes et Disponibilités (rdv.js), calendrier avancé (calendar.js),
+// Planning (planning.js). Que du TEXTE écrit dans la page.
 import { INCLUDES, PRICE_KINDS, PRO_SERVICES, VEHICLES, announcedDetail, announcedText, parseProPrice, serviceLabel } from "../shared/pro-prices.js";
 import { createGarageView } from "./garage.js";
 import { createRdvViews } from "./rdv.js";
 import { createCalendarViews } from "./calendar.js";
 import { createPlanning } from "./planning.js";
+import { createHome } from "./home.js";
+import { parisParts } from "../shared/rdv.js";
 
 const LONG = { day: "numeric", month: "long", year: "numeric" };
 const DAY_MONTH = { day: "numeric", month: "long" };
 const SHORT = { day: "numeric", month: "short" };
 const date = (iso, opts = LONG) => new Date(iso).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", ...opts });
 const euros = (n) => (Number.isInteger(n) ? String(n) : n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + " €";
-const firstName = (full) => String(full || "").trim().split(/\s+/)[0] || "";
 const ORDER = new Map(PRO_SERVICES.map((s, i) => [s.id, i]));
 const STATE = {
   ok: { cls: "ok", text: (p) => date(p.confirmedAt, SHORT) },
@@ -44,6 +46,8 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
   // calendrier avancé (calendar.js) : ouvert depuis Disponibilités ; le planning (planning.js) n'existe qu'en mode avancé
   const cal = createCalendarViews({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name) => panel(name), onMode: setMode });
   const plan = createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name) => panel(name) });
+  // tableau de bord (lot 3c) : ses liens ouvrent les autres écrans, parfois sur un jour, une fiche ou un formulaire
+  const board = createHome({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name, opts) => panel(name, opts), decline: (id, r, done) => rdv.decline(id, r, done), onTodo: (n) => setTodo(n) });
   // mode avancé : « Planning » apparaît ; sur téléphone il prend la place de « Créneaux », qui passe sous « Plus »
   function setMode(mode) {
     const adv = mode === "advanced" && !!(data && data.rdv);
@@ -56,8 +60,6 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     c.hidden = !n;
     c.textContent = n ? String(n) : "";
     c.setAttribute("aria-label", `${n} à traiter`);
-    $("dashRq").hidden = !n;
-    $("dashRqTitle").textContent = n ? `${n} demande${n > 1 ? "s" : ""} de rendez-vous à traiter` : "";
   }
 
   // ---- chargement et rendu
@@ -84,36 +86,35 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     show("dash", { focus });
   }
 
-  // ---- onglets du tableau de bord : « Tableau de bord » (et « Mes prix », plus bas sur le même écran), « Mon garage », « Demandes »,
-  // « Disponibilités »
-  const BODIES = { top: "dash-top", prices: "dash-top", garage: "dash-garage", requests: "dash-requests", agenda: "dash-agenda", calendar: "dash-calendar", planning: "dash-planning" };
-  const TITLES = { top: "dashTitle", garage: "mgTitle", requests: "rqTitle", agenda: "agTitle", calendar: "calTitle", planning: "planTitle" };
-  async function panel(name, { focus = true } = {}) {
+  // ---- écrans : « Tableau de bord », « Prestations & tarifs », « Mon garage », « Demandes », « Disponibilités » (et le calendrier
+  // avancé), « Planning ». opts (depuis le tableau de bord) : planning { day, item, form: { kind, arrived } }, agenda { closure },
+  // prices { add } ; le formulaire ou la fiche s'ouvre une fois l'écran affiché.
+  const BODIES = { top: "dash-top", prices: "dash-prices", garage: "dash-garage", requests: "dash-requests", agenda: "dash-agenda", calendar: "dash-calendar", planning: "dash-planning" };
+  const TITLES = { top: "dashTitle", prices: "pricesTitle", garage: "mgTitle", requests: "rqTitle", agenda: "agTitle", calendar: "calTitle", planning: "planTitle" };
+  async function panel(name, { focus = true, ...opts } = {}) {
     more(false);
-    if (name !== "top" && name !== "prices") {
-      alertBox("");
-      try {
-        if (name === "garage") await garage.open(data.garage.id, { verifiedAt: data.garage.verifiedAt });
-        if (name === "requests") await rdv.openRequests(data.garage.id, { focus: false });
-        if (name === "agenda") await rdv.openAgenda(data.garage.id, { focus: false });
-        if (name === "calendar") await cal.open(data.garage.id, { focus: false });
-        if (name === "planning") await plan.open(data.garage.id, { focus: false });
-      } catch (e) {
-        if (!apiProblem(e)) alertBox(e.message);
-        return;
-      }
+    alertBox("");
+    try {
+      if (name === "top") await board.open(data, { focus: false });
+      if (name === "garage") await garage.open(data.garage.id, { verifiedAt: data.garage.verifiedAt });
+      if (name === "requests") await rdv.openRequests(data.garage.id, { focus: false });
+      if (name === "agenda") await rdv.openAgenda(data.garage.id, { focus: false });
+      if (name === "calendar") await cal.open(data.garage.id, { focus: false });
+      if (name === "planning") await (opts.day || opts.item || opts.form ? plan.openDay(data.garage.id, opts.day || parisParts(Date.now()).iso) : plan.open(data.garage.id, { focus: false }));
+    } catch (e) {
+      if (!apiProblem(e)) alertBox(e.message);
+      return;
     }
     for (const id of new Set(Object.values(BODIES))) $(id).hidden = id !== BODIES[name];
     for (const b of document.querySelectorAll(".dash-link[data-panel]")) {
       if (b.dataset.panel === (name === "calendar" ? "agenda" : name)) b.setAttribute("aria-current", "true");
       else b.removeAttribute("aria-current");
     }
-    if (name === "prices") {
-      $("dash-prices").scrollIntoView({ block: "start" });
-      if (focus) $("pricesTitle").focus({ preventScroll: true });
-      return;
-    }
     window.scrollTo(0, 0);
+    if (name === "planning" && opts.item && plan.showItem(opts.item)) return;
+    if (name === "planning" && opts.form) return plan.form(opts.form.kind, opts.form);
+    if (name === "agenda" && opts.closure) return $("agAddClosure").click();
+    if (name === "prices" && opts.add) return openEditor(null);
     if (focus) $(TITLES[name]).focus();
   }
   // ordinateur : barre latérale dépliée (libellés) ou repliée (icônes, libellé en infobulle) ; le choix est gardé dans ce navigateur
@@ -150,13 +151,8 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     $("dashMore").setAttribute("aria-expanded", String(open));
   }
 
+  // « Prestations & tarifs » (et le nombre de prix à confirmer dans le menu)
   function render() {
-    const g = data.garage;
-    const badge = $("dashVerified");
-    badge.replaceChildren(icon("i-shield"), `Garage vérifié le ${date(g.verifiedAt)}`);
-    $("dashTitle").textContent = firstName(g.holderName) ? `Bonjour ${firstName(g.holderName)}` : "Bonjour";
-    $("dashGarage").textContent = [g.name, g.addr].filter(Boolean).join(" · ");
-
     const prices = data.prices.slice().sort((a, b) => (ORDER.get(a.service) ?? 99) - (ORDER.get(b.service) ?? 99));
     const due = prices.filter((p) => p.state === "due");
     const stale = prices.filter((p) => p.state === "stale");
@@ -231,7 +227,8 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     await busy($("confirmAll"), async () => {
       try {
         const out = await api.confirm(data.garage.id);
-        await open(data.garage.id, { focus: false });
+        data = await api.garage(data.garage.id);
+        render();
         alertBox(out.confirmed > 1 ? `${out.confirmed} prix confirmés pour 6 mois.` : "Prix confirmé pour 6 mois.", "info");
       } catch (e) {
         if (!apiProblem(e)) alertBox(e.message);
@@ -382,7 +379,6 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
   $("calBack").addEventListener("click", () => panel("agenda"));
   $("dashMore").addEventListener("click", () => more($("dashMore").getAttribute("aria-expanded") !== "true"));
   $("dashNav").addEventListener("keydown", (e) => e.key === "Escape" && more(false));
-  $("dashRqGo").addEventListener("click", () => panel("requests"));
   $("priceValue").addEventListener("input", (e) => {
     e.target.value = e.target.value.replace(/[^\d,.\s]/g, "");
     e.target.removeAttribute("aria-invalid"); // l'erreur affichée ne vaut plus pour ce qui est en cours de saisie
