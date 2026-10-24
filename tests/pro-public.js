@@ -39,10 +39,13 @@ async function tiles(ctx) {
 }
 
 (async () => {
-  const { repair, isoDay } = await import("../server/test/helpers.mjs");
+  const { repair } = await import("../server/test/helpers.mjs");
   const server = await serve(ROOT);
   const browser = await launch();
   const api = await startApi({ origin: server.url, env: { PRO_ENABLED: "1" } });
+  // jours comptés sur l'horloge de l'API de test (partie du 1er octobre 2026), pas sur l'heure réelle : sinon la date devient « à venir »
+  // pour l'API quelques semaines après le 1er octobre et la déclaration est refusée
+  const isoDay = (daysAgo = 0) => new Date(api.now() - daysAgo * 864e5).toISOString().slice(0, 10);
   api.upstream.elements = OSM;
   if (server.allowConnect) server.allowConnect(api.url);
 
