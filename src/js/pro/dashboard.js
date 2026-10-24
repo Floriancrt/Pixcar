@@ -158,7 +158,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
   rail(railMin);
   $("dashRail").addEventListener("click", () => rail(!document.body.classList.contains("rail-min"), { save: true }));
 
-  // téléphone, avec les rendez-vous : « Plus » ouvre Mon garage, Voir Pixcar et Mes garages au-dessus de la barre du bas
+  // téléphone, avec les rendez-vous : « Plus » ouvre Mon garage et Mes garages au-dessus de la barre du bas
   function more(open) {
     $("dashNav").classList.toggle("more-open", open);
     $("dashMore").setAttribute("aria-expanded", String(open));

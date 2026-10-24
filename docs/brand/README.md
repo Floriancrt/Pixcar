@@ -72,7 +72,7 @@ simple / avancée, Mon garage à onglets, prestations libres).
 | Code à 6 **ou 8** chiffres (maquette : 6) | Cognito envoie 8 chiffres pour la connexion |
 | « Vos données » et « Aide à la connexion » ouvrent une fenêtre ; « Contact » ajouté au pied de page | Les liens de la maquette ne mènent nulle part |
 | Adresse du compte et « Se déconnecter » dans le fil d'Ariane | Indispensable ; absent de la maquette |
-| Barre latérale : les liens existants (Planning, Prestations & tarifs, Disponibilités, Voir Pixcar, Mes garages, Replier le menu) | Les écrans de la maquette (Gestion d'atelier…) sont l'étape 2 |
+| Barre latérale : les liens existants (Planning, Prestations & tarifs, Disponibilités, Mes garages, Replier le menu ; « Voir Pixcar » supprimé à la demande de l'utilisateur) | Les écrans de la maquette (Gestion d'atelier…) sont l'étape 2 |
 | Rôle de la carte utilisateur : « Gérant(e) », « Salarié(e) » ou « Espace professionnel » (maquette : « Administrateur ») | C'est ce que l'API connaît |
 | Libellés « ESPACE PRO » et « Retour à l'accueil » sur une ligne sur téléphone (maquette : deux) | La maquette les coupe parce que le bouton « Tester la transition » prend la place |
 | Reproduit tel quel : « Aujourd'hui » à 24 px dans l'aperçu du planning sur téléphone (16 px sur ordinateur) | C'est ce que fait la maquette (sa règle mobile `.product-detail h3` s'applique aussi à ce titre) ; probablement involontaire, à confirmer |

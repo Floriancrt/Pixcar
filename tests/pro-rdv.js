@@ -106,7 +106,7 @@ const NOTIFY = "atelier@garage-demo.fr";
   await page.goto(`${srv.url}/pro/`);
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
   const nav = await page.$$eval("#dashNav .dash-link:not(.rail-toggle)", (els) => els.filter((e) => e.offsetParent).map((e) => e.innerText.trim()));
-  check("with appointments open in the API, the menu offers « Demandes » and « Disponibilités » (nothing to answer yet)", nav.join("|") === "Tableau de bord|Demandes|Mon garage|Prestations & tarifs|Disponibilités|Voir Pixcar|Mes garages" && (await page.locator("#rqCount").isHidden()) && (await page.locator("#dbRqCount").isHidden()) && (await text(page, "#dbRqEmpty")) === "Aucune demande en attente.", nav.join("|"));
+  check("with appointments open in the API, the menu offers « Demandes » and « Disponibilités » (nothing to answer yet)", nav.join("|") === "Tableau de bord|Demandes|Mon garage|Prestations & tarifs|Disponibilités|Mes garages" && (await page.locator("#rqCount").isHidden()) && (await page.locator("#dbRqCount").isHidden()) && (await text(page, "#dbRqEmpty")) === "Aucune demande en attente.", nav.join("|"));
 
   // ---- Disponibilités : fermés, et ce qui manque
   await page.click('.dash-link[data-panel="agenda"]');
@@ -273,7 +273,7 @@ const NOTIFY = "atelier@garage-demo.fr";
     await m.page.waitForSelector('[data-screen="dash"]:not([hidden])');
     // depuis la maquette « Parcours Atelier » (24 octobre 2026) : un rail d'icônes de 64 px à gauche remplace la barre du bas et son « Plus »
     const bar = await m.page.$$eval("#dashNav .dash-link:not(.rail-toggle)", (els) => els.filter((e) => e.offsetParent).map((e) => { const r = e.getBoundingClientRect(), t = [...e.querySelectorAll("span")].filter((x) => x.offsetParent && !x.classList.contains("dash-count")); return [e.innerText.trim(), Math.round(r.right), Math.round(r.bottom), Math.max(0, ...t.map((x) => x.getBoundingClientRect().width))]; }));
-    check("mobile: the 64 px icon rail lists every link (« Tarifs », « Créneaux » for short), names kept for screen readers but not shown, all inside the screen, no « Plus »", bar.map((x) => x[0]).join("|") === "Tableau de bord|Demandes|Mon garage|Tarifs|Créneaux|Voir Pixcar|Mes garages" && bar.every(([, right, bottom, label]) => right <= 64 && bottom <= 844 && label <= 1) && (await m.page.locator("#dashMore").isHidden()), JSON.stringify(bar));
+    check("mobile: the 64 px icon rail lists every link (« Tarifs », « Créneaux » for short), names kept for screen readers but not shown, all inside the screen, no « Plus »", bar.map((x) => x[0]).join("|") === "Tableau de bord|Demandes|Mon garage|Tarifs|Créneaux|Mes garages" && bar.every(([, right, bottom, label]) => right <= 64 && bottom <= 844 && label <= 1) && (await m.page.locator("#dashMore").isHidden()), JSON.stringify(bar));
     await shot(m.page, "4-mobile-rail");
     await m.page.click('#dashNav .dash-link[data-panel="garage"]');
     await m.page.waitForSelector("#dash-garage:not([hidden])");

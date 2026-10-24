@@ -1846,7 +1846,7 @@ input[type="url"] {
     display: none;
   }
 }
-/* menu : sur téléphone, avec les rendez-vous, « Plus » regroupe Mon garage, Voir Pixcar et Mes garages */
+/* menu : sur téléphone, avec les rendez-vous, « Plus » regroupe Mon garage et Mes garages */
 @media (min-width: 900px) {
   .dash-nav .more-btn {
     display: none !important;
@@ -1876,9 +1876,6 @@ input[type="url"] {
     text-align: left;
   }
   .dash-nav.has-rdv.more-open .more-item[data-panel="garage"] {
-    bottom: calc(76px + 2 * 52px);
-  }
-  .dash-nav.has-rdv.more-open #dashSite {
     bottom: calc(76px + 52px);
   }
   .dash-nav.has-rdv.more-open .more-item[data-go="home"] {
