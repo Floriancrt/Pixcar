@@ -188,7 +188,8 @@ d'ensemble et d'un bloc enrichi, vidéo de la barre latérale). Tout est dans la
   haut ; identité du 24 octobre 2026, `docs/brand/README.md`) ; le bandeau du compte commence à sa droite et le contenu prend le
   reste de la largeur. « Replier le menu » la réduit aux icônes (le libellé reste lu par les lecteurs d'écran et
   s'affiche en infobulle) ; le choix est gardé dans ce navigateur (`localStorage`, clé `pixcar-pro-rail`). Planning a sa propre icône,
-  distincte de Disponibilités. Téléphone : la barre du bas ne change pas.
+  distincte de Disponibilités. Téléphone : la barre du bas ne change pas (remplacée le 24 octobre 2026 par le rail d'icônes de 64 px à
+  gauche de la maquette, voir `docs/brand/README.md`).
 - **Vue d'ensemble** en haut du Planning, comptée sur la période affichée (jour, semaine, mois), sans les filtres : **Rendez-vous**
   (nombre, dont à confirmer), **Charge atelier** (heures de main-d'œuvre planifiées / heures disponibles des mécaniciens, en % avec une
   jauge), **Mécaniciens** (présents / total en vue Jour, sinon absences sur la période), **Alertes** (conflits et demandes à confirmer

@@ -2,7 +2,7 @@
 // l'Espace Pro et les rendez-vous ouverts, un compte déjà connecté (jeton accepté par un vérificateur simulé) et un garage déjà rattaché.
 // Parcours : Disponibilités (ce qui manque, adresse qui reçoit les demandes vérifiée par code, créneau et son aperçu, ouverture, règles,
 // fermeture, jours fériés) → demandes envoyées par l'API publique → Demandes (accepter, refuser avec un motif, détails, export, annuler) ;
-// téléphone (menu « Plus », liste par jour, volet du créneau) ; accessibilité (axe) de chaque écran.
+// téléphone (rail d'icônes, liste par jour, volet du créneau) ; accessibilité (axe) de chaque écran.
 //   node tests/pro-rdv.js
 delete process.env.PIXCAR_ROOT;
 const { execFileSync } = require("child_process");
@@ -271,18 +271,13 @@ const NOTIFY = "atelier@garage-demo.fr";
     const m = await newPage({ width: 390, height: 844 });
     await m.page.goto(`${srv.url}/pro/`);
     await m.page.waitForSelector('[data-screen="dash"]:not([hidden])');
-    const bar = await m.page.$$eval("#dashNav .dash-link:not(.rail-toggle)", (els) => els.filter((e) => e.offsetParent).map((e) => e.innerText.trim()));
-    check("mobile: five buttons in the bottom bar (Mon garage, Voir Pixcar, Mes garages under « Plus »), « Créneaux » for short", bar.join("|") === "Tableau de bord|Demandes|Tarifs|Créneaux|Plus", bar.join("|"));
-    await m.page.click("#dashMore");
-    const menu = await m.page.$$eval("#dashNav .more-item", (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [e.textContent.trim(), Math.round(r.right), Math.round(r.bottom)]; }));
-    check("« Plus » opens the three other links above the bar, inside the screen", (await m.page.getAttribute("#dashMore", "aria-expanded")) === "true" && menu.length === 3 && menu.every(([, right, bottom]) => right <= 390 && bottom < 844 - 60), JSON.stringify(menu));
-    await shot(m.page, "4-mobile-plus");
-    await m.page.keyboard.press("Escape");
-    check("Escape closes « Plus »", (await m.page.getAttribute("#dashMore", "aria-expanded")) === "false" && (await m.page.locator('#dashNav .more-item[data-panel="garage"]').isHidden()));
-    await m.page.click("#dashMore");
-    await m.page.click('#dashNav .more-item[data-panel="garage"]');
+    // depuis la maquette « Parcours Atelier » (24 octobre 2026) : un rail d'icônes de 64 px à gauche remplace la barre du bas et son « Plus »
+    const bar = await m.page.$$eval("#dashNav .dash-link:not(.rail-toggle)", (els) => els.filter((e) => e.offsetParent).map((e) => { const r = e.getBoundingClientRect(), t = [...e.querySelectorAll("span")].filter((x) => x.offsetParent && !x.classList.contains("dash-count")); return [e.innerText.trim(), Math.round(r.right), Math.round(r.bottom), Math.max(0, ...t.map((x) => x.getBoundingClientRect().width))]; }));
+    check("mobile: the 64 px icon rail lists every link (« Tarifs », « Créneaux » for short), names kept for screen readers but not shown, all inside the screen, no « Plus »", bar.map((x) => x[0]).join("|") === "Tableau de bord|Demandes|Mon garage|Tarifs|Créneaux|Voir Pixcar|Mes garages" && bar.every(([, right, bottom, label]) => right <= 64 && bottom <= 844 && label <= 1) && (await m.page.locator("#dashMore").isHidden()), JSON.stringify(bar));
+    await shot(m.page, "4-mobile-rail");
+    await m.page.click('#dashNav .dash-link[data-panel="garage"]');
     await m.page.waitForSelector("#dash-garage:not([hidden])");
-    check("a link of « Plus » opens its screen and closes the menu", (await m.page.getAttribute("#dashMore", "aria-expanded")) === "false");
+    check("mobile: a link of the rail opens its screen", await m.page.locator("#dash-garage").isVisible());
     await m.page.click('.dash-link[data-panel="agenda"]');
     await m.page.waitForSelector("#dash-agenda:not([hidden])");
     const list = await m.page.evaluate(() => ({ grid: getComputedStyle(document.getElementById("agWeek")).display, days: [...document.querySelectorAll("#agDays li")].map((li) => li.innerText.replace(/\s+/g, " ")) }));

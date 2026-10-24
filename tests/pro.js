@@ -214,7 +214,9 @@ function fakeCognito() {
   }
   const axe = async (page, label) => {
     await page.evaluate(AXE);
-    const r = await page.evaluate(async () => (await window.axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } })).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(" | ")}`));
+    // l'aperçu du planning de l'accueil (maquette) est une illustration masquée aux lecteurs d'écran : texte d'image, hors exigence de
+    // contraste (WCAG 1.4.3, « incidental »)
+    const r = await page.evaluate(async () => (await window.axe.run({ include: [document], exclude: [[".m-mini-planning"], [".m-planner-legend"]] }, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } })).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(" | ")}`));
     check(`axe: no violation on « ${label} »`, r.length === 0, r.join("\n"));
   };
   const visible = (page, screen) => page.locator(`[data-screen="${screen}"]`).isVisible();
@@ -242,12 +244,15 @@ function fakeCognito() {
   // accueil des visiteurs (maquette 2) : la promesse, l'en-tête, rien de demandé à Cognito ; il ne promet que ce qui existe
   await page.waitForSelector('[data-screen="welcome"]:not([hidden])');
   const w = await page.evaluate(() => ({
-    h1: document.getElementById("welcomeTitle").textContent,
+    h1: document.getElementById("welcomeTitle").innerText.replace(/\s+/g, " "),
     nav: [...document.querySelectorAll("#proNav a")].map((a) => a.getAttribute("href")),
     text: document.querySelector('[data-screen="welcome"]').textContent.replace(/\s+/g, " "),
   }));
-  check("a visitor lands on the welcome page; the header offers the FAQ, « Se connecter », « Gérer mon garage »; nothing asked of Cognito", w.h1 === "L'essentiel de votre atelier. Au même endroit." && w.nav.join() === "#faq,#connexion,#inscription" && !cognito.calls.length && (await page.locator("#account").isHidden()), JSON.stringify(w.nav));
-  check("the welcome page promises only what exists: the sample garage says « Exemple », verification by an e-mail code (no phone call), no hourly rate", /Exemple/.test(w.text) && /un code envoyé à une adresse e-mail connue de votre garage/.test(w.text) && !/appel automatique|Décrochez|taux horaire/i.test(w.text), w.text.slice(0, 200));
+  check("a visitor lands on the welcome page; the header offers « Comment ça marche », the FAQ, « Se connecter », « Gérer mon garage » (maquette Parcours Atelier); nothing asked of Cognito", w.h1 === "L’essentiel de votre atelier. Au même endroit." && w.nav.join() === "#fonctionnement,#faq,#connexion,#inscription" && !cognito.calls.length && (await page.locator("#account").isHidden()), JSON.stringify(w.nav));
+  // tailles de la maquette : logo de l'en-tête 146 px, du pied de page 104 px (noir), titres sans équilibrage des lignes
+  const sizes = await page.evaluate(() => ({ head: Math.round(document.querySelector(".pro-top .m-brand").getBoundingClientRect().width), foot: Math.round(document.querySelector(".m-footer .m-brand").getBoundingClientRect().width), wrap: getComputedStyle(document.getElementById("welcomeTitle")).textWrap }));
+  check("welcome page at the maquette's sizes: header logo 146 px, footer logo 104 px, headings wrap like the maquette (no balancing)", sizes.head === 146 && sizes.foot === 104 && !/balance/.test(sizes.wrap), JSON.stringify(sizes));
+  check("the welcome page promises only what exists: the sample garage says « Exemple », verification by an e-mail code (no phone call), no hourly rate", /Exemple/.test(w.text) && /Recevez un code à une adresse e-mail connue de votre garage/.test(w.text) && !/appel automatique|Décrochez|taux horaire/i.test(w.text), w.text.slice(0, 200));
   await axe(page, "accueil");
   await shot(page, "0-accueil");
   // les trois usages en onglets : clic, flèches, Début / Fin ; un seul panneau visible
@@ -272,10 +277,10 @@ function fakeCognito() {
   await page.waitForSelector('[data-screen="welcome"]:not([hidden])');
   check("the browser's back button returns to the welcome page", await visible(page, "welcome"));
   await page.click('#proNav a[href="#connexion"]');
-  await page.click('[data-screen="login"] a.back');
+  await page.click('#authNav a[href="#accueil"]');
   await page.waitForSelector('[data-screen="welcome"]:not([hidden])');
-  check("the login form's « Découvrir l'Espace Pro » returns to the welcome page", await visible(page, "welcome"));
-  await page.click('.w-cta a[href="#inscription"]');
+  check("the header's « Retour à l'accueil » (sign-in screens) returns to the welcome page", await visible(page, "welcome"));
+  await page.click('.m-actions a[href="#inscription"]');
   await page.waitForSelector('[data-screen="login"]:not([hidden])');
   check("#inscription opens the sign-up form", (await page.locator("#signupTitle").isVisible()) && !(await page.locator("#loginTitle").isVisible()));
   await axe(page, "inscription");
@@ -664,7 +669,7 @@ function fakeCognito() {
   // le code de connexion de Cognito compte 8 chiffres (6 pour l'inscription) : la page l'accepte, tapé avec une espace, et l'affiche en entier
   const signin = cognito.last(EMAIL);
   await page.fill("#otp", signin.slice(0, 4) + " " + signin.slice(4));
-  const fit = await page.$eval("#otp", (el) => ({ value: el.value, clipped: el.scrollWidth > el.clientWidth + 1, lead: el.closest("section").querySelector(".lead").textContent }));
+  const fit = await page.$eval("#otp", (el) => ({ value: el.value, clipped: el.scrollWidth > el.clientWidth + 1, lead: el.closest("section").querySelector(".m-auth-subtitle").textContent }));
   check("sign-in code: 8 digits (Cognito), typed with a space, kept whole and fully visible; the screen does not promise 6 digits", signin.length === 8 && fit.value.replace(/\D/g, "") === signin && !fit.clipped && !/6 chiffres/.test(fit.lead), JSON.stringify(fit));
   await watchCurtain(page);
   await page.click('#otpForm button[type="submit"]');
@@ -673,11 +678,24 @@ function fakeCognito() {
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
   const veil2 = await curtainDone(page);
   const rail = await page.evaluate(() => {
-    const b = document.querySelector(".dash-nav .nav-brand").getBoundingClientRect();
+    const b = document.querySelector(".dash-nav .m-side-logo").getBoundingClientRect();
     return { x: Math.round(b.left), y: Math.round(b.top), anims: document.getAnimations().length };
   });
   check("signing in to a dashboard: the curtain shrinks into the side bar, then leaves nothing behind (no animation left running)", veil2 === "false,true" && rail.anims === 0 && rail.x < 40 && rail.y < 40, JSON.stringify({ veil2, rail }));
   check("sign in again by e-mail code: an account with one verified garage lands on its dashboard, under the name Pixcar approved", (await page.textContent("#dashGarage")).startsWith("Bonjour Camille · Garage Démo du Centre"), await page.textContent("#dashGarage"));
+  // coque de l'atelier comme la maquette : fil d'Ariane, bouton d'aide, « MON ESPACE » et la carte utilisateur en bas de la barre
+  const shell = await page.evaluate(() => {
+    const nav = document.getElementById("dashNav").getBoundingClientRect();
+    const bottom = document.querySelector(".dash-nav .m-nav-bottom");
+    const labels = [...document.querySelectorAll(".dash-nav .m-nav-label")].map((n) => ({ t: n.textContent, low: !!n.closest(".m-nav-bottom") }));
+    const help = document.querySelector('#account [data-help]');
+    return { crumb: document.getElementById("crumb").textContent, labels, gap: Math.round(nav.bottom - bottom.getBoundingClientRect().bottom), help: !!help && help.offsetWidth > 0 && help.getAttribute("aria-label"), initials: document.getElementById("navInitials").textContent, name: document.getElementById("navName").textContent };
+  });
+  check("atelier shell: breadcrumb « Mon atelier / Tableau de bord », MON ATELIER on top and MON ESPACE with the user card at the bottom of the side bar, help button « Aide » in the top line", shell.crumb === "Mon atelier / Tableau de bord" && shell.labels.map((l) => l.t + ":" + l.low).join() === "MON ATELIER:false,MON ESPACE:true" && shell.gap >= 0 && shell.gap <= 24 && shell.help === "Aide" && shell.initials && shell.name, JSON.stringify(shell));
+  await page.click("#account [data-help]");
+  const helpOpen = await page.evaluate(() => document.getElementById("helpDlg").open);
+  await page.click("#helpDlg [data-close]");
+  check("the top line's help button opens the help window, which closes again", helpOpen && !(await page.evaluate(() => document.getElementById("helpDlg").open)));
 
   // « Gérer mon garage » avec une adresse déjà inscrite : on bascule sur la connexion
   await page.click("#signOut");
@@ -733,7 +751,7 @@ function fakeCognito() {
     await m.page.click('.dash-link[data-panel="prices"]');
     await m.page.waitForSelector("#dash-prices:not([hidden])");
     const pricesOverflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    check("mobile « Tarifs » in the bottom bar: the prices screen, no horizontal scroll", pricesOverflow <= 0, pricesOverflow);
+    check("mobile « Tarifs » in the icon rail: the prices screen, no horizontal scroll", pricesOverflow <= 0, pricesOverflow);
     await axe(m.page, "prestations et tarifs (mobile)");
     await m.page.click("#priceRows button");
     await m.page.waitForSelector("#priceDlg[open]");

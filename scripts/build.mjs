@@ -519,6 +519,10 @@ async function buildPro(fonts) {
   await writeFile(join(DIST, "assets", jsName), js);
   const mark = /<symbol id="px-mark"[\s\S]*?<\/symbol>/.exec(await read(SRC, "partials/sprite.html"));
   if (!mark) throw new Error("Espace Pro : symbole px-mark introuvable dans partials/sprite.html");
+  // logo complet (symbole + lettrage, scripts/brand-logo.py) : en-têtes, barre latérale, rideau et pied de page de l'Espace Pro
+  const logo = /<symbol id="px-logo"[\s\S]*?<\/symbol>/.exec(await read(SRC, "partials/pro-logo.html"));
+  if (!logo) throw new Error("Espace Pro : symbole px-logo introuvable dans partials/pro-logo.html");
+  mark[0] += logo[0];
   let contact = "";
   try {
     contact = JSON.parse(await read(SRC, "legal.json")).contact || "";

@@ -37,7 +37,7 @@ Spécification des deux lots décidés avec l'utilisateur le 17 octobre 2026, d'
 
 ### Ce que voit le garagiste
 
-Un onglet « Mon garage » dans le menu de l'Espace Pro (bureau : colonne de gauche ; téléphone : barre du bas), entre « Tableau de bord » et
+Un onglet « Mon garage » dans le menu de l'Espace Pro (bureau : colonne de gauche ; téléphone : barre du bas, rail d'icônes à gauche depuis le 24 octobre 2026), entre « Tableau de bord » et
 « Mes prix ».
 
 1. **Coordonnées** : nom affiché, adresse, téléphone, site, e-mail affiché aux clients. Chaque ligne dit d'où vient la valeur :

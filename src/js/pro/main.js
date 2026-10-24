@@ -81,7 +81,10 @@ function show(screen, { focus = true } = {}) {
     }
   }
   $("account").hidden = !auth.signedIn;
-  $("proNav").hidden = auth.signedIn || screen === "loading";
+  // en-tête de la maquette : liens du site sur l'accueil, aide et retour à l'accueil pendant la connexion
+  $("proNav").hidden = auth.signedIn || screen !== "welcome";
+  $("authNav").hidden = auth.signedIn || (screen !== "login" && screen !== "otp");
+  $("crumb").hidden = screen !== "dash";
   $("accountEmail").textContent = auth.email;
   if (screen !== "code") stopTicker();
   if (focus) {
@@ -154,6 +157,7 @@ async function submitLogin(ev) {
       }
       $("otpEmail").textContent = email;
       $("otpTo").textContent = email;
+      for (const n of document.querySelectorAll("[data-flow]")) n.hidden = n.dataset.flow !== state.flow;
       $("otp").value = "";
       fieldError($("otp"), "otpErr", "");
       show("otp");
@@ -176,6 +180,7 @@ async function submitOtp(ev) {
       // inscription confirmée sur un groupe qui demande un code de connexion en plus : un second code arrive
       state.flow = "signin";
       state.session = r.session;
+      for (const n of document.querySelectorAll("[data-flow]")) n.hidden = n.dataset.flow !== state.flow;
       input.value = "";
       fieldError(input, "otpErr", "Compte confirmé. Un code de connexion vient de partir : saisissez-le.");
     } catch (e) {
@@ -202,11 +207,12 @@ async function resendOtp() {
 
 // connecté : le rideau couvre l'écran pendant le chargement de l'espace, puis le découvre
 async function enter() {
-  const veiled = await curtain.cover();
+  const shell = document.querySelector('[data-screen]:not([hidden]) .m-guided-shell');
+  const veiled = await curtain.cover(shell);
   try {
     await home({ auto: true });
   } finally {
-    if (veiled) curtain.reveal();
+    if (veiled) curtain.reveal(shell);
   }
 }
 
@@ -223,6 +229,7 @@ async function home({ auto = false } = {}) {
     if (!apiProblem(e)) show("home");
     return;
   }
+  for (const c of me.claims) if (c.holder) roles.set(c.garageId, c.holder.role);
   const verified = me.claims.filter((c) => c.status === "verified");
   if (auto && verified.length === 1 && verified.length === me.claims.length) return dashboard.open(verified[0].garageId);
   const list = $("garageList");
@@ -477,7 +484,9 @@ async function resendCode() {
 }
 
 // ---- branchements
-const dashboard = createDashboard({ api, $, el, icon, alertBox, busy, show, apiProblem, home });
+// fonction du titulaire (gérant, salarié) : lue dans « mes garages », montrée sur la carte de l'utilisateur de la barre latérale
+const roles = new Map();
+const dashboard = createDashboard({ api, $, el, icon, alertBox, busy, show, apiProblem, home, roleOf: (id) => roles.get(id) || null });
 $("doneDash").addEventListener("click", () => dashboard.open(state.claim.garageId));
 $("loginForm").addEventListener("submit", submitLogin);
 $("otpForm").addEventListener("submit", submitOtp);
@@ -511,6 +520,11 @@ for (const b of document.querySelectorAll("[data-go]"))
     show(to);
   });
 for (const id of ["otp", "code", "siret"]) $(id).addEventListener("input", (e) => (e.target.value = e.target.value.replace(/[^\d\s.]/g, "")));
+
+// Fenêtres « Besoin d'aide ? » / « Aide à la connexion » et « Vos données » (pied de page) ; tout bouton [data-close] ferme la sienne
+for (const b of document.querySelectorAll("[data-help]")) b.addEventListener("click", () => $("helpDlg").showModal());
+for (const b of document.querySelectorAll("[data-privacy]")) b.addEventListener("click", () => $("privacyDlg").showModal());
+for (const b of document.querySelectorAll("dialog [data-close]")) b.addEventListener("click", () => b.closest("dialog").close());
 
 // Accueil : les trois usages en onglets (flèches gauche / droite, Début, Fin ; le panneau suit l'onglet sélectionné)
 const wTabs = [...document.querySelectorAll(".w-tabs [role=tab]")];

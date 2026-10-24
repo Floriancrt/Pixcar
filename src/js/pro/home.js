@@ -228,9 +228,9 @@ export function createHome({ api, $, el, icon, alertBox, busy, apiProblem, goPan
       el(
         "button",
         { type: "button", class: "db-kpi-btn", "data-kpi": key, ...(pressed === null ? {} : { "aria-pressed": String(pressed) }), onclick },
-        el("span", { class: "db-kpi-top" }, el("span", { class: "db-kpi-ic" }, icon(ic)), el("b", { class: "db-kpi-v", text: String(value) }), chevron ? icon("i-next") : null),
+        // bandeau de chiffres de la maquette « Parcours Atelier » : l'intitulé, puis la valeur et sa précision
         el("span", { class: "db-kpi-l", text: label }),
-        sub ? el("span", { class: "db-kpi-s", text: sub }) : null,
+        el("span", { class: "db-kpi-top" }, el("b", { class: "db-kpi-v", text: String(value) }), sub ? el("span", { class: "db-kpi-s", text: sub }) : null, chevron ? icon("i-next") : null),
       ),
     );
   }

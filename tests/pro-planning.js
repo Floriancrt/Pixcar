@@ -550,10 +550,9 @@ const NOTIFY = "atelier@garage-planning.fr";
     await m.page.goto(`${srv.url}/pro/`);
     await m.page.waitForSelector('[data-screen="dash"]:not([hidden])');
     if (name === "telephone") {
-      check("phone: Planning takes the place of Créneaux in the bottom bar", (await m.page.isVisible('.dash-link[data-panel="planning"]')) && (await m.page.isHidden('.dash-link[data-panel="agenda"]')));
-      await m.page.click("#dashMore");
-      check("phone: Créneaux is under « Plus »", await m.page.isVisible('.dash-link[data-panel="agenda"]'));
-      await m.page.click("#dashMore");
+      // depuis la maquette « Parcours Atelier » (24 octobre 2026) : rail d'icônes de 64 px à gauche, plus de barre du bas ni de « Plus »
+      const rail = await m.page.evaluate(() => ({ w: Math.round(document.getElementById("dashNav").getBoundingClientRect().width), left: Math.round(document.getElementById("dashNav").getBoundingClientRect().left) }));
+      check("phone: the 64 px icon rail on the left shows Planning and Disponibilités, no « Plus » menu", rail.w === 64 && rail.left === 0 && (await m.page.isVisible('.dash-link[data-panel="planning"]')) && (await m.page.isVisible('.dash-link[data-panel="agenda"]')) && (await m.page.isHidden("#dashMore")), JSON.stringify(rail));
     }
     await m.page.click('.dash-link[data-panel="planning"]');
     await m.page.waitForSelector("#dash-planning:not([hidden]) .pl-grid");

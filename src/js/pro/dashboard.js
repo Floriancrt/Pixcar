@@ -26,7 +26,7 @@ const STATE = {
 // Évolution sur les 30 jours d'avant : « +18 % », « −5 % », rien quand il n'y a pas de point de comparaison
 const evolution = (v) => (v.previous ? `${v.recent >= v.previous ? "+" : "−"}${Math.abs(Math.round(((v.recent - v.previous) / v.previous) * 100))} %` : "");
 
-export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiProblem, home }) {
+export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiProblem, home, roleOf = () => null }) {
   let data = null; // réponse de GET /v1/pro/garages/:id
   let editing = null; // prestation en cours de modification (null : ajout)
   let removeArmed = false;
@@ -81,6 +81,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     $("dashMore").hidden = !on;
     setTodo(on ? data.rdv.todo : 0);
     setMode(on ? data.rdv.mode : "simple");
+    profile();
     render();
     await panel("top", { focus: false });
     show("dash", { focus });
@@ -91,6 +92,17 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
   // prices { add } ; le formulaire ou la fiche s'ouvre une fois l'écran affiché.
   const BODIES = { top: "dash-top", prices: "dash-prices", garage: "dash-garage", requests: "dash-requests", agenda: "dash-agenda", calendar: "dash-calendar", planning: "dash-planning" };
   const TITLES = { top: "dashTitle", prices: "pricesTitle", garage: "mgTitle", requests: "rqTitle", agenda: "agTitle", calendar: "calTitle", planning: "planTitle" };
+  // coque de la maquette : la carte du garage et celle de l'utilisateur (nom, fonction, initiales) dans la barre latérale
+  const ROLES = { manager: "Gérant(e)", employee: "Salarié(e)" };
+  function profile() {
+    const name = String(data.garage.holderName || "").trim();
+    $("navGarage").textContent = data.garage.name || "Mon garage";
+    $("navName").textContent = name || "Mon compte";
+    $("navRole").textContent = ROLES[roleOf(data.garage.id)] || "Espace professionnel";
+    $("navInitials").textContent = name ? name.split(/\s+/).slice(0, 2).map((w) => w[0].toUpperCase()).join("") : "PRO";
+  }
+  // fil d'Ariane (en-tête de l'atelier)
+  const CRUMBS = { top: "Mon atelier / Tableau de bord", planning: "Mon atelier / Planning", requests: "Mon atelier / Demandes", garage: "Mon espace / Mon garage", prices: "Mon espace / Prestations & tarifs", agenda: "Mon espace / Disponibilités", calendar: "Mon espace / Disponibilités" };
   async function panel(name, { focus = true, ...opts } = {}) {
     more(false);
     alertBox("");
@@ -106,6 +118,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
       return;
     }
     for (const id of new Set(Object.values(BODIES))) $(id).hidden = id !== BODIES[name];
+    $("crumb").textContent = CRUMBS[name];
     for (const b of document.querySelectorAll(".dash-link[data-panel]")) {
       if (b.dataset.panel === (name === "calendar" ? "agenda" : name)) b.setAttribute("aria-current", "true");
       else b.removeAttribute("aria-current");
