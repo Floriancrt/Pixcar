@@ -4,12 +4,14 @@
 import { createCognito, explain } from "./cognito.js";
 import { createProApi } from "./api.js";
 import { createDashboard } from "./dashboard.js";
+import { createCurtain } from "./curtain.js";
 
 const $ = (id) => document.getElementById(id);
 const meta = document.querySelector('meta[name="pixcar-pro"]');
 const apiBase = (document.querySelector('meta[name="pixcar-api"]').content || "").replace(/\/+$/, "");
 const auth = createCognito({ userPoolId: meta.content, clientId: meta.dataset.client });
 const api = createProApi({ base: apiBase, token: () => auth.accessToken() });
+const curtain = createCurtain($("curtain"));
 
 const STEPS = { garage: "garage", you: "you", verify: "verify", code: "verify", done: "done", manual: "garage" };
 const state = { mode: "login", email: "", flow: "signin", session: null, siret: "", establishment: null, garages: [], garage: null, holder: null, claim: null };
@@ -146,7 +148,7 @@ async function submitLogin(ev) {
         }
       } else {
         const r = await auth.startSignIn(email);
-        if (r.done) return home({ auto: true });
+        if (r.done) return enter();
         state.flow = "signin";
         state.session = r.session;
       }
@@ -170,7 +172,7 @@ async function submitOtp(ev) {
   await busy(ev.submitter || input.form.querySelector("button"), async () => {
     try {
       const r = state.flow === "signup" ? await auth.answerSignUp(state.email, code) : await auth.answerSignIn(state.email, state.session, code);
-      if (r.done) return home({ auto: true });
+      if (r.done) return enter();
       // inscription confirmée sur un groupe qui demande un code de connexion en plus : un second code arrive
       state.flow = "signin";
       state.session = r.session;
@@ -196,6 +198,16 @@ async function resendOtp() {
       alertBox(explain(e));
     }
   });
+}
+
+// connecté : le rideau couvre l'écran pendant le chargement de l'espace, puis le découvre
+async function enter() {
+  const veiled = await curtain.cover();
+  try {
+    await home({ auto: true });
+  } finally {
+    if (veiled) curtain.reveal();
+  }
 }
 
 // ---- mes garages
@@ -499,6 +511,31 @@ for (const b of document.querySelectorAll("[data-go]"))
     show(to);
   });
 for (const id of ["otp", "code", "siret"]) $(id).addEventListener("input", (e) => (e.target.value = e.target.value.replace(/[^\d\s.]/g, "")));
+
+// Accueil : les trois usages en onglets (flèches gauche / droite, Début, Fin ; le panneau suit l'onglet sélectionné)
+const wTabs = [...document.querySelectorAll(".w-tabs [role=tab]")];
+function pickTab(t, { focus = false } = {}) {
+  for (const o of wTabs) {
+    const on = o === t;
+    o.setAttribute("aria-selected", String(on));
+    o.tabIndex = on ? 0 : -1;
+    const panel = $(o.getAttribute("aria-controls"));
+    panel.hidden = !on;
+    panel.classList.toggle("is-in", on);
+  }
+  if (focus) t.focus();
+}
+for (const t of wTabs) {
+  t.addEventListener("click", () => pickTab(t));
+  t.addEventListener("keydown", (e) => {
+    const i = wTabs.indexOf(t);
+    const n = wTabs.length;
+    const j = { ArrowRight: (i + 1) % n, ArrowLeft: (i + n - 1) % n, Home: 0, End: n - 1 }[e.key];
+    if (j === undefined) return;
+    e.preventDefault();
+    pickTab(wTabs[j], { focus: true });
+  });
+}
 
 if (auth.signedIn) home({ auto: true });
 else route({ focus: false });

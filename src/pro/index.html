@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="description" content="Espace Pro de Pixcar : les garagistes rattachent leur garage pour y annoncer leurs prix.">
-<meta name="theme-color" content="#111216">
+<meta name="theme-color" content="#000000">
 <meta name="pixcar-api" content="{{API_BASE}}">
 <meta name="pixcar-pro" content="{{POOL}}" data-client="{{CLIENT}}">
 <title>Espace Pro · Pixcar</title>
@@ -87,130 +87,232 @@
 
   <p class="pro-loading" data-screen="loading">Chargement…</p>
 
-  <!-- Accueil des visiteurs non connectés (maquette 2 du 11 octobre 2026) : la promesse, un exemple de fiche, la vérification, la règle -->
+  <!-- Accueil des visiteurs non connectés, d'après la maquette « Parcours Atelier » de l'utilisateur (24 octobre 2026) : promesse et
+       aperçu du planning, atouts, trois usages en onglets, accès vérifié, règle des prix, questions, appel final. Il ne promet que ce
+       qui existe (planning et rendez-vous en ligne, tarifs annoncés, badge vérifié, statistiques de la fiche). -->
   <section class="welcome" data-screen="welcome" hidden aria-labelledby="welcomeTitle">
-    <div class="w-hero">
+    <div class="w-wrap w-hero">
       <div class="w-pitch">
-        <p class="w-pill"><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg>Gratuit pour les garages</p>
-        <h1 id="welcomeTitle" tabindex="-1">Vos prix, à jour, là où vos clients comparent.</h1>
-        <p class="w-lead">Les automobilistes de votre secteur comparent déjà les garages sur Pixcar. Affichez vos tarifs, à côté des prix que vos clients déclarent avoir payés.</p>
+        <p class="w-eyebrow"><span class="w-dot" aria-hidden="true"></span>Pixcar · Votre espace atelier</p>
+        <h1 id="welcomeTitle" tabindex="-1">L'essentiel de votre atelier. Au même endroit.</h1>
+        <p class="w-lead">Vos rendez-vous, vos tarifs et votre visibilité sur Pixcar, dans un même espace gratuit. Retrouvez l'essentiel, puis reprenez le fil de votre journée.</p>
         <div class="w-cta">
           <a class="btn primary" href="#inscription">Gérer mon garage<svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></a>
-          <a class="btn" href="#connexion">Se connecter</a>
+          <a class="w-textlink" href="#connexion">Se connecter<svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></a>
         </div>
-        <p class="w-note"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg><span>Vérification en quelques minutes : votre SIRET, puis un code envoyé à une adresse e-mail connue de votre garage.</span></p>
+        <p class="w-note"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg><span>Un espace réservé aux professionnels vérifiés : votre SIRET, puis un code envoyé à une adresse e-mail connue de votre garage.</span></p>
       </div>
-      <div class="w-preview" role="group" aria-label="Exemple : la fiche d'un garage vérifié sur Pixcar et ses statistiques">
-        <div class="w-fiche">
-          <div class="w-head">
-            <span class="w-avatar" aria-hidden="true">AD</span>
-            <div>
-              <p class="w-name">Atelier Démo Auto</p>
-              <p class="ok-badge w-badge"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>Garage vérifié</p>
+      <div class="w-stage" role="group" aria-label="Exemple : une semaine du planning d'un garage">
+        <div class="w-window">
+          <p class="w-window-k"><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg>Une semaine, en un coup d'œil</p>
+          <div class="w-planner">
+            <div class="w-planner-h">
+              <div><b>Votre planning</b><small>Exemple</small></div>
+              <span class="w-chip-cta" aria-hidden="true">+ Rendez-vous</span>
             </div>
-            <span class="w-ex" aria-hidden="true">Exemple</span>
+            <div class="w-mini" aria-hidden="true">
+              <div class="w-mini-t"><span>9:00</span><span>10:00</span><span>11:00</span><span>12:00</span></div>
+              <div class="w-mini-d"><b>Mer.</b><i class="ev ev-ok y0 h2"><small>9:00</small>Révision<em>Mickaël · Golf</em></i><i class="ev ev-off y5 h2"><small>11:30</small>Créneau bloqué<em>Livraison de pièces</em></i></div>
+              <div class="w-mini-d"><b>Jeu.</b><i class="ev ev-ok y2 h2"><small>10:00</small>Vidange + filtre<em>Mickaël · Clio</em></i></div>
+              <div class="w-mini-d is-today"><b>Ven.</b><i class="ev ev-ok y0 h2"><small>9:00</small>Diagnostic<em>Sarah · C3</em></i><i class="ev ev-due y2 h3"><small>10:00</small>Freinage avant<em>À confirmer · 208</em></i></div>
+            </div>
+            <p class="w-legend" aria-hidden="true"><span><i class="lg ev-ok"></i>Confirmé</span><span><i class="lg ev-due"></i>À confirmer</span><span><i class="lg ev-off"></i>Bloqué</span></p>
           </div>
-          <ul class="w-prices">
-            <li><span>Vidange (huile + filtre)</span><b>89 €</b></li>
-            <li><span>Plaquettes de frein avant</span><b>dès 119 €</b></li>
-            <li><span>Recharge de climatisation</span><b>69 €</b></li>
-          </ul>
-          <p class="w-foot">Prix annoncés par le garage, sous sa responsabilité</p>
         </div>
-        <div class="w-stats">
-          <p class="w-stats-t"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg>30 derniers jours</p>
-          <dl>
-            <div><dt>vues de la fiche</dt><dd>248</dd></div>
-            <div><dt>clics « Appeler »</dt><dd>31</dd></div>
-          </dl>
-        </div>
+        <p class="w-toast"><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg><span><b>Vos rendez-vous réunis.</b>Pixcar, téléphone ou comptoir : un seul planning.</span></p>
       </div>
     </div>
 
-    <ul class="w-feats">
-      <li>
-        <span class="w-ico is-tag" aria-hidden="true"><svg class="ic"><use href="#i-tag" /></svg></span>
-        <h2>Vos tarifs, sans intermédiaire</h2>
-        <p>Forfaits, prix « à partir de » ou sur devis : vous les modifiez depuis votre téléphone, ils sont en ligne dans la minute.</p>
-      </li>
-      <li>
-        <span class="w-ico is-ok" aria-hidden="true"><svg class="ic"><use href="#i-shield" /></svg></span>
-        <h2>Le badge « Garage vérifié »</h2>
-        <p>Il rassure : vos prix viennent de vous, et nous avons vérifié que vous représentez bien l'établissement.</p>
-      </li>
-      <li>
-        <span class="w-ico is-info" aria-hidden="true"><svg class="ic"><use href="#i-chart" /></svg></span>
-        <h2>Ce que voient vos clients</h2>
-        <p>Vues de votre fiche, clics sur « Appeler », écart entre vos prix annoncés et les prix payés par vos clients.</p>
-      </li>
+    <ul class="w-wrap w-strip">
+      <li><svg class="ic" aria-hidden="true"><use href="#i-planning" /></svg>Planning et rendez-vous en ligne</li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-tag" /></svg>Tarifs publiés sur votre fiche</li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>Badge « Garage vérifié »</li>
+      <li><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg>Suivi de votre visibilité</li>
     </ul>
 
-    <div class="w-bottom">
-      <section class="w-how" aria-labelledby="howTitle">
-        <h2 class="w-kicker" id="howTitle">Comment ça marche</h2>
-        <ol>
-          <li><b>Trouvez votre garage</b><span>Par son SIRET.</span></li>
-          <li><b>Recevez un code</b><span>Par e-mail, à une adresse connue de votre garage.</span></li>
-          <li><b>Saisissez vos prix</b><span>Deux minutes, depuis votre téléphone.</span></li>
-        </ol>
-      </section>
-      <section class="w-rule" aria-labelledby="ruleTitle">
-        <h2 class="w-kicker" id="ruleTitle">Notre règle</h2>
-        <p class="w-rule-t">Les prix payés par vos clients restent les leurs.</p>
-        <p>Vous ne pouvez ni les modifier ni les supprimer. Vos prix annoncés sont affichés à part et n'entrent jamais dans les prix médians de Pixcar.</p>
-      </section>
-    </div>
+    <section class="w-band" aria-labelledby="usesTitle">
+      <div class="w-wrap">
+        <p class="w-eyebrow">Un espace, trois usages</p>
+        <h2 class="w-h2" id="usesTitle">Ce dont vous avez besoin. Quand vous en avez besoin.</h2>
+        <div class="w-tabs" role="tablist" aria-label="Les usages de l'Espace Pro">
+          <button type="button" role="tab" id="wTab1" aria-controls="wPanel1" aria-selected="true"><span>01</span>Organiser</button>
+          <button type="button" role="tab" id="wTab2" aria-controls="wPanel2" aria-selected="false" tabindex="-1"><span>02</span>Publier</button>
+          <button type="button" role="tab" id="wTab3" aria-controls="wPanel3" aria-selected="false" tabindex="-1"><span>03</span>Comprendre</button>
+        </div>
+        <div class="w-panel" role="tabpanel" id="wPanel1" aria-labelledby="wTab1">
+          <div class="w-panel-copy">
+            <p class="w-eyebrow">Le planning</p>
+            <h3>Une vue claire. Vos repères habituels.</h3>
+            <p>Les demandes reçues sur Pixcar, les rendez-vous pris au téléphone ou au comptoir : tout arrive dans le même planning. Filtrez par mécanicien ou par poste, déplacez un rendez-vous, prévenez le client quand sa voiture est prête.</p>
+          </div>
+          <div class="w-sample" aria-label="Exemple : la journée d'un garage" role="group">
+            <p class="w-sample-h"><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg><span><b>Aujourd'hui</b><small>Exemple</small></span></p>
+            <ul class="w-rows">
+              <li><span>9:00 · Diagnostic</span><em class="is-ok">Confirmé</em></li>
+              <li><span>10:00 · Freinage avant</span><em class="is-due">À confirmer</em></li>
+              <li><span>14:00 · Absence de Sarah</span><em>2 heures</em></li>
+            </ul>
+          </div>
+        </div>
+        <div class="w-panel" role="tabpanel" id="wPanel2" aria-labelledby="wTab2" hidden>
+          <div class="w-panel-copy">
+            <p class="w-eyebrow">Vos tarifs</p>
+            <h3>Vos prix, à jour, là où vos clients comparent.</h3>
+            <p>Forfaits, prix « à partir de » ou sur devis : vous les modifiez depuis votre téléphone, ils sont en ligne dans la minute, à côté des prix que vos clients déclarent avoir payés.</p>
+          </div>
+          <div class="w-sample" role="group" aria-label="Exemple : la fiche d'un garage vérifié sur Pixcar">
+            <div class="w-head">
+              <span class="w-avatar" aria-hidden="true">AD</span>
+              <div>
+                <p class="w-name">Atelier Démo Auto</p>
+                <p class="ok-badge w-badge"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>Garage vérifié</p>
+              </div>
+              <span class="w-ex" aria-hidden="true">Exemple</span>
+            </div>
+            <ul class="w-prices">
+              <li><span>Vidange (huile + filtre)</span><b>89 €</b></li>
+              <li><span>Plaquettes de frein avant</span><b>dès 119 €</b></li>
+              <li><span>Recharge de climatisation</span><b>69 €</b></li>
+            </ul>
+            <p class="w-foot">Prix annoncés par le garage, sous sa responsabilité</p>
+          </div>
+        </div>
+        <div class="w-panel" role="tabpanel" id="wPanel3" aria-labelledby="wTab3" hidden>
+          <div class="w-panel-copy">
+            <p class="w-eyebrow">Votre visibilité</p>
+            <h3>Ce que voient vos clients.</h3>
+            <p>Vues de votre fiche, clics sur « Appeler », écart entre vos prix annoncés et les prix payés par vos clients : des totaux, jamais l'identité de ceux qui vous consultent.</p>
+          </div>
+          <div class="w-sample" role="group" aria-label="Exemple : les statistiques d'une fiche sur 30 jours">
+            <p class="w-sample-h"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg><span><b>30 derniers jours</b><small>Exemple</small></span></p>
+            <dl class="w-stats">
+              <div><dt>vues de la fiche</dt><dd>248</dd></div>
+              <div><dt>clics « Appeler »</dt><dd>31</dd></div>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="w-wrap w-how" id="comment" aria-labelledby="howTitle">
+      <div class="w-how-h">
+        <div>
+          <p class="w-eyebrow">Comment ça marche</p>
+          <h2 class="w-h2" id="howTitle">Votre espace pro. Un accès vérifié.</h2>
+        </div>
+        <p>Un parcours simple pour prendre la main sur les informations de votre garage.</p>
+      </div>
+      <ol class="w-steps">
+        <li><span>01</span><b>Retrouvez votre garage</b><p>Identifiez votre établissement avec son numéro SIRET.</p></li>
+        <li><span>02</span><b>Vérifiez votre accès</b><p>Recevez un code à une adresse e-mail connue de votre garage.</p></li>
+        <li><span>03</span><b>Organisez et publiez</b><p>Ouvrez vos rendez-vous en ligne et mettez vos tarifs à jour, depuis votre téléphone.</p></li>
+      </ol>
+      <div class="w-rule" role="note" aria-labelledby="ruleTitle">
+        <svg class="ic" aria-hidden="true"><use href="#i-info" /></svg>
+        <div>
+          <p class="w-rule-t" id="ruleTitle">Vos tarifs et les prix payés restent distincts.</p>
+          <p>Les prix déclarés par vos clients restent les leurs : vous ne pouvez ni les modifier ni les supprimer. Vos tarifs sont affichés à part et n'entrent jamais dans les prix médians de Pixcar.</p>
+        </div>
+      </div>
+    </section>
 
     <section class="w-faq" id="faq" tabindex="-1" aria-labelledby="faqTitle">
-      <h2 id="faqTitle">Questions fréquentes</h2>
-      <details>
-        <summary>Combien ça coûte ?</summary>
-        <p>Rien : l'Espace Pro est gratuit pour les garages.</p>
-      </details>
-      <details>
-        <summary>Comment savez-vous que je représente le garage ?</summary>
-        <p>Nous vérifions le SIRET dans le répertoire public des entreprises, puis nous envoyons un code à une adresse e-mail publique du garage ou à une adresse sur le domaine de son site. Nous n'écrivons jamais à une adresse saisie sur la page. Aucun moyen ne convient ? Écrivez à <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>.</p>
-      </details>
-      <details>
-        <summary>Mes prix apparaissent-ils tout de suite ?</summary>
-        <p>Oui, dans la minute, avec la mention « Annoncé ». Un prix très éloigné des prix payés dans le secteur est d'abord relu par Pixcar.</p>
-      </details>
-      <details>
-        <summary>Puis-je retirer un prix payé déclaré par un client ?</summary>
-        <p>Non : ces prix appartiennent aux automobilistes qui les déclarent. Un prix manifestement faux peut nous être signalé à <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>.</p>
-      </details>
+      <div class="w-wrap w-faq-in">
+        <div>
+          <p class="w-eyebrow">Questions fréquentes</p>
+          <h2 class="w-h2" id="faqTitle">Tout simplement.</h2>
+          <p class="w-faq-sub">Les réponses aux questions que vous vous posez avant de commencer.</p>
+        </div>
+        <div class="w-faq-list">
+          <details>
+            <summary>Combien ça coûte ?</summary>
+            <p>Rien : l'Espace Pro est gratuit pour les garages.</p>
+          </details>
+          <details>
+            <summary>Comment savez-vous que je représente le garage ?</summary>
+            <p>Nous vérifions le SIRET dans le répertoire public des entreprises, puis nous envoyons un code à une adresse e-mail publique du garage ou à une adresse sur le domaine de son site. Nous n'écrivons jamais à une adresse saisie sur la page. Aucun moyen ne convient ? Écrivez à <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>.</p>
+          </details>
+          <details>
+            <summary>Mes prix apparaissent-ils tout de suite ?</summary>
+            <p>Oui, dans la minute, avec la mention « Annoncé ». Un prix très éloigné des prix payés dans le secteur est d'abord relu par Pixcar.</p>
+          </details>
+          <details>
+            <summary>Puis-je retirer un prix payé déclaré par un client ?</summary>
+            <p>Non : ces prix appartiennent aux automobilistes qui les déclarent. Un prix manifestement faux peut nous être signalé à <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="w-wrap w-final" aria-labelledby="finalTitle">
+      <div>
+        <h2 class="w-h2" id="finalTitle">Votre prochaine journée, un peu plus simple.</h2>
+        <p>Vos rendez-vous et vos tarifs, là où vos clients comparent.</p>
+      </div>
+      <a class="btn primary" href="#inscription">Gérer mon garage<svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></a>
     </section>
   </section>
 
-  <!-- Connexion / inscription : e-mail seul, un code arrive par e-mail -->
-  <section class="card narrow" data-screen="login" hidden aria-labelledby="loginTitle">
-    <a class="back" href="#accueil"><svg class="ic" aria-hidden="true"><use href="#i-back" /></svg>Découvrir l'Espace Pro</a>
-    <h1 id="loginTitle" tabindex="-1" data-when="login">Connexion</h1>
-    <h1 id="signupTitle" tabindex="-1" data-when="signup">Créer mon accès</h1>
-    <p class="lead" data-when="login">Sans mot de passe : un code reçu par e-mail.</p>
-    <p class="lead" data-when="signup">Pour gérer la fiche de votre garage sur Pixcar. Sans mot de passe : un code reçu par e-mail.</p>
-    <form id="loginForm" novalidate>
-      <label for="email">E-mail professionnel</label>
-      <input id="email" type="email" autocomplete="email" inputmode="email" spellcheck="false" aria-describedby="emailErr" required>
-      <p class="field-err" id="emailErr" hidden></p>
-      <button class="btn primary" type="submit" id="loginBtn"><span data-when="login">Recevoir mon code</span><span data-when="signup">Créer mon accès</span></button>
-    </form>
-    <p class="switch" data-when="login">Pas encore d'accès ? <button type="button" class="link-btn" data-mode="signup">Gérer mon garage</button></p>
-    <p class="switch" data-when="signup">Déjà un accès ? <button type="button" class="link-btn" data-mode="login">Se connecter</button></p>
-    <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>Connexion gérée par notre prestataire d'identité (Amazon Cognito). Votre code vous est envoyé par e-mail, sans être conservé.</span></p>
+  <!-- Connexion / inscription : e-mail seul, un code arrive par e-mail. Mise en page « connexion guidée » de la maquette Parcours Atelier :
+       formulaire à gauche, les trois étapes à droite (en bandeau au-dessus du formulaire sur téléphone). -->
+  <section class="card guided" data-screen="login" hidden aria-labelledby="loginTitle">
+    <div class="g-top"><b><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg>Votre espace Atelier</b><span>Étape 1 sur 3</span></div>
+    <div class="g-body">
+      <div class="g-form">
+        <a class="back" href="#accueil"><svg class="ic" aria-hidden="true"><use href="#i-back" /></svg>Découvrir l'Espace Pro</a>
+        <p class="w-eyebrow"><span class="w-dot" aria-hidden="true"></span><span data-when="login">Accéder à mon espace</span><span data-when="signup">Gérer mon garage</span></p>
+        <h1 id="loginTitle" tabindex="-1" data-when="login">Connexion</h1>
+        <h1 id="signupTitle" tabindex="-1" data-when="signup">Créer mon accès</h1>
+        <p class="lead" data-when="login">Sans mot de passe : un code reçu par e-mail.</p>
+        <p class="lead" data-when="signup">Pour gérer la fiche de votre garage sur Pixcar. Sans mot de passe : un code reçu par e-mail.</p>
+        <form id="loginForm" novalidate>
+          <label for="email">E-mail professionnel</label>
+          <input id="email" type="email" autocomplete="email" inputmode="email" spellcheck="false" aria-describedby="emailErr" required>
+          <p class="field-err" id="emailErr" hidden></p>
+          <button class="btn primary" type="submit" id="loginBtn"><span data-when="login">Recevoir mon code</span><span data-when="signup">Créer mon accès</span><svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></button>
+        </form>
+        <p class="switch" data-when="login">Pas encore d'accès ? <button type="button" class="link-btn" data-mode="signup">Gérer mon garage</button></p>
+        <p class="switch" data-when="signup">Déjà un accès ? <button type="button" class="link-btn" data-mode="login">Se connecter</button></p>
+        <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>Connexion gérée par notre prestataire d'identité (Amazon Cognito). Votre code vous est envoyé par e-mail, sans être conservé.</span></p>
+      </div>
+      <aside class="g-side" aria-label="Étapes de connexion">
+        <h2 class="g-side-t">Un accès en toute simplicité.</h2>
+        <ol class="g-steps">
+          <li class="is-on" aria-current="step"><span class="g-dot" aria-hidden="true">1</span><div><b>Votre e-mail</b><p>L'adresse de votre compte professionnel.</p></div></li>
+          <li><span class="g-dot" aria-hidden="true">2</span><div><b>Votre code</b><p>Un code reçu directement dans votre boîte mail.</p></div></li>
+          <li><span class="g-dot" aria-hidden="true">3</span><div><b data-when="login">Votre atelier</b><b data-when="signup">Votre garage</b><p data-when="login">Retrouvez vos outils et poursuivez votre journée.</p><p data-when="signup">Retrouvez votre garage avec son SIRET, puis vérifiez votre accès.</p></div></li>
+        </ol>
+        <p class="g-note">Aucun mot de passe à créer ni à mémoriser.</p>
+      </aside>
+    </div>
   </section>
 
-  <section class="card narrow" data-screen="otp" hidden aria-labelledby="otpTitle">
-    <button type="button" class="back" data-go="login"><svg class="ic" aria-hidden="true"><use href="#i-back" /></svg><span id="otpEmail"></span></button>
-    <h1 id="otpTitle" tabindex="-1">Votre code</h1>
-    <p class="lead">Nous venons d'envoyer un code par e-mail à <b id="otpTo"></b>. Pensez à regarder dans les courriers indésirables.</p>
-    <form id="otpForm" novalidate>
-      <label for="otp">Code reçu par e-mail</label>
-      <input id="otp" class="code-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="11" spellcheck="false" aria-describedby="otpErr" required>
-      <p class="field-err" id="otpErr" hidden></p>
-      <button class="btn primary" type="submit">Se connecter</button>
-    </form>
-    <p class="switch"><button type="button" class="link-btn" id="otpResend">Recevoir un nouveau code</button></p>
+  <section class="card guided" data-screen="otp" hidden aria-labelledby="otpTitle">
+    <div class="g-top"><b><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg>Votre espace Atelier</b><span>Étape 2 sur 3</span></div>
+    <div class="g-body">
+      <div class="g-form">
+        <button type="button" class="back" data-go="login"><svg class="ic" aria-hidden="true"><use href="#i-back" /></svg><span id="otpEmail"></span></button>
+        <p class="w-eyebrow"><span class="w-dot" aria-hidden="true"></span>Vérifier mon adresse</p>
+        <h1 id="otpTitle" tabindex="-1">Votre code</h1>
+        <p class="lead">Nous venons d'envoyer un code par e-mail à <b id="otpTo"></b>. Pensez à regarder dans les courriers indésirables.</p>
+        <form id="otpForm" novalidate>
+          <label for="otp">Code reçu par e-mail</label>
+          <input id="otp" class="code-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="11" spellcheck="false" aria-describedby="otpErr" required>
+          <p class="field-err" id="otpErr" hidden></p>
+          <button class="btn primary" type="submit">Se connecter<svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></button>
+        </form>
+        <p class="switch"><button type="button" class="link-btn" id="otpResend">Recevoir un nouveau code</button></p>
+      </div>
+      <aside class="g-side" aria-label="Étapes de connexion">
+        <h2 class="g-side-t">Un accès en toute simplicité.</h2>
+        <ol class="g-steps">
+          <li class="is-done"><span class="g-dot" aria-hidden="true">1</span><div><b>Votre e-mail</b><p>L'adresse de votre compte professionnel.</p></div></li>
+          <li class="is-on" aria-current="step"><span class="g-dot" aria-hidden="true">2</span><div><b>Votre code</b><p>Un code reçu directement dans votre boîte mail.</p></div></li>
+          <li><span class="g-dot" aria-hidden="true">3</span><div><b data-when="login">Votre atelier</b><b data-when="signup">Votre garage</b><p data-when="login">Retrouvez vos outils et poursuivez votre journée.</p><p data-when="signup">Retrouvez votre garage avec son SIRET, puis vérifiez votre accès.</p></div></li>
+        </ol>
+        <p class="g-note">Aucun mot de passe à créer ni à mémoriser.</p>
+      </aside>
+    </div>
   </section>
 
   <!-- Tableau de bord : garages rattachés et vérifications en cours -->
@@ -318,6 +420,11 @@
   <!-- Tableau de bord d'un garage rattaché : prix annoncés, prix payés par ses clients, visites de sa fiche -->
   <section class="dash" data-screen="dash" hidden aria-labelledby="dashTitle">
     <nav class="dash-nav" id="dashNav" aria-label="Espace Pro">
+      <a class="nav-brand" href="../" aria-label="Pixcar : retour au comparateur">
+        <span class="brand-mark"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#px-mark" /></svg></span>
+        <span class="px-word brand-word" aria-hidden="true"></span>
+      </a>
+      <span class="nav-tag" aria-hidden="true">Espace Pro</span>
       <button type="button" class="dash-link" data-panel="top" aria-current="true"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg><span>Tableau de bord</span></button>
       <button type="button" class="dash-link" data-panel="requests" data-rdv hidden><svg class="ic" aria-hidden="true"><use href="#i-inbox" /></svg><span>Demandes</span><span class="dash-count" id="rqCount" hidden></span></button>
       <button type="button" class="dash-link" data-panel="planning" data-adv hidden><svg class="ic" aria-hidden="true"><use href="#i-planning" /></svg><span>Planning</span></button>
@@ -615,6 +722,15 @@
     <button type="button" class="btn" data-go="garage">Essayer un autre SIRET</button>
   </section>
 </main>
+
+<!-- Rideau de la connexion (src/js/pro/curtain.js) : décoratif, retiré dès que l'espace est affiché -->
+<div class="curtain" id="curtain" hidden aria-hidden="true">
+  <div class="curtain-surface"></div>
+  <div class="curtain-logo">
+    <span class="brand-mark"><svg viewBox="0 0 100 100"><use href="#px-mark" /></svg></span>
+    <span class="px-word brand-word"></span>
+  </div>
+</div>
 
 <dialog class="sheet" id="priceDlg" aria-labelledby="priceDlgTitle">
   <form id="priceForm" novalidate>

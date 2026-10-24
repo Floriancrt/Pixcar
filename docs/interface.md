@@ -56,20 +56,20 @@ Relevée sur les maquettes de l'utilisateur (octobre 2026) ; elle remplace « Or
 | Élément | Couleur |
 | --- | --- |
 | En-tête, carte « écart » de l'accueil | noir `#111216` |
-| Plaque du logo | marine `#0E1220` |
+| Plaque du logo | marine `#0E1220` ; logo de la charte graphique v2.1 (symbole et mot « pixcar » en dégradé `#F82B15` → `#FC4916` → `#FB8855`, `docs/brand/README.md`) depuis le 24 octobre 2026 |
 | Fond de page | crème `#F6F4F0` |
 | Tableau, cartes | blanc ; en-tête du tableau `#F8FAFB` ; ligne la moins chère `#FEF6F2` |
-| Orange des actions (`--btn`) | `#FF5A1E` : **texte blanc en grand gras seulement** (19 px, 700 : 3,12:1, admis pour le grand texte), sinon texte noir (5,98:1) |
+| Orange des actions (`--btn`) | `#FC4916` (charte v2.1, 24 octobre 2026 ; `#FF5A1E` avant) : **texte noir** (`--on-btn`, 6,1:1), comme le demande la charte (le blanc, 3,4:1, est à éviter) |
 | Boutons Appeler / Demander, barre de l'échelle | noir `#111216`, texte blanc |
 | Petite ligne orange des résultats (« VIDANGE · LYON ») | `#C2400D` (4,7:1 sur le crème) |
 | Accent (liens, sélection, focus, rayon de recherche) | `#B13506` |
 | Marqueurs | noir `#111216` (avec prix), gris `#8E94AA` (sans prix), orange `#E5440B` (choisi, et le moins cher) |
 | Tuiles des lignes | teinte claire de la couleur de l'enseigne (15 %) et lettre foncée (45 % de la couleur sur le noir) ; sans enseigne : bleu pâle (marque), orange pâle (pneus), gris (`--tile-gray`, indépendants et registre) |
-| Rond-point d'attente | bitume noir `#111216`, pointillés `#F4F5FA`, voiture `#FD5319` |
+| Rond-point d'attente | bitume noir `#111216`, pointillés `#F4F5FA`, voiture `#FC4916` |
 
-Logos inchangés (mot-symbole « pixcar » sur sa plaque marine, favicon, `apple-touch-icon`) ; le site publiable a aussi un `favicon.ico` (16, 32 et 48 px, rendu depuis `favicon.svg` par `scripts/favicon-ico.mjs`) : c'est l'adresse que demandent les robots qui ne lisent pas le SVG, et Google n'affiche dans ses résultats qu'une icône d'au moins 48 px. Description pour les moteurs de recherche (`<meta name="description">`, demande du 11 octobre 2026) : « 1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto. » ; Google peut en afficher une autre et ne relit l'icône et la description qu'à son prochain passage (`exploitation.md`) ; `theme-color` `#111216`, le noir de l'en-tête. En couleurs forcées, la plaque du logo garde son marine (le « pix » est blanc) et l'échelle de prix est redessinée en `CanvasText`.
+Logo, favicon et `apple-touch-icon` de la charte graphique v2.1 depuis le 24 octobre 2026 (mise en page inchangée : le logo garde sa plaque marine ; fichiers et provenance dans `docs/brand/README.md`) ; le site publiable a aussi un `favicon.ico` (16, 32 et 48 px, rendu depuis `favicon.svg` par `scripts/favicon-ico.mjs`) : c'est l'adresse que demandent les robots qui ne lisent pas le SVG, et Google n'affiche dans ses résultats qu'une icône d'au moins 48 px. Description pour les moteurs de recherche (`<meta name="description">`, demande du 11 octobre 2026) : « 1ère plateforme communautaire de comparaison de prestations d'entretien et de réparation auto. » ; Google peut en afficher une autre et ne relit l'icône et la description qu'à son prochain passage (`exploitation.md`) ; `theme-color` `#111216`, le noir de l'en-tête. En couleurs forcées, la plaque du logo garde son marine (le logo orange est dessiné pour un fond sombre) et l'échelle de prix est redessinée en `CanvasText`.
 
-Jetons : section 1 du CSS, **un seul thème, clair** (le mode sombre a été retiré le 10 octobre 2026 à la demande de l'utilisateur ; `color-scheme: light`, la page reste claire quand le système est réglé en sombre) (`--canvas`, `--topbar-bg`, `--btn`, `--on-btn`, `--on-btn-2`, `--thead-bg`, `--best-bg`, `--track`, `--bar`, `--act-*`, `--note-*`, `--stat-dark*`, `--step-*`, `--tile-*`, `--mk-*`, `--ld-*`…). L'audit `tests/contrast/contrast_css.py` vérifie 88 paires (texte 4,5:1, grand texte et éléments graphiques 3:1) ; la suite `a11y` vérifie en plus, dans la page, que **tout** texte blanc sur l'orange est en grand gras.
+Jetons : section 1 du CSS, **un seul thème, clair** (le mode sombre a été retiré le 10 octobre 2026 à la demande de l'utilisateur ; `color-scheme: light`, la page reste claire quand le système est réglé en sombre) (`--canvas`, `--topbar-bg`, `--btn`, `--on-btn`, `--on-btn-2`, `--thead-bg`, `--best-bg`, `--track`, `--bar`, `--act-*`, `--note-*`, `--stat-dark*`, `--step-*`, `--tile-*`, `--mk-*`, `--ld-*`…). L'audit `tests/contrast/contrast_css.py` vérifie 88 paires (texte 4,5:1, grand texte et éléments graphiques 3:1) ; la suite `a11y` vérifie en plus, dans la page, que **tout** texte blanc sur l'orange est en grand gras (il n'en reste plus depuis le passage au texte noir).
 
 ## Ce qui ne change pas
 

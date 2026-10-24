@@ -184,8 +184,9 @@ note l'ajout, le déplacement ou la suppression d'un bloc sans son libellé.
 d'ensemble et d'un bloc enrichi, vidéo de la barre latérale). Tout est dans la page (`src/js/pro/planning.js`, `src/js/pro/dashboard.js`,
 `src/pro/index.html`, `src/css/pro.css`) : aucune route ni donnée nouvelle, l'API du lot 3b suffit.
 
-- **Barre latérale de l'Espace Pro** (ordinateur, 900 px et plus) : fixée tout à gauche sous le bandeau, sur toute la hauteur ; le
-  contenu prend le reste de la largeur. « Replier le menu » la réduit aux icônes (le libellé reste lu par les lecteurs d'écran et
+- **Barre latérale de l'Espace Pro** (ordinateur, 900 px et plus) : fixée tout à gauche, sur toute la hauteur (noire, le logo en
+  haut ; identité du 24 octobre 2026, `docs/brand/README.md`) ; le bandeau du compte commence à sa droite et le contenu prend le
+  reste de la largeur. « Replier le menu » la réduit aux icônes (le libellé reste lu par les lecteurs d'écran et
   s'affiche en infobulle) ; le choix est gardé dans ce navigateur (`localStorage`, clé `pixcar-pro-rail`). Planning a sa propre icône,
   distincte de Disponibilités. Téléphone : la barre du bas ne change pas.
 - **Vue d'ensemble** en haut du Planning, comptée sur la période affichée (jour, semaine, mois), sans les filtres : **Rendez-vous**

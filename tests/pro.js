@@ -189,8 +189,8 @@ function fakeCognito() {
   const cognito = fakeCognito();
   const browser = await chromium.launch({ args: ["--proxy-server=direct://", "--proxy-bypass-list=*"] });
   const outside = [];
-  async function newPage({ width = 1280, height = 900 } = {}) {
-    const ctx = await browser.newContext({ viewport: { width, height }, locale: "fr-FR", serviceWorkers: "block" });
+  async function newPage({ width = 1280, height = 900, reducedMotion = "no-preference" } = {}) {
+    const ctx = await browser.newContext({ viewport: { width, height }, locale: "fr-FR", serviceWorkers: "block", reducedMotion });
     await ctx.route("**/*", async (route) => {
       const req = route.request();
       const url = new URL(req.url());
@@ -218,6 +218,19 @@ function fakeCognito() {
     check(`axe: no violation on « ${label} »`, r.length === 0, r.join("\n"));
   };
   const visible = (page, screen) => page.locator(`[data-screen="${screen}"]`).isVisible();
+  // le rideau de la connexion (curtain.js) : on note chaque fois qu'il apparaît (false) ou disparaît (true)
+  const watchCurtain = (p) =>
+    p.evaluate(() => {
+      window.__curtain = [];
+      if (window.__curtainObs) return;
+      const c = document.getElementById("curtain");
+      window.__curtainObs = new MutationObserver(() => window.__curtain.push(c.hidden));
+      window.__curtainObs.observe(c, { attributes: true, attributeFilter: ["hidden"] });
+    });
+  const curtainDone = async (p) => {
+    await p.waitForSelector("#curtain", { state: "hidden" });
+    return p.evaluate(() => window.__curtain.join());
+  };
   const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, `pro-${name}.png`), fullPage: true });
   const EMAIL = "camille@garage-demo.fr";
 
@@ -233,10 +246,22 @@ function fakeCognito() {
     nav: [...document.querySelectorAll("#proNav a")].map((a) => a.getAttribute("href")),
     text: document.querySelector('[data-screen="welcome"]').textContent.replace(/\s+/g, " "),
   }));
-  check("a visitor lands on the welcome page; the header offers the FAQ, « Se connecter », « Gérer mon garage »; nothing asked of Cognito", w.h1 === "Vos prix, à jour, là où vos clients comparent." && w.nav.join() === "#faq,#connexion,#inscription" && !cognito.calls.length && (await page.locator("#account").isHidden()), JSON.stringify(w.nav));
+  check("a visitor lands on the welcome page; the header offers the FAQ, « Se connecter », « Gérer mon garage »; nothing asked of Cognito", w.h1 === "L'essentiel de votre atelier. Au même endroit." && w.nav.join() === "#faq,#connexion,#inscription" && !cognito.calls.length && (await page.locator("#account").isHidden()), JSON.stringify(w.nav));
   check("the welcome page promises only what exists: the sample garage says « Exemple », verification by an e-mail code (no phone call), no hourly rate", /Exemple/.test(w.text) && /un code envoyé à une adresse e-mail connue de votre garage/.test(w.text) && !/appel automatique|Décrochez|taux horaire/i.test(w.text), w.text.slice(0, 200));
   await axe(page, "accueil");
   await shot(page, "0-accueil");
+  // les trois usages en onglets : clic, flèches, Début / Fin ; un seul panneau visible
+  await page.click("#wTab2");
+  const tabState = () => page.evaluate(() => [1, 2, 3].map((i) => `${document.getElementById("wTab" + i).getAttribute("aria-selected")}/${document.getElementById("wPanel" + i).hidden}`).join());
+  const t1 = await tabState();
+  await page.keyboard.press("ArrowRight");
+  const t2 = await tabState();
+  await page.keyboard.press("Home");
+  const t3 = await tabState();
+  await page.keyboard.press("ArrowLeft");
+  const t4 = await tabState();
+  check("welcome tabs: click, arrows, Home wrap around; one panel at a time and focus follows", t1 === "false/true,true/false,false/true" && t2 === "false/true,false/true,true/false" && t3 === "true/false,false/true,false/true" && t4 === "false/true,false/true,true/false" && (await page.evaluate(() => document.activeElement.id)) === "wTab3", [t1, t2, t3, t4].join(" | "));
+  await page.click("#wTab1");
   await page.click('#proNav a[href="#faq"]');
   await page.waitForFunction(() => document.activeElement && document.activeElement.id === "faq");
   check("« Questions fréquentes » leads to the questions, on the welcome page", await visible(page, "welcome"));
@@ -269,8 +294,11 @@ function fakeCognito() {
   await page.waitForFunction(() => !document.getElementById("otpErr").hidden);
   check("a wrong e-mail code says so, in French", (await page.textContent("#otpErr")).includes("Code incorrect"));
   await page.fill("#otp", cognito.last(EMAIL));
+  await watchCurtain(page);
   await page.click('#otpForm button[type="submit"]');
   await page.waitForSelector('[data-screen="home"]:not([hidden])');
+  const veil1 = await curtainDone(page);
+  check("once the code is accepted, the black curtain covers the screen, then fades away on the garage list (no side bar there)", veil1 === "false,true", veil1);
   check("confirmed and signed in at once (ConfirmSignUp session, no second code)", cognito.calls.slice(-2).join() === "ConfirmSignUp,InitiateAuth" && cognito.mail.length === 1, cognito.calls.join());
   check("dashboard: no garage yet, the account is shown in the header (not the visitor's links), the address loses #inscription", (await page.locator("#noGarage").isVisible()) && (await page.textContent("#accountEmail")) === EMAIL && (await page.locator("#proNav").isHidden()) && new URL(page.url()).hash === "");
   const stored = await page.evaluate(() => [Object.keys(sessionStorage), Object.keys(localStorage), document.cookie]);
@@ -638,8 +666,17 @@ function fakeCognito() {
   await page.fill("#otp", signin.slice(0, 4) + " " + signin.slice(4));
   const fit = await page.$eval("#otp", (el) => ({ value: el.value, clipped: el.scrollWidth > el.clientWidth + 1, lead: el.closest("section").querySelector(".lead").textContent }));
   check("sign-in code: 8 digits (Cognito), typed with a space, kept whole and fully visible; the screen does not promise 6 digits", signin.length === 8 && fit.value.replace(/\D/g, "") === signin && !fit.clipped && !/6 chiffres/.test(fit.lead), JSON.stringify(fit));
+  await watchCurtain(page);
   await page.click('#otpForm button[type="submit"]');
+  await page.waitForTimeout(1300); // en plein resserrement : capture pour la revue visuelle
+  await shot(page, "6b-rideau");
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
+  const veil2 = await curtainDone(page);
+  const rail = await page.evaluate(() => {
+    const b = document.querySelector(".dash-nav .nav-brand").getBoundingClientRect();
+    return { x: Math.round(b.left), y: Math.round(b.top), anims: document.getAnimations().length };
+  });
+  check("signing in to a dashboard: the curtain shrinks into the side bar, then leaves nothing behind (no animation left running)", veil2 === "false,true" && rail.anims === 0 && rail.x < 40 && rail.y < 40, JSON.stringify({ veil2, rail }));
   check("sign in again by e-mail code: an account with one verified garage lands on its dashboard, under the name Pixcar approved", (await page.textContent("#dashGarage")).startsWith("Bonjour Camille · Garage Démo du Centre"), await page.textContent("#dashGarage"));
 
   // « Gérer mon garage » avec une adresse déjà inscrite : on bascule sur la connexion
@@ -668,7 +705,7 @@ function fakeCognito() {
 
   // ---- mobile
   {
-    const m = await newPage({ width: 390, height: 844 });
+    const m = await newPage({ width: 390, height: 844, reducedMotion: "reduce" });
     await m.page.goto(`${srv.url}/pro/`);
     await m.page.waitForSelector('[data-screen="welcome"]:not([hidden])');
     const overflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -684,8 +721,10 @@ function fakeCognito() {
     await m.page.click("#loginBtn");
     await m.page.waitForSelector('[data-screen="otp"]:not([hidden])');
     await m.page.fill("#otp", cognito.last(EMAIL));
+    await watchCurtain(m.page);
     await m.page.click('#otpForm button[type="submit"]');
     await m.page.waitForSelector('[data-screen="dash"]:not([hidden])');
+    check("fewer animations asked (prefers-reduced-motion): no curtain at all", (await m.page.evaluate(() => window.__curtain.join())) === "" && (await m.page.locator("#curtain").isHidden()));
     const dashOverflow = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     const nav = await m.page.$eval(".dash-nav", (n) => ({ position: getComputedStyle(n).position, bottom: Math.round(n.getBoundingClientRect().bottom) }));
     check("mobile dashboard: no horizontal scroll, the navigation sits at the bottom of the screen", dashOverflow <= 0 && nav.position === "fixed" && nav.bottom === 844, JSON.stringify({ dashOverflow, nav }));

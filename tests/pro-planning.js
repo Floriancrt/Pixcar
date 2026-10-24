@@ -179,14 +179,16 @@ const NOTIFY = "atelier@garage-planning.fr";
   await page.goto(`${srv.url}/pro/`);
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
   check("advanced mode: Planning is in the menu, next to Demandes", await page.isVisible('.dash-link[data-panel="planning"]'));
-  // ---- barre latérale : fixée tout à gauche sous le bandeau, repliable en icônes, choix mémorisé
+  // ---- barre latérale : fixée tout à gauche sur toute la hauteur, repliable en icônes, choix mémorisé
   const rail = () => page.evaluate(() => {
     const n = document.querySelector(".dash-nav").getBoundingClientRect(), m = document.querySelector(".pro-main").getBoundingClientRect(), t = document.querySelector(".pro-top").getBoundingClientRect();
     const label = document.querySelector('.dash-link[data-panel="planning"] span:not(.dash-count)');
-    return { left: Math.round(n.left), top: Math.round(n.top), topbar: Math.round(t.bottom), width: Math.round(n.width), main: Math.round(m.left), height: Math.round(n.height), label: label ? label.getBoundingClientRect().width : -1 };
+    return { left: Math.round(n.left), top: Math.round(n.top), topbar: Math.round(t.left), width: Math.round(n.width), main: Math.round(m.left), height: Math.round(n.height), label: label ? label.getBoundingClientRect().width : -1 };
   });
+  await page.waitForFunction(() => !document.getAnimations().length); // le bandeau glisse à droite de la barre (transition de 0,18 s)
   const r0 = await rail();
-  check("rail: fixed at the far left, under the top bar, full height", r0.left === 0 && r0.top === r0.topbar && r0.height >= 1000 - r0.topbar - 1 && r0.main >= r0.width, JSON.stringify(r0));
+  // identité du 24 octobre 2026 (maquette Parcours Atelier) : barre noire sur toute la hauteur, le bandeau du compte commence à sa droite
+  check("rail: fixed at the far left, full height, the account bar starts at its right edge", r0.left === 0 && r0.top === 0 && r0.height >= 1000 - 1 && r0.topbar === r0.width && r0.main >= r0.width, JSON.stringify(r0));
   check("rail: expanded by default, with its labels and a « Replier le menu » button", r0.width >= 200 && r0.label > 20 && (await text(page, "#dashRail")) === "Replier le menu" && (await page.getAttribute("#dashRail", "aria-expanded")) === "true", JSON.stringify(r0));
   await page.click("#dashRail");
   await page.waitForFunction(() => document.querySelector(".dash-nav").getBoundingClientRect().width <= 80);

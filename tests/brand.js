@@ -49,18 +49,20 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
         })();
     check(`${T}2b favicon.ico next to the SVG on the publishable site (16, 32 and 48 px); none in the all-in-one page`, ico, head.ico.slice(0, 60));
     check(`${T}3 a single theme-color, the black of the header (#111216)`, head.themeColors.length === 1 && head.themeColors[0] === "#111216", JSON.stringify(head.themeColors));
-    check(`${T}4 symbol path has 16 sectors, an arc pair each`, head.sprite && (head.sprite.match(/M/g) || []).length === 16 && (head.sprite.match(/A/g) || []).length === 32, head.sprite && head.sprite.slice(0, 80));
+    // charte du 24 octobre 2026 (scripts/brand-logo.py) : 14 traits fermés en dégradé #F82B15 → #FC4916 → #FB8855
+    const grad = await page.evaluate(() => [...document.querySelectorAll("#px-grad stop")].map((s) => s.getAttribute("stop-color").toUpperCase()).join());
+    check(`${T}4 symbol path: the charter's ring of 14 closed strokes, filled with its gradient (#F82B15 → #FC4916 → #FB8855)`, head.sprite && (head.sprite.match(/M/g) || []).length === 14 && (head.sprite.match(/Z/g) || []).length === 14 && grad === "#F82B15,#FC4916,#FB8855", (head.sprite && head.sprite.slice(0, 80)) + " " + grad);
     const brand = await page.evaluate(() => {
       const a = document.querySelector(".topbar .brand"), svg = a.querySelector("svg"), w = a.querySelector(".brand-word"), cs = getComputedStyle(svg), ws = getComputedStyle(w), wr = w.getBoundingClientRect();
-      return { label: a.getAttribute("aria-label"), use: svg.querySelector("use").getAttribute("href"), fill: cs.fill, svgW: Math.round(svg.getBoundingClientRect().width), plate: getComputedStyle(a).backgroundColor, word: ws.display, wordBox: [Math.round(wr.width), Math.round(wr.height)], wordImg: /^url\("data:image\/png;base64,/.test(ws.backgroundImage), hidden: w.getAttribute("aria-hidden") };
+      return { label: a.getAttribute("aria-label"), use: svg.querySelector("use").getAttribute("href"), fill: cs.fill, svgW: Math.round(svg.getBoundingClientRect().width), plate: getComputedStyle(a).backgroundColor, word: ws.display, wordBox: [Math.round(wr.width), Math.round(wr.height)], wordImg: /^url\("data:image\/svg\+xml,/.test(ws.backgroundImage), hidden: w.getAttribute("aria-hidden") };
     });
-    check(`${T}5 brand link in the header: label, symbol via sprite in the logo light orange (#FF9A72, 40 px), wordmark (80 × 27 px, decorative) on its navy plate`, brand.label === "Pixcar, accueil" && brand.use === "#px-mark" && eq(brand.fill, 255, 154, 114) && brand.svgW === 40 && brand.word === "block" && brand.wordBox[0] === 80 && brand.wordBox[1] === 27 && brand.wordImg && brand.hidden === "true" && rgb(brand.plate)[2] > rgb(brand.plate)[0] + 10, JSON.stringify(brand));
+    check(`${T}5 brand link in the header: label, symbol via sprite in the charter's gradient (orange #FC4916 as fallback, 40 px), vector wordmark (84 × 27 px, decorative) on its navy plate`, brand.label === "Pixcar, accueil" && brand.use === "#px-mark" && /^url\("#px-grad"\) rgb\(252, 73, 22\)$/.test(brand.fill) && brand.svgW === 40 && brand.word === "block" && brand.wordBox[0] === 84 && brand.wordBox[1] === 27 && brand.wordImg && brand.hidden === "true" && rgb(brand.plate)[2] > rgb(brand.plate)[0] + 10, JSON.stringify(brand));
     const title = await page.evaluate(() => {
       const h = document.getElementById("garagesTitle"), c = getComputedStyle(h);
       return { tag: h.tagName, text: h.textContent.replace(/\s+/g, " ").trim(), size: c.fontSize, weight: c.fontWeight, family: c.fontFamily.split(",")[0].replace(/"/g, ""), loaded: document.fonts.check(`800 ${c.fontSize} Manrope`) && [...document.fonts].some((f) => f.family.replace(/"/g, "") === "Manrope" && f.status === "loaded") };
     });
     check(`${T}6 home: the visible title is the hero sentence, an h1 in Manrope ExtraBold (54.4 px), the font file loaded`, title.tag === "H1" && title.text === "Le bon prix pour votre voiture, près de chez vous." && title.size === "54.4px" && title.weight === "800" && title.family === "Manrope" && title.loaded, JSON.stringify(title));
-    // pixel check of the logo plate: navy background, near-white "pix", orange "car"
+    // pixel check of the logo plate: navy background, the word and the symbol in the charter's orange gradient
     const plateShot = path.join(__dirname, ".out", "shots", `brand-${scheme}-plate.png`);
     const shotOk = await page.locator(".topbar .brand").screenshot({ path: plateShot, timeout: 4000, scale: "device" }).then(() => true, () => false);
     const hist = shotOk ? execSync(`convert ${plateShot} -format %c histogram:info:-`, { maxBuffer: 64 * 1024 * 1024 }).toString().split("\n") : [];
@@ -70,16 +72,16 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
       if (!m) continue;
       const [n, r, g, b] = m.slice(1).map(Number);
       if (Math.abs(r - 15) <= 6 && Math.abs(g - 18) <= 6 && Math.abs(b - 31) <= 6) nNavy += n;
-      else if (Math.abs(r - 253) <= 8 && Math.abs(g - 83) <= 10 && Math.abs(b - 25) <= 12) nOrange += n;
+      else if (r >= 235 && g >= 35 && g <= 150 && b <= 110) nOrange += n;
       else if (r >= 238 && r <= 250 && g >= 238 && b >= 244 && Math.abs(r - g) <= 4) nIce += n;
     }
-    check(`${T}7 plate pixels: navy background, near-white "pix" (#F4F5FA) and orange "car" (#FD5319) all present`, nNavy > 3000 && nOrange > 80 && nIce > 80, JSON.stringify({ nNavy, nOrange, nIce }));
+    check(`${T}7 plate pixels: navy background, the whole logo in the charter's orange (no white letters left)`, nNavy > 3000 && nOrange > 400 && nIce === 0, JSON.stringify({ nNavy, nOrange, nIce }));
     const chrome = await page.evaluate(() => {
       const top = getComputedStyle(document.querySelector(".topbar")), tabs = [...document.querySelectorAll("#tabs .tab")].map((t) => ({ cur: t.getAttribute("aria-current") === "page", shown: getComputedStyle(t).display !== "none", fg: getComputedStyle(t).color, text: t.innerText.trim() })), add = document.getElementById("addRepairBtn"), ac = getComputedStyle(add);
       return { top: [top.backgroundColor, top.color, top.position, Math.round(document.querySelector(".topbar").getBoundingClientRect().top)], tabs, add: [ac.backgroundColor, ac.color, ac.fontSize, ac.fontWeight], addName: add.getAttribute("aria-label") };
     });
     const other = chrome.tabs.find((t) => !t.cur), cur = chrome.tabs.find((t) => t.cur);
-    check(`${T}8 header: black (${scheme}), sticky at the top, pale ink; the nav shows the other section only (« Prix et promos »); the add button is orange with white text, large and bold (19 px, 700: 3:1 is enough)`, eq(chrome.top[0], ...TOP) && eq(chrome.top[1], 244, 245, 250) && chrome.top[2] === "sticky" && chrome.top[3] === 0 && cur && !cur.shown && other && other.shown && other.text === "Prix et promos" && eq(other.fg, 185, 189, 207) && eq(chrome.add[0], 255, 90, 30) && eq(chrome.add[1], 255, 255, 255) && parseFloat(chrome.add[2]) >= 18.66 && +chrome.add[3] >= 700 && chrome.addName === "Ajouter une réparation", JSON.stringify(chrome));
+    check(`${T}8 header: black (${scheme}), sticky at the top, pale ink; the nav shows the other section only (« Prix et promos »); the add button is the charter's orange with black text (6.1:1), large and bold (19 px, 700)`, eq(chrome.top[0], ...TOP) && eq(chrome.top[1], 244, 245, 250) && chrome.top[2] === "sticky" && chrome.top[3] === 0 && cur && !cur.shown && other && other.shown && other.text === "Prix et promos" && eq(other.fg, 185, 189, 207) && eq(chrome.add[0], 252, 73, 22) && eq(chrome.add[1], 0, 0, 0) && parseFloat(chrome.add[2]) >= 18.66 && +chrome.add[3] >= 700 && chrome.addName === "Ajouter une réparation", JSON.stringify(chrome));
     const tok = await page.evaluate(() => { const s = getComputedStyle(document.documentElement); const g = (k) => s.getPropertyValue(k).trim(); return { accent: g("--accent"), btn: g("--btn"), indigo: g("--indigo"), pink: g("--pink"), canvas: g("--canvas") }; });
     check(`${T}9 tokens: accent #b13506 (burnt orange, 4.5:1 on tinted backgrounds)${scheme === "dark" ? ", even with the system in dark mode (one light theme)" : ""}, old indigo/pink tokens gone`, tok.accent === "#b13506" && tok.indigo === "" && tok.pink === "" && tok.canvas.toLowerCase() === "#f6f4f0", JSON.stringify(tok));
     // markers read the tokens
@@ -127,8 +129,8 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
       return { word: [Math.round(w.width), Math.round(w.height)], symbol: Math.round(sv.width), top: [getComputedStyle(top).backgroundColor, getComputedStyle(top).position, Math.round(tr.height)], add: [ac.backgroundColor, ac.color, ac.fontSize, ac.fontWeight, add.textContent.replace(/\s+/g, " ").trim(), [...add.querySelectorAll("span")].filter((x) => getComputedStyle(x).display !== "none" && x.getBoundingClientRect().width > 1).map((x) => x.textContent.trim()).join("")],
         other: { text: other.innerText.trim(), name: other.textContent.includes("Promos"), bg: oc.backgroundColor, fg: oc.color, border: [oc.borderTopColor, oc.borderTopWidth], weight: oc.fontWeight, inTop: !!other.closest(".topbar"), pos: getComputedStyle(tabs).position, row: Math.abs((orr.top + orr.bottom) / 2 - (ar.top + ar.bottom) / 2) < 1.5, before: orr.right <= ar.left, inside: orr.left >= 0 && ar.right <= innerWidth && orr.bottom <= tr.bottom }, curShown: getComputedStyle(cur).display !== "none", sw: document.documentElement.scrollWidth, h1: getComputedStyle(document.getElementById("garagesTitle")).fontSize };
     });
-    check(`${T}13 mobile: black sticky top bar (64 px) with the symbol (28 px) and the wordmark (56 × 19 px); the hero title shrinks to 37.6 px`, eq(mob.top[0], ...TOP) && mob.top[1] === "sticky" && mob.top[2] === 64 && mob.symbol === 28 && mob.word[0] === 56 && mob.word[1] === 19 && mob.h1 === "37.6px", JSON.stringify(mob));
-    check(`${T}14 mobile: orange « Réparation » button (white, 19 px bold) and, before it in the header, « Promos » (black, orange border, white bold text); no bar at the bottom, nothing wider than the screen`, eq(mob.add[0], 255, 90, 30) && eq(mob.add[1], 255, 255, 255) && parseFloat(mob.add[2]) >= 18.66 && +mob.add[3] >= 700 && mob.add[5] === "Réparation" && mob.other.text === "Promos" && eq(mob.other.bg, ...TOP) && eq(mob.other.fg, 244, 245, 250) && eq(mob.other.border[0], 255, 90, 30) && mob.other.border[1] === "2px" && +mob.other.weight >= 700 && mob.other.inTop && mob.other.pos === "static" && mob.other.row && mob.other.before && mob.other.inside && !mob.curShown && mob.sw === 390, JSON.stringify(mob));
+    check(`${T}13 mobile: black sticky top bar (64 px) with the symbol (28 px) and the wordmark (59 × 19 px); the hero title shrinks to 37.6 px`, eq(mob.top[0], ...TOP) && mob.top[1] === "sticky" && mob.top[2] === 64 && mob.symbol === 28 && mob.word[0] === 59 && mob.word[1] === 19 && mob.h1 === "37.6px", JSON.stringify(mob));
+    check(`${T}14 mobile: orange « Réparation » button (black, 19 px bold) and, before it in the header, « Promos » (black, orange border, white bold text); no bar at the bottom, nothing wider than the screen`, eq(mob.add[0], 252, 73, 22) && eq(mob.add[1], 0, 0, 0) && parseFloat(mob.add[2]) >= 18.66 && +mob.add[3] >= 700 && mob.add[5] === "Réparation" && mob.other.text === "Promos" && eq(mob.other.bg, ...TOP) && eq(mob.other.fg, 244, 245, 250) && eq(mob.other.border[0], 252, 73, 22) && mob.other.border[1] === "2px" && +mob.other.weight >= 700 && mob.other.inTop && mob.other.pos === "static" && mob.other.row && mob.other.before && mob.other.inside && !mob.curShown && mob.sw === 390, JSON.stringify(mob));
     check(`${T}15 mobile: no page error`, logs.errors.length === 0 && logs.console.length === 0, JSON.stringify([logs.errors, logs.console]));
     await ctx.close();
   }
@@ -139,7 +141,7 @@ const eq = (s, r, g, b) => { const v = rgb(s); return v[0] === r && v[1] === g &
   const fpage = await fctx.newPage();
   await fpage.goto(`${server.url}/${FILE}`); await fpage.waitForTimeout(500);
   const fc = await fpage.evaluate(() => ({ plate: getComputedStyle(document.querySelector(".topbar .brand")).backgroundColor, adj: getComputedStyle(document.querySelector(".topbar .brand")).forcedColorAdjust }));
-  check("F1 forced colors: the logo keeps its navy plate (the wordmark has a white part)", /rgb\(14, 18, 32\)/.test(fc.plate) && fc.adj === "none", JSON.stringify(fc));
+  check("F1 forced colors: the logo keeps its navy plate (the orange logo is drawn for a dark background)", /rgb\(14, 18, 32\)/.test(fc.plate) && fc.adj === "none", JSON.stringify(fc));
   await fctx.close();
 
   await browser.close(); server.close();
