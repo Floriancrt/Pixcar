@@ -52,10 +52,11 @@ simple / avancée, Mon garage à onglets, prestations libres).
   téléphone (390 px).
 - **Connexion et code** : cadre guidé de 1 000 px, formulaire à gauche, les trois étapes à droite (« Étape N sur 3 ») ; sur téléphone,
   les étapes passent en bandeau. Mêmes mesures : seuls restent les écarts voulus listés plus bas.
-- **Transition** (`src/js/pro/curtain.js`), séquence `enterDashboard` de la maquette : le formulaire glisse de 24 px vers la gauche en
-  s'effaçant (450 ms), un rideau noir arrive par la droite (700 ms, `cubic-bezier(.76, 0, .24, 1)`), le logo apparaît au centre
-  (220 ms) pendant le chargement ; puis le rideau se resserre jusqu'à la largeur de la barre latérale (1 s) et le logo rejoint sa place
-  en haut de celle-ci (850 ms, 150 ms après) ; sur téléphone il se réduit au symbole du rail. Animations Web (WAAPI), donc rien
+- **Transition** (`src/js/pro/curtain.js`), séquence `enterDashboard` de la maquette, raccourcie le 25 octobre 2026 (« dure un peu
+  trop longtemps » : 1,1 s au lieu de 1,9 s) : le formulaire glisse de 24 px vers la gauche en s'effaçant (260 ms ; maquette 450), un
+  rideau noir arrive par la droite (420 ms ; 700, `cubic-bezier(.76, 0, .24, 1)`), le logo apparaît au centre (140 ms ; 220) pendant
+  le chargement, commencé dès l'arrivée du rideau ; puis le rideau se resserre jusqu'à la largeur de la barre latérale (600 ms ; 1 000)
+  et le logo rejoint sa place en haut de celle-ci (520 ms, 80 ms après ; 850 et 150) ; sur téléphone il se réduit au symbole du rail. Animations Web (WAAPI), donc rien
   d'inline dans le HTML (politique de sécurité `style-src 'self'`) ; **aucun rideau** si le système demande moins d'animations.
 - **Coque de l'atelier** : barre latérale noire de 216 px (196 px sous 1 200 px, rail de 64 px sous 760 px et quand elle est repliée)
   avec le logo (148 px), la carte du garage, « MON ATELIER » en haut, puis en bas « MON ESPACE », « Replier le menu » et la carte

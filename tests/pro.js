@@ -396,7 +396,13 @@ function fakeCognito() {
     [await page.textContent("#dashTitle"), await page.textContent("#dashGarage"), await page.textContent("#dashVerified")].join(" | "),
   );
   check("the steps are gone on the dashboard", await page.locator("#steps").isHidden());
+  check(
+    "without online appointments: no period, the big card is the Pixcar listing, then the quick actions and the attention points alone",
+    (await page.locator("#dbPeriod").isHidden()) && (await page.textContent("#dbCapaTitle")) === "Votre fiche Pixcar" && (await page.locator("#dbTodayCard").isHidden()) && (await page.locator("#dbRqCard").isHidden()) && (await page.locator("#dbResources").isHidden()) && (await page.$$eval("#dbActions b", (bs) => bs.map((b) => b.textContent))).join() === "Annoncer un prix,Mon garage" && (await page.$$eval("#dbKpis .db-kpi-btn", (bs) => bs.map((b) => b.dataset.kpi))).join() === "calls,prices,fresh,alerts",
+    await page.textContent("#dbCapa"),
+  );
   await axe(page, "tableau de bord vide (garage)");
+  await shot(page, "6c-tableau-sans-rdv");
   // Mon garage › Prestations (ex-« Prestations & tarifs ») : les prix et les statistiques de la fiche
   await garageTab(page, "services");
   check(

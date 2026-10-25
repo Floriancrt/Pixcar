@@ -20,7 +20,7 @@ glisser-déposer, blocs internes : section « Lot 3b » plus bas), lot 3c (suivi
 | Pause pendant une intervention | La main-d'œuvre s'interrompt (pause, fermeture de midi) et reprend ; le véhicule reste sur son poste. |
 | Mécaniciens | Des ressources, pas des comptes : un seul compte par garage (inchangé). |
 | Voiture prête (lot 3c) | Au passage d'un rendez-vous Pixcar à « Prête », une case « Prévenir le client par e-mail » est **cochée par défaut** (le garage peut la décocher) ; la page de suivi du client montre l'avancement. Décision de l'utilisateur du 19 octobre 2026. |
-| Tableau de bord (lot 3c) | Inspiré de la maquette de l'utilisateur du 19 octobre 2026 ; raccourcis personnalisables. |
+| Tableau de bord (lot 3c) | Inspiré de la maquette de l'utilisateur du 19 octobre 2026, puis refait sur la proposition « 03 · Pilotage » de son fichier du 25 octobre 2026 : période Jour, Semaine ou Mois, calendrier en ligne. Les raccourcis personnalisables ne sont plus affichés (absents de la proposition ; la préférence reste gardée par l'API). |
 
 ## Données (migration `006_calendar.sql`)
 
@@ -288,6 +288,28 @@ maquette » ; pour le planning, « à chaque fois que j'ouvre un rdv, un panneau
 - **Écart voulu** : une cinquième rubrique, « Fiche Pixcar », garde les coordonnées et le registre, qui n'ont pas de place dans les
   quatre rubriques de la maquette.
 
+**Retouches et tableau de bord « Pilotage » (25 octobre 2026)** — retours de l'utilisateur après ses essais, avec le fichier
+`Pixcar_Tableau_De_Bord_3_Propositions_3.html` (trois propositions, la troisième choisie : « 03 · Pilotage ») :
+- « L'animation Pixcar à la connexion dure un peu trop longtemps » : 1,1 s d'animation au lieu de 1,9 s (`src/js/pro/curtain.js`,
+  durées dans `T`), et le compte se charge pendant que le rideau arrive au lieu d'après (`main.js`).
+- « Lorsque je clique sur les boutons du panneau de gauche, il y a un délai de latence » : l'écran choisi s'affiche au clic (titre, fil
+  d'Ariane, bouton actif) ; une barre orange de 2 px court en haut tant que ses données arrivent ; la première visite d'un écran cache son
+  contenu périmé, les suivantes gardent le dernier état ; Mon garage et le Planning lisent leurs données en parallèle ; une réponse
+  arrivée après un autre clic ne reprend ni l'écran ni le focus (`dashboard.js`, `panel`).
+- « La police est trop brute dans la section garage, réduis l'épaisseur » : Mon garage passe à 400 et 500 pour le texte, 650 pour les
+  titres de section (mesuré : 59 à 71 % du texte en 400, 9 % au plus en 650 ou plus).
+- « À chaque fois que je déplace un rdv pris sur Pixcar, le panneau de droite doit s'ouvrir et la validation doit entraîner un mail » :
+  glisser un rendez-vous Pixcar ouvre toujours le panneau. Autre horaire : la validation envoie au client l'e-mail « Nouvel horaire »
+  (règle déjà en place, page de suivi et fichier d'agenda). Même horaire, autre mécanicien ou poste : le panneau le dit (« Aucun e-mail
+  n'est envoyé au client ») et « Enregistrer l'affectation » valide.
+- **Tableau de bord « Pilotage »** (section « Tableau de bord » plus bas) : en-tête avec la période, calendrier en ligne qui pousse le
+  contenu, actions rapides, carte « La capacité de votre atelier » et quatre chiffres, équipe et postes, rendez-vous de la période,
+  demandes à traiter, points d'attention. **Écarts voulus** : les gris de la maquette sont assombris et aucun texte ne descend sous
+  9 px (contraste AA) ; une ligne de rendez-vous garde son état et son menu d'actions (la proposition ne montre que l'heure, la
+  prestation et la voiture) ; « Voir les N rendez-vous » déplie la liste sur place au lieu d'ouvrir le Planning ; les demandes gardent
+  « Confirmer » et « Refuser » (la proposition : « Examiner ») ; les icônes de provenance sont celles de l'Espace Pro (globe : Pixcar,
+  téléphone : hors Pixcar) au lieu d'émojis ; la carte « Raccourcis utiles » et sa fenêtre disparaissent (absentes de la proposition).
+
 ## Lot 3c : suivi des interventions, tableau de bord
 
 Choix faits au début du lot (19 octobre 2026), dans le cadre des décisions ci-dessus ; à revoir sur retour de l'utilisateur.
@@ -327,40 +349,67 @@ ceux prévus dès la migration 006 (`rdv_work_orders.status`), plus « Client ab
 
 ### Tableau de bord
 
-Premier écran de l'Espace Pro. Tout est calculé dans la page à partir des routes existantes (agenda du jour et du lendemain, réglages
-du calendrier, demandes à traiter, prix et visites), avec les mêmes règles de charge que le Planning.
+Premier écran de l'Espace Pro, sur la proposition « 03 · Pilotage » de l'utilisateur (25 octobre 2026 ; avant : la maquette du
+19 octobre). Tout est calculé dans la page à partir des routes existantes (agenda de la période, d'aujourd'hui et de demain ; réglages du
+calendrier ; demandes à traiter ; prix et visites), avec les mêmes règles de charge que le Planning (`src/js/pro/home.js`,
+`workshop.js`).
 
-**Mode avancé** (inspiré de la maquette de l'utilisateur) :
+**En-tête et période** : badge « Garage vérifié », titre, « Bonjour prénom · garage, adresse » (l'adresse disparaît sur téléphone) ; à
+droite, la période : *Jour*, *Semaine* (lundi au dimanche), *Mois* (mois civil), avec une pastille qui glisse ; flèches (jour, semaine ou
+mois précédent et suivant) ; le libellé (« Mercredi 4 novembre 2026 », « 2 – 8 novembre 2026 », « Novembre 2026 ») ouvre le
+**calendrier en ligne** ; « Aujourd'hui », « Cette semaine » ou « Ce mois » y ramène. Le calendrier s'ouvre dans la page, sous la
+période, en poussant le contenu (0,28 s ; rien si le système demande moins d'animations) : titre « Choisir un jour / une semaine / un
+mois », mois et année en listes, flèches, grille des jours (six semaines), des semaines (une ligne par semaine) ou des mois ; à droite,
+« Période affichée » et une aide. Au clavier : un seul arrêt de tabulation dans la grille, les flèches s'y déplacent, Entrée choisit (le
+calendrier reste ouvert sur le choix), Échap ou « Replier le calendrier » le referme et rend le focus au libellé. La période choisie reste
+celle du garage le temps de la visite ; une lecture de l'agenda suffit quand la période, aujourd'hui et demain tiennent dans les 42 jours
+de la route, sinon deux.
 
-- **Cinq chiffres** : *Véhicules attendus aujourd'hui* (rendez-vous Pixcar confirmés et hors Pixcar du jour, sans les clients absents ;
-  dessous : combien restent à recevoir, combien hors Pixcar) ; *Interventions en cours* (reçue, en cours, en attente de pièces,
-  suspendue) ; *Véhicules prêts* (à remettre) ; *Capacité restante* (heures de main-d'œuvre encore libres aujourd'hui, à partir de
-  maintenant, pour les mécaniciens présents) ; *Alertes* (nombre de points d'attention). Les trois premiers filtrent la liste du jour,
-  Capacité ouvre le Planning sur la journée, Alertes mène aux points d'attention.
-- **Aujourd'hui à l'atelier** : heure de dépôt, client (ou libellé), voiture et immatriculation, prestations, état (À confirmer, Prévue,
-  l'état de l'intervention, Client absent) et un menu « Actions » : les passages possibles, « Ouvrir dans le planning ». Lien « Voir le
-  planning complet ».
-- **Actions rapides** : *Nouveau rendez-vous* (pris par téléphone ou au comptoir), *Client déjà sur place* (rendez-vous hors Pixcar au
-  prochain quart d'heure, marqué « Voiture reçue » à l'enregistrement), *Bloquer un créneau*, *Déclarer une absence* : les formulaires du
-  Planning. La maquette disait « Prendre un rendez-vous Pixcar » : un rendez-vous Pixcar créé par le garage pour son client supposerait
-  d'enregistrer les coordonnées d'un client qui n'a rien demandé (Pixcar sous-traitant du garage) ; c'est la décision « plus tard » sur
-  les rendez-vous pris hors Pixcar, inchangée.
-- **Demandes à traiter** : les trois plus urgentes (Confirmer ; Refuser, avec le motif, comme dans Demandes) et le lien vers toutes.
-- **Équipe & charge** : chaque mécanicien actif, sa charge du jour (planifié / disponible, %), son état maintenant (En intervention,
-  Disponible, Absent, Absent à partir de…, De retour à…, Ne travaille pas aujourd'hui).
-- **Postes & équipements** : état maintenant (Occupé, avec la voiture et l'heure de fin ; Disponible ; Indisponible jusqu'à… ; Fermé).
-- **Points d'attention**, les plus urgents d'abord : rendez-vous en conflit, demande dont l'heure limite tombe dans les 24 heures,
-  prestation faite que l'équipe ne peut pas planifier (contrôles du calendrier : compétence, poste ou équipement manquant), voiture pas
-  arrivée 15 minutes après l'heure de dépôt, voiture pas prête à l'heure prévue, absence ou indisponibilité de demain, prix à confirmer.
-  Quatre affichés, « Voir tous les points » pour le reste ; chacun mène à l'écran où le régler.
-- **Raccourcis utiles** : trois par défaut (Planning, Prestations & tarifs, Disponibilités) ; « Personnaliser » en choisit jusqu'à six
-  parmi : Planning, Demandes, Prestations & tarifs, Disponibilités, Mon garage, Équipe et postes, Nouveau rendez-vous, Fermer une
-  journée, Ma fiche sur Pixcar. Gardés sur le compte pour ce garage (tous les appareils).
+**Mode avancé** :
 
-**Mode simple** : chiffres (rendez-vous aujourd'hui, demandes à traiter, vues de la fiche sur 30 jours, prix à jour), liste du jour
-(sans états d'intervention), demandes à traiter, points d'attention (heures limites, prix à confirmer, adresse de notification
-manquante), raccourcis et une invitation au calendrier avancé. **Sans rendez-vous en ligne** : chiffres des prix et des visites, points
-d'attention (prix), raccourcis.
+- **Actions rapides** (une ligne, la première orange) : *Nouveau rendez-vous*, *Client déjà sur place* (rendez-vous hors Pixcar au
+  prochain multiple de 5 minutes, marqué « Voiture reçue » à l'enregistrement), *Bloquer un créneau*, *Déclarer une absence* : les
+  formulaires du Planning. La maquette du 19 octobre disait « Prendre un rendez-vous Pixcar » : un rendez-vous Pixcar créé par le garage
+  pour son client supposerait d'enregistrer les coordonnées d'un client qui n'a rien demandé (Pixcar sous-traitant du garage) ; c'est la
+  décision « plus tard » sur les rendez-vous pris hors Pixcar, inchangée.
+- **La capacité de votre atelier** : les heures de main-d'œuvre encore libres sur la période (à partir de maintenant ; un jour passé n'en
+  a plus), « de main-d'œuvre encore disponible » (jour) ou « non planifiée » (semaine, mois) ; à côté, *Mécaniciens présents* (ou *sur
+  la période*) x / y, *Postes disponibles* x / y, *Charge planifiée* ; dessous, la jauge planifié / capacité et « Ajuster les
+  disponibilités » (Mon garage › Ressources).
+- **Quatre chiffres** : jour : *Véhicules attendus* (pas encore arrivés, dont ceux à confirmer), *Interventions en cours* (reçue, en
+  cours, en attente de pièces, suspendue), *Véhicules prêts*, *Points d'attention* ; semaine et mois : *Rendez-vous planifiés*,
+  *Véhicules restitués*, *Véhicules prêts*, *Points d'attention*. Ceux de l'atelier filtrent la liste (bouton enfoncé, « Filtre : … »,
+  « Tout afficher ») ; *Points d'attention* mène à leur carte.
+- **Équipe & charge** : chaque mécanicien actif, initiales, planifié / heures de travail sur la période, jauge, heures encore libres
+  (« Ne travaille pas ce jour », « Absence déclarée ») et, aujourd'hui, ce qu'il fait maintenant (En intervention, Disponible, Absent,
+  Absent à partir de…, De retour à…). « Gérer l'équipe » : Mon garage › Ressources.
+- **Postes & équipements** : aujourd'hui, l'état maintenant (Occupé avec la voiture et l'heure de fin, Disponible, Indisponible avec le
+  motif, Fermé, Hors service) ; une autre période : Disponible (et « Indisponible une partie de la période »), Indisponible, Fermé.
+- **Les rendez-vous de la période** (« Aujourd'hui à l'atelier », « La journée à l'atelier », « Les rendez-vous de la semaine / du
+  mois ») : heure de dépôt (et jour, en semaine et en mois), provenance (Pixcar ou hors Pixcar), prestations, client et voiture, état
+  (À confirmer, Prévue, l'état de l'intervention, Client absent) et le menu « Actions » (les passages possibles jusqu'à aujourd'hui,
+  « Ouvrir dans le planning »). Trois lignes, puis « Voir les N rendez-vous » déplie la liste sur place. « Planning complet » ouvre le
+  Planning sur la journée.
+- **Demandes à traiter** : les trois plus urgentes (Confirmer ; Refuser, avec le motif, comme dans Demandes), leur nombre, « Tout
+  voir ».
+- **Points d'attention** (toujours ceux d'aujourd'hui), les plus urgents d'abord : rendez-vous en conflit, voiture pas prête à l'heure
+  prévue, voiture pas arrivée 15 minutes après l'heure de dépôt, prestation faite que l'équipe ne peut pas planifier (plusieurs : un seul
+  point « N prestations non planifiables » avec leur liste), demande dont l'heure limite tombe dans les 24 heures, absence ou
+  indisponibilité de demain, prix à confirmer. Le premier en encart avec son action (« Voir le rendez-vous », « Vérifier les
+  compétences »…), les autres derrière « N autres points d'attention ».
+
+Mise en page : capacité et chiffres côte à côte, équipe et postes, puis rendez-vous, demandes et points d'attention sur trois colonnes ;
+sous 1 180 px les points d'attention passent sur toute la largeur, sous 1 030 px la période passe sous le titre, sous 950 px la capacité
+au-dessus des quatre chiffres (sur une ligne), sous 720 px une colonne, deux chiffres par ligne et la période sur deux lignes dans un
+cadre.
+
+**Mode simple** : même en-tête et même période ; actions (*Répondre aux demandes* ou *Mes horaires et créneaux*, *Fermer une journée*,
+*Annoncer un prix*, *Planning avancé*) ; grande carte « Vos rendez-vous en ligne » (rendez-vous confirmés de la période ; à confirmer,
+vues de la fiche, prix à jour) ; chiffres : demandes à traiter, vues de la fiche et clics « Appeler » sur 30 jours, points d'attention
+(heures limites, prix à confirmer, adresse de notification manquante, rendez-vous en ligne fermés) ; liste de la période sans états
+d'intervention, demandes. **Sans rendez-vous en ligne** : pas de période ; actions *Annoncer un prix* et *Mon garage* ; grande carte
+« Votre fiche Pixcar » (vues sur 30 jours, les 30 jours d'avant, clics « Appeler ») ; chiffres : clics « Appeler », prix annoncés, prix
+à jour, points d'attention.
 
 **Prestations & tarifs** : ce qu'affichait le tableau de bord jusqu'ici (prix à confirmer, chiffres des visites, tableau des prix
 annoncés) devient un écran à part ; « Mes prix » prend ce nom.

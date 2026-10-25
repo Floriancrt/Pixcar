@@ -106,7 +106,7 @@ const NOTIFY = "atelier@garage-demo.fr";
   await page.goto(`${srv.url}/pro/`);
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
   const nav = await page.$$eval("#dashNav .dash-link:not(.rail-toggle)", (els) => els.filter((e) => e.offsetParent).map((e) => e.innerText.trim()));
-  check("with appointments open in the API, the menu offers « Demandes » (nothing to answer yet); Disponibilités and the prices are in Mon garage", nav.join("|") === "Tableau de bord|Demandes|Mon garage|Mes garages" && (await page.locator("#rqCount").isHidden()) && (await page.locator("#dbRqCount").isHidden()) && (await text(page, "#dbRqEmpty")) === "Aucune demande en attente.", nav.join("|"));
+  check("with appointments open in the API, the menu offers « Demandes » (nothing to answer yet); Disponibilités and the prices are in Mon garage", nav.join("|") === "Tableau de bord|Demandes|Mon garage|Mes garages" && (await page.locator("#rqCount").isHidden()) && (await page.locator("#dbRqCount").isHidden()) && (await text(page, "#dbRqEmpty h3")) === "Aucune demande en attente.", nav.join("|"));
 
   // ---- Disponibilités, dans Mon garage › Horaires (demande du 24 octobre 2026) : fermés, et ce qui manque
   await page.click('.dash-link[data-panel="garage"]');

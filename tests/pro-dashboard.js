@@ -1,12 +1,13 @@
-// Espace Pro, tableau de bord et suivi des interventions (docs/calendrier-avance.md, lot 3c) de bout en bout : page construite comme la
-// version publiée (politique de sécurité), vraie API (PGlite), horloges de la page et de l'API arrêtées un mercredi à 10:30. Un garage en
+// Espace Pro, tableau de bord « Pilotage » et suivi des interventions (docs/calendrier-avance.md) de bout en bout : page construite comme
+// la version publiée (politique de sécurité), vraie API (PGlite), horloges de la page et de l'API arrêtées un mercredi à 10:30. Un garage en
 // mode avancé (trois mécaniciens dont une absente à 15:00, deux ponts dont l'un en maintenance demain, un poste pneus en maintenance, la
 // climatisation faite mais que personne ne sait faire) et la journée : une voiture prête, deux en cours (en retard), une pas arrivée,
-// une demande à confirmer, un rendez-vous pris par téléphone. Parcours : cinq chiffres → liste du jour (états, menu d'actions au clavier,
-// voiture reçue, voiture prête avec le client prévenu par e-mail) → filtre par un chiffre → demandes à traiter (confirmer) → équipe et
-// postes → points d'attention → raccourcis personnalisés (gardés sur le compte) → client déjà sur place (formulaire du Planning) →
-// ouvrir dans le planning (fiche, avancement) → page de suivi du client → prix annoncés (Mon garage › Prestations) → mode simple →
-// téléphone ; axe.
+// une demande à confirmer, un rendez-vous pris par téléphone. Parcours : en-tête et période → actions rapides → capacité de l'atelier →
+// quatre chiffres → rendez-vous du jour (trois, puis tous ; états, menu d'actions au clavier, voiture reçue, voiture prête avec le client
+// prévenu par e-mail) → filtre par un chiffre → demandes à traiter (confirmer) → équipe et postes → points d'attention → Semaine, flèches,
+// Mois, calendrier en ligne au clavier, Jour → « Gérer l'équipe » → client déjà sur place (formulaire du Planning) → ouvrir dans le
+// planning (fiche, avancement) → page de suivi du client → prix annoncés (Mon garage › Prestations) → téléphone (calendrier des mois) →
+// mode simple ; axe.
 //   node tests/pro-dashboard.js
 delete process.env.PIXCAR_ROOT;
 const { execFileSync } = require("child_process");
@@ -156,8 +157,13 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
   };
   const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, `pro-dash-${name}.png`), fullPage: true });
   const words = (page, sel) => page.$eval(sel, (e) => { const w = document.createTreeWalker(e, NodeFilter.SHOW_TEXT), out = []; while (w.nextNode()) out.push(w.currentNode.textContent); return out.join(" ").replace(/\s+/g, " ").trim(); });
-  const kpis = (page) => page.$$eval("#dbKpis .db-kpi-btn", (bs) => Object.fromEntries(bs.map((b) => [b.dataset.kpi, { v: b.querySelector(".db-kpi-v").textContent, l: b.querySelector(".db-kpi-l").textContent, s: (b.querySelector(".db-kpi-s") || {}).textContent || "", p: b.getAttribute("aria-pressed") }])));
-  const rows = (page) => page.$$eval("#dbList .db-row", (rs) => rs.map((r) => [r.querySelector(".db-time").textContent, r.querySelector(".db-who b").textContent, r.querySelector(".db-chip").textContent.trim()].join(" | ")));
+  const kpis = (page) => page.$$eval("#dbKpis .db-kpi-btn", (bs) => Object.fromEntries(bs.map((b) => [b.dataset.kpi, { v: b.querySelector(".db-kpi-v").textContent, l: b.querySelector(".db-kpi-l").textContent, s: b.querySelector(".db-kpi-s").textContent, p: b.getAttribute("aria-pressed") }])));
+  const rows = (page) => page.$$eval("#dbList .db-row", (rs) => rs.map((r) => [r.querySelector(".db-time").textContent, r.querySelector(".db-who").textContent.split(" · ")[0], r.querySelector(".db-chip").textContent.trim()].join(" | ")));
+  const facts = (page) => page.$$eval("#dbCapa .pv-facts div", (ds) => ds.map((d) => `${d.querySelector("dt").textContent} ${d.querySelector("dd").textContent}`));
+  const settled = (page) => page.waitForSelector("#dbBody:not([aria-busy])");
+  const allRows = async (page) => {
+    if ((await page.isVisible("#dbMoreRows")) && (await page.getAttribute("#dbMoreRows", "aria-expanded")) === "false") await page.click("#dbMoreRows");
+  };
   const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   const live = (page, re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById("dbLive").textContent), re.source);
   const rowSel = (q) => `#dbList [data-id="${q.id}"]`;
@@ -174,14 +180,19 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
     throw e;
   });
   await page.waitForSelector("#dbList .db-row");
-  check("the dashboard is the first screen, with its title, the greeting and today's date", (await words(page, "#dashTitle")) === "Tableau de bord" && /^Bonjour Camille · Garage Démo Atelier/.test(await words(page, "#dashGarage")) && (await words(page, "#dbToday")) === "Mer. 4 nov. 2026", (await words(page, ".db-head")));
+  check("the dashboard is the first screen: title, greeting, the day shown (Jour, today, « Aujourd'hui »)", (await words(page, "#dashTitle")) === "Tableau de bord" && /^Bonjour Camille · Garage Démo Atelier, 14 rue de l'Exemple/.test(await page.textContent("#dashGarage")) && (await words(page, "#dbToday")) === "Mercredi 4 novembre 2026" && (await page.getAttribute('#dbGran [data-gran="day"]', "aria-pressed")) === "true" && (await words(page, "#dbNow")) === "Aujourd'hui" && (await page.getAttribute("#dbPicker", "aria-label")) === "Choisir un jour" && (await page.getAttribute("#dbPicker", "aria-expanded")) === "false" && (await page.getAttribute("#dbCal", "aria-hidden")) === "true", await words(page, ".pv-head"));
   check("the menu says « Tableau de bord »; the prices are in « Mon garage »", (await page.getAttribute('.dash-link[data-panel="top"]', "aria-current")) === "true" && !(await page.$('.dash-link[data-panel="prices"]')) && (await words(page, '.dash-link[data-panel="garage"]')) === "Mon garage");
+  check("quick actions as the proposal: new appointment (orange), client already here, block a slot, an absence", (await page.$$eval("#dbActions .db-act", (bs) => bs.map((b) => b.textContent))).join() === "Nouveau rendez-vous,Client déjà sur place,Bloquer un créneau,Déclarer une absence" && (await page.$$("#dbActions .db-act.is-primary")).length === 1);
+  check("the workshop's capacity: 11 h 45 still free today, 3 / 3 mechanics, 3 / 4 posts (tyres down), 5 h planned out of 21 h", (await words(page, "#dbCapa .pv-capa-v")) === "11 h 45" && (await words(page, "#dbCapa h3")) === "de main-d'œuvre encore disponible" && JSON.stringify(await facts(page)) === JSON.stringify(["Mécaniciens présents 3 / 3", "Postes disponibles 3 / 4", "Charge planifiée 5 h"]) && (await words(page, "#dbCapa .pv-scale")) === "5 h planifiées 21 h de capacité" && (await page.getAttribute("#dbCapa .pv-meter", "aria-label")) === "Charge planifiée : 24 % de la capacité", `${await words(page, "#dbCapa")} ${JSON.stringify(await facts(page))}`);
   let k = await kpis(page);
-  check("five figures: 6 vehicles expected (2 to receive, 1 to confirm, 1 off Pixcar), 2 in progress, 1 ready, the free capacity, the alerts", k.expected.v === "6" && k.expected.s === "2 à recevoir · 1 à confirmer · 1 hors Pixcar" && k.live.v === "2" && k.live.s === "Sur 6 véhicules aujourd'hui" && k.ready.v === "1" && k.capacity.v === "11 h 45" && k.alerts.v === "6" && k.alerts.l === "Alertes", JSON.stringify(k));
-  check("the figures that filter the list say so (aria-pressed)", k.expected.p === "false" && k.live.p === "false" && k.ready.p === "false" && k.capacity.p === null);
+  check("four figures: 3 vehicles expected (1 to confirm), 2 in progress, 1 ready, 6 attention points", k.expected.v === "3" && k.expected.s === "à recevoir, dont 1 à confirmer" && k.live.v === "2" && k.live.s === "dans l'atelier" && k.ready.v === "1" && k.ready.s === "à restituer" && k.alerts.v === "6" && k.alerts.l === "Points d'attention" && Object.keys(k).length === 4, JSON.stringify(k));
+  check("the figures that filter the list say so (aria-pressed)", k.expected.p === "false" && k.live.p === "false" && k.ready.p === "false" && k.alerts.p === null);
   let list = await rows(page);
-  check("today at the workshop: by drop-off time, each with its state", JSON.stringify(list) === JSON.stringify(["8:00 | Sophie Lambert | Prête", "8:30 | Julien Roux | En cours", "9:00 | Marie Curie | Voiture reçue", "9:30 | Lucas Petit | Prévue", "14:00 | M. Martin (tél.) | Prévue", "14:30 | Thomas Bernard | À confirmer"]), JSON.stringify(list));
-  check("a row gives the car and plate, the service, and Pixcar or not", (await words(page, rowSel(julien))).includes("Peugeot 208 · FY-123-AB") && (await words(page, rowSel(julien))).includes("Vidange") && (await words(page, `#dbList .db-row:nth-child(5)`)).includes("Hors Pixcar") && (await words(page, rowSel(julien))).includes("Travaux 8:30–9:15"), await words(page, rowSel(julien)));
+  check("today at the workshop: the first three by drop-off time, then « Voir les 6 rendez-vous »", JSON.stringify(list) === JSON.stringify(["8:00 | Sophie Lambert | Prête", "8:30 | Julien Roux | En cours", "9:00 | Marie Curie | Voiture reçue"]) && (await words(page, "#dbListCount")) === "6 rendez-vous sur la journée" && (await words(page, "#dbMoreRows")) === "Voir les 6 rendez-vous" && (await words(page, "#dbTodayText")) === "Aujourd'hui à l'atelier", JSON.stringify(list));
+  await page.click("#dbMoreRows");
+  list = await rows(page);
+  check("« Voir les 6 rendez-vous » unfolds the whole day in place", JSON.stringify(list) === JSON.stringify(["8:00 | Sophie Lambert | Prête", "8:30 | Julien Roux | En cours", "9:00 | Marie Curie | Voiture reçue", "9:30 | Lucas Petit | Prévue", "14:00 | M. Martin (tél.) | Prévue", "14:30 | Thomas Bernard | À confirmer"]) && (await page.getAttribute("#dbMoreRows", "aria-expanded")) === "true" && (await words(page, "#dbMoreRows")) === "Voir moins", JSON.stringify(list));
+  check("a row gives the service, the client, the car and plate, and Pixcar or not", (await words(page, rowSel(julien))).includes("Pixcar : Vidange") && (await words(page, rowSel(julien))).includes("Julien Roux · Peugeot 208 · FY-123-AB") && (await words(page, "#dbList .db-row:nth-child(5)")).includes("Hors Pixcar : Plaquettes de frein avant"), await words(page, rowSel(julien)));
   check("the page carries the published security policy, and nothing complained", /(^|; )style-src 'self'(;|$)/.test(await page.$eval('meta[http-equiv="Content-Security-Policy"]', (m) => m.content)) && logs.length === 0, logs.join("\n"));
   await shot(page, "1-ordinateur");
   await axe(page, "tableau de bord (mode avancé)");
@@ -197,7 +208,7 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
   await page.click(`${rowSel(lucas)} .db-menu >> text=Voiture reçue`);
   await live(page, /Lucas Petit : Voiture reçue\./);
   k = await kpis(page);
-  check("« Voiture reçue »: the row and the figures follow, the focus stays on the row", (await words(page, `${rowSel(lucas)} .db-chip`)) === "Voiture reçue" && k.live.v === "3" && k.expected.s === "1 à recevoir · 1 à confirmer · 1 hors Pixcar" && (await page.evaluate((id) => !!document.activeElement.closest(`[data-id="${id}"]`), lucas.id)), JSON.stringify(k));
+  check("« Voiture reçue »: the row and the figures follow, the focus stays on the row", (await words(page, `${rowSel(lucas)} .db-chip`)) === "Voiture reçue" && k.live.v === "3" && k.expected.v === "2" && k.expected.s === "à recevoir, dont 1 à confirmer" && (await page.evaluate((id) => !!document.activeElement.closest(`[data-id="${id}"]`), lucas.id)), JSON.stringify(k));
   items = await menu(page, julien);
   check("actions of a car in progress: waiting for parts, suspend, ready", JSON.stringify(items) === JSON.stringify(["En attente de pièces", "Suspendre", "Voiture prête", "Ouvrir dans le planning"]), JSON.stringify(items));
   await page.keyboard.press("Escape");
@@ -217,45 +228,75 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
   list = await rows(page);
   check("« Interventions en cours » filters the list, the filter is named and can be undone", (await page.getAttribute('[data-kpi="live"]', "aria-pressed")) === "true" && list.length === 2 && list.every((r) => /En cours|Voiture reçue/.test(r)) && (await words(page, "#dbFilter")).startsWith("Filtre : Interventions en cours"), JSON.stringify(list));
   await page.click("#dbFilter button");
-  check("« Tout afficher » brings the whole day back", (await rows(page)).length === 6 && (await page.getAttribute('[data-kpi="live"]', "aria-pressed")) === "false");
+  check("« Tout afficher » brings the whole day back (three rows, then the rest behind the button)", (await rows(page)).length === 3 && (await words(page, "#dbListCount")) === "6 rendez-vous sur la journée" && (await page.getAttribute('[data-kpi="live"]', "aria-pressed")) === "false");
 
   // ---- demandes à traiter
   const rq = await page.$$eval("#dbRq .db-rq-row", (rs) => rs.map((r) => r.innerText.replace(/\s+/g, " ")));
   check("requests to handle: Thomas Bernard, with Confirm and Refuse", rq.length === 1 && /Thomas Bernard/.test(rq[0]) && /Citroën C3 · BB-789-EF/.test(rq[0]) && /Confirmer/.test(rq[0]) && /Refuser/.test(rq[0]) && (await words(page, "#dbRqCount")) === "1", JSON.stringify(rq));
   // ---- équipe et postes
-  const team = await page.$$eval("#dbTeam .db-team-row", (rs) => rs.map((r) => r.innerText.replace(/\s+/g, " ").trim()));
-  check("team: each mechanic with initials, today's load and what they do now; Sami away from 15:00", team.length === 3 && /^PM Paul Martin/.test(team[0]) && team.some((t) => /^S Sami .*Absent à partir de 15:00/.test(t)) && team.every((t) => /\d+ %/.test(t)), JSON.stringify(team));
-  const posts = await page.$$eval("#dbPosts .db-post-row", (rs) => rs.map((r) => r.innerText.replace(/\s+/g, " ").trim()));
-  check("posts: the tyre post is down, the others free now", posts.length === 4 && posts.some((p) => /^Pneus Indisponible/.test(p)) && posts.some((p) => /^Pont 1 Disponible/.test(p)) && posts.some((p) => /^Diagnostic Disponible/.test(p)), JSON.stringify(posts));
-  // ---- points d'attention : les plus urgents d'abord, quatre affichés
-  const alerts = () => page.$$eval("#dbAlerts .db-alert", (bs) => bs.map((b) => b.querySelector("b").textContent));
-  let al = await alerts();
-  check("attention points: late cars first, four shown, the rest behind a button", al.length === 4 && al[0] === "Pas prête à l'heure : Julien Roux" && (await words(page, "#dbAlertsMore")) === "Voir tous les points (5)", JSON.stringify(al));
+  const team = await page.$$eval("#dbTeam .pv-person", (rs) => rs.map((r) => r.innerText.replace(/\s+/g, " ").trim()));
+  check("team: initials, today's load (planned / hours), the hours still free, what each does now; Sami away from 15:00", team.length === 3 && /^PM Paul Martin 2 h 45 \/ 8 h 4 h 30 disponibles/.test(team[0]) && team.some((t) => /^S Sami 0 h \/ 5 h .*disponibles Absent à partir de 15:00/.test(t)), JSON.stringify(team));
+  const posts = await page.$$eval("#dbPosts .pv-post", (rs) => rs.map((r) => r.innerText.replace(/\s+/g, " ").trim()));
+  check("posts: the tyre post is down, the others free now", posts.length === 4 && posts.some((p) => /^Pneus Maintenance Indisponible/.test(p)) && posts.some((p) => /^Pont 1 Disponible/.test(p)) && posts.some((p) => /^Diagnostic Disponible/.test(p)), JSON.stringify(posts));
+  // ---- points d'attention : le plus urgent en encart, les autres derrière un bouton
+  const others = () => page.$$eval("#dbAlerts .db-alert", (bs) => bs.map((b) => b.querySelector("b").textContent));
+  check("attention points: the most urgent in a box with its action, the others behind « N autres points d'attention »", (await words(page, "#dbAlertsCount")) === "5" && (await words(page, "#dbAlertTop b")) === "Pas prête à l'heure : Julien Roux" && (await words(page, "#dbAlertTop .pv-alert-go")) === "Voir le rendez-vous" && (await words(page, "#dbAlertsMore")) === "4 autres points d'attention" && (await page.isHidden("#dbAlerts")), await words(page, "#dbAlertsCard"));
   await page.click("#dbAlertsMore");
-  al = await alerts();
-  check("all points: the service nobody can do, tomorrow's maintenance, the client to confirm", al.length === 5 && al.includes("Recharge de climatisation non planifiable") && al.includes("Pont 2 indisponible demain") && al.includes("1 client à confirmer") && (await page.getAttribute("#dbAlertsMore", "aria-expanded")) === "true", JSON.stringify(al));
+  const al = await others();
+  check("the other points: the late car, the service nobody can do, tomorrow's maintenance, the client to confirm", al.length === 4 && al.includes("Pas prête à l'heure : Lucas Petit") && al.includes("Recharge de climatisation non planifiable") && al.includes("Pont 2 indisponible demain") && al.includes("1 client à confirmer") && (await page.getAttribute("#dbAlertsMore", "aria-expanded")) === "true" && (await words(page, "#dbAlertsMore")) === "Masquer les autres points", JSON.stringify(al));
   check("tomorrow's maintenance says when", (await page.$$eval("#dbAlerts .db-alert", (bs) => bs.map((b) => b.innerText.replace(/\s+/g, " ")).find((t) => /Pont 2/.test(t)))).includes("De 9:00 à 11:00 (maintenance)"));
   // ---- confirmer la demande de Thomas
   await page.click("#dbRq .db-ok");
   await live(page, /Rendez-vous confirmé\./);
-  check("confirmed from the dashboard: the request leaves the list, the menu badge is gone, the client is told", (await page.$$("#dbRq .db-rq-row")).length === 0 && (await page.isVisible("#dbRqEmpty")) && (await page.isHidden("#rqCount")) && outbox.some((m) => m.target === "thomas@example.com" && /confirmé/i.test(m.subject || "")) && (await words(page, `${rowSel(thomas)} .db-chip`)) === "Prévue");
+  check("confirmed from the dashboard: the request leaves the list, the menu badge is gone, the client is told", (await page.$$("#dbRq .db-rq-row")).length === 0 && (await page.isVisible("#dbRqEmpty")) && (await page.isHidden("#rqCount")) && outbox.some((m) => m.target === "thomas@example.com" && /confirm/i.test(m.subject || "")));
 
-  // ---- raccourcis : trois par défaut, personnalisés, gardés sur le compte
-  const shorts = () => page.$$eval("#dbShortcuts .db-short", (bs) => bs.map((b) => b.querySelector("b").textContent));
-  check("shortcuts: Planning, the announced prices, the hours and slots by default", JSON.stringify(await shorts()) === JSON.stringify(["Aller au planning", "Prix annoncés", "Horaires et créneaux"]), JSON.stringify(await shorts()));
-  await page.click("#dbShortEdit");
-  await page.waitForSelector("#shortDlg[open]");
-  await page.uncheck('#shortList input[value="agenda"]');
-  for (const v of ["requests", "garage", "team", "new"]) await page.check(`#shortList input[value="${v}"]`);
-  check("six at most: the other boxes are disabled once six are ticked", (await page.$$eval("#shortList input:disabled", (x) => x.length)) === 3 && /6 sur 6/.test(await words(page, "#shortHelp")));
-  await axe(page, "fenêtre des raccourcis");
-  await page.click("#shortSave");
-  await live(page, /Raccourcis enregistrés\./);
-  check("saved: in the order of the list", JSON.stringify(await shorts()) === JSON.stringify(["Aller au planning", "Demandes", "Prix annoncés", "Mon garage", "Équipe et postes", "Nouveau rendez-vous"]), JSON.stringify(await shorts()));
-  check("kept on the account (the API has them)", JSON.stringify((await pro("GET", "")).body.prefs.shortcuts) === JSON.stringify(["planning", "requests", "prices", "garage", "team", "new"]));
-  await page.click('#dbShortcuts [data-short="garage"]');
+  // ---- la période : Semaine, flèches, Mois, calendrier en ligne au clavier
+  await page.click('#dbGran [data-gran="week"]');
+  await settled(page);
+  k = await kpis(page);
+  check("Semaine: Monday to Sunday, « Cette semaine », the week's appointments with their day, figures on the week", (await words(page, "#dbToday")) === "2 – 8 novembre 2026" && (await page.getAttribute('#dbGran [data-gran="week"]', "aria-pressed")) === "true" && (await page.getAttribute("#dbGran", "data-gran")) === "week" && (await words(page, "#dbNow")) === "Cette semaine" && (await page.getAttribute("#dbPrev", "aria-label")) === "Semaine précédente" && (await words(page, "#dbTodayText")) === "Les rendez-vous de la semaine" && (await words(page, "#dbList .db-row:first-child .db-time")) === "mer. 4 8:00" && k.all.v === "6" && k.all.s === "sur la semaine" && k.returned && k.ready && k.alerts && !k.live && (await words(page, "#dbCapa h3")) === "de main-d'œuvre non planifiée" && (await facts(page))[0] === "Mécaniciens sur la période 3 / 3", JSON.stringify(k));
+  await page.click("#dbNext");
+  await settled(page);
+  check("the next week: nothing booked, the empty state points to the planning", (await words(page, "#dbToday")) === "9 – 15 novembre 2026" && (await page.isVisible("#dbListEmpty")) && (await words(page, "#dbListEmptyTitle")) === "Aucun rendez-vous sur cette semaine." && (await words(page, "#dbListEmptyGo")) === "Consulter le planning" && (await kpis(page)).all.v === "0");
+  await page.click("#dbNow");
+  await settled(page);
+  check("« Cette semaine » comes back", (await words(page, "#dbToday")) === "2 – 8 novembre 2026");
+  await page.click('#dbGran [data-gran="month"]');
+  await settled(page);
+  check("Mois: the calendar month", (await words(page, "#dbToday")) === "Novembre 2026" && (await words(page, "#dbNow")) === "Ce mois" && (await words(page, "#dbTodayText")) === "Les rendez-vous du mois" && (await kpis(page)).all.s === "sur le mois");
+  await page.click("#dbPicker");
+  await page.waitForFunction(() => document.getElementById("dbCal").dataset.open === "true");
+  check("the calendar opens in the page, under the period: the twelve months, November chosen, the focus on it", (await page.getAttribute("#dbPicker", "aria-expanded")) === "true" && (await page.getAttribute("#dbCal", "aria-hidden")) === "false" && !(await page.$eval("#dbCal", (n) => n.inert)) && (await words(page, "#dbCalTitle")) === "Choisir un mois" && (await page.$$("#dbCal .pv-months button")).length === 12 && (await page.getAttribute('[data-month="2026-11"]', "aria-pressed")) === "true" && (await page.evaluate(() => document.activeElement.dataset.month)) === "2026-11" && (await words(page, "#dbCal .pv-cal-sel strong")) === "Novembre 2026");
+  await axe(page, "calendrier de la période (mois)");
+  await page.keyboard.press("ArrowRight");
+  check("the arrows move in the grid", (await page.evaluate(() => document.activeElement.dataset.month)) === "2026-12");
+  await page.keyboard.press("Enter");
+  await settled(page);
+  check("Enter picks December: the period follows, the calendar stays open on the choice", (await words(page, "#dbToday")) === "Décembre 2026" && (await words(page, "#dbCal .pv-cal-sel strong")) === "Décembre 2026" && (await page.evaluate(() => document.activeElement.dataset.month)) === "2026-12" && (await page.getAttribute("#dbPicker", "aria-expanded")) === "true");
+  await page.keyboard.press("Escape");
+  check("Escape folds the calendar and gives the focus back to the period", (await page.getAttribute("#dbPicker", "aria-expanded")) === "false" && (await page.$eval("#dbCal", (n) => n.inert)) && (await page.evaluate(() => document.activeElement.id)) === "dbPicker");
+  await page.click('#dbGran [data-gran="day"]');
+  await settled(page);
+  check("Jour after December: the first of December, « La journée à l'atelier »", (await words(page, "#dbToday")) === "Mardi 1 décembre 2026" && (await words(page, "#dbTodayText")) === "La journée à l'atelier");
+  await page.click("#dbNow");
+  await settled(page);
+  await page.click("#dbPicker");
+  await page.waitForFunction(() => document.getElementById("dbCal").dataset.open === "true");
+  check("Choisir un jour: six weeks of days, today chosen and focused, one tab stop", (await words(page, "#dbCalTitle")) === "Choisir un jour" && (await page.$$("#dbCal .pv-days button")).length === 42 && (await page.getAttribute(`[data-day="${D}"]`, "aria-label")) === "Mercredi 4 novembre 2026" && (await page.evaluate(() => document.activeElement.dataset.day)) === D && (await page.$$eval("#dbCal .pv-days button", (bs) => bs.filter((b) => b.tabIndex === 0).length)) === 1);
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Enter");
+  await settled(page);
+  check("the next day picked from the keyboard: Thursday, the list of that day", (await words(page, "#dbToday")) === "Jeudi 5 novembre 2026" && (await words(page, "#dbTodayText")) === "La journée à l'atelier" && (await page.isVisible("#dbListEmpty")));
+  await axe(page, "calendrier de la période (jour)");
+  await page.click("#dbCal .pv-fold");
+  await page.click("#dbNow");
+  await settled(page);
+  await page.waitForSelector("#dbList .db-row");
+  check("« Aujourd'hui » brings today back", (await words(page, "#dbToday")) === "Mercredi 4 novembre 2026" && (await words(page, "#dbTodayText")) === "Aujourd'hui à l'atelier");
+  // ---- « Gérer l'équipe » : Mon garage › Ressources
+  await page.click("#dbTeamCard [data-goto]");
   await page.waitForSelector("#dash-garage:not([hidden]):not([aria-busy])");
-  check("a shortcut opens its screen", (await page.getAttribute('.dash-link[data-panel="garage"]', "aria-current")) === "true");
+  check("« Gérer l'équipe » opens Mon garage › Ressources", (await page.getAttribute('.dash-link[data-panel="garage"]', "aria-current")) === "true" && (await page.getAttribute("#mgTab-resources", "aria-selected")) === "true");
   await page.click('.dash-link[data-panel="top"]');
   await page.waitForSelector("#dash-top:not([hidden]):not([aria-busy]) #dbList .db-row");
 
@@ -270,6 +311,8 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
   const walk = (await pro("GET", `/rdv/calendar/agenda?from=${D}&to=${D}`)).body.blocks.find((b) => b.label === "Mme Durand");
   check("saved and received at once", walk && walk.work && walk.work.status === "received", JSON.stringify(walk && walk.work));
   await page.click('.dash-link[data-panel="top"]');
+  await page.waitForSelector("#dash-top:not([hidden]):not([aria-busy]) #dbList .db-row");
+  await allRows(page);
   await page.waitForSelector(`#dbList [data-id="${walk.id}"]`);
   check("back on the dashboard: the walk-in is in the list, received", (await words(page, `#dbList [data-id="${walk.id}"] .db-chip`)) === "Voiture reçue");
 
@@ -300,12 +343,14 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
     await c.ctx.close();
   }
 
-  // ---- prix annoncés (l'ancien tableau de bord, puis « Prestations & tarifs ») : Mon garage › Prestations, par le raccourci
+  // ---- prix annoncés (l'ancien tableau de bord, puis « Prestations & tarifs ») : Mon garage › Prestations
   {
     const c = await newPage();
     await c.page.goto(`${srv.url}/pro/`);
     await c.page.waitForSelector("#dbList .db-row");
-    await c.page.click('#dbShortcuts [data-short="prices"]');
+    await c.page.click('.dash-link[data-panel="garage"]');
+    await c.page.waitForSelector("#dash-garage:not([hidden]):not([aria-busy])");
+    await c.page.click("#mgTab-services");
     await c.page.waitForSelector("#mgPanel-services:not([hidden])");
     check("« Prix annoncés »: Mon garage › Prestations, with the visits and the prices", (await words(c.page, "#pricesTitle")) === "Prix annoncés sur Pixcar" && (await c.page.isVisible("#statViews")) && (await c.page.isVisible("#noPrice")) && (await c.page.isHidden("#dash-top")) && (await words(c.page, "#crumb")) === "Mon atelier / Mon garage / Prestations");
     await c.ctx.close();
@@ -316,7 +361,16 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
     const c = await newPage({ width: 390, height: 844, touch: true });
     await c.page.goto(`${srv.url}/pro/`);
     await c.page.waitForSelector("#dbList .db-row");
-    check("phone: no horizontal scroll, the figures two by two", (await overflow(c.page)) <= 0 && (await c.page.$$eval("#dbKpis .db-kpi", (ks) => new Set(ks.slice(0, 2).map((x) => Math.round(x.getBoundingClientRect().top))).size === 1)), String(await overflow(c.page)));
+    check("phone: no horizontal scroll, the figures two by two, the period on two lines (Jour/Semaine/Mois and « Aujourd'hui », then the arrows and the day)", (await overflow(c.page)) <= 0 && (await c.page.$$eval("#dbKpis .db-kpi", (ks) => new Set(ks.slice(0, 2).map((x) => Math.round(x.getBoundingClientRect().top))).size === 1)) && (await c.page.evaluate(() => { const top = (id) => document.getElementById(id).getBoundingClientRect().top; return Math.abs(top("dbGran") - top("dbNow")) < 8 && top("dbPicker") > top("dbGran") + 20; })), String(await overflow(c.page)));
+    await c.page.click('#dbGran [data-gran="month"]');
+    await c.page.click("#dbPicker");
+    await c.page.waitForFunction(() => document.getElementById("dbCal").dataset.open === "true");
+    check("phone: the months calendar fits the screen", (await overflow(c.page)) <= 0 && (await c.page.$$("#dbCal .pv-months button")).length === 12);
+    await c.page.screenshot({ path: path.join(SHOTS, "pro-dash-4b-telephone-calendrier.png"), fullPage: true });
+    await axe(c.page, "calendrier de la période (téléphone)");
+    await c.page.click("#dbCal .pv-cal-x");
+    await c.page.click('#dbGran [data-gran="day"]');
+    await c.page.waitForSelector("#dbBody:not([aria-busy]) #dbList .db-row");
     await c.page.screenshot({ path: path.join(SHOTS, "pro-dash-4-telephone.png"), fullPage: true });
     await axe(c.page, "tableau de bord (téléphone)");
     await c.ctx.close();
@@ -330,9 +384,9 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
     await c.page.goto(`${srv.url}/pro/`);
     await c.page.waitForSelector("#dbKpis .db-kpi");
     const kk = await kpis(c.page);
-    check("simple mode: other figures (today's appointments, requests, visits, prices), no team nor posts", kk.today && kk.today.v === "5" && kk.todo.v === "0" && kk.views && kk.fresh && !kk.live && (await c.page.isHidden("#dbTeamCard")) && (await c.page.isHidden("#dbPostsCard")), JSON.stringify(kk));
-    check("simple mode: today's list without progress actions, the shortcuts that need the advanced mode are hidden", (await c.page.$$("#dbList .db-more-btn")).length === 0 && !(await c.page.$$eval("#dbShortcuts b", (bs) => bs.some((b) => /planning|Équipe|Nouveau/.test(b.textContent)))), await words(c.page, "#dbShortcuts"));
-    check("simple mode: quick actions for the requests, a day off, a price, the advanced planning", (await c.page.$$eval("#dbActions b", (bs) => bs.map((b) => b.textContent))).join() === "Mes disponibilités,Fermer une journée,Annoncer un prix,Planning avancé");
+    check("simple mode: the big card counts today's confirmed appointments; figures for the requests, the visits, the calls; no team nor posts", (await words(c.page, "#dbCapa .pv-capa-v")) === "5" && (await words(c.page, "#dbCapa h3")) === "rendez-vous confirmés sur la journée" && (await words(c.page, "#dbCapaTitle")) === "Vos rendez-vous en ligne" && kk.todo.v === "0" && kk.views && kk.calls && kk.alerts && !kk.live && (await c.page.isHidden("#dbResources")) && (await c.page.isVisible("#dbPeriod")), JSON.stringify(kk));
+    check("simple mode: the day's list without progress actions", (await c.page.$$("#dbList .db-more-btn")).length === 0 && (await c.page.isHidden("#dbPlanLink")) && (await words(c.page, "#dbListCount")) === "5 rendez-vous sur la journée");
+    check("simple mode: quick actions for the hours, a day off, a price, the advanced planning", (await c.page.$$eval("#dbActions b", (bs) => bs.map((b) => b.textContent))).join() === "Mes horaires et créneaux,Fermer une journée,Annoncer un prix,Planning avancé");
     await c.page.screenshot({ path: path.join(SHOTS, "pro-dash-5-mode-simple.png"), fullPage: true });
     await axe(c.page, "tableau de bord (mode simple)");
     await c.ctx.close();
