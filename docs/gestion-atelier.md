@@ -194,8 +194,32 @@ les pièces arrivent (P1).
 
 ## 3. Maquettes
 
-Douze écrans (liste du cahier des charges), dessinés avec la feuille de style et les jetons de l'Espace Pro (`src/css/pro.css`), sur
-des données de démonstration : `docs/maquettes/gestion-atelier/` (source HTML et captures).
+Les douze écrans demandés sont **rendus dans le vrai Espace Pro** (branche `gestion-atelier`), pas dessinés à part : l'écran Gestion
+d'atelier existait déjà (Planning, validé le 24 octobre 2026) et les vues nouvelles s'appuient sur des données que l'API fournit déjà ;
+une maquette statique aurait été refaite une seconde fois en code. Données de démonstration réalistes, sur la vraie API (PGlite) :
+`node tests/demo-atelier.js` construit le garage (« Garage des Pyrénées », trois mécaniciens, six postes, une semaine de rendez-vous Pixcar
+et pris par téléphone, interventions en cours, absence, maintenance, créneau bloqué ; horloges fixées au mardi 27 octobre 2026 à 10:40)
+et écrit les captures dans `tests/.out/demo-atelier/shots/` (envoyées à l'utilisateur le 25 octobre 2026, non versionnées) :
+
+| N° | Écran | Capture |
+|---|---|---|
+| 1 | Mode simple — Semaine | `01-simple-semaine.png` |
+| 2 | Mode simple — Jour | `02-simple-jour.png` |
+| 3 | Mode simple — Création de rendez-vous | `03-simple-creation.png` |
+| 4 | Mode simple — Filtres (ouverts, puis rétractés avec un filtre actif) | `04-simple-filtres.png`, `04b-simple-filtres-replies.png` |
+| 5 | Mode simple — Plein écran | `05-simple-plein-ecran.png` (et la liste : `05b-simple-liste.png`) |
+| 6 | Mode avancé — Agenda global | `06-avance-agenda.png` |
+| 7 | Mode avancé — Planning mécaniciens | `07-avance-equipe.png` (semaine : `07b-avance-equipe-semaine.png`) |
+| 8 | Mode avancé — Planning équipements | `08-avance-equipements.png` |
+| 9 | Mode avancé — Suivi des interventions | `09-avance-suivi.png` |
+| 10 | Mode avancé — Charge et capacité | `10-avance-charge.png` (semaine : `10b-avance-charge-semaine.png`) |
+| 11 | Paramètres — Modules | `11-parametres-modules.png` |
+| 12 | Fiche détaillée d'une intervention | `12-fiche-intervention.png` |
+| — | Téléphone (liste) | `13-telephone-liste.png` |
+
+À ce stade, l'écran n'est complet qu'avec l'API du P0 (section 4) : en calcul par créneaux, la saisie d'un rendez-vous, les états et le
+déplacement d'une demande sont encore refusés par l'API en service (409 `simple_mode`), et les nouveaux champs (canal, téléphone,
+véhicule, immatriculation, durée, restitution, commentaire, modules) ne sont pas encore enregistrés.
 
 ## 4. Plan de réalisation
 
