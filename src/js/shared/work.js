@@ -80,13 +80,13 @@ export function nextOpening(ctx, nowMs) {
 // ---------------------------------------------------------------- raccourcis du tableau de bord
 // rdv : demande les rendez-vous en ligne ; adv : demande le mode avancé (sinon le raccourci n'est pas proposé)
 export const SHORTCUTS = [
-  { id: "planning", label: "Aller au planning", sub: "Voir et modifier vos rendez-vous", adv: true },
+  { id: "planning", label: "Gestion d'atelier", sub: "Voir et modifier vos rendez-vous", rdv: true },
   { id: "requests", label: "Demandes", sub: "Répondre aux demandes de rendez-vous", rdv: true },
   { id: "prices", label: "Prix annoncés", sub: "Mon garage › Prestations" },
   { id: "agenda", label: "Horaires et créneaux", sub: "Mon garage › Horaires", rdv: true },
   { id: "garage", label: "Mon garage", sub: "Horaires, prestations, fiche Pixcar" },
   { id: "team", label: "Équipe et postes", sub: "Mon garage › Ressources", adv: true },
-  { id: "new", label: "Nouveau rendez-vous", sub: "Pris par téléphone ou au comptoir", adv: true },
+  { id: "new", label: "Nouveau rendez-vous", sub: "Pris par téléphone ou au comptoir", rdv: true },
   { id: "closure", label: "Fermer une journée", sub: "Congés, fermeture exceptionnelle", rdv: true },
   { id: "site", label: "Voir Pixcar", sub: "Le comparateur, comme vos clients" },
 ];

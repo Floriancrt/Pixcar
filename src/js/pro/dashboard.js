@@ -111,7 +111,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     $("navInitials").textContent = name ? name.split(/\s+/).slice(0, 2).map((w) => w[0].toUpperCase()).join("") : "PRO";
   }
   // fil d'Ariane (en-tête de l'atelier) ; Mon garage ajoute sa rubrique (maquette : « Mon atelier / Mon garage / Modules »)
-  const CRUMBS = { top: "Mon atelier / Tableau de bord", planning: "Mon atelier / Planning", requests: "Mon atelier / Demandes", garage: "Mon atelier / Mon garage", calendar: "Mon atelier / Mon garage / Mode avancé" };
+  const CRUMBS = { top: "Mon atelier / Tableau de bord", planning: "Mon atelier / Gestion d'atelier", requests: "Mon atelier / Demandes", garage: "Mon atelier / Mon garage", calendar: "Mon atelier / Mon garage / Mode avancé" };
   // Au clic, l'écran change tout de suite (menu, fil d'Ariane, rubrique) et se remplit dès que ses données arrivent, une barre fine en
   // haut le disant pendant ce temps (demande du 25 octobre 2026 : un « délai de latence » au clic dans la barre latérale). Un écran
   // jamais rempli pour ce garage reste masqué jusque-là ; un écran déjà vu garde son contenu le temps de la mise à jour. La réponse
@@ -148,7 +148,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
       if (name === "garage") await openGarage();
       if (name === "requests") await rdv.openRequests(data.garage.id, { focus: false });
       if (name === "calendar") await cal.open(data.garage.id, { focus: false });
-      if (name === "planning") await (opts.day || opts.item || opts.form ? plan.openDay(data.garage.id, opts.day || parisParts(Date.now()).iso) : plan.open(data.garage.id, { focus: false }));
+      if (name === "planning") await (opts.day || opts.item || opts.form ? plan.openDay(data.garage.id, opts.day || parisParts(Date.now()).iso) : plan.open(data.garage.id, { focus: false, space: opts.space || null }));
     } catch (e) {
       if (n === seq) busyState(body, false);
       if (!apiProblem(e)) alertBox(e.message);
@@ -198,27 +198,73 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     $("mgIdSub").textContent = ["Espace professionnel", [name, role && role.toLowerCase()].filter(Boolean).join(", ")].filter(Boolean).join(" · ");
     $("mgScope").textContent = data.rdv ? "Paramètres communs aux modes Simple et Avancé" : "Les informations de votre fiche Pixcar et vos prix";
   }
-  // les outils du mode avancé (maquette : Mécaniciens, Équipements, Suivi des interventions, Charge et capacité) : ils viennent ensemble
-  // avec le mode avancé, chacun mène à l'endroit où il se trouve
+  // les modules de l'affichage avancé de Gestion d'atelier (docs/gestion-atelier.md, 2.1) : un interrupteur chacun, pour tout le garage.
+  // Couper un module masque son espace ; ses données restent. Dépendances : mécaniciens et équipements servent au calcul par
+  // ressources (on ne les coupe qu'après être revenu au calcul par créneaux) ; la charge demande l'un des deux ; les analyses attendent
+  // les temps réellement passés.
   const MODULES = [
-    ["Mécaniciens", "Affectations, disponibilités et absences.", () => showTab("resources", { focus: true })],
-    ["Équipements", "Ponts, diagnostic et géométrie.", () => showTab("resources", { focus: true })],
-    ["Suivi des interventions", "Avancement des travaux et motifs d'attente.", () => panel("planning")],
-    ["Charge et capacité", "Synthèse calculée à partir des ressources activées.", () => panel("planning")],
+    ["staff", "Mécaniciens", "Planning de l'équipe : horaires, absences, compétences, affectations et charge de chacun.", "team"],
+    ["equip", "Ponts et équipements", "Planning des postes : occupation, maintenances, conflits.", "equip"],
+    ["track", "Suivi des interventions", "Avancement des travaux par état, retards, attentes de pièces.", "track"],
+    ["load", "Charge et capacité", "Heures disponibles, planifiées et restantes ; mécaniciens et postes comptés à part.", "load"],
+    ["stats", "Analyses", "Durées réelles, écarts, rendez-vous honorés, répartition par canal.", null],
   ];
+  const modulesOf = () => ({ staff: true, equip: true, track: true, load: true, stats: false, ...((data && data.rdv && data.rdv.modules) || {}) });
+  let armed = null; // module dont la désactivation attend sa confirmation
+  function moduleRule(key, on, m) {
+    const byRes = mode === "advanced";
+    if (key === "stats") return { locked: true, why: "Prochainement : il faut d'abord noter les heures réelles de début et de fin des travaux." };
+    if ((key === "staff" || key === "equip") && on && byRes) return { locked: true, why: "Utilisé par le calcul de vos disponibilités en ligne : revenez d'abord au calcul par créneaux pour le couper." };
+    if (key === "load" && !on && !m.staff && !m.equip) return { locked: true, why: "Demande le module Mécaniciens ou Ponts et équipements." };
+    return { locked: false, why: "" };
+  }
   function modules() {
-    const adv = mode === "advanced";
+    const m = modulesOf();
     $("mgModules").replaceChildren(
-      ...MODULES.map(([name, text, go]) =>
-        el(
+      ...MODULES.map(([key, name, text, space]) => {
+        const on = !!m[key];
+        const rule = moduleRule(key, on, m);
+        const id = `mgMod-${key}`;
+        const sw = el("button", { type: "button", role: "switch", class: "mg-switch", id, "aria-checked": String(on), "aria-describedby": `${id}-d`, disabled: rule.locked, onclick: () => toggleModule(key, !on) }, el("span", { class: "sr-only", text: name }));
+        return el(
           "li",
-          { class: "mg-module" },
-          el("div", {}, el("b", { text: name }), el("small", { text })),
-          el("span", { class: `pill ${adv ? "ok" : "off"}`, text: adv ? "Actif" : "Inactif" }),
-          adv ? el("button", { type: "button", class: "btn small", "aria-label": `Ouvrir : ${name}`, onclick: go }, "Ouvrir") : null,
-        ),
-      ),
+          { class: `mg-module${on ? " is-on" : ""}${armed === key ? " is-armed" : ""}` },
+          el("div", {}, el("b", { text: name }), el("small", { id: `${id}-d`, text: rule.why ? `${text} ${rule.why}` : text })),
+          el("span", { class: `pill ${on ? "ok" : "off"}`, text: key === "stats" ? "Bientôt" : on ? "Actif" : "Inactif" }),
+          sw,
+          armed === key
+            ? el(
+                "div",
+                { class: "mg-mod-ask", role: "alert" },
+                el("p", { text: `Couper « ${name} » masque son espace dans l'affichage avancé. Rien n'est effacé ; vous pourrez le réactiver.` }),
+                el("button", { type: "button", class: "btn small danger", onclick: () => toggleModule(key, false, true) }, "Couper le module"),
+                el("button", { type: "button", class: "btn small", onclick: () => ((armed = null), modules(), $(id).focus()) }, "Garder"),
+              )
+            : on && space && data && data.rdv
+              ? el("button", { type: "button", class: "link-btn mg-mod-go", onclick: () => panel("planning", { space }) }, "Ouvrir")
+              : null,
+        );
+      }),
     );
+  }
+  async function toggleModule(key, on, confirmed = false) {
+    if (!on && !confirmed) {
+      armed = key;
+      modules();
+      return;
+    }
+    armed = null;
+    try {
+      const out = await api.calSettings(data.garage.id, { modules: { ...modulesOf(), [key]: on } });
+      data.rdv.modules = out.modules;
+      plan.reset();
+      modules();
+      alertBox(on ? "Module activé." : "Module coupé : ses données restent enregistrées.", "info");
+      $(`mgMod-${key}`).focus();
+    } catch (e) {
+      modules();
+      if (!apiProblem(e)) alertBox(e.message);
+    }
   }
   const tabButtons = () => [...document.querySelectorAll("#mgTabs [role=tab]")].filter((t) => !t.hidden);
   function showTab(name, { focus = false } = {}) {
@@ -248,8 +294,8 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     showTab(list[(next + list.length) % list.length].dataset.tab, { focus: true });
   });
   for (const b of document.querySelectorAll("[data-mg-tab]")) b.addEventListener("click", () => showTab(b.dataset.mgTab, { focus: true }));
-  // « Retour à l'atelier » : le planning en mode avancé, sinon le tableau de bord
-  $("mgBack").addEventListener("click", () => panel(mode === "advanced" ? "planning" : "top"));
+  // « Retour à l'atelier » : la gestion d'atelier quand les rendez-vous en ligne sont ouverts, sinon le tableau de bord
+  $("mgBack").addEventListener("click", () => panel(data && data.rdv ? "planning" : "top"));
   // ordinateur : barre latérale dépliée (libellés) ou repliée (icônes, libellé en infobulle) ; le choix est gardé dans ce navigateur
   const RAIL = "pixcar-pro-rail";
   function rail(min, { save = false } = {}) {

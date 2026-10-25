@@ -87,7 +87,7 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
     if (host) return renderHost();
     $("calTitle").textContent = advanced() ? "Mon atelier" : "Calendrier avancé";
     $("calLead").textContent = advanced()
-      ? "Le mode avancé est actif : les horaires proposés tiennent compte de vos mécaniciens, de vos postes et du temps de chaque prestation."
+      ? "Le calcul par ressources est actif : les horaires proposés tiennent compte de vos mécaniciens, de vos postes et du temps de chaque prestation."
       : "Six étapes pour que Pixcar propose des horaires selon vos vraies ressources. Tout est enregistré au fur et à mesure ; rien ne change pour vos clients avant l'activation.";
     $("calSteps").replaceChildren(
       ...STEPS.map(([key, name], i) =>
@@ -728,9 +728,9 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
         el(
           "section",
           { class: "mg-panel", "aria-labelledby": "calModeTitle" },
-          el("h3", { id: "calModeTitle", text: host ? "Affectations et retour au mode simple" : "Mode du calendrier" }),
-          el("p", { class: "help", text: "Revenir au mode simple rattache chaque rendez-vous à venir à un créneau de votre semaine type. Vos mécaniciens, postes et réglages restent enregistrés." }),
-          el("div", { class: "rv-acts" }, el("button", { type: "button", class: "btn", id: "calRecompute", onclick: (ev) => activate(ev.currentTarget) }, "Recalculer les affectations"), el("button", { type: "button", class: "btn danger", id: "calToSimple", onclick: (ev) => toSimple(ev.currentTarget) }, "Revenir au mode simple")),
+          el("h3", { id: "calModeTitle", text: host ? "Affectations et retour au calcul par créneaux" : "Calcul des disponibilités" }),
+          el("p", { class: "help", text: "Revenir au calcul par créneaux rattache chaque rendez-vous à venir à un créneau de votre semaine type. Vos mécaniciens, postes et réglages restent enregistrés." }),
+          el("div", { class: "rv-acts" }, el("button", { type: "button", class: "btn", id: "calRecompute", onclick: (ev) => activate(ev.currentTarget) }, "Recalculer les affectations"), el("button", { type: "button", class: "btn danger", id: "calToSimple", onclick: (ev) => toSimple(ev.currentTarget) }, "Revenir au calcul par créneaux")),
           el("div", { id: "calSimpleFail" }),
         ),
       );
@@ -773,7 +773,7 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
       el(
         "div",
         { class: "cal-activate" },
-        el("button", { type: "button", class: "btn primary", id: "calActivate", disabled: !rd.ok || failed.length > 0, onclick: (ev) => activate(ev.currentTarget) }, "Activer le mode avancé"),
+        el("button", { type: "button", class: "btn primary", id: "calActivate", disabled: !rd.ok || failed.length > 0, onclick: (ev) => activate(ev.currentTarget) }, "Activer le calcul par ressources"),
         el("p", { class: "help", text: !rd.ok ? "Corrigez d'abord les points bloquants ci-dessus." : failed.length ? "Placez d'abord les rendez-vous qui n'ont pas trouvé de place." : "Dès l'activation, les horaires proposés en ligne viennent de vos ressources ; votre semaine type reste enregistrée." }),
       ),
     );
@@ -797,7 +797,7 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
         st = await api.calActivate(garageId, { placements: Object.entries(placements).map(([requestId, p]) => ({ requestId, ...p })) });
         placements = {};
         check = null;
-        const text = advanced() && st.placed !== undefined ? `Mode avancé actif. ${plural(st.placed, "rendez-vous à venir affecté", "rendez-vous à venir affectés")}.` : "Mode avancé actif.";
+        const text = advanced() && st.placed !== undefined ? `Calcul par ressources actif. ${plural(st.placed, "rendez-vous à venir affecté", "rendez-vous à venir affectés")}.` : "Calcul par ressources actif.";
         render();
         // le mode avancé actif, ses réglages sont dans Mon garage : l'assistant s'y range
         const moved = first && advanced();
@@ -817,7 +817,7 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
   async function toSimple(button) {
     if (button.dataset.armed !== "1") {
       button.dataset.armed = "1";
-      button.textContent = "Confirmer le retour au mode simple";
+      button.textContent = "Confirmer le retour au calcul par créneaux";
       return;
     }
     await busy(button, async () => {
@@ -830,7 +830,7 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
         if (e.status === 409 && e.details && e.details.failed) {
           $("calSimpleFail").replaceChildren(el("p", { class: "warn", text: e.message }), el("ul", { class: "cal-conflicts" }, ...e.details.failed.map((f) => el("li", {}, el("b", { text: whenText(f) }), el("span", { text: f.reasons.join(" ") })))));
           button.dataset.armed = "";
-          button.textContent = "Revenir au mode simple";
+          button.textContent = "Revenir au calcul par créneaux";
           return;
         }
         fail(e);

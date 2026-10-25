@@ -311,9 +311,9 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
     // en mode avancé, la semaine type et les règles laissent la place aux réglages du calendrier avancé (mêmes délais, plus les marges)
     $("agWeekBox").hidden = adv;
     $("agRulesBox").hidden = adv;
-    say("agModeText", adv ? "Avancé : les horaires proposés viennent de vos mécaniciens, de vos postes et du temps de chaque prestation." : "Simple : votre semaine type en créneaux, chacun avec un nombre de voitures.");
-    say("agModeHelp", adv ? "Votre semaine type reste enregistrée : elle reprend si vous revenez au mode simple (Mon garage › Modules)." : "Le mode avancé tient compte de vos mécaniciens, de leurs absences et compétences, de vos ponts et postes. Un assistant vous guide ; rien ne change pour vos clients avant l'activation.");
-    $("agModeGo").textContent = adv ? "Mécaniciens et postes" : c.started ? "Reprendre la configuration" : "Passer au mode avancé";
+    say("agModeText", adv ? "Par ressources : les horaires proposés viennent de vos mécaniciens, de vos postes et du temps de chaque prestation." : "Par créneaux : votre semaine type, chaque créneau avec un nombre de voitures en même temps.");
+    say("agModeHelp", adv ? "Votre semaine type reste enregistrée : elle reprend si vous revenez au calcul par créneaux (Mon garage › Modules). L'affichage Simple ou Avancé de Gestion d'atelier ne change rien ici." : "Le calcul par ressources tient compte de vos mécaniciens, de leurs absences et compétences, de vos ponts et postes. Un assistant vous guide ; rien ne change pour vos clients avant l'activation. L'affichage Simple ou Avancé de Gestion d'atelier, lui, ne change jamais vos horaires en ligne.");
+    $("agModeGo").textContent = adv ? "Mécaniciens et postes" : c.started ? "Reprendre la configuration" : "Calculer par ressources";
     $("agModeGo").className = adv ? "btn small" : "btn primary small";
     const lead = $("agLead");
     lead.textContent = adv ? "Quand votre atelier peut prendre une voiture : Pixcar calcule les horaires avec vos mécaniciens et vos postes (Ressources)." : "Quand vous pouvez prendre une voiture, et pour quelles prestations. Pixcar ne propose aux automobilistes que des horaires pris dans ces créneaux.";

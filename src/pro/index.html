@@ -395,7 +395,7 @@
       <div class="m-garage-label"><span class="m-loc" aria-hidden="true">⌖</span><div><b id="navGarage"></b><small>Espace professionnel</small></div></div>
       <p class="m-nav-label">MON ATELIER</p>
       <button type="button" class="dash-link" data-panel="top" aria-current="true"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg><span>Tableau de bord</span></button>
-      <button type="button" class="dash-link" data-panel="planning" data-adv hidden><svg class="ic" aria-hidden="true"><use href="#i-planning" /></svg><span>Planning</span></button>
+      <button type="button" class="dash-link" data-panel="planning" data-rdv hidden><svg class="ic" aria-hidden="true"><use href="#i-planning" /></svg><span>Gestion d'atelier</span></button>
       <button type="button" class="dash-link" data-panel="requests" data-rdv hidden><svg class="ic" aria-hidden="true"><use href="#i-inbox" /></svg><span>Demandes</span><span class="dash-count" id="rqCount" hidden></span></button>
       <div class="m-nav-bottom">
         <p class="m-nav-label">MON ESPACE</p>
@@ -680,7 +680,7 @@
             <section class="mg-panel cal-mode" id="agMode" aria-labelledby="agModeTitle">
               <div class="mg-head">
                 <div>
-                  <h2 id="agModeTitle">Mode du calendrier</h2>
+                  <h2 id="agModeTitle">Calcul des disponibilités en ligne</h2>
                   <p class="sub" id="agModeText"></p>
                 </div>
                 <button type="button" class="btn small" id="agModeGo"></button>
@@ -688,10 +688,10 @@
               <p class="help" id="agModeHelp"></p>
             </section>
             <section class="mg-panel" aria-labelledby="mgModTitle">
-              <h2 id="mgModTitle">Modules du mode avancé</h2>
-              <p class="sub">Le mode est un choix du garage : ses outils et leurs réglages restent enregistrés quand vous revenez au mode simple.</p>
+              <h2 id="mgModTitle">Modules de l'affichage avancé</h2>
+              <p class="sub">Les outils que Gestion d'atelier propose en affichage avancé, pour tout le garage. Couper un module le masque : ses données restent enregistrées.</p>
               <ul class="mg-modules" id="mgModules"></ul>
-              <div class="info-box">Les quatre outils s'activent ensemble, avec le mode avancé. Revenir au mode simple les masque sans rien effacer : mécaniciens, postes, affectations et règles restent enregistrés.</div>
+              <div class="info-box">Affichage Simple ou Avancé : chacun le choisit dans Gestion d'atelier. Il ne change ni vos rendez-vous, ni vos affectations, ni les horaires proposés en ligne. Ces horaires ne changent qu'avec le calcul des disponibilités, ci-dessus, par une action à part.</div>
             </section>
             <div class="mg-cal" id="mgCalModules"></div>
           </div>
@@ -733,23 +733,37 @@
     </div>
     <!-- Planning (docs/calendrier-avance.md, lot 3b ; mode avancé) : jour, semaine, mois, par mécanicien, par poste -->
     <div class="dash-body" id="dash-planning" hidden>
-      <!-- Planning, à l'image de l'agenda « Gestion d'atelier » de la maquette (24 octobre 2026) : en-tête, bandeau de chiffres, barre
-           d'outils (période, vues, filtres, plein écran, recherche), grille, légende -->
+      <!-- Gestion d'atelier (docs/gestion-atelier.md, 25 octobre 2026), sur l'agenda « Gestion d'atelier » de la maquette du 24 octobre :
+           en-tête (titre, garage, date ; affichage Simple ou Avancé ; nouveau rendez-vous ; plein écran), espaces de l'affichage avancé,
+           indicateurs, barre d'outils (période, vues, filtres, recherche), filtres repliables à gauche, grille, panneau à droite, légende -->
       <div class="pl-top">
-        <div>
-          <h1 id="planTitle" tabindex="-1">Planning</h1>
-          <p class="pl-sub">Vos rendez-vous et vos ressources. Ouvrez un bloc pour le détail, glissez-le pour le déplacer.</p>
+        <div class="pl-titles">
+          <h1 id="planTitle" tabindex="-1">Gestion d'atelier</h1>
+          <p class="pl-sub" id="planSub"></p>
         </div>
-        <div class="pl-new">
-          <button type="button" class="btn primary small" id="planNew" aria-expanded="false" aria-controls="planNewMenu"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Nouveau</button>
-          <div class="pl-menu" id="planNewMenu" hidden>
-            <button type="button" data-new="job"><svg class="ic" aria-hidden="true"><use href="#i-phone" /></svg>Rendez-vous pris hors Pixcar</button>
-            <button type="button" data-new="hold"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg>Créneau bloqué</button>
-            <button type="button" data-new="staff"><svg class="ic" aria-hidden="true"><use href="#i-user" /></svg>Absence d'un mécanicien</button>
-            <button type="button" data-new="resource"><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg>Indisponibilité d'un poste</button>
+        <div class="pl-head-acts">
+          <div class="pl-mode" id="planMode" role="radiogroup" aria-label="Affichage">
+            <button type="button" role="radio" aria-checked="true" data-display="simple">Simple</button>
+            <button type="button" role="radio" aria-checked="false" data-display="advanced" tabindex="-1">Avancé</button>
           </div>
+          <div class="pl-new">
+            <div class="pl-split">
+              <button type="button" class="btn primary small" id="planNewRdv"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Nouveau rendez-vous</button>
+              <button type="button" class="btn primary small pl-split-more" id="planNew" aria-expanded="false" aria-controls="planNewMenu" aria-label="Autres ajouts"><svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg></button>
+            </div>
+            <div class="pl-menu" id="planNewMenu" hidden>
+              <button type="button" data-new="job"><svg class="ic" aria-hidden="true"><use href="#i-phone" /></svg>Rendez-vous (téléphone, comptoir)</button>
+              <button type="button" data-new="arrived"><svg class="ic" aria-hidden="true"><use href="#i-car" /></svg>Client déjà sur place</button>
+              <button type="button" data-new="hold"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg>Créneau bloqué</button>
+              <button type="button" data-new="staff" data-res><svg class="ic" aria-hidden="true"><use href="#i-user" /></svg>Absence d'un mécanicien</button>
+              <button type="button" data-new="resource" data-res><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg>Indisponibilité d'un poste</button>
+            </div>
+          </div>
+          <button type="button" class="pl-btn" id="planFocus" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-full" /></svg><span id="planFocusText">Plein écran</span></button>
         </div>
       </div>
+      <!-- affichage avancé : un espace par besoin (agenda, équipe, équipements, suivi des interventions, charge), jamais tous à la fois -->
+      <div class="pl-spaces" id="planSpaces" role="group" aria-label="Espace" hidden></div>
       <section class="pl-summary" id="planSummary" aria-labelledby="planSumTitle"></section>
       <div class="pl-bar">
         <div class="pl-nav">
@@ -761,7 +775,6 @@
         <span class="pl-spacer"></span>
         <div class="pl-views" id="planViews" role="group" aria-label="Vue"></div>
         <button type="button" class="pl-btn pl-ftoggle" id="planFToggle" aria-expanded="false" aria-controls="planFilters"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg>Filtres<span class="pl-fcount" id="planFCount" aria-hidden="true" hidden></span></button>
-        <button type="button" class="pl-btn" id="planFocus" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-full" /></svg><span id="planFocusText">Plein écran</span></button>
         <label class="pl-search"><svg class="ic" aria-hidden="true"><use href="#i-find" /></svg><span class="sr-only">Rechercher dans la période affichée</span><input id="planSearch" type="search" placeholder="Client, véhicule, immatriculation…" autocomplete="off" spellcheck="false"></label>
       </div>
       <div class="pl-tools">
@@ -769,10 +782,11 @@
         <ul class="pl-chips" id="planChips" aria-label="Filtres actifs"></ul>
         <button type="button" class="pl-btn" id="planWeekend" hidden>Afficher le week-end</button>
       </div>
-      <div class="pl-filters" id="planFilters" role="group" aria-label="Filtres" hidden></div>
-      <!-- la grille et, à sa droite, le panneau d'un rendez-vous ou d'un formulaire : il la rétrécit au lieu de la couvrir (au-dessus d'elle
-           quand la place manque) ; boîte de dialogue non modale, le reste du planning reste utilisable -->
+      <!-- à gauche, les filtres (repliables entièrement : la grille prend la place) ; au centre, la grille ; à droite, le panneau d'un
+           rendez-vous ou d'un formulaire, qui rétrécit la grille au lieu de la couvrir (au-dessus d'elle quand la place manque) ; boîte de
+           dialogue non modale, le reste du planning reste utilisable -->
       <div class="pl-layout" id="planLayout">
+        <aside class="pl-filters" id="planFilters" aria-labelledby="planFTitle" hidden></aside>
         <div class="pl-wrap" id="planGrid"></div>
         <dialog class="pl-side" id="planDlg" aria-labelledby="planDlgTitle">
           <form id="planForm" novalidate></form>
