@@ -495,7 +495,7 @@ async function buildDist(parts) {
     await writeFile(join(DIST, ".nojekyll"), ""); // servir les fichiers tels quels, sans passer par Jekyll
   } else await writeFile(join(DIST, "_headers"), headersFile(styleHash));
   await writeFile(join(DIST, "robots.txt"), "User-agent: *\nAllow: /\n" + (garages ? "Disallow: /garages/\n" : "") + (pro ? "Disallow: /pro/\nDisallow: /rendez-vous/\n" : ""));
-  if (pro) await buildPro(fonts);
+  if (pro) await buildPro(fonts, rdvBook);
   return { html: html.length, js: js.length, css: css.length, version };
 }
 
@@ -506,7 +506,7 @@ async function buildDist(parts) {
 const PRO_CSP = (cognito) =>
   ["default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data:", "font-src 'self'", `connect-src ${[apiOrigin, cognito].join(" ")}`, "object-src 'none'", "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'"].join("; ");
 export const proContentSecurityPolicy = () => (pro ? PRO_CSP(pro.cognito) : "");
-async function buildPro(fonts) {
+async function buildPro(fonts, rdvBook) {
   const app = await read(SRC, "css/app.css");
   const word = /\.px-word\s*\{[^}]*\}/.exec(app);
   if (!word) throw new Error("Espace Pro : règle .px-word introuvable dans css/app.css (mot-symbole du logo)");
@@ -540,7 +540,7 @@ async function buildPro(fonts) {
   if (pages) html = withPolicyMeta(html, "", PRO_CSP(pro.cognito));
   await mkdir(join(DIST, "pro"), { recursive: true });
   await writeFile(join(DIST, "pro", "index.html"), html);
-  await buildRdvPage({ cssName, mark: mark[0], contact, fontName: fonts[0].name });
+  await buildRdvPage({ cssName, mark: mark[0], contact, fontName: fonts[0].name, rdvBook });
 }
 
 // ------------------------------------------------------------------------------------------------ rendez-vous en ligne (docs/rendez-vous.md, lot 2)
@@ -554,11 +554,12 @@ async function buildRdvBook() {
   await writeFile(join(DIST, "assets", cssName), css);
   return [`assets/${jsName}`, `assets/${cssName}`];
 }
-// Page rendez-vous/ (suivi de l'automobiliste, réponse du garage depuis l'e-mail) : la feuille de style de l'Espace Pro, son propre script ;
-// version publiée : sa balise <meta> (connect-src : l'API seule). Pas de Cognito ici : on y entre par le jeton du lien.
+// Page rendez-vous/ (suivi de l'automobiliste, réponse du garage depuis l'e-mail, réservation directe ?garage=…) : la feuille de style de
+// l'Espace Pro, son propre script ; la fenêtre « Prendre rendez-vous » (rdv-book) chargée au clic, par les adresses de la balise
+// pixcar-rdv-book ; version publiée : sa balise <meta> (connect-src : l'API seule). Pas de Cognito ici : on y entre par le lien.
 const RDV_CSP = () => ["default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data:", "font-src 'self'", `connect-src ${apiOrigin}`, "object-src 'none'", "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'"].join("; ");
 export const rdvContentSecurityPolicy = () => (pro ? RDV_CSP() : "");
-async function buildRdvPage({ cssName, mark, contact, fontName }) {
+async function buildRdvPage({ cssName, mark, contact, fontName, rdvBook }) {
   const js = (await build({ entryPoints: [join(SRC, "js/rdv-page.js")], bundle: true, format: "iife", target: "es2020", minify: !dev, legalComments: "none", write: false, logLevel: "warning" })).outputFiles[0].text;
   const jsName = `rdv-page.${hash(js)}.js`;
   await writeFile(join(DIST, "assets", jsName), js);
@@ -568,7 +569,7 @@ async function buildRdvPage({ cssName, mark, contact, fontName }) {
     `<link rel="preload" href="../assets/fonts/${fontName}" as="font" type="font/woff2" crossorigin>`,
     `<link rel="stylesheet" href="../assets/${cssName}">`,
   ].join("\n");
-  const fill = { API_BASE: apiBase, CONTACT: contact, HEAD_ASSETS: headAssets, MARK: mark, SCRIPTS: `<script src="../assets/${jsName}" defer></script>` };
+  const fill = { API_BASE: apiBase, CONTACT: contact, HEAD_ASSETS: headAssets, MARK: mark, RDV_BOOK: rdvBook.map((x) => `../${x}`).join(" "), SCRIPTS: `<script src="../assets/${jsName}" defer></script>` };
   let html = squeeze((await read(SRC, "rendez-vous/index.html")).replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => (k in fill ? fill[k] : m)));
   if (/\{\{[A-Z_]+\}\}/.test(html)) throw new Error("Rendez-vous : marque {{…}} non remplacée dans rendez-vous/index.html");
   if (pages) html = withPolicyMeta(html, "", RDV_CSP());

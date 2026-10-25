@@ -297,6 +297,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
     $("agStateText").className = a.open ? "on" : "";
     renderState();
     renderMissing();
+    renderLink();
     renderWeek();
     renderClosures();
     for (const s of document.querySelectorAll("#agRulesBox [data-setting]")) s.value = String(a.settings[s.dataset.setting]);
@@ -335,6 +336,33 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
     if (!a.garage.phone) items.push(el("li", { class: "soft" }, "Votre téléphone n'apparaît pas dans les e-mails aux clients : demandez-le dans ", el("button", { type: "button", class: "link-btn", onclick: () => goPanel("garage", { tab: "profile" }), text: "Fiche Pixcar" }), "."));
     box.hidden = !items.length;
     box.replaceChildren(...(a.missing.length ? [el("p", { text: "Pour ouvrir les rendez-vous en ligne :" })] : []), el("ul", {}, ...items));
+  }
+
+  // ---- lien de réservation directe : la page rendez-vous/?garage=… du site (docs/rendez-vous.md, « Lien de réservation directe »)
+  const bookLink = () => new URL(`../rendez-vous/?garage=${encodeURIComponent(garageId)}`, location.href).href;
+  function renderLink() {
+    const url = bookLink();
+    $("agLink").value = url;
+    $("agLinkTry").href = url;
+    say(
+      "agLinkState",
+      agenda.open
+        ? "Le lien est actif : il ouvre la prise de rendez-vous de votre garage, avec les prestations que vous prenez en ligne."
+        : "Tant que vos rendez-vous en ligne ne sont pas activés, ce lien indique au client qu'aucun rendez-vous n'est proposé pour l'instant.",
+    );
+  }
+  async function copyLink() {
+    const input = $("agLink");
+    try {
+      await navigator.clipboard.writeText(input.value);
+      say("agLive", "Lien copié.");
+      alertBox("Lien de réservation copié : collez-le sur votre site ou vos réseaux.", "info");
+    } catch {
+      // presse-papiers refusé (navigateur, réglages) : le lien sélectionné, prêt à copier au clavier
+      input.focus();
+      input.select();
+      say("agLive", "Lien sélectionné : copiez-le avec Ctrl+C (Cmd+C sur Mac).");
+    }
   }
 
   // ---- semaine type
@@ -724,6 +752,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
     });
   }
   $("rqExport").addEventListener("click", exportIcs);
+  $("agLinkCopy").addEventListener("click", copyLink);
   $("rqState").addEventListener("click", () => goPanel("agenda"));
   $("whyForm").addEventListener("submit", submitWhy);
   $("whyClose").addEventListener("click", () => $("whyDlg").close());

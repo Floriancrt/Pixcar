@@ -2405,6 +2405,34 @@ input[type="url"] {
   flex: 1 1 220px;
   width: auto;
 }
+/* Mon garage › Horaires : le lien de réservation directe */
+.ag-link {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.ag-link h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+.ag-link .help {
+  margin: 0;
+}
+.ag-link input {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.ag-link .btn .ic {
+  width: 16px;
+  height: 16px;
+}
+.ag-link a.btn {
+  color: var(--ink);
+  text-decoration: none;
+}
 .code-input.small {
   max-width: 200px;
   font-size: 1.3rem !important;
@@ -2612,6 +2640,153 @@ input[type="url"] {
 /* ---- page rendez-vous/ (suivi de l'automobiliste, réponse du garage depuis l'e-mail) */
 .rv-page {
   max-width: 720px;
+}
+/* lien de réservation directe (rendez-vous/?garage=…) : les prestations prises en ligne, en puces à cocher */
+.rv-svc {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.rv-svc legend {
+  margin-bottom: 10px;
+  padding: 0;
+  font-weight: 650;
+}
+.rv-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rv-card > .help,
+.rv-via {
+  margin: 0;
+}
+.rv-acts .btn .ic {
+  width: 18px;
+  height: 18px;
+}
+/* La fenêtre « Prendre rendez-vous » du comparateur (rdv-book), ouverte ici par le lien de réservation directe : les règles de base que
+   la feuille du comparateur lui donne (app.css : .dlg, .dlg-head, .field, .btn.dark…), reprises pour elle seule et aux jetons de
+   l'Espace Pro. Le comparateur ne charge pas cette feuille : rien n'y change. */
+.rdv-dlg {
+  --r-md: 16px;
+  width: min(34rem, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+  border: 0;
+  border-radius: 24px;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 24px 60px -20px rgba(16, 18, 31, 0.45);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.rdv-dlg::backdrop {
+  background: rgba(16, 18, 31, 0.46);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.rdv-dlg form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  padding: 22px 20px 20px;
+}
+.rdv-dlg .dlg-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rdv-dlg .dlg-head h2 {
+  margin: 0;
+  font: 700 1.5rem/1.15 var(--font);
+  letter-spacing: -0.025em;
+}
+.rdv-dlg .dlg-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -6px -6px 0 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--card-2);
+  color: var(--ink);
+  font-size: 1.4rem;
+  line-height: 1;
+}
+.rdv-dlg .dlg-close:hover {
+  background: var(--accent-soft);
+}
+.rdv-dlg .dlg-note {
+  margin: -8px 0 0;
+  color: var(--ink-3);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+.rdv-dlg .dlg-note.warn {
+  color: var(--warn-ink);
+}
+.rdv-dlg .field {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.rdv-dlg .field > label {
+  color: var(--ink-2);
+  font: 700 0.8rem/1.2 var(--font);
+  letter-spacing: 0.01em;
+}
+.rdv-dlg .opt {
+  color: var(--ink-3);
+  font: 500 0.78rem/1 var(--font);
+}
+.rdv-dlg .hint {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.rdv-dlg .plate-in {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+.rdv-dlg .plate-in:not(:placeholder-shown) {
+  font-weight: 700;
+}
+.rdv-dlg .err-msg {
+  margin: 0;
+  color: var(--red);
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.rdv-dlg .dlg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 2px;
+}
+.rdv-dlg .btn.dark {
+  border-color: var(--btn);
+  background: var(--btn);
+  color: var(--on-btn);
+}
+@media (max-width: 599px) {
+  .rdv-dlg {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 94dvh;
+    margin: auto 0 0;
+    border-radius: 24px 24px 0 0;
+  }
 }
 .btn.danger {
   border-color: var(--red);

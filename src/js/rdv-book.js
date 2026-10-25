@@ -377,7 +377,7 @@ async function sendCode(ev) {
 
 // ================================================================ envoyée
 function done(v) {
-  const link = new URL(`rendez-vous/#c=${v.token}`, document.baseURI).href;
+  const link = new URL(`rendez-vous/#c=${v.token}`, st.root || document.baseURI).href;
   st.code = "";
   const ok = v.status === "confirmed";
   const back = v.when.back || (v.when.mode === "drop" ? v.when.end : "");
@@ -398,10 +398,11 @@ function done(v) {
 }
 
 // ================================================================ entrée
-function open({ base, garage, services, opener }) {
+// root : la racine du site quand la fenêtre s'ouvre ailleurs qu'à l'accueil (lien de réservation directe, rendez-vous/?garage=…)
+function open({ base, garage, services, opener, root = "" }) {
   if (!dlg) shell();
   stopTick();
-  st = { base, garage, services, opener, times: null, day: "", pick: null, draft: null, change: false, form: null, code: "", vehicle: "" };
+  st = { base, garage, services, opener, root, times: null, day: "", pick: null, draft: null, change: false, form: null, code: "", vehicle: "" };
   dlg.querySelector("#rbTitle").textContent = "Prendre rendez-vous";
   dlg.querySelector("#rbGarage").textContent = garage.name;
   if (typeof dlg.showModal === "function") dlg.showModal();

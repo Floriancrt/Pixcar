@@ -4,9 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
-<meta name="description" content="Suivi d'une demande de rendez-vous prise sur Pixcar.">
+<meta name="description" content="Prendre rendez-vous dans un garage, suivre sa demande : rendez-vous en ligne avec Pixcar.">
 <meta name="theme-color" content="#111216">
 <meta name="pixcar-api" content="{{API_BASE}}">
+<meta name="pixcar-rdv-book" content="{{RDV_BOOK}}">
 <title>Votre rendez-vous · Pixcar</title>
 {{HEAD_ASSETS}}
 </head>
@@ -27,12 +28,14 @@
 </svg>
 <a class="skip" href="#main">Aller au contenu</a>
 
+<!-- en-tête de l'Espace Pro (logo complet, libellé) : l'ancien en-tête (symbole et mot-symbole) n'a plus de style depuis l'identité v2.1 -->
 <header class="pro-top">
-  <a class="brand" href="../" aria-label="Pixcar : retour au comparateur">
-    <span class="brand-mark"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#px-mark" /></svg></span>
-    <span class="px-word brand-word" aria-hidden="true"></span>
-  </a>
-  <span class="pro-badge">Rendez-vous</span>
+  <div class="m-nav">
+    <div class="m-lockup">
+      <a class="m-brand" href="../" aria-label="Pixcar : retour au comparateur"><svg viewBox="0 0 1643 433.8" aria-hidden="true"><use href="#px-logo" /></svg></a>
+      <span class="m-pro-label">RENDEZ-VOUS</span>
+    </div>
+  </div>
 </header>
 
 <main id="main" class="pro-main rv-page" tabindex="-1">
@@ -61,7 +64,7 @@
     <summary>Vos données</summary>
     <ul>
       <li>Votre nom, votre e-mail, votre téléphone, votre voiture et votre message vont au seul garage choisi, pour ce rendez-vous. Pixcar les efface 30 jours après le rendez-vous (7 jours après un refus, une annulation ou une demande restée sans réponse).</li>
-      <li>Ce lien personnel est le seul moyen d'accéder à votre demande : ne le transmettez pas. Il cesse de fonctionner 7 jours après le rendez-vous.</li>
+      <li id="rvPersonal">Ce lien personnel est le seul moyen d'accéder à votre demande : ne le transmettez pas. Il cesse de fonctionner 7 jours après le rendez-vous.</li>
       <li>Accès, rectification, effacement : <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>.</li>
     </ul>
   </details>

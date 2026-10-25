@@ -229,7 +229,34 @@ semble partir, rien n'est envoyé. Un horaire n'est retenu qu'après le code, ca
   coordonnées, code, envoyée) est un script et une feuille de style à part (`assets/rdv-book.*`), chargés au premier clic (+0,45 Ko gzip
   pour le comparateur). La voiture est reprise de la mémoire du comparateur (`jg.vehicles.v1`) ; les coordonnées ne sont pas gardées
   dans le navigateur.
-- `rendez-vous/` : page de suivi de l'automobiliste (état, frise, agenda, itinéraire, appel, annulation) et page d'action du garage.
+- `rendez-vous/` : page de suivi de l'automobiliste (état, frise, agenda, itinéraire, appel, annulation), page d'action du garage et,
+  depuis le 25 octobre 2026, lien de réservation directe (ci-dessous).
+
+### Lien de réservation directe (25 octobre 2026)
+
+Pour qu'un client prenne rendez-vous chez son garage sans passer par la recherche du comparateur (le garage n'y a de bloc « Prendre
+rendez-vous » que si la table de garages le connaît, et le client doit chercher près de chez lui). Aucun changement de l'API ni de la
+base : la page lit les mêmes routes publiques que le comparateur.
+
+- **Adresse** : `https://pixcar.fr/rendez-vous/?garage=<identifiant du garage>`. L'identifiant est public (celui des fiches du
+  comparateur) ; il est dans la requête et non dans le fragment, parce que `#g=` sert déjà au lien de réponse du garage.
+- **Espace Pro, Mon garage › Horaires**, sous « Rendez-vous en ligne » : bloc « Votre lien de réservation » (adresse en lecture seule,
+  « Copier le lien », « Tester » dans un nouvel onglet) et une phrase d'état : lien actif quand les rendez-vous en ligne sont ouverts ;
+  sinon, il indique au client qu'aucun rendez-vous n'est proposé pour l'instant. Copie par le presse-papiers ; à défaut, l'adresse est
+  sélectionnée et le message donne Ctrl+C / Cmd+C.
+- **Page** : `GET /v1/pro/public/garages?ids=` (garage vérifié, prestations prises en ligne, prestations à confirmation immédiate) ; nom
+  et adresse de la fiche, ou à défaut ceux que renvoie `GET /v1/rdv/garages/:id/times` (fiche pas encore relue). Elle montre le garage,
+  les prestations à cocher (la première cochée), une phrase sur la confirmation (immédiate ou par le garage), « Choisir un horaire » et
+  « Appeler le garage » si la fiche a un téléphone. Le bouton charge au premier clic la fenêtre du comparateur (`assets/rdv-book.*`,
+  adresses données par `<meta name="pixcar-rdv-book">`, remplie au build ; règles de base de la fenêtre reprises dans `pro.css`) :
+  horaire, coordonnées, code, envoi, comme depuis une fiche. Le lien de suivi de la demande est calculé depuis la racine du site
+  (option `root` de `PixcarRdv.open`), pas depuis la page.
+- **Cas d'erreur** : identifiant mal formé → « Ce lien de réservation n'est pas valide » ; garage inconnu ou non vérifié, rendez-vous en
+  ligne fermés, ou aucun horaire libre dans les 14 jours (l'API ne donne alors pas `rdv`) → « Pas de rendez-vous en ligne pour
+  l'instant », avec un lien vers le comparateur.
+- **Corrigé en chemin** : l'en-tête de la page `rendez-vous/` gardait l'ancien balisage du logo, plus mis en forme depuis l'identité
+  2.1 : sur la page de suivi en production, le logo s'affichait en très grand. L'en-tête reprend celui de l'Espace Pro (logo et
+  « RENDEZ-VOUS ») ; `tests/rdv-book.js` vérifie maintenant sa hauteur.
 
 ### Avant la mise en ligne du lot 2
 
