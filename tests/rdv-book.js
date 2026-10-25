@@ -219,7 +219,9 @@ async function tiles(ctx) {
   const track = await page.getAttribute(".rb-done ~ .dlg-actions a", "href");
   check("« Suivre ma demande » leads to rendez-vous/#c=<the same token as in the e-mail>", track === `${srv.url}/rendez-vous/#c=${tokenIn(myMail, "c")}`, track);
   await page.click('.rdv-dlg .dlg-actions button:has-text("Fermer")');
-  check("closing gives the focus back to « Choisir un horaire »", (await page.evaluate(() => document.activeElement.dataset.act)) === "rdv");
+  // l'évènement « close » d'un <dialog> part après le clic (tâche différée) : le focus revient alors, pas pendant le clic
+  const back = await page.waitForFunction(() => document.activeElement && document.activeElement.dataset.act === "rdv", null, { timeout: 3000 }).then(() => true, () => false);
+  check("closing gives the focus back to « Choisir un horaire »", back, await page.evaluate(() => document.activeElement && document.activeElement.outerHTML.slice(0, 120)));
   check("comparator: no console error, no page error", !errorsOf(logs).length, errorsOf(logs).join("\n"));
   await ctx.close();
 
