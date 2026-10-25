@@ -338,8 +338,8 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
     box.replaceChildren(...(a.missing.length ? [el("p", { text: "Pour ouvrir les rendez-vous en ligne :" })] : []), el("ul", {}, ...items));
   }
 
-  // ---- lien de réservation directe : la page rendez-vous/?garage=… du site (docs/rendez-vous.md, « Lien de réservation directe »)
-  const bookLink = () => new URL(`../rendez-vous/?garage=${encodeURIComponent(garageId)}`, location.href).href;
+  // ---- mini-site de réservation du garage : la page reserver/?garage=… du site (docs/rendez-vous.md, « Mini-site de réservation »)
+  const bookLink = () => new URL(`../reserver/?garage=${encodeURIComponent(garageId)}`, location.href).href;
   function renderLink() {
     const url = bookLink();
     $("agLink").value = url;
@@ -347,8 +347,8 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
     say(
       "agLinkState",
       agenda.open
-        ? "Le lien est actif : il ouvre la prise de rendez-vous de votre garage, avec les prestations que vous prenez en ligne."
-        : "Tant que vos rendez-vous en ligne ne sont pas activés, ce lien indique au client qu'aucun rendez-vous n'est proposé pour l'instant.",
+        ? "Votre mini-site est actif : vos clients y choisissent leurs prestations et un horaire libre de votre agenda."
+        : "Tant que vos rendez-vous en ligne ne sont pas activés, votre mini-site indique qu'aucun rendez-vous n'est proposé pour l'instant.",
     );
   }
   async function copyLink() {
@@ -356,7 +356,7 @@ export function createRdvViews({ api, $, el, icon, alertBox, busy, apiProblem, g
     try {
       await navigator.clipboard.writeText(input.value);
       say("agLive", "Lien copié.");
-      alertBox("Lien de réservation copié : collez-le sur votre site ou vos réseaux.", "info");
+      alertBox("Lien de votre mini-site copié : collez-le sur votre site, votre fiche Google ou vos réseaux.", "info");
     } catch {
       // presse-papiers refusé (navigateur, réglages) : le lien sélectionné, prêt à copier au clavier
       input.focus();

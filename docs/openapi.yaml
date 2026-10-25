@@ -1881,7 +1881,7 @@ components:
               times: { type: array, items: { type: object, required: [t], properties: { t: { type: string, example: "08:30" }, drop: { type: boolean }, until: { type: string }, end: { type: string } } } }
     RdvRequestInput:
       type: object
-      required: [garageId, services, day, time, name, email, phone, car, year]
+      required: [garageId, services, day, time, name, email, phone, car, year, plate]
       properties:
         garageId: { type: string }
         services: { type: array, items: { type: object, required: [id], properties: { id: { type: string }, qty: { type: integer, minimum: 1, maximum: 4 } } } }
@@ -1894,7 +1894,8 @@ components:
         phone: { type: string }
         car: { type: string, maxLength: 40 }
         year: { type: integer }
-        plate: { type: string, description: "Facultatif, format AB-123-CD." }
+        plate: { type: string, example: EZ-108-BC, description: "Obligatoire. Plaque française SIV (AB-123-CD) ou ancienne FNI (1234 AB 31), avec ou sans tirets ni espaces ; gardée sous la forme AB-123-CD ou 1234AB31 (9 caractères au plus). Plaque étrangère : plateForeign à true, de 2 à 9 lettres et chiffres." }
+        plateForeign: { type: boolean, description: "La plaque est étrangère (format libre, voir plate)." }
         message: { type: string, maxLength: 500 }
         remindPrice: { type: boolean, description: "Me rappeler par e-mail, après le rendez-vous, de déclarer ce que j'ai payé (une fois)." }
         website: { type: string, description: "Champ piège : à laisser vide." }

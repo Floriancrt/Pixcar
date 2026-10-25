@@ -186,6 +186,12 @@ describe("Rendez-vous en ligne", () => {
     assert.equal(r.body.error.field, "email");
     for (const [k, v] of [["phone", "12"], ["car", "x"], ["year", 1900], ["plate", "AB123"], ["message", "x".repeat(501)], ["time", "8h"], ["services", [{ id: "vidange", qty: 2 }]]])
       assert.equal((await pub("POST", "/v1/rdv/requests", { ...b, [k]: v })).body.error.field, k, k);
+    // immatriculation obligatoire : absente, vide, plaque étrangère sans la case, case qui n'est pas un booléen
+    for (const over of [{ plate: undefined }, { plate: "  " }, { plate: "GE 123456" }, { plate: "GE 123456", plateForeign: "oui" }, { plate: "ABCDEFGHIJ", plateForeign: true }]) {
+      const e = (await pub("POST", "/v1/rdv/requests", { ...b, ...over })).body.error;
+      assert.deepEqual([e.code, e.field], ["validation", "plate"], JSON.stringify(over));
+    }
+    assert.match((await pub("POST", "/v1/rdv/requests", { ...b, plate: "" })).body.error.message, /^Indiquez l'immatriculation/);
     assert.equal((await pub("POST", "/v1/rdv/requests", { ...b, time: "08:15" })).body.error.code, "time_taken", "pas un horaire proposé");
     r = await pub("POST", "/v1/rdv/requests", b);
     assert.equal(r.status, 201);
@@ -232,6 +238,16 @@ describe("Rendez-vous en ligne", () => {
     // la place est prise : une seule reste à 8:00
     r = await pub("GET", `/v1/rdv/garages/${DUPONT}/times?services=vidange`);
     assert.equal(r.body.days[0].times[0].t, "08:00");
+  });
+
+  test("plates: an old FNI plate and a foreign plate (when said so) are accepted, kept in 9 characters and shown to the garage", async () => {
+    await openGarage();
+    const fni = await sendRequest({ plate: "1234 ab 31", email: "fni@example.com" });
+    const foreign = await sendRequest({ plate: "KA-AB 1234", plateForeign: true, email: "ka@example.com", time: "08:30" });
+    const rows = (await t.db.query("SELECT id, plate FROM rdv_requests WHERE id = ANY($1)", [[fni.id, foreign.id]])).rows;
+    assert.deepEqual(Object.fromEntries(rows.map((r) => [r.id, r.plate])), { [fni.id]: "1234AB31", [foreign.id]: "KAAB1234" });
+    const toGarage = mails("Nouvelle demande").filter((m) => m.target === "atelier@garage-dupont.fr");
+    assert.ok(toGarage.some((m) => /1234AB31/.test(m.text)) && toGarage.some((m) => /KAAB1234/.test(m.text)), "la plaque est dans l'e-mail du garage");
   });
 
   test("limits: one pending request per e-mail and garage, codes per address and per connection; the trap field sends nothing", async () => {

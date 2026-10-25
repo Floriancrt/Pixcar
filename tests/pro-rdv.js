@@ -119,10 +119,10 @@ const NOTIFY = "atelier@garage-demo.fr";
   const week = await page.$$eval("#agWeek .ag-col", (cols) => cols.map((c) => [c.querySelector(".ag-col-head b").textContent, c.querySelector(".ag-col-head small").textContent, c.classList.contains("closed")]));
   check("the week: seven columns, Sunday closed, no slot yet", week.length === 7 && week[6][1] === "Fermé" && week[6][2] && week.slice(0, 6).every((c) => c[1] === "0 créneau" && !c[2]), JSON.stringify(week));
   check("the opening rules show the defaults (24 h, 4 weeks, every 30 min) and the next public holiday", (await page.inputValue("#agDelay")) === "24" && (await page.inputValue("#agHorizon")) === "28" && (await page.inputValue("#agStep")) === "30" && /Fermé automatiquement \(prochain : .*1 novembre.*toussaint\)/i.test(await text(page, "#agHolText")), await text(page, "#agHolText"));
-  const link = `${srv.url}/rendez-vous/?garage=${GARAGE}`;
+  const link = `${srv.url}/reserver/?garage=${GARAGE}`;
   check(
-    "the booking link (to put on the garage's website or networks): rendez-vous/?garage=<id>, « Copier le lien », « Tester » in a new tab; closed, it says what the client will see",
-    (await page.inputValue("#agLink")) === link && (await page.getAttribute("#agLinkTry", "href")) === link && (await page.getAttribute("#agLinkTry", "target")) === "_blank" && (await text(page, "#agLinkCopy")) === "Copier le lien" && /aucun rendez-vous n'est proposé/.test(await text(page, "#agLinkState")),
+    "the mini-site link (to put on the garage's website or networks): reserver/?garage=<id>, « Copier le lien », « Ouvrir » in a new tab; closed, it says what the client will see",
+    (await page.inputValue("#agLink")) === link && (await page.getAttribute("#agLinkTry", "href")) === link && (await page.getAttribute("#agLinkTry", "target")) === "_blank" && (await text(page, "#agLinkCopy")) === "Copier le lien" && /^Ouvrir/.test(await text(page, "#agLinkTry")) && /aucun rendez-vous n'est proposé/.test(await text(page, "#agLinkState")),
     `${await page.inputValue("#agLink")} | ${await text(page, "#agLinkState")}`,
   );
   await axe(page, "Disponibilités (fermés)");
@@ -180,11 +180,11 @@ const NOTIFY = "atelier@garage-demo.fr";
   await page.click("#agEnabled");
   await page.waitForFunction(() => document.getElementById("agEnabled").getAttribute("aria-checked") === "true");
   check("switched on: « Activés », and the API now offers times to drivers", (await text(page, "#agStateText")) === "Activés" && (await call("GET", `/v1/rdv/garages/${GARAGE}/times?services=vidange`)).status === 200);
-  check("switched on: the booking link says it is active", /^Le lien est actif/.test(await text(page, "#agLinkState")), await text(page, "#agLinkState"));
+  check("switched on: the mini-site link says it is active", /^Votre mini-site est actif/.test(await text(page, "#agLinkState")), await text(page, "#agLinkState"));
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: srv.url });
   await page.click("#agLinkCopy");
   await page.waitForFunction(() => /Lien copié/.test(document.getElementById("agLive").textContent));
-  check("« Copier le lien » puts the link in the clipboard and says so", (await page.evaluate(() => navigator.clipboard.readText())) === link && /Lien de réservation copié/.test(await text(page, "#alert")), await text(page, "#alert"));
+  check("« Copier le lien » puts the link in the clipboard and says so", (await page.evaluate(() => navigator.clipboard.readText())) === link && /Lien de votre mini-site copié/.test(await text(page, "#alert")), await text(page, "#alert"));
   await page.evaluate(() => (document.getElementById("agLive").textContent = "")); // « Enregistré. » est déjà là depuis l'ouverture
   await page.selectOption("#agDelay", "2");
   await page.waitForFunction(() => document.getElementById("agLive").textContent === "Enregistré.");

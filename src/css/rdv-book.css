@@ -192,6 +192,14 @@
   margin-top: 1px;
   accent-color: var(--ink);
 }
+.rb-foreign {
+  margin-top: -6px;
+  font-size: 0.85rem;
+}
+.rb-foreign input {
+  width: 18px;
+  height: 18px;
+}
 .rb-trap {
   position: absolute;
   left: -10000px;

@@ -415,7 +415,7 @@ function headersFile(styleHash) {
   Cache-Control: no-cache
 /sw.js
   Cache-Control: no-cache
-${pro ? "/pro/\n  Cache-Control: no-cache\n/pro/index.html\n  Cache-Control: no-cache\n/rendez-vous/\n  Cache-Control: no-cache\n/rendez-vous/index.html\n  Cache-Control: no-cache\n" : ""}
+${pro ? "/pro/\n  Cache-Control: no-cache\n/pro/index.html\n  Cache-Control: no-cache\n/rendez-vous/\n  Cache-Control: no-cache\n/rendez-vous/index.html\n  Cache-Control: no-cache\n/reserver/\n  Cache-Control: no-cache\n/reserver/index.html\n  Cache-Control: no-cache\n" : ""}
 # Fichiers dont le nom contient l'empreinte de leur contenu : jamais modifiés, gardés un an.
 /assets/*
   Cache-Control: ${immutable}
@@ -495,7 +495,7 @@ async function buildDist(parts) {
     await writeFile(join(DIST, ".nojekyll"), ""); // servir les fichiers tels quels, sans passer par Jekyll
   } else await writeFile(join(DIST, "_headers"), headersFile(styleHash));
   await writeFile(join(DIST, "robots.txt"), "User-agent: *\nAllow: /\n" + (garages ? "Disallow: /garages/\n" : "") + (pro ? "Disallow: /pro/\nDisallow: /rendez-vous/\n" : ""));
-  if (pro) await buildPro(fonts, rdvBook);
+  if (pro) await buildPro(fonts);
   return { html: html.length, js: js.length, css: css.length, version };
 }
 
@@ -506,7 +506,7 @@ async function buildDist(parts) {
 const PRO_CSP = (cognito) =>
   ["default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data:", "font-src 'self'", `connect-src ${[apiOrigin, cognito].join(" ")}`, "object-src 'none'", "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'"].join("; ");
 export const proContentSecurityPolicy = () => (pro ? PRO_CSP(pro.cognito) : "");
-async function buildPro(fonts, rdvBook) {
+async function buildPro(fonts) {
   const app = await read(SRC, "css/app.css");
   const word = /\.px-word\s*\{[^}]*\}/.exec(app);
   if (!word) throw new Error("Espace Pro : règle .px-word introuvable dans css/app.css (mot-symbole du logo)");
@@ -540,7 +540,8 @@ async function buildPro(fonts, rdvBook) {
   if (pages) html = withPolicyMeta(html, "", PRO_CSP(pro.cognito));
   await mkdir(join(DIST, "pro"), { recursive: true });
   await writeFile(join(DIST, "pro", "index.html"), html);
-  await buildRdvPage({ cssName, mark: mark[0], contact, fontName: fonts[0].name, rdvBook });
+  await buildRdvPage({ cssName, mark: mark[0], contact, fontName: fonts[0].name });
+  await buildReserver({ fonts, mark: mark[0], contact });
 }
 
 // ------------------------------------------------------------------------------------------------ rendez-vous en ligne (docs/rendez-vous.md, lot 2)
@@ -554,12 +555,11 @@ async function buildRdvBook() {
   await writeFile(join(DIST, "assets", cssName), css);
   return [`assets/${jsName}`, `assets/${cssName}`];
 }
-// Page rendez-vous/ (suivi de l'automobiliste, réponse du garage depuis l'e-mail, réservation directe ?garage=…) : la feuille de style de
-// l'Espace Pro, son propre script ; la fenêtre « Prendre rendez-vous » (rdv-book) chargée au clic, par les adresses de la balise
-// pixcar-rdv-book ; version publiée : sa balise <meta> (connect-src : l'API seule). Pas de Cognito ici : on y entre par le lien.
+// Page rendez-vous/ (suivi de l'automobiliste, réponse du garage depuis l'e-mail) : la feuille de style de l'Espace Pro, son propre script ;
+// version publiée : sa balise <meta> (connect-src : l'API seule). Pas de Cognito ici : on y entre par le jeton du lien.
 const RDV_CSP = () => ["default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data:", "font-src 'self'", `connect-src ${apiOrigin}`, "object-src 'none'", "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'"].join("; ");
 export const rdvContentSecurityPolicy = () => (pro ? RDV_CSP() : "");
-async function buildRdvPage({ cssName, mark, contact, fontName, rdvBook }) {
+async function buildRdvPage({ cssName, mark, contact, fontName }) {
   const js = (await build({ entryPoints: [join(SRC, "js/rdv-page.js")], bundle: true, format: "iife", target: "es2020", minify: !dev, legalComments: "none", write: false, logLevel: "warning" })).outputFiles[0].text;
   const jsName = `rdv-page.${hash(js)}.js`;
   await writeFile(join(DIST, "assets", jsName), js);
@@ -569,12 +569,39 @@ async function buildRdvPage({ cssName, mark, contact, fontName, rdvBook }) {
     `<link rel="preload" href="../assets/fonts/${fontName}" as="font" type="font/woff2" crossorigin>`,
     `<link rel="stylesheet" href="../assets/${cssName}">`,
   ].join("\n");
-  const fill = { API_BASE: apiBase, CONTACT: contact, HEAD_ASSETS: headAssets, MARK: mark, RDV_BOOK: rdvBook.map((x) => `../${x}`).join(" "), SCRIPTS: `<script src="../assets/${jsName}" defer></script>` };
+  const fill = { API_BASE: apiBase, CONTACT: contact, HEAD_ASSETS: headAssets, MARK: mark, SCRIPTS: `<script src="../assets/${jsName}" defer></script>` };
   let html = squeeze((await read(SRC, "rendez-vous/index.html")).replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => (k in fill ? fill[k] : m)));
   if (/\{\{[A-Z_]+\}\}/.test(html)) throw new Error("Rendez-vous : marque {{…}} non remplacée dans rendez-vous/index.html");
   if (pages) html = withPolicyMeta(html, "", RDV_CSP());
   await mkdir(join(DIST, "rendez-vous"), { recursive: true });
   await writeFile(join(DIST, "rendez-vous", "index.html"), html);
+}
+
+// ------------------------------------------------------------------------------------------------ mini-site de réservation d'un garage
+// Page reserver/ (docs/rendez-vous.md, « Mini-site de réservation ») : le lien que le garage partage. Sa feuille de style (vue
+// « Essentielle » de la maquette, police du site) et son script, noms à empreinte ; version publiée : sa balise <meta> (connect-src :
+// l'API seule, comme rendez-vous/). Pas d'interdiction dans robots.txt (les réseaux sociaux lisent la page pour l'aperçu du lien) ;
+// la page porte noindex : son contenu dépend du garage, écrit par le script.
+async function buildReserver({ fonts, mark, contact }) {
+  let css = fonts.map((f) => fontFace(`fonts/${f.name}`, f.range)).join("") + fallbackFaces + (await read(SRC, "css/reserver.css"));
+  if (!dev) css = (await transform(css, { loader: "css", minify: true })).code;
+  const cssName = `reserver.${hash(css)}.css`;
+  await writeFile(join(DIST, "assets", cssName), css);
+  const js = (await build({ entryPoints: [join(SRC, "js/reserver.js")], bundle: true, format: "iife", target: "es2020", minify: !dev, legalComments: "none", write: false, logLevel: "warning" })).outputFiles[0].text;
+  const jsName = `reserver.${hash(js)}.js`;
+  await writeFile(join(DIST, "assets", jsName), js);
+  const headAssets = [
+    `<link rel="icon" href="../favicon.ico" sizes="48x48">`,
+    `<link rel="icon" type="image/svg+xml" href="../favicon.svg">`,
+    `<link rel="preload" href="../assets/fonts/${fonts[0].name}" as="font" type="font/woff2" crossorigin>`,
+    `<link rel="stylesheet" href="../assets/${cssName}">`,
+  ].join("\n");
+  const fill = { API_BASE: apiBase, CONTACT: contact, HEAD_ASSETS: headAssets, LOGO: mark, SCRIPTS: `<script src="../assets/${jsName}" defer></script>` };
+  let html = squeeze((await read(SRC, "reserver/index.html")).replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => (k in fill ? fill[k] : m)));
+  if (/\{\{[A-Z_]+\}\}/.test(html)) throw new Error("Mini-site : marque {{…}} non remplacée dans reserver/index.html");
+  if (pages) html = withPolicyMeta(html, "", RDV_CSP());
+  await mkdir(join(DIST, "reserver"), { recursive: true });
+  await writeFile(join(DIST, "reserver", "index.html"), html);
 }
 
 // ------------------------------------------------------------------------------------------------

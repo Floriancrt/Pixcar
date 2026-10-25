@@ -266,7 +266,7 @@ describe("docs/openapi.yaml ↔ API", () => {
       await call("GET", T, `/v1/rdv/garages/${gid}/times?services=vidange`, { status: 200 });
       await call("GET", T, `/v1/rdv/garages/${gid}/times?services=clim`, { status: 404 });
       await call("GET", T, `/v1/rdv/garages/${gid}/times?services=`, { status: 400 });
-      const body = { garageId: gid, services: [{ id: "vidange" }], day: "2026-10-21", time: "08:00", name: "Julien Roux", email: "julien.roux@example.com", phone: "06 39 98 12 34", car: "Peugeot 208", year: 2019 };
+      const body = { garageId: gid, services: [{ id: "vidange" }], day: "2026-10-21", time: "08:00", name: "Julien Roux", email: "julien.roux@example.com", phone: "06 39 98 12 34", car: "Peugeot 208", year: 2019, plate: "EZ-108-BC" };
       await call("POST", "/v1/rdv/requests", "/v1/rdv/requests", { body: { ...body, email: "x" }, status: 422 });
       await call("POST", "/v1/rdv/requests", "/v1/rdv/requests", { body: { ...body, time: "08:10" }, status: 409 });
       await call("POST", "/v1/rdv/requests", "/v1/rdv/requests", { body: "{", status: 400 });
@@ -395,7 +395,7 @@ describe("docs/openapi.yaml ↔ API", () => {
       await call("POST", `${C}/activate`, `${G}/calendar/activate`, { headers: me, status: 200 });
       await app.call("PUT", `${G}/settings`, { headers: me, body: { enabled: true, minDelayH: 0 } });
       // une demande en mode avancé, puis le calendrier, le déplacement, le retour au simple
-      const body = { garageId: gid, services: [{ id: "plaq_av" }], day: "2026-10-21", time: "08:00", name: "Julien Roux", email: "julien.roux@example.com", phone: "06 39 98 12 34", car: "Peugeot 208", year: 2019 };
+      const body = { garageId: gid, services: [{ id: "plaq_av" }], day: "2026-10-21", time: "08:00", name: "Julien Roux", email: "julien.roux@example.com", phone: "06 39 98 12 34", car: "Peugeot 208", year: 2019, plate: "EZ-108-BC" };
       await call("GET", "/v1/rdv/garages/{id}/times", `/v1/rdv/garages/${gid}/times?services=plaq_av`, { status: 200 });
       const d = JSON.parse((await call("POST", "/v1/rdv/requests", "/v1/rdv/requests", { body, status: 201 })).text);
       await call("POST", "/v1/rdv/requests/{id}/code", `/v1/rdv/requests/${d.id}/code`, { body: { code: code("julien.roux@example.com") }, status: 200 });

@@ -75,7 +75,7 @@ const NOTIFY = "atelier@garage-demo.fr";
     (await pro("PUT", "/rdv/settings", { enabled: true, minDelayH: 0 })).status === 200;
   const times = (await call("GET", `/v1/rdv/garages/${GARAGE}/times?services=vidange`)).body;
   const pick = { day: times.days[0].day, time: times.days[0].times[0].t };
-  const draft = await call("POST", "/v1/rdv/requests", { garageId: GARAGE, services: [{ id: "vidange", qty: 1 }], ...pick, name: "Julien Roux", email: "julien.roux@example.com", phone: "06 39 98 12 34", car: "Peugeot 208", year: 2019, plate: "", message: "", remindPrice: false });
+  const draft = await call("POST", "/v1/rdv/requests", { garageId: GARAGE, services: [{ id: "vidange", qty: 1 }], ...pick, name: "Julien Roux", email: "julien.roux@example.com", phone: "06 39 98 12 34", car: "Peugeot 208", year: 2019, plate: "EZ-108-BC", message: "", remindPrice: false });
   const sent = await call("POST", `/v1/rdv/requests/${draft.body && draft.body.id}/code`, { code: lastCode("julien.roux@example.com") });
   check("setup: the garage takes requests in simple mode, and a request is already taken", ok && sent.status === 200, JSON.stringify(sent.body));
 

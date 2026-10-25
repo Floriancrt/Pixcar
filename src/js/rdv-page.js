@@ -1,12 +1,9 @@
 // Page rendez-vous/ (docs/rendez-vous.md, lot 2 ; maquettes « Rendez-vous » 4 et 7), ouverte depuis les liens des e-mails :
 //  - #c=<jeton> : suivi de l'automobiliste (état, frise, agenda, itinéraire, appel, annulation, autres garages, déclarer le prix payé) ;
-//  - #g=<jeton> : réponse du garage sans connexion (accepter, refuser avec un motif), jusqu'à l'heure limite ;
-//  - ?garage=<identifiant> : lien de réservation directe du garage (Mon garage › Horaires), à mettre sur son site ou ses réseaux : le
-//    garage, les prestations qu'il prend en ligne, puis la fenêtre « Prendre rendez-vous » du comparateur (rdv-book), chargée au clic.
+//  - #g=<jeton> : réponse du garage sans connexion (accepter, refuser avec un motif), jusqu'à l'heure limite.
 // Le jeton reste dans le fragment de l'adresse : ni GitHub Pages ni l'en-tête Referer ne le voient. Il part à l'API dans l'en-tête
-// x-rdv-token, jamais dans le chemin. L'identifiant du garage, lui, est public. Que du TEXTE écrit dans la page.
+// x-rdv-token, jamais dans le chemin. Que du TEXTE écrit dans la page.
 import { CLIENT_CANCEL_REASONS, DECLINE_REASONS, icsCalendar } from "./shared/rdv.js";
-import { serviceLabel } from "./shared/pro-prices.js";
 
 const $ = (id) => document.getElementById(id);
 const API = (document.querySelector('meta[name="pixcar-api"]') || {}).content || "";
@@ -35,11 +32,8 @@ const icon = (name) => {
 };
 
 const m = /^#([cg])=([A-Za-z0-9_-]{43})$/.exec(location.hash);
-// ?garage= : même forme d'identifiant que l'API (lieu Overture ou garage d'essai)
-const bookFor = m ? "" : (new URLSearchParams(location.search).get("garage") || "").trim().toLowerCase();
-const kind = m ? (m[1] === "c" ? "client" : "garage") : bookFor ? "book" : "";
+const kind = m ? (m[1] === "c" ? "client" : "garage") : "";
 const token = m ? m[2] : "";
-const GARAGE_RE = /^[0-9a-f-]{8,40}$/;
 
 async function call(method, path, body) {
   let res;
@@ -59,11 +53,10 @@ function alertBox(message, info = false) {
   a.dataset.kind = info ? "info" : "error";
   a.hidden = !message;
 }
-function gone(text, title = "") {
+function gone(text) {
   $("rvLoading").hidden = true;
   $("rvView").hidden = true;
   $("rvGone").hidden = false;
-  if (title) $("rvGoneTitle").textContent = title;
   if (text) $("rvGoneText").textContent = text;
   $("rvGoneTitle").focus();
 }
@@ -312,137 +305,8 @@ function declineForm(opener) {
   form.querySelector("input").focus();
 }
 
-// ================================================================ lien de réservation directe (?garage=…)
-// l'API ne donne les prestations en ligne que s'il reste un horaire libre dans les 14 jours : fermé ou complet, même message
-const NOT_OPEN = ["Ce garage ne propose pas d'horaire en ligne en ce moment. Retrouvez-le, ou un autre garage près de chez vous, sur le comparateur.", "Pas de rendez-vous en ligne pour l'instant"];
-// la fenêtre « Prendre rendez-vous » : script et feuille de style du comparateur, chargés au premier clic, gardés ensuite
-let bookLoad = null;
-function loadBook() {
-  const [js, css] = ((document.querySelector('meta[name="pixcar-rdv-book"]') || {}).content || "").split(" ");
-  if (!js || !css) return Promise.reject(new Error("no book"));
-  bookLoad =
-    bookLoad ||
-    Promise.all(
-      [
-        ["script", { src: js }],
-        ["link", { rel: "stylesheet", href: css }],
-      ].map(
-        ([tag, attrs]) =>
-          new Promise((ok, ko) => {
-            const n = el(tag, attrs);
-            n.addEventListener("load", ok);
-            n.addEventListener("error", ko);
-            document.head.append(n);
-          }),
-      ),
-    ).catch((e) => {
-      bookLoad = null;
-      throw e;
-    });
-  return bookLoad;
-}
-async function book() {
-  if (!GARAGE_RE.test(bookFor)) return gone("Vérifiez l'adresse reçue du garage : elle est peut-être incomplète.", "Ce lien de réservation n'est pas valide");
-  const out = await callPublic(`/v1/pro/public/garages?ids=${encodeURIComponent(bookFor)}`);
-  const g = (out.garages || []).find((x) => x && x.id === bookFor && x.verified === true);
-  const offered = (g && g.rdv && Array.isArray(g.rdv.services) ? g.rdv.services : []).filter((id) => typeof id === "string");
-  if (!offered.length) return gone(...NOT_OPEN);
-  const auto = new Set((g.rdv.auto || []).filter((id) => typeof id === "string"));
-  const profile = g.profile || {};
-  let name = typeof profile.name === "string" ? profile.name : "";
-  let addr = profile.addr && typeof profile.addr === "object" ? [profile.addr.street, `${profile.addr.pc || ""} ${profile.addr.city || ""}`.trim()].filter(Boolean).join(", ") : "";
-  // fiche pas encore relue par Pixcar : le nom et l'adresse que l'API donne avec les horaires
-  if (!name) {
-    try {
-      const t = await callPublic(`/v1/rdv/garages/${encodeURIComponent(bookFor)}/times?services=${encodeURIComponent(offered[0])}`);
-      name = (t.garage && t.garage.name) || "";
-      addr = addr || (t.garage && t.garage.addr) || "";
-    } catch (e) {
-      if (e.status === 404) return gone(...NOT_OPEN);
-    }
-  }
-  name = name || "Ce garage";
-  document.title = `Prendre rendez-vous · ${name} · Pixcar`;
-  $("rvPersonal").hidden = true;
-  show("Rendez-vous en ligne", "ok", "Prendre rendez-vous", addr ? `${name}, ${addr}` : name);
-  const boxes = offered.map((id, i) =>
-    el("label", { class: "chip" }, el("input", { type: "checkbox", name: "rvSvc", value: id, checked: offered.length === 1 || i === 0 }), el("span", { text: serviceLabel(id) })),
-  );
-  const err = el("p", { class: "field-err", id: "rvSvcErr", role: "alert", hidden: true });
-  const note = el("p", { class: "help", id: "rvSvcHelp" });
-  const picked = () => boxes.map((b) => b.querySelector("input")).filter((x) => x.checked).map((x) => x.value);
-  const sayAuto = () => {
-    const ids = picked();
-    note.textContent =
-      ids.length && ids.every((id) => auto.has(id))
-        ? "Confirmation immédiate : le garage confirme ces prestations dès votre demande envoyée."
-        : "Vous choisissez un horaire libre ; le garage confirme votre demande par e-mail.";
-  };
-  $("rvCard").replaceChildren(
-    el(
-      "fieldset",
-      { class: "rv-svc", "aria-describedby": "rvSvcHelp" },
-      el("legend", { text: offered.length > 1 ? "Les prestations à faire" : "La prestation" }),
-      el("div", { class: "rv-chips" }, ...boxes),
-      err,
-    ),
-    note,
-  );
-  sayAuto();
-  $("rvCard").addEventListener("change", () => {
-    err.hidden = true;
-    sayAuto();
-  });
-  const go = el("button", { type: "button", class: "btn primary", id: "rvBook" }, icon("calendar"), "Choisir un horaire");
-  go.addEventListener("click", async () => {
-    const ids = picked();
-    if (!ids.length) {
-      err.textContent = "Choisissez au moins une prestation.";
-      err.hidden = false;
-      boxes[0].querySelector("input").focus();
-      return;
-    }
-    go.disabled = true;
-    try {
-      await loadBook();
-      window.PixcarRdv.open({ base: API, garage: { id: bookFor, name }, services: ids, opener: go, root: new URL("../", location.href).href });
-    } catch {
-      alertBox("La prise de rendez-vous ne répond pas. Réessayez dans un instant.");
-    } finally {
-      go.disabled = false;
-    }
-  });
-  const acts = [go];
-  if (typeof profile.phone === "string" && /^\+\d{6,15}$/.test(profile.phone)) acts.push(el("a", { class: "btn", href: `tel:${profile.phone}` }, icon("phone"), "Appeler le garage"));
-  $("rvActs").replaceChildren(...acts);
-  $("rvMore").replaceChildren(el("p", { class: "help rv-via", text: "Pixcar transmet votre demande au garage, qui la confirme ; vous suivez tout par e-mail et sur cette page." }));
-  $("rvTitle").focus();
-}
-// lectures publiques (sans jeton)
-async function callPublic(path) {
-  let res;
-  try {
-    res = await fetch(API + path, { headers: { accept: "application/json" }, referrerPolicy: "no-referrer" });
-  } catch {
-    throw Object.assign(new Error("Le service ne répond pas. Vérifiez votre connexion et réessayez."), { status: 0 });
-  }
-  const out = await res.json().catch(() => null);
-  if (res.ok) return out || {};
-  const e = (out && out.error) || {};
-  throw Object.assign(new Error(e.message || "Le service ne répond pas. Réessayez dans un instant."), { status: res.status, code: e.code || "" });
-}
-
 // ================================================================ entrée
 async function load() {
-  if (kind === "book") {
-    try {
-      return await book();
-    } catch (e) {
-      if (e.status === 404) return gone("Les rendez-vous en ligne ne sont pas ouverts pour l'instant.", NOT_OPEN[1]);
-      $("rvLoading").hidden = true;
-      return alertBox(e.message);
-    }
-  }
   if (!kind) return gone("Ouvrez cette page depuis le lien reçu par e-mail.");
   try {
     const v = await call("GET", kind === "client" ? "/v1/rdv/me" : "/v1/rdv/action");
@@ -453,6 +317,6 @@ async function load() {
     alertBox(e.message);
   }
 }
-document.title = kind === "garage" ? "Demande de rendez-vous · Pixcar" : kind === "book" ? "Prendre rendez-vous · Pixcar" : "Votre rendez-vous · Pixcar";
+document.title = kind === "garage" ? "Demande de rendez-vous · Pixcar" : "Votre rendez-vous · Pixcar";
 window.addEventListener("hashchange", () => location.reload());
 load();

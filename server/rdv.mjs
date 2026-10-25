@@ -26,7 +26,7 @@ import { bookingOf, createRdvRepo } from "./rdv-repo.mjs";
 import { clientCodeMail, notifyCodeMail, requestMail } from "./lib/rdv-mail.mjs";
 import { PRO_SERVICES, serviceLabel } from "../src/js/shared/pro-prices.js";
 import { addrText, parseEmail, parsePhone, phoneText } from "../src/js/shared/garage-profile.js";
-import { MODEL_MAX, MODEL_MIN, PLATE_RE, YEAR_MIN } from "../src/js/shared/rules.js";
+import { MODEL_MAX, MODEL_MIN, YEAR_MIN, parsePlate } from "../src/js/shared/rules.js";
 import * as R from "../src/js/shared/rdv.js";
 import * as W from "../src/js/shared/work.js";
 import { NIL_SLOT, buildJob, pickPlan, planTimes } from "../src/js/shared/plan.js";
@@ -76,8 +76,11 @@ export function parseBooking(b, { thisYear }) {
   if (chars(car) < MODEL_MIN || chars(car) > MODEL_MAX) return { error: `Votre voiture : de ${MODEL_MIN} à ${MODEL_MAX} caractères (ex. Peugeot 208).`, field: "car" };
   const year = b.year;
   if (!Number.isInteger(year) || year < YEAR_MIN || year > thisYear + 1) return { error: `Année du modèle : de ${YEAR_MIN} à ${thisYear + 1}.`, field: "year" };
-  const plate = typeof b.plate === "string" ? b.plate.trim().toUpperCase() : "";
-  if (plate && !PLATE_RE.test(plate)) return { error: "Immatriculation au format AB-123-CD, ou rien.", field: "plate" };
+  // immatriculation obligatoire (le garage identifie la voiture avec) : SIV, ancienne FNI, ou plaque étrangère quand plateForeign est vrai
+  if (b.plateForeign !== undefined && typeof b.plateForeign !== "boolean") return { error: "plateForeign : true ou false.", field: "plate" };
+  const plateIn = parsePlate(typeof b.plate === "string" ? b.plate : "", { foreign: b.plateForeign === true });
+  if (plateIn.error) return { error: plateIn.error, field: "plate" };
+  const plate = plateIn.value;
   const message = cleanMultiline(b.message);
   if (chars(message) > MESSAGE_MAX) return { error: `Message : ${MESSAGE_MAX} caractères au plus.`, field: "message" };
   if (b.remindPrice !== undefined && typeof b.remindPrice !== "boolean") return { error: "remindPrice : true ou false.", field: "remindPrice" };

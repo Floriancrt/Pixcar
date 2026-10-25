@@ -2,8 +2,7 @@
 // la fenêtre « Prendre rendez-vous » et la page rendez-vous/), vraie API (PGlite) avec les rendez-vous ouverts, tuiles de la table et
 // OpenStreetMap simulés. Parcours : étiquette et bloc de la fiche → fenêtre chargée au premier clic → horaire → coordonnées (voiture
 // reprise de la mémoire du comparateur) → code → horaire pris entre-temps, rechoisi avec le même code → demande envoyée → suivi (page
-// rendez-vous/#c=…) → réponse du garage sans connexion (#g=…) → agenda, annulation, refus avec motif → lien de réservation directe
-// (rendez-vous/?garage=…) ; téléphone ; axe ; politiques.
+// rendez-vous/#c=…) → réponse du garage sans connexion (#g=…) → agenda, annulation, refus avec motif ; téléphone ; axe ; politiques.
 //   node tests/rdv-book.js
 delete process.env.PIXCAR_ROOT;
 const { execFileSync } = require("child_process");
@@ -182,6 +181,18 @@ async function tiles(ctx) {
   await page.click("#rbSend");
   check("an invalid e-mail is caught on the page", (await text(page, "#rbEmailErr")) === "Adresse e-mail invalide." && !mails().length);
   await page.fill("#rbEmail", ME.email);
+  // immatriculation obligatoire, en tête des informations de la voiture ; plaque étrangère sur case cochée
+  check("the plate comes before the car, without « facultatif »", (await page.$$eval(".rb-form input[type=text]", (els) => els.map((e) => e.id))).join(" ").includes("rbPlate rbCar rbYear") && !/facultatif/.test(await text(page, 'label[for="rbPlate"]')));
+  await page.fill("#rbPlate", "");
+  await page.click("#rbSend");
+  check("a missing plate is caught on the page, nothing sent", (await text(page, "#rbPlateErr")) === "Indiquez l'immatriculation de la voiture." && (await page.getAttribute("#rbPlate", "aria-invalid")) === "true" && !mails().length);
+  await page.fill("#rbPlate", "GE 123456");
+  await page.click("#rbSend");
+  check("a foreign plate needs the box", /^Immatriculation au format AB-123-CD/.test(await text(page, "#rbPlateErr")) && !mails().length, await text(page, "#rbPlateErr"));
+  await page.check("#rbPlateForeign");
+  check("the box changes the example", (await page.getAttribute("#rbPlate", "placeholder")) === "Ex. M-AB 1234");
+  await page.uncheck("#rbPlateForeign");
+  await page.fill("#rbPlate", "ez 108 bc");
   await page.fill("#rbMsg", "Un bruit au freinage.");
   await page.check("#rbRemind");
   await axe(page, "fenêtre de rendez-vous : coordonnées", ".rdv-dlg");
@@ -197,7 +208,7 @@ async function tiles(ctx) {
   check("a wrong code says how many tries are left", /^Code incorrect\. Encore 4 essais\.$/.test(await text(page, "#rbCodeErr")), await text(page, "#rbCodeErr"));
   await axe(page, "fenêtre de rendez-vous : code", ".rdv-dlg");
   // entre-temps, quelqu'un d'autre prend lundi 8:00 (une voiture à la fois)
-  const r2 = await call("POST", "/v1/rdv/requests", { garageId: uid(1), services: [{ id: "vidange", qty: 1 }], day: "2026-10-05", time: "08:00", name: OTHER.name, email: OTHER.email, phone: "07 11 22 33 44", car: "Renault Clio", year: 2017, plate: "", message: "", remindPrice: false });
+  const r2 = await call("POST", "/v1/rdv/requests", { garageId: uid(1), services: [{ id: "vidange", qty: 1 }], day: "2026-10-05", time: "08:00", name: OTHER.name, email: OTHER.email, phone: "07 11 22 33 44", car: "Renault Clio", year: 2017, plate: "FG-456-HJ", message: "", remindPrice: false });
   const c2 = await call("POST", `/v1/rdv/requests/${r2.body.id}/code`, { code: lastCode(OTHER.email) });
   check("setup: another driver takes Monday 8:00 meanwhile", c2.status === 200, JSON.stringify(c2.body));
   await page.fill("#rbCode", lastCode(ME.email));
@@ -285,63 +296,6 @@ async function tiles(ctx) {
   await axe(p2, "lien expiré");
   check("rendez-vous/: no console error, no page error", !logs2.length, logs2.join("\n"));
   await ctx2.close();
-
-  // ---- lien de réservation directe (Mon garage › Horaires) : rendez-vous/?garage=<identifiant>, sans passer par la recherche
-  {
-    const ctx3 = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: "fr-FR", timezoneId: "Europe/Paris", serviceWorkers: "block" });
-    await ctx3.route("**/*", (route) => (new URL(route.request().url()).hostname === "127.0.0.1" ? route.continue() : route.abort()));
-    const p3 = await ctx3.newPage();
-    const logs3 = [], reqs3 = [];
-    p3.on("console", (m) => ["error", "warning"].includes(m.type()) && !/status of (404|409|422)\b/.test(m.text()) && logs3.push(m.text()));
-    p3.on("pageerror", (e) => logs3.push(e.message));
-    p3.on("request", (r) => reqs3.push(r.url()));
-    const direct = async (q) => {
-      await p3.goto(`${srv.url}/rendez-vous/${q}`);
-      await p3.waitForFunction(() => document.getElementById("rvLoading").hidden);
-    };
-    await direct(`?garage=${uid(1)}`);
-    check(
-      "direct link: the garage (declared name and address), its online services (the only one ticked), « Choisir un horaire », « Appeler le garage »",
-      (await text(p3, "#rvStatus")) === "Rendez-vous en ligne" && (await text(p3, "#rvTitle")) === "Prendre rendez-vous" && (await text(p3, "#rvLead")) === `${MARTIN}, 5 rue Neuve, 31220 Cazères` &&
-        JSON.stringify(await p3.$$eval('#rvCard input[name="rvSvc"]', (bs) => bs.map((b) => [b.value, b.checked]))) === JSON.stringify([["vidange", true]]) && (await text(p3, "#rvCard legend")) === "La prestation" &&
-        (await text(p3, "#rvBook")) === "Choisir un horaire" && (await p3.getAttribute("#rvActs a", "href")) === "tel:+33561000099" && (await p3.title()) === `Prendre rendez-vous · ${MARTIN} · Pixcar`,
-      await text(p3, "#rvView"),
-    );
-    check("direct link: no « personal link » warning in the footer, nothing of the booking window loaded before the click, the page header at its size", (await p3.isHidden("#rvPersonal")) && !reqs3.some((u) => /rdv-book/.test(u)) && (await p3.$eval(".pro-top", (e) => e.getBoundingClientRect().height)) < 120);
-    await axe(p3, "lien de réservation directe");
-    await shot(p3, "11-lien-direct", true);
-    await p3.click("#rvBook");
-    await p3.waitForSelector(".rdv-dlg[open] .rb-time");
-    check("the click loads the booking window (script and stylesheet) and opens it on the times, for this garage and this service", reqs3.some((u) => u.endsWith(bookJs)) && reqs3.some((u) => u.endsWith(bookCss)) && (await text(p3, "#rbGarage")) === `${MARTIN} · Vidange (huile + filtre)`, await text(p3, "#rbGarage"));
-    await axe(p3, "fenêtre ouverte depuis le lien direct", ".rdv-dlg");
-    await shot(p3, "12-lien-direct-fenetre");
-    await p3.click(".rb-time");
-    await p3.click("#rbGo");
-    await p3.waitForSelector("#rbName");
-    await p3.fill("#rbName", "Lina Morel");
-    await p3.fill("#rbEmail", "lina.morel@example.com");
-    await p3.fill("#rbPhone", "06 22 33 44 55");
-    await p3.fill("#rbCar", "Renault Clio");
-    await p3.fill("#rbYear", "2018");
-    await p3.click("#rbSend");
-    await p3.waitForSelector("#rbCode");
-    await p3.fill("#rbCode", lastCode("lina.morel@example.com"));
-    await p3.click("#rbCheck");
-    await p3.waitForSelector(".rb-done");
-    const linaMail = mails("lina.morel@example.com").find((x) => /#c=/.test(x.text || ""));
-    const track3 = await p3.getAttribute(".rb-done ~ .dlg-actions a", "href");
-    check("sent from the direct link: the garage gets the request, « Suivre ma demande » leads to rendez-vous/#c=… (not rendez-vous/rendez-vous/)", !!linaMail && track3 === `${srv.url}/rendez-vous/#c=${tokenIn(linaMail, "c")}` && mails(NOTIFY).some((x) => /Lina Morel/.test(`${x.subject} ${x.text}`)), track3);
-    await p3.click('.rdv-dlg .dlg-actions button:has-text("Fermer")');
-    await p3.waitForFunction(() => document.activeElement && document.activeElement.id === "rvBook", null, { timeout: 3000 }).catch(() => {});
-    check("closing the window gives the focus back to « Choisir un horaire »", (await p3.evaluate(() => document.activeElement.id)) === "rvBook");
-    await direct("?garage=pas-un-garage");
-    check("a malformed link: « Ce lien de réservation n'est pas valide »", (await text(p3, "#rvGoneTitle")) === "Ce lien de réservation n'est pas valide" && (await p3.isHidden("#rvView")));
-    await direct("?garage=aaaaaaaa-0000-4000-8000-00000000dead");
-    check("a garage that does not book online: « Pas de rendez-vous en ligne pour l'instant », back to the comparator", (await text(p3, "#rvGoneTitle")) === "Pas de rendez-vous en ligne pour l'instant" && /sur le comparateur\.$/.test(await text(p3, "#rvGoneText")) && (await p3.getAttribute("#rvGone a", "href")) === "../");
-    await axe(p3, "lien direct d'un garage sans rendez-vous en ligne");
-    check("direct link page: no console error, no page error", !logs3.length, logs3.join("\n"));
-    await ctx3.close();
-  }
 
   // ---- téléphone
   {

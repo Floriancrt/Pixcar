@@ -229,34 +229,82 @@ semble partir, rien n'est envoyé. Un horaire n'est retenu qu'après le code, ca
   coordonnées, code, envoyée) est un script et une feuille de style à part (`assets/rdv-book.*`), chargés au premier clic (+0,45 Ko gzip
   pour le comparateur). La voiture est reprise de la mémoire du comparateur (`jg.vehicles.v1`) ; les coordonnées ne sont pas gardées
   dans le navigateur.
-- `rendez-vous/` : page de suivi de l'automobiliste (état, frise, agenda, itinéraire, appel, annulation), page d'action du garage et,
-  depuis le 25 octobre 2026, lien de réservation directe (ci-dessous).
+- `rendez-vous/` : page de suivi de l'automobiliste (état, frise, agenda, itinéraire, appel, annulation) et page d'action du garage.
+- `reserver/` : mini-site de réservation d'un garage (ci-dessous), depuis le 25 octobre 2026.
 
-### Lien de réservation directe (25 octobre 2026)
+### Mini-site de réservation d'un garage (25 octobre 2026)
 
-Pour qu'un client prenne rendez-vous chez son garage sans passer par la recherche du comparateur (le garage n'y a de bloc « Prendre
-rendez-vous » que si la table de garages le connaît, et le client doit chercher près de chez lui). Aucun changement de l'API ni de la
-base : la page lit les mêmes routes publiques que le comparateur.
+Une page à son nom que le garage partage (son site, sa fiche Google, ses réseaux) : ses clients réservent selon ses disponibilités,
+sans passer par la recherche du comparateur (où le garage n'a de bloc « Prendre rendez-vous » que si la table de garages le connaît et
+que le client cherche près de chez lui). Mise en page : la vue **« Essentielle »** de la maquette « Mini-site garage · 3 propositions »
+(fichier HTML de l'utilisateur, 25 octobre 2026), reprise avec sa feuille de style ; les vues « Guidée » et « Atelier » et l'écran de
+réglages de démonstration de la maquette ne sont pas repris (les réglages existent déjà dans l'Espace Pro). **Aucune route ni table
+nouvelle** : la page lit les routes publiques du comparateur et dépose la demande comme la fenêtre « Prendre rendez-vous ».
 
-- **Adresse** : `https://pixcar.fr/rendez-vous/?garage=<identifiant du garage>`. L'identifiant est public (celui des fiches du
-  comparateur) ; il est dans la requête et non dans le fragment, parce que `#g=` sert déjà au lien de réponse du garage.
-- **Espace Pro, Mon garage › Horaires**, sous « Rendez-vous en ligne » : bloc « Votre lien de réservation » (adresse en lecture seule,
-  « Copier le lien », « Tester » dans un nouvel onglet) et une phrase d'état : lien actif quand les rendez-vous en ligne sont ouverts ;
-  sinon, il indique au client qu'aucun rendez-vous n'est proposé pour l'instant. Copie par le presse-papiers ; à défaut, l'adresse est
-  sélectionnée et le message donne Ctrl+C / Cmd+C.
-- **Page** : `GET /v1/pro/public/garages?ids=` (garage vérifié, prestations prises en ligne, prestations à confirmation immédiate) ; nom
-  et adresse de la fiche, ou à défaut ceux que renvoie `GET /v1/rdv/garages/:id/times` (fiche pas encore relue). Elle montre le garage,
-  les prestations à cocher (la première cochée), une phrase sur la confirmation (immédiate ou par le garage), « Choisir un horaire » et
-  « Appeler le garage » si la fiche a un téléphone. Le bouton charge au premier clic la fenêtre du comparateur (`assets/rdv-book.*`,
-  adresses données par `<meta name="pixcar-rdv-book">`, remplie au build ; règles de base de la fenêtre reprises dans `pro.css`) :
-  horaire, coordonnées, code, envoi, comme depuis une fiche. Le lien de suivi de la demande est calculé depuis la racine du site
-  (option `root` de `PixcarRdv.open`), pas depuis la page.
-- **Cas d'erreur** : identifiant mal formé → « Ce lien de réservation n'est pas valide » ; garage inconnu ou non vérifié, rendez-vous en
-  ligne fermés, ou aucun horaire libre dans les 14 jours (l'API ne donne alors pas `rdv`) → « Pas de rendez-vous en ligne pour
-  l'instant », avec un lien vers le comparateur.
+- **Adresse** : `https://pixcar.fr/reserver/?garage=<identifiant du garage>` (`src/reserver/index.html`, `src/js/reserver.js`,
+  `src/css/reserver.css`, construite par `scripts/build.mjs` seulement dans le site qui a l'Espace Pro). L'identifiant est public (celui
+  des fiches du comparateur). Politique de sécurité de la version publiée : celle de `rendez-vous/` (`connect-src` : l'API seule) ;
+  `noindex` dans la page (contenu écrit par le script), mais pas d'interdiction dans `robots.txt` (aperçu du lien sur les réseaux) ;
+  `Cache-Control: no-cache` comme les autres pages.
+- **Espace Pro, Mon garage › Horaires**, sous « Rendez-vous en ligne » : bloc « Votre mini-site de réservation » (adresse en lecture
+  seule, « Copier le lien », « Ouvrir » dans un nouvel onglet) et une phrase d'état (actif, ou « aucun rendez-vous n'est proposé pour
+  l'instant » tant que les rendez-vous en ligne sont fermés). Copie par le presse-papiers ; à défaut, l'adresse est sélectionnée.
+- **Données** : `GET /v1/pro/public/garages?ids=` (garage vérifié ; nom, adresse, téléphone, e-mail, site, horaires de la fiche ; prix
+  annoncés ; prestations prises en ligne et celles à confirmation immédiate) ; nom et adresse de `GET /v1/rdv/garages/:id/times` si la
+  fiche n'est pas encore relue ; horaires libres de cette même route pour les prestations cochées (et le type de véhicule quand le
+  calendrier avancé en a besoin) ; `POST /v1/rdv/requests`, `/code`, `/resend` comme la fenêtre du comparateur.
+- **Page** : en-tête noir (logo Pixcar, nom du garage, Réserver, L'atelier, Nous contacter, Partager : partage du système, sinon copie
+  du lien) ; « Réservez votre créneau. », ville, « Garage vérifié », ouvert ou fermé aujourd'hui (horaires de la fiche, heure de Paris) ;
+  étapes « Prestation & créneau → Vos coordonnées → Confirmation » ; à droite, le guide puis le récapitulatif (prestations et prix
+  annoncés, immatriculation, dépôt, fin indicative quand le calendrier avancé la donne, estimation « à partir de » quand toutes les
+  prestations ont un prix, « Continuer », mode de confirmation, contact de l'atelier) ; sous la réservation, « Votre garage » (adresse,
+  téléphone, e-mail, site, itinéraire), « Les horaires » (jour courant en couleur), « Avant votre venue » et quatre questions.
+- **Étape 1** : immatriculation (bande bleue « F », case « Plaque étrangère ») et liste déroulante des prestations prises en ligne
+  (recherche au-delà de 5, prix annoncé, « Confirmation immédiate » ou « Confirmée par le garage », « Tout effacer », « Terminé » ; Échap
+  ou un clic ailleurs la ferment) ; puis les disponibilités : semaine du lundi au dimanche (5 horaires par jour, « +N créneaux » ouvre
+  le jour ; « Passé », « Fermé » d'après les horaires de la fiche, sinon « Pas de créneau »), « Par jour », « Matin » / « Après-midi »,
+  « Prochain créneau », semaine précédente et suivante dans l'horizon du garage. « Continuer » vérifie l'immatriculation d'abord.
+- **Étape 2** : prénom, nom (envoyés ensemble dans `name`), e-mail, téléphone, immatriculation (reprise), modèle, année, précision pour le
+  garage (facultative), champ piège ; « Vérifier ma demande » envoie le code par e-mail (rien ne part au garage avant le bon code).
+  Le mini-site n'offre pas l'invitation à déclarer le prix payé (`remindPrice: false`) : c'est une page au nom du garage.
+- **Étape 3** : récapitulatif (véhicule et prestations, coordonnées, chacun avec « Modifier ») et code à 6 chiffres ; « Confirmer le
+  rendez-vous » si toutes les prestations sont à confirmation immédiate, sinon « Envoyer la demande ». Horaire pris entre-temps : retour
+  aux disponibilités avec la raison, et « Envoyer avec cet horaire » reprend le même code. Envoyée : « Votre rendez-vous est confirmé. »
+  ou « Votre demande est envoyée. » (heure limite du garage), récapitulatif, « Suivre ma demande » vers `rendez-vous/#c=…`,
+  « Prendre un autre rendez-vous » (immatriculation et coordonnées gardées dans la page, rien dans le navigateur).
+- **Cas d'erreur** : identifiant absent ou mal formé → « Ce lien de réservation n'est pas valide » ; garage inconnu ou non vérifié,
+  rendez-vous en ligne fermés ou aucun horaire libre dans les 14 jours (l'API ne donne alors pas `rdv`) → « Pas de rendez-vous en ligne
+  pour l'instant » ; API injoignable → « Le service ne répond pas » avec « Réessayer ».
+- **Écarts voulus avec la maquette** : gris de texte assombris (contraste AA, 4,6:1 contre le fond le plus foncé de la page) ; police
+  Manrope du site ; pas de durée de travail affichée (le temps moyen d'une prestation est privé, voir « Décisions ») ; pas de calendrier
+  mensuel (l'horizon est de 1 à 4 semaines) ; pas de formulaire « Contacter l'atelier » (les liens téléphone, e-mail mènent au garage) ;
+  la première lettre seule en capitale (« Lundi 5 octobre à 08:30 ») ; un code e-mail avant l'envoi (décision du lot 2).
 - **Corrigé en chemin** : l'en-tête de la page `rendez-vous/` gardait l'ancien balisage du logo, plus mis en forme depuis l'identité
   2.1 : sur la page de suivi en production, le logo s'affichait en très grand. L'en-tête reprend celui de l'Espace Pro (logo et
-  « RENDEZ-VOUS ») ; `tests/rdv-book.js` vérifie maintenant sa hauteur.
+  « RENDEZ-VOUS ») ; `tests/rdv-book.js` vérifie sa hauteur.
+
+### Immatriculation obligatoire (25 octobre 2026)
+
+Demande de l'utilisateur : la plaque est essentielle pour connaître la voiture. Elle devient **obligatoire** pour tout rendez-vous en
+ligne (mini-site, fenêtre du comparateur, API), en tête des informations du véhicule.
+
+- **Formats** (`parsePlate`, `src/js/shared/rules.js`, commun à la page et à l'API) : SIV `AB-123-CD` (avec ou sans tirets ni espaces,
+  casse indifférente), ancienne plaque FNI `1234 AB 31` (2A, 2B et 971 à 976 compris), plaque étrangère quand le client coche « Plaque
+  étrangère » (`plateForeign: true` : 2 à 9 lettres et chiffres, espaces et tirets permis).
+- **Forme gardée** : 9 caractères au plus, parce que la colonne `rdv_requests.plate` a une contrainte `CHECK (char_length(plate) <= 9)`
+  qu'Aurora DSQL ne laisse pas modifier simplement (voir `calendrier-avance.md`) : SIV `AB-123-CD`, FNI sans séparateurs `1234AB31`,
+  plaque étrangère telle qu'écrite si elle tient, sinon sans séparateurs. **Aucune migration.**
+- **Ce que le garage reçoit** : la plaque, comme avant, dans l'e-mail « Nouvelle demande », les Demandes, le Planning et le tableau de
+  bord ; effacée avec les autres coordonnées (30 jours après le rendez-vous, 7 après un refus).
+- **Compatibilité** : l'API déployée accepte la plaque facultative et au seul format SIV. **Déployer l'API avant le site** : sinon une
+  plaque FNI ou étrangère serait refusée par l'ancienne API. Une fenêtre du comparateur encore en cache qui enverrait une plaque vide
+  après le déploiement reçoit l'erreur sur le champ immatriculation (422, champ `plate`), qu'elle affiche.
+- **Pas de lecture automatique des données du véhicule** (marque, modèle, motorisation à partir de la plaque) : elle demande un
+  fournisseur de données d'immatriculation (accès payant, contrat, base légale à vérifier) ; décision de l'utilisateur à prendre. Le
+  client écrit toujours le modèle et l'année.
+- Texte de confidentialité : « votre voiture (immatriculation, qui permet au garage de l'identifier, modèle et année…) », et la page de
+  réservation du garage comme second point d'entrée ; date de mise à jour du 25 octobre 2026. **À faire relire** (texte relu par un
+  juriste le 18 octobre 2026).
 
 ### Avant la mise en ligne du lot 2
 

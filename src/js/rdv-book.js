@@ -5,7 +5,7 @@
 // garage (docs/calendrier-avance.md) : type de véhicule demandé d'abord quand la durée en dépend, heure de restitution prévue, et
 // confirmation immédiate quand les prestations y sont ouvertes.
 // Que du TEXTE écrit dans la page (textContent), jamais de HTML venu de l'API.
-import { MODEL_MAX, MODEL_MIN, PLATE_RE, YEAR_MIN } from "./shared/rules.js";
+import { MODEL_MAX, MODEL_MIN, YEAR_MIN, parsePlate } from "./shared/rules.js";
 
 const VEHICLES = "jg.vehicles.v1"; // mémoire du véhicule du comparateur (modules/repair-store.js) : lue ici, jamais écrite
 const MESSAGE_MAX = 500;
@@ -199,13 +199,20 @@ function contactStep() {
     field("rbName", "Nom et prénom", input({ type: "text", autocomplete: "name", maxlength: "80" }, f.name)),
     field("rbEmail", "E-mail", input({ type: "email", autocomplete: "email", maxlength: "254", spellcheck: "false" }, f.email), "Le code et la réponse du garage arrivent à cette adresse."),
     field("rbPhone", "Téléphone", input({ type: "tel", autocomplete: "tel", maxlength: "20" }, f.phone), "Pour que le garage puisse vous joindre."),
+    // l'immatriculation d'abord : le garage identifie la voiture avec (obligatoire) ; plaque étrangère sur case cochée
+    field("rbPlate", "Immatriculation", input({ type: "text", class: "plate-in", maxlength: "15", placeholder: f.plateForeign ? "Ex. M-AB 1234" : "AB-123-CD", autocomplete: "off", autocapitalize: "characters", spellcheck: "false" }, f.plate || v.plate), "Le garage identifie votre voiture avec."),
+    el(
+      "label",
+      { class: "rb-check rb-foreign" },
+      Object.assign(el("input", { type: "checkbox", id: "rbPlateForeign", onchange: (e) => (dlg.querySelector("#rbPlate").placeholder = e.target.checked ? "Ex. M-AB 1234" : "AB-123-CD") }), { checked: !!f.plateForeign }),
+      el("span", { text: "Plaque étrangère" }),
+    ),
     el(
       "div",
       { class: "row2" },
       field("rbCar", "Votre voiture", input({ type: "text", maxlength: String(MODEL_MAX), placeholder: "Ex. Peugeot 208", autocomplete: "off" }, f.car || v.model)),
       field("rbYear", "Année du modèle", input({ type: "text", inputmode: "numeric", maxlength: "4", placeholder: String(thisYear - 6), autocomplete: "off" }, f.year || (v.year ? String(v.year) : ""))),
     ),
-    field("rbPlate", opt("Immatriculation"), input({ type: "text", class: "plate-in", maxlength: "9", placeholder: "AB-123-CD", autocomplete: "off", spellcheck: "false" }, f.plate || v.plate)),
     field("rbMsg", opt("Message au garage"), Object.assign(el("textarea", { maxlength: String(MESSAGE_MAX), rows: "3", placeholder: "Ex. un bruit au freinage" }), { value: f.message || "" })),
     el("label", { class: "rb-check" }, Object.assign(el("input", { type: "checkbox", id: "rbRemind" }), { checked: !!f.remindPrice }), el("span", { text: "Le lendemain du rendez-vous, m'inviter par e-mail à déclarer le prix payé (une fois)." })),
     el("div", { class: "rb-trap", "aria-hidden": "true" }, el("label", { text: "Site web " }, el("input", { type: "text", name: "website", id: "rbWebsite", tabindex: "-1", autocomplete: "off" }))),
@@ -224,6 +231,7 @@ function readForm() {
     car: val("rbCar"),
     year: val("rbYear"),
     plate: val("rbPlate").toUpperCase(),
+    plateForeign: dlg.querySelector("#rbPlateForeign").checked,
     message: val("rbMsg"),
     remindPrice: dlg.querySelector("#rbRemind").checked,
     website: dlg.querySelector("#rbWebsite").value,
@@ -244,9 +252,11 @@ function check(f) {
   if (f.name.length < 2) return ["name", "Indiquez votre nom."];
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) return ["email", "Adresse e-mail invalide."];
   if (f.phone.replace(/\D/g, "").length < 9) return ["phone", "Un numéro de téléphone, par exemple 06 12 34 56 78."];
+  const plate = parsePlate(f.plate, { foreign: f.plateForeign });
+  if (plate.error) return ["plate", plate.error];
+  f.plate = plate.value;
   if (f.car.length < MODEL_MIN) return ["car", "Indiquez votre voiture, par exemple Peugeot 208."];
   if (!/^\d{4}$/.test(f.year) || y < YEAR_MIN || y > thisYear + 1) return ["year", `Année du modèle : de ${YEAR_MIN} à ${thisYear + 1}.`];
-  if (f.plate && !PLATE_RE.test(f.plate)) return ["plate", "Format AB-123-CD, ou laissez vide."];
   return null;
 }
 async function sendContact(ev) {
@@ -273,6 +283,7 @@ async function sendContact(ev) {
       car: f.car,
       year: Number(f.year),
       plate: f.plate,
+      ...(f.plateForeign ? { plateForeign: true } : {}),
       message: f.message,
       remindPrice: f.remindPrice,
       website: f.website,
@@ -377,7 +388,7 @@ async function sendCode(ev) {
 
 // ================================================================ envoyée
 function done(v) {
-  const link = new URL(`rendez-vous/#c=${v.token}`, st.root || document.baseURI).href;
+  const link = new URL(`rendez-vous/#c=${v.token}`, document.baseURI).href;
   st.code = "";
   const ok = v.status === "confirmed";
   const back = v.when.back || (v.when.mode === "drop" ? v.when.end : "");
@@ -398,11 +409,10 @@ function done(v) {
 }
 
 // ================================================================ entrée
-// root : la racine du site quand la fenêtre s'ouvre ailleurs qu'à l'accueil (lien de réservation directe, rendez-vous/?garage=…)
-function open({ base, garage, services, opener, root = "" }) {
+function open({ base, garage, services, opener }) {
   if (!dlg) shell();
   stopTick();
-  st = { base, garage, services, opener, root, times: null, day: "", pick: null, draft: null, change: false, form: null, code: "", vehicle: "" };
+  st = { base, garage, services, opener, times: null, day: "", pick: null, draft: null, change: false, form: null, code: "", vehicle: "" };
   dlg.querySelector("#rbTitle").textContent = "Prendre rendez-vous";
   dlg.querySelector("#rbGarage").textContent = garage.name;
   if (typeof dlg.showModal === "function") dlg.showModal();
