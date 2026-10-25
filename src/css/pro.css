@@ -7398,3 +7398,123 @@ body[data-view="otp"] .pro-main {
     gap: 10px 14px;
   }
 }
+/* Mon garage, police plus fine (demande du 25 octobre 2026 : « trop brut, réduis l'épaisseur ») : titres de section à 650, textes
+   d'aide, petites lignes et valeurs à 400, intitulés, boutons, pastilles et noms (mécaniciens, postes, prestations) à 500 ou 600 ;
+   boutons et champs ramenés vers les tailles de la maquette (11 à 13 px au lieu de 15). Mesuré sur les quatre rubriques en mode avancé :
+   avant, 400 / 600 / 650 / 700 = 26 à 59 % / 0 à 34 % / 21 à 36 % / 4 à 7 % du texte. */
+.mg-page .mg-panelset .mg-panel h2 {
+  font-weight: 650;
+}
+.mg-page .sub,
+.mg-page .help,
+.mg-page small,
+.mg-page .ag-rule label small,
+.mg-page .cal-item-sub,
+.mg-page .mg-reg dd,
+.mg-page .mg-kv small,
+.mg-page .stat-l,
+.mg-page .stat-d {
+  font-weight: 400;
+}
+.mg-page .mg-panelset :is(b, strong, dt, th, label, legend),
+.mg-page .ag-notify-now,
+.mg-page .cal-tag,
+.mg-page .cal-skills li span,
+.mg-page .pill,
+.mg-page .ok-badge,
+.mg-page .mg-tabs [role="tab"] b {
+  font-weight: 500;
+}
+.mg-page .mg-panelset .mg-head b,
+.mg-page .cal-item-name b,
+.mg-page .mg-module b,
+.mg-page #mgIdName,
+.mg-page .stat-v {
+  font-weight: 600;
+}
+.mg-page .mg-tabs [role="tab"][aria-selected="true"] b {
+  font-weight: 600;
+}
+.mg-page :is(.btn, .link-btn) {
+  font-weight: 600;
+}
+.mg-page .mg-panelset .btn,
+.mg-page .mg-panelset .btn.small {
+  min-height: 36px;
+  padding: 7px 14px;
+  font-size: 12px;
+}
+.mg-page .mg-panelset .ag-rule label,
+.mg-page .mg-panelset select,
+.mg-page .mg-panelset input:not([type="checkbox"]):not([type="radio"]),
+.mg-page .mg-panelset .svc td,
+.mg-page .mg-panelset .svc th,
+.mg-page .mg-panelset .prices td,
+.mg-page .mg-panelset .cal-item-sub {
+  font-size: 13px;
+}
+.mg-page .mg-panelset .cal-tag,
+.mg-page .mg-panelset .cal-skills li,
+.mg-page .mg-panelset .pill,
+.mg-page .mg-panelset .prices th,
+.mg-page .mg-panelset .svc thead th {
+  font-size: 12px;
+}
+.mg-page .mg-panelset .mg-hours :is(dt, dd),
+.mg-page .mg-panelset :is(.prices, .svc) :is(th, td, span, b),
+.mg-page .mg-panelset .unit {
+  font-weight: 500;
+}
+.mg-page .mg-panelset .mg-hours dd,
+.mg-page .mg-panelset .unit {
+  font-weight: 400;
+}
+.mg-page .mg-panelset .link-btn {
+  font-size: 13px;
+}
+
+/* chargement d'un écran (demande du 25 octobre 2026) : l'écran s'affiche au clic ; une barre orange de 2 px court en haut tant que ses
+   données arrivent ; un écran jamais rempli pour ce garage reste vide jusque-là (pas de contenu d'un autre garage ou d'avant) */
+.dash-busy {
+  position: fixed;
+  z-index: 60;
+  top: 0;
+  right: 0;
+  left: var(--rail, 0px);
+  height: 2px;
+  overflow: hidden;
+  background: rgba(252, 73, 22, 0.18);
+  pointer-events: none;
+}
+.dash-busy::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  background: #fc4916;
+  animation: dash-busy 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes dash-busy {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dash-busy::before {
+    width: 100%;
+    animation: none;
+  }
+}
+.dash-body.is-first > * {
+  visibility: hidden;
+}
+/* réaffectation glissée d'un rendez-vous Pixcar, à valider : information bleue (pas une alerte) */
+.pl-ask.is-info {
+  background: #eef4ff;
+}
+.pl-ask.is-info .ic {
+  color: #0659e5;
+}

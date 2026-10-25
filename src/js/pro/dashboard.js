@@ -112,22 +112,29 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
   }
   // fil d'Ariane (en-tête de l'atelier) ; Mon garage ajoute sa rubrique (maquette : « Mon atelier / Mon garage / Modules »)
   const CRUMBS = { top: "Mon atelier / Tableau de bord", planning: "Mon atelier / Planning", requests: "Mon atelier / Demandes", garage: "Mon atelier / Mon garage", calendar: "Mon atelier / Mon garage / Mode avancé" };
+  // Au clic, l'écran change tout de suite (menu, fil d'Ariane, rubrique) et se remplit dès que ses données arrivent, une barre fine en
+  // haut le disant pendant ce temps (demande du 25 octobre 2026 : un « délai de latence » au clic dans la barre latérale). Un écran
+  // jamais rempli pour ce garage reste masqué jusque-là ; un écran déjà vu garde son contenu le temps de la mise à jour. La réponse
+  // d'un écran quitté entre-temps ne déplace ni le focus ni rien d'autre.
+  let seq = 0;
+  const filled = new Map(); // écran → garage pour lequel il a déjà été rempli
+  function busyState(body, on, first = false) {
+    if (on) body.setAttribute("aria-busy", "true");
+    else body.removeAttribute("aria-busy");
+    body.classList.toggle("is-first", on && first);
+    $("dashBusy").hidden = !on;
+  }
   async function panel(name, { focus = true, ...opts } = {}) {
     if (ALIASES[name]) return panel("garage", { focus, ...opts, tab: ALIASES[name] });
     if (name === "calendar" && mode === "advanced") return panel("garage", { focus, ...opts, tab: opts.tab || "resources" });
+    const n = ++seq;
     more(false);
     alertBox("");
-    try {
-      if (name === "top") await board.open(data, { focus: false });
-      if (name === "garage") await openGarage();
-      if (name === "requests") await rdv.openRequests(data.garage.id, { focus: false });
-      if (name === "calendar") await cal.open(data.garage.id, { focus: false });
-      if (name === "planning") await (opts.day || opts.item || opts.form ? plan.openDay(data.garage.id, opts.day || parisParts(Date.now()).iso) : plan.open(data.garage.id, { focus: false }));
-    } catch (e) {
-      if (!apiProblem(e)) alertBox(e.message);
-      return;
+    const body = $(BODIES[name]);
+    for (const id of new Set(Object.values(BODIES))) {
+      $(id).hidden = id !== BODIES[name];
+      if (id !== BODIES[name]) busyState($(id), false);
     }
-    for (const id of new Set(Object.values(BODIES))) $(id).hidden = id !== BODIES[name];
     $("crumb").textContent = CRUMBS[name];
     if (name === "garage") showTab(opts.tab || tab);
     for (const b of document.querySelectorAll(".dash-link[data-panel]")) {
@@ -135,6 +142,21 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
       else b.removeAttribute("aria-current");
     }
     window.scrollTo(0, 0);
+    busyState(body, true, filled.get(name) !== data.garage.id);
+    try {
+      if (name === "top") await board.open(data, { focus: false });
+      if (name === "garage") await openGarage();
+      if (name === "requests") await rdv.openRequests(data.garage.id, { focus: false });
+      if (name === "calendar") await cal.open(data.garage.id, { focus: false });
+      if (name === "planning") await (opts.day || opts.item || opts.form ? plan.openDay(data.garage.id, opts.day || parisParts(Date.now()).iso) : plan.open(data.garage.id, { focus: false }));
+    } catch (e) {
+      if (n === seq) busyState(body, false);
+      if (!apiProblem(e)) alertBox(e.message);
+      return;
+    }
+    if (n !== seq) return; // un autre écran a été demandé entre-temps
+    filled.set(name, data.garage.id);
+    busyState(body, false);
     if (name === "planning" && opts.item && plan.showItem(opts.item)) return;
     if (name === "planning" && opts.form) return plan.form(opts.form.kind, opts.form);
     if (name === "garage" && opts.closure) return $("agAddClosure").click();
@@ -148,13 +170,10 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
   // tout est chargé à l'ouverture : passer d'une rubrique à l'autre est immédiat
   async function openGarage() {
     const id = data.garage.id;
-    await garage.open(id, { verifiedAt: data.garage.verifiedAt });
-    if (data.rdv) {
-      await rdv.openAgenda(id, { focus: false });
-      await mountCal();
-    }
     identity();
     modules();
+    // la fiche, les disponibilités et le calendrier avancé en même temps
+    await Promise.all([garage.open(id, { verifiedAt: data.garage.verifiedAt }), data.rdv ? rdv.openAgenda(id, { focus: false }) : null, data.rdv ? mountCal() : null]);
   }
   // en mode avancé, délais et capacité (Horaires), exigences des prestations (Prestations), mécaniciens et postes (Ressources),
   // contrôles (Modules) viennent du calendrier avancé

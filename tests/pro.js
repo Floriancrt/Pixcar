@@ -238,7 +238,7 @@ function fakeCognito() {
   const garageTab = async (pg, tab) => {
     if (await pg.isHidden("#dash-garage")) {
       await pg.click('.dash-link[data-panel="garage"]');
-      await pg.waitForSelector("#dash-garage:not([hidden])");
+      await pg.waitForSelector("#dash-garage:not([hidden]):not([aria-busy])");
     }
     await pg.click(`#mgTab-${tab}`);
     await pg.waitForSelector(`#mgPanel-${tab}:not([hidden])`);
@@ -471,9 +471,9 @@ function fakeCognito() {
 
   // ---- « Mon garage » : coordonnées (contacts privés jamais montrés), registre, horaires, changements relus, prestations et temps moyens
   await page.click('.dash-link[data-panel="top"]');
-  await page.waitForSelector("#dash-top:not([hidden])");
+  await page.waitForSelector("#dash-top:not([hidden]):not([aria-busy])");
   await page.click('.dash-link[data-panel="garage"]');
-  await page.waitForSelector("#dash-garage:not([hidden])");
+  await page.waitForSelector("#dash-garage:not([hidden]):not([aria-busy])");
   // comme la maquette : surtitre, sous-titre, « Retour à l'atelier », carte de l'établissement, rubriques en onglets verticaux ; sans
   // rendez-vous en ligne, ni Ressources ni Modules
   const mgHead = await page.evaluate(() => ({
@@ -600,10 +600,10 @@ function fakeCognito() {
   await api.app.pro.repo.decideChange({ id: asked.name, decision: "approve" });
   await api.app.pro.repo.decideChange({ id: asked.addr, decision: "reject", reason: "Adresse différente du registre" });
   await page.click('.dash-link[data-panel="top"]');
-  await page.waitForSelector("#dash-top:not([hidden])");
+  await page.waitForSelector("#dash-top:not([hidden]):not([aria-busy])");
   check("« Tableau de bord » in the menu: back to the top, focus on the greeting", (await page.evaluate(() => document.activeElement.id)) === "dashTitle" && (await page.locator("#dash-garage").isHidden()));
   await page.click('.dash-link[data-panel="garage"]');
-  await page.waitForSelector("#dash-garage:not([hidden])");
+  await page.waitForSelector("#dash-garage:not([hidden]):not([aria-busy])");
   check("reopened on the tab left last (Fiche Pixcar)", await page.isVisible("#mgPanel-profile"));
   c0 = await coords();
   check(
@@ -704,7 +704,7 @@ function fakeCognito() {
   await page.waitForFunction(() => document.querySelector('#mgSvcRows tr[data-svc="diag"] .tgl').getAttribute("aria-checked") === "false");
   check("a service without a price is unticked at once", (await page.locator("#untickDlg[open]").count()) === 0 && JSON.stringify((await svcDb()).diag) === "[false,null]");
   await page.click("#mgBack");
-  await page.waitForSelector("#dash-top:not([hidden])");
+  await page.waitForSelector("#dash-top:not([hidden]):not([aria-busy])");
   check("« Retour à l'atelier » (simple mode): the dashboard, focus on its title", (await page.evaluate(() => document.activeElement.id)) === "dashTitle" && (await page.getAttribute('.dash-link[data-panel="top"]', "aria-current")) === "true");
 
   // déconnexion, puis reconnexion (compte existant : code de connexion)

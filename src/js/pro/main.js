@@ -205,12 +205,15 @@ async function resendOtp() {
   });
 }
 
-// connecté : le rideau couvre l'écran pendant le chargement de l'espace, puis le découvre
+// connecté : le rideau couvre l'écran pendant le chargement de l'espace, puis le découvre ; le compte se charge pendant que le rideau
+// arrive (rien ne change à l'écran avant qu'il couvre tout)
 async function enter() {
   const shell = document.querySelector('[data-screen]:not([hidden]) .m-guided-shell');
+  const me = api.me();
+  me.catch(() => {}); // l'erreur éventuelle est traitée par home()
   const veiled = await curtain.cover(shell);
   try {
-    await home({ auto: true });
+    await home({ auto: true, me });
   } finally {
     if (veiled) curtain.reveal(shell);
   }
@@ -218,13 +221,14 @@ async function enter() {
 
 // ---- mes garages
 // auto : juste après la connexion, un compte qui n'a qu'un garage vérifié (et rien en cours) arrive directement sur son tableau de bord
-async function home({ auto = false } = {}) {
+// me : la réponse de GET /v1/pro/me déjà demandée (connexion), sinon elle l'est ici
+async function home({ auto = false, me: asked = null } = {}) {
   alertBox("");
   if (location.hash) history.replaceState(null, "", location.pathname + location.search); // connecté : #connexion, #inscription ne servent plus
   show("loading", { focus: false });
   let me;
   try {
-    me = await api.me();
+    me = await (asked || api.me());
   } catch (e) {
     if (!apiProblem(e)) show("home");
     return;

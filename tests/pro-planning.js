@@ -108,7 +108,9 @@ const NOTIFY = "atelier@garage-planning.fr";
     await ctx.route("**/*", (route) => (new URL(route.request().url()).hostname === "127.0.0.1" ? route.continue() : route.abort()));
     const page = await ctx.newPage();
     const logs = [];
-    page.on("console", (m) => ["error", "warning"].includes(m.type()) && !/status of (400|401|409|422)\b/.test(m.text()) && logs.push(`[${m.type()}] ${m.text()}`));
+    // le registre SIRENE n'a pas ce garage d'essai : sa route répond 404, la page le dit (Mon garage › Fiche Pixcar)
+    const expected = (m) => /status of (400|401|409|422)\b/.test(m.text()) || (/status of 404\b/.test(m.text()) && /\/registry$/.test(m.location().url));
+    page.on("console", (m) => ["error", "warning"].includes(m.type()) && !expected(m) && logs.push(`[${m.type()}] ${m.text()}`));
     page.on("pageerror", (e) => logs.push("[pageerror] " + e.message));
     return { ctx, page, logs };
   }
@@ -207,7 +209,7 @@ const NOTIFY = "atelier@garage-planning.fr";
   await page.waitForFunction(() => document.querySelector(".dash-nav").getBoundingClientRect().width >= 200);
   check("rail: unfolded again", (await rail()).width >= 200 && (await page.evaluate(() => localStorage.getItem("pixcar-pro-rail"))) === "full");
   await page.click('.dash-link[data-panel="planning"]');
-  await page.waitForSelector("#dash-planning:not([hidden]) .pl-grid");
+  await page.waitForSelector("#dash-planning:not([hidden]):not([aria-busy]) .pl-grid");
   if (monday(D1) !== monday(today)) {
     await page.click("#planNext");
     await page.waitForFunction((d) => !!document.querySelector(`.pl-col[data-day="${d}"]`), D1);
@@ -402,10 +404,25 @@ const NOTIFY = "atelier@garage-planning.fr";
   await dragTo(page, `.pl-col[data-staff="${col}"] ${ev(marie)}`, `.pl-col[data-staff="${col}"]`, minOfIso(before.plan.find((r) => r.role === "labour").start) + 60);
   await page.waitForSelector("#planDlg[open] .pl-ask");
   check("dragging a client's request to another hour asks for confirmation first", (await page.inputValue("#planMvTime")) === "11:00", await page.inputValue("#planMvTime"));
+  check("dragged to another hour: the panel opens on the right with « Confirmer et prévenir le client »", (await text(page, "#planMvSave")) === "Confirmer et prévenir le client" && (await page.evaluate(() => !document.getElementById("planDlg").matches(":modal"))));
+  const mailsDrag = outbox.length;
   await page.click("#planMvSave");
   await closed(page);
   ag = await agenda();
   check("confirmed: the request moved to 11:00, still with the same mechanic", ag.appointments.find((a) => a.id === marie).when.start === "11:00" && ag.appointments.find((a) => a.id === marie).plan.some((r) => r.id === col && r.role === "labour"));
+  const movedMail = outbox.slice(mailsDrag).filter((m) => m.target === "marie.curie@example.com");
+  check("the client gets the « Nouvel horaire » e-mail (rendez-vous déplacé, with the new time and the calendar file)", movedMail.length === 1 && /^Nouvel horaire : .*11:00/.test(movedMail[0].subject) && /déplace votre rendez-vous/.test(movedMail[0].text) && (movedMail[0].attachments || []).some((x) => x.type === "text/calendar"), JSON.stringify(movedMail.map((m) => [m.subject, (m.text || "").slice(0, 80)])));
+  // glisser le même rendez-vous Pixcar vers l'autre mécanicien, même heure : le panneau s'ouvre aussi, à valider ; aucun e-mail au client
+  const other = col === paul ? lea : paul;
+  await page.waitForSelector(`.pl-col[data-staff="${col}"] ${ev(marie)}`);
+  await dragTo(page, `.pl-col[data-staff="${col}"] ${ev(marie)}`, `.pl-col[data-staff="${other}"]`, 11 * 60);
+  await page.waitForSelector("#planDlg[open] .pl-ask.is-info");
+  check("dragged to the other mechanic at the same time: the panel opens, says the client is not disturbed, nothing saved yet", (await text(page, "#planMvSave")) === "Enregistrer l'affectation" && /aucun e-mail/.test(await text(page, "#planForm .pl-ask")) && (await agenda()).appointments.find((a) => a.id === marie).plan.some((r) => r.id === col && r.role === "labour"), await text(page, "#planForm"));
+  const mailsAssign = outbox.length;
+  await page.click("#planMvSave");
+  await closed(page);
+  const reassigned = (await agenda()).appointments.find((a) => a.id === marie);
+  check("validated: the other mechanic does it, same time, no e-mail to the client", reassigned.when.start === "11:00" && reassigned.plan.some((r) => r.id === other && r.role === "labour") && !outbox.slice(mailsAssign).some((m) => m.target === "marie.curie@example.com"), JSON.stringify(reassigned.plan));
 
   // ---- menu « Nouveau » (clavier), puis création rapide
   await page.click("#planNew");
@@ -609,6 +626,34 @@ const NOTIFY = "atelier@garage-planning.fr";
   await closed(page);
   check("cancelled: gone from the planning, the client is told", !(await agenda()).appointments.some((a) => a.id === julien) && /Rendez-vous annulé/.test(await text(page, "#alert")));
   check("the Espace Pro privacy note tells how long a block's label is kept", /Le libellé d'un bloc, qui peut contenir un nom, est effacé 30 jours après lui, le bloc 24 mois après/.test(await page.$eval(".pro-privacy", (d) => d.textContent)));
+  // ---- barre latérale sans latence (demande du 25 octobre 2026) : avec une API lente (1,5 s pour la fiche du garage), l'écran change dès
+  // le clic, une barre fine dit le chargement, le contenu arrive ensuite ; un écran quitté entre-temps ne reprend ni l'affichage ni le focus
+  await page.route("**/profile", async (route) => {
+    await new Promise((r) => setTimeout(r, 1500));
+    await route.continue().catch(() => {});
+  });
+  const t0 = Date.now();
+  await page.click('.dash-link[data-panel="garage"]');
+  const instant = await page.evaluate(() => ({
+    shown: !document.getElementById("dash-garage").hidden,
+    busy: document.getElementById("dash-garage").getAttribute("aria-busy"),
+    bar: !document.getElementById("dashBusy").hidden,
+    current: document.querySelector('.dash-link[data-panel="garage"]').getAttribute("aria-current"),
+    crumb: document.getElementById("crumb").textContent,
+    planning: document.getElementById("dash-planning").hidden,
+  }));
+  check("slow API: the click switches the screen at once (menu, crumb, busy bar), before the data", instant.shown && instant.busy === "true" && instant.bar && instant.current === "true" && /Mon garage/.test(instant.crumb) && instant.planning && Date.now() - t0 < 1200, JSON.stringify(instant));
+  await page.waitForSelector("#dash-garage:not([aria-busy])");
+  check("slow API: once loaded, the bar goes, the title has the focus", (await page.isHidden("#dashBusy")) && (await page.evaluate(() => document.activeElement.id)) === "mgTitle" && Date.now() - t0 >= 1400);
+  await page.click('.dash-link[data-panel="top"]');
+  await page.waitForSelector("#dash-top:not([hidden]):not([aria-busy])");
+  await page.click('.dash-link[data-panel="garage"]');
+  await page.click('.dash-link[data-panel="planning"]');
+  await page.waitForSelector("#dash-planning:not([hidden]):not([aria-busy])");
+  await page.waitForTimeout(1700); // la fiche du garage arrive après coup
+  check("slow API: a screen left before its data came does not come back nor take the focus", (await page.isVisible("#dash-planning")) && (await page.isHidden("#dash-garage")) && (await page.evaluate(() => document.activeElement.id)) !== "mgTitle" && (await page.isHidden("#dashBusy")));
+  await page.unroute("**/profile");
+
   check("no console error, no page error", !logs.length, logs.join("\n"));
   await ctx.close();
 
@@ -623,7 +668,7 @@ const NOTIFY = "atelier@garage-planning.fr";
       check("phone: the 64 px icon rail on the left shows Planning and Mon garage, no « Plus » menu", rail.w === 64 && rail.left === 0 && (await m.page.isVisible('.dash-link[data-panel="planning"]')) && (await m.page.isVisible('.dash-link[data-panel="garage"]')) && (await m.page.isHidden("#dashMore")), JSON.stringify(rail));
     }
     await m.page.click('.dash-link[data-panel="planning"]');
-    await m.page.waitForSelector("#dash-planning:not([hidden]) .pl-grid");
+    await m.page.waitForSelector("#dash-planning:not([hidden]):not([aria-busy]) .pl-grid");
     if (name === "telephone") check("phone: the day view is the default, the filters are folded", (await text(m.page, '.pl-view[aria-pressed="true"]')) === "Jour" && (await m.page.isHidden("#planFilters")));
     check(`${name}: no page-wide horizontal scroll (the grid scrolls inside its box)`, (await overflow(m.page)) <= 0, await overflow(m.page));
     await axe(m.page, `planning · ${name}`);

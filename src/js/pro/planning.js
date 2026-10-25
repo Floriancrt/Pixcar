@@ -128,8 +128,10 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     closeSide({ now: true, refocus: false });
     view ||= narrow() ? "day" : "week";
     anchor ||= today();
-    st = await api.calendar(id);
-    if (!(await load({ todo: true }))) return;
+    // les réglages et la période en même temps (une seule attente au lieu de deux)
+    const [cal, ok] = await Promise.all([api.calendar(id), load({ todo: true })]);
+    st = cal;
+    if (!ok) return;
     render();
     if (focus) $("planTitle").focus();
   }
@@ -737,6 +739,10 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     else if (c.staff) change = { day, start, staff: from && row.target === "staff" ? swap(currentStaff(it), from, c.staff) : [c.staff], post: null, swapStaff: from && from !== c.staff ? [from, c.staff] : null };
     else change = { day, start, staff: view === "post" ? [] : currentStaff(it), post: c.post, swapPost: from && from !== c.post ? [from, c.post] : null };
     if (day === it.day && start === it.start && !change.swapStaff && !change.swapPost && !(row === undefined && (c.staff || c.post))) return;
+    // un rendez-vous pris sur Pixcar ne change jamais sans validation dans le panneau (demande du 25 octobre 2026) : autre jour ou autre
+    // heure, l'API annonce le nouvel horaire et le client reçoit l'e-mail « Nouvel horaire » une fois validé ; même jour et même heure
+    // (autre mécanicien ou poste), le panneau le dit et rien n'est envoyé au client
+    if (it.type === "rdv" && day === it.day && start === it.start) return void openSheet(it, { mode: "move", change, problem: { code: "assign", message: "Même jour, même heure : le client n'est pas dérangé, aucun e-mail ne lui est envoyé." } });
     void tryMove(it, change);
   }
   const swap = (list, from, to) => [...new Set(list.map((x) => (x === from ? to : x)))];
@@ -934,6 +940,8 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     // confirm : le client sera prévenu ; shifted : les travaux attendent que le mécanicien (ou le poste) se libère
     const confirmAsk = problem && (problem.code === "confirm" || problem.code === "shifted");
     const shifted = problem && problem.code === "shifted";
+    // assign : réaffectation glissée dans la grille (même heure), à valider ; le formulaire non retouché garde exactement ce qui a été glissé
+    const assign = problem && problem.code === "assign";
     const reasons = (problem && problem.details && problem.details.reasons) || [];
     const alts = (problem && problem.details && problem.details.alternatives) || [];
     const staffSel = el("select", { id: "planMvStaff" }, el("option", { value: "", text: "Au choix de Pixcar" }), ...activeStaff().map((m) => el("option", { value: m.id, text: m.name, selected: !ch.auto && ch.staff[0] === m.id })));
@@ -943,7 +951,8 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       el("p", { class: "help", text: it.type === "rdv" ? "Même heure, autre mécanicien ou poste : le client n'est pas dérangé. Autre heure : il est prévenu par e-mail, après votre confirmation." : "Pixcar vérifie que les mécaniciens et postes sont libres." }),
       el("div", { class: "mg-row2" }, el("span", {}, el("label", { for: "planMvDay", text: "Jour" }), el("input", { id: "planMvDay", type: "date", value: ch.day, min: data.today, required: true })), el("span", {}, el("label", { for: "planMvTime", text: hold ? "De" : "Dépôt à" }), el("input", { id: "planMvTime", type: "time", step: "300", value: hm(ch.start), required: true }))),
       hold ? null : el("div", { class: "mg-row2" }, el("span", {}, el("label", { for: "planMvStaff", text: "Mécanicien" }), staffSel), el("span", {}, el("label", { for: "planMvPost", text: "Poste" }), postSel)),
-      problem && !confirmAsk ? el("div", { class: "pl-conflict", role: "alert" }, el("p", {}, icon("i-flag"), el("b", { text: problem.message })), reasons.length > 1 ? el("ul", {}, ...reasons.slice(1).map((t) => el("li", { text: t }))) : null) : null,
+      problem && !confirmAsk && !assign ? el("div", { class: "pl-conflict", role: "alert" }, el("p", {}, icon("i-flag"), el("b", { text: problem.message })), reasons.length > 1 ? el("ul", {}, ...reasons.slice(1).map((t) => el("li", { text: t }))) : null) : null,
+      assign ? el("p", { class: "pl-ask is-info", role: "status" }, icon("i-user"), problem.message) : null,
       alts.length
         ? el(
             "div",
@@ -962,20 +971,22 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       confirmAsk ? el("p", { class: "pl-ask", role: "alert" }, icon(shifted ? "i-clock" : "i-mail"), problem.message || "Le client sera prévenu par e-mail du nouvel horaire.") : null,
     ];
     frame(it.title, "Déplacer ou réaffecter", body, [
-      el("button", { type: "submit", class: "btn primary", id: "planMvSave" }, shifted ? "Confirmer ces horaires" : confirmAsk ? "Confirmer et prévenir le client" : "Enregistrer"),
+      el("button", { type: "submit", class: "btn primary", id: "planMvSave" }, shifted ? "Confirmer ces horaires" : confirmAsk ? "Confirmer et prévenir le client" : assign ? "Enregistrer l'affectation" : "Enregistrer"),
       el("button", { type: "button", class: "btn", onclick: () => openSheet(it) }, "Retour"),
     ], it.id);
+    const initial = [$("planMvDay").value, $("planMvTime").value, hold ? "" : staffSel.value, hold ? "" : postSel.value].join();
     $("planForm").onsubmit = (ev) => {
       ev.preventDefault();
       const day = $("planMvDay").value, start = minOf($("planMvTime").value);
       if (!day || !Number.isFinite(start)) return err("Choisissez un jour et une heure.");
       const s = hold ? "" : $("planMvStaff").value, p = hold ? "" : $("planMvPost").value;
       const next = hold ? { day, start } : { day, start, staff: s ? [s] : [], post: p || null, auto: !s && !p };
+      if (assign && [day, $("planMvTime").value, s, p].join() === initial) return void tryMove(it, ch, { button: $("planMvSave") });
       // la confirmation ne vaut que pour le déplacement annoncé : s'il a changé, l'API redemande
       const same = JSON.stringify(moveBody(it, next)) === JSON.stringify(moveBody(it, ch));
       void tryMove(it, confirmAsk && same ? ch : next, { confirm: confirmAsk && same, button: $("planMvSave") });
     };
-    (confirmAsk ? $("planMvSave") : $("planMvDay")).focus();
+    (confirmAsk || assign ? $("planMvSave") : $("planMvDay")).focus();
   }
 
   // annuler un rendez-vous confirmé, avec un motif transmis au client (une demande à confirmer se traite dans « Demandes »)

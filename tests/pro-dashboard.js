@@ -254,10 +254,10 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
   check("saved: in the order of the list", JSON.stringify(await shorts()) === JSON.stringify(["Aller au planning", "Demandes", "Prix annoncés", "Mon garage", "Équipe et postes", "Nouveau rendez-vous"]), JSON.stringify(await shorts()));
   check("kept on the account (the API has them)", JSON.stringify((await pro("GET", "")).body.prefs.shortcuts) === JSON.stringify(["planning", "requests", "prices", "garage", "team", "new"]));
   await page.click('#dbShortcuts [data-short="garage"]');
-  await page.waitForSelector("#dash-garage:not([hidden])");
+  await page.waitForSelector("#dash-garage:not([hidden]):not([aria-busy])");
   check("a shortcut opens its screen", (await page.getAttribute('.dash-link[data-panel="garage"]', "aria-current")) === "true");
   await page.click('.dash-link[data-panel="top"]');
-  await page.waitForSelector("#dash-top:not([hidden]) #dbList .db-row");
+  await page.waitForSelector("#dash-top:not([hidden]):not([aria-busy]) #dbList .db-row");
 
   // ---- client déjà sur place : le formulaire du Planning, puis « Voiture reçue »
   await page.click("#dbActions .db-act:nth-child(2)");

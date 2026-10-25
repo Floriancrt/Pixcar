@@ -118,7 +118,7 @@ const NOTIFY = "atelier@garage-demo.fr";
   const tab = async (pg, name) => {
     if (await pg.isHidden("#dash-garage")) {
       await pg.click('.dash-link[data-panel="garage"]');
-      await pg.waitForSelector("#dash-garage:not([hidden])");
+      await pg.waitForSelector("#dash-garage:not([hidden]):not([aria-busy])");
     }
     await pg.click(`#mgTab-${name}`);
     await pg.waitForSelector(`#mgPanel-${name}:not([hidden])`);
@@ -132,7 +132,7 @@ const NOTIFY = "atelier@garage-demo.fr";
 
   // ---- 1. garage
   await page.click("#agModeGo");
-  await page.waitForSelector("#dash-calendar:not([hidden]) #calStepTitle");
+  await page.waitForSelector("#dash-calendar:not([hidden]):not([aria-busy]) #calStepTitle");
   const steps = await page.$$eval("#calSteps button", (els) => els.map((e) => e.innerText.replace(/\s+/g, " ").trim()));
   check("the wizard opens on step 1 of 6, the menu still points at Mon garage", steps.join("|") === "1 Garage|2 Personnel|3 Équipements|4 Prestations|5 Réservation|6 Vérification" && (await text(page, "#calStepTitle")) === "1. Garage" && (await page.getAttribute("#calSteps [data-step='1']", "aria-current")) === "step" && (await page.getAttribute('.dash-link[data-panel="garage"]', "aria-current")) === "true" && (await text(page, "#crumb")) === "Mon atelier / Mon garage / Mode avancé", steps.join("|"));
   check("step 1: the opening hours, the pauses explained, closures, delays and margins", /lun\.–ven\. 8:00–12:00, 14:00–18:00/.test(await text(page, "#calBody")) && /le travail s'y interrompt et reprend après/.test(await text(page, "#calBody")) && (await page.inputValue("#calReception")) === "10" && (await page.inputValue("#calReturn")) === "15");
@@ -238,7 +238,7 @@ const NOTIFY = "atelier@garage-demo.fr";
   await axe(page, "assistant · 6. Vérification");
   await shot(page, "6-verification");
   await page.click("#calActivate");
-  await page.waitForSelector("#dash-garage:not([hidden]) #mgPanel-modules:not([hidden]) #calChkTitle");
+  await page.waitForSelector("#dash-garage:not([hidden]):not([aria-busy]) #mgPanel-modules:not([hidden]) #calChkTitle");
   check("activated: back in Mon garage › Modules, the alert says how many appointments were affected; the wizard is put away", /Mode avancé actif\. 1 rendez-vous à venir affecté\./.test(await text(page, "#alert")) && (await state()).mode === "advanced" && (await page.evaluate(() => document.activeElement.id)) === "mgTitle" && !(await page.$("#calBody > *")), await text(page, "#alert"));
   const mods1 = await page.$$eval("#mgModules li", (ls) => ls.map((l) => l.innerText.replace(/\s+/g, " ").trim()));
   check("Modules in advanced mode: the four tools active, each with « Ouvrir »; controls, no conflict, recompute and back to simple", mods1.every((m) => /Actif Ouvrir$/.test(m)) && /^Avancé :/.test(await text(page, "#agModeText")) && (await text(page, "#agModeGo")) === "Mécaniciens et postes" && /Conflits · 0/.test(await text(page, "#mgCalModules")) && (await page.isVisible("#calToSimple")) && (await page.isVisible("#calRecompute")), mods1.join(" | "));
@@ -267,7 +267,7 @@ const NOTIFY = "atelier@garage-demo.fr";
   await closed(page);
   check("a mechanic edited from Mon garage: saved, the list follows", /Paul R\./.test(await text(page, "#mgCalResources")) && (await state()).staff.some((m) => m.name === "Paul R."), await text(page, "#mgCalResources"));
   await page.click('.dash-link[data-panel="requests"]');
-  await page.waitForSelector("#dash-requests:not([hidden]) .rq-card");
+  await page.waitForSelector("#dash-requests:not([hidden]):not([aria-busy]) .rq-card");
   check("Demandes: the request shows who does it and where", /Affecté : Paul R\. · Pont n°1/.test(await text(page, ".rq-card")), await text(page, ".rq-card"));
   const pub = (await call("GET", `/v1/rdv/garages/${GARAGE}/times?services=vidange`)).body;
   check("public times now come from Paul and the lift (afternoons too), with a return time and immediate confirmation", pub.auto === true && pub.days[0].times.some((t) => t.t >= "14:00") && pub.days[0].times.every((t) => /^\d\d:\d\d$/.test(t.end)), JSON.stringify(pub.days[0]).slice(0, 300));
@@ -278,7 +278,7 @@ const NOTIFY = "atelier@garage-demo.fr";
     await m.page.goto(`${srv.url}/pro/`);
     await m.page.waitForSelector('[data-screen="dash"]:not([hidden])');
     await m.page.evaluate(() => document.querySelector('.dash-link[data-panel="garage"]').click());
-    await m.page.waitForSelector("#dash-garage:not([hidden])");
+    await m.page.waitForSelector("#dash-garage:not([hidden]):not([aria-busy])");
     await m.page.click("#mgTab-resources");
     await m.page.waitForSelector("#mgPanel-resources:not([hidden]) .cal-item");
     check(`${name}: Mon garage › Ressources, the tabs in a row, no horizontal scroll`, (await overflow(m.page)) <= 0 && (await m.page.$eval("#mgTabs", (t) => getComputedStyle(t).display)) === "flex", await overflow(m.page));
