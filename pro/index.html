@@ -1,0 +1,978 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src https://api.pixcar.fr https://cognito-idp.eu-north-1.amazonaws.com; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="description" content="Espace Pro de Pixcar : les garagistes rattachent leur garage pour y annoncer leurs prix.">
+<meta name="theme-color" content="#000000">
+<meta name="pixcar-api" content="https://api.pixcar.fr">
+<meta name="pixcar-pro" content="eu-north-1_Tze1ditaT" data-client="3ehjknufqlki9fft1a4aj7urmg">
+<title>Espace Pro · Pixcar</title>
+<link rel="icon" href="../favicon.ico" sizes="48x48">
+<link rel="icon" type="image/svg+xml" href="../favicon.svg">
+<link rel="preload" href="../assets/fonts/manrope-latin.a30ddcd349.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/pro.bed6b0da04.css">
+</head>
+<body>
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+<symbol id="px-mark" viewBox="0 0 100 100"><linearGradient id="px-grad" gradientUnits="userSpaceOnUse" x1="0" y1="2.3" x2="0" y2="97.7"><stop offset="0" stop-color="#F82B15"/><stop offset=".5" stop-color="#FC4916"/><stop offset="1" stop-color="#FB8855"/></linearGradient><path d="M53.5 2.3 60.8 2.7 63.2 3.4 64.4 4.6 64.8 5.7 64.8 7.9 63.2 9.7 61.6 10.2 52.6 10 49.6 10.5 44.3 12 39.7 14.2 35.4 17.1 31.8 20.6 27.4 26 26 26.5 24.3 26.2 23.2 25.6 22.5 24.6 22.2 22 23.3 19.8 27.8 14 32 10.3 37.5 6.7 41.2 5 46.9 3.2ZM73.7 10.9 75.3 10.9 77.9 12 81.2 14 83.6 15.9 85.4 17.7 86.1 19.1 86.1 21.1 85.5 22.2 83.6 23.2 82.3 22.9 77.9 19.5 72.3 16.5 71.2 14.5 71.5 12.7 72.3 11.6ZM52.6 16.4 60.3 16.6 66.3 17.9 70.2 19.5 76.4 23 82 27.9 86.6 33.8 88.8 38.7 88.8 40.4 88.1 42.2 86.9 43.4 85.6 43.8 84.7 43.8 83.2 43.2 82.2 42.2 79.1 37.4 77.3 35.3 71.5 30.5 67.6 28.3 60.8 26.1 55.5 25.4 51.8 25.4 50.4 24.7 48.8 22.9 48.6 20 49.3 18.7 50.8 17.1ZM14.6 18.8 16.6 18.8 17.6 19.3 18.4 20.9 18.4 22.6 14.8 29.7 13.4 33.2 12.3 37.8 10.7 39 8.7 39 7.1 37.8 6.7 36.3 7.5 30.1 8.6 26.8 10.1 23.7 12.2 20.8 13.9 19.1ZM39.7 20.1 41.2 20.1 43 21.5 43.5 22.9 43 24.8 42.3 25.8 38.1 28.7 35.7 31.3 33.2 35.2 31.8 38.9 30.9 40.1 29.3 40.8 27.1 40.3 26.4 39.6 25.7 37.6 26.4 34.7 28.4 30.1 30.4 27.2 32.8 24.6 36.8 21.5ZM90.9 25.9 92.9 26.5 94.7 28.6 96.7 31.6 98.6 36 99.7 40.2 100 43.3 99.5 44.7 97.5 46.2 95.3 46 93.9 44.6 91 35.8 87.9 30.1 88.2 27.9 88.8 26.8ZM19.2 32 20.1 32 21.1 32.5 21.9 33.4 22.4 34.7 21.3 41.8 21.3 46.8 22 50.8 22.8 53.2 22.9 55.2 22.1 56.8 20.3 57.9 17.9 57.7 16.3 56.3 14.8 52.5 13.6 46.8 13.9 41.8 15.6 35.4 17.3 32.9ZM71.8 36.4 74 36.8 75.8 38.7 78.2 42 79.5 44.6 80.4 47.5 80.7 50.1 80.2 51.4 79 52.4 77.3 52.6 75.5 51.5 72.9 45.3 69.7 40.9 69.5 39.8 69.7 38.2 70.3 37.1ZM3 43.9 4.9 44.1 6.3 45.3 8.2 50.5 9.9 54.1 14 59.4 16.7 62 19.9 64.3 22.7 65.8 27.8 67.5 32 68.3 34.1 69.7 34.9 71.4 34.9 73 34.7 73.8 33.7 75.1 32 75.9 28.7 75.9 24.7 75.2 19.9 73.7 14 70.4 10.8 67.9 7.3 64.4 4.4 60.4 2.2 56.3 0.3 50.3 0 48.8 0.3 46.2 1.2 44.8ZM85.8 48.3 88.2 48.5 89.8 49.8 90.3 51 91.4 56.9 91.4 62.4 90.7 67 88.8 73.4 85.5 79.6 82.9 82.9 79.1 86.4 77.7 86.9 76.4 86.9 74.1 85.5 73.4 84.2 73.4 82.4 74.1 80.9 77.3 77.2 79.1 74.5 81.7 69.2 83.3 64 83.7 60.4 83.7 56.5 83.1 53.2 83.1 51 84 49.5ZM74.2 57.3 75.8 57.8 76.9 58.9 77.3 60.2 77.6 64.8 76.9 68.8 76 71.4 74.3 74.9 72.6 77.2 70.2 79.2 68.5 79.2 66.4 77.6 66.2 74.9 69 70.1 70.1 67 71.2 59.1 72.6 57.7ZM7.8 70.3 10.1 71 12.6 74 17.6 78 18 79.1 18 80.7 16.6 82.5 15.1 82.9 13.1 82.3 9.5 79.8 6 76 5.1 74.5 5.1 72.3 6.5 70.7ZM55.9 71.4 57.9 71.4 59.9 72.6 60.8 74.5 60.6 76.7 59.6 78.5 56.2 81.2 54 82.7 49.3 85.1 41.6 87.5 36.2 88.2 31.8 88.2 24.7 87.1 23.7 86.6 22.5 85.1 22.2 84.2 22.5 81.5 23.7 80 24.7 79.5 26.3 79.1 30.9 79.7 34.2 79.7 39 79.2 42.3 78.5 48.7 76.1ZM64.1 83.2 65.4 83.4 66.9 84.5 67.4 85.3 67.7 87.3 66.7 89.6 63.6 92.4 57.9 95.7 51.5 97.7 47.8 97.7 46.7 97.2 45.3 95.8 44.9 94.7 44.9 93.2 45.3 92.1 46.7 90.7 49.1 90.2 54.8 88.2 59 86 62.1 83.9Z"/></symbol><symbol id="px-logo" viewBox="0 0 1643 433.8"><linearGradient id="px-grad-logo" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="433.8"><stop offset="0" stop-color="#F82B15"/><stop offset=".5" stop-color="#FC4916"/><stop offset="1" stop-color="#FB8855"/></linearGradient><path d="M243.5 0 276.5 1.9 287.5 5 292.9 10.4 295 15.4 294.9 25.4 287.5 33.8 280.5 35.9 239.5 34.9 225.5 37.1 201.5 44.1 180.5 54 161 67.4 144.5 83 124.5 107.8 118.5 109.9 110.5 108.8 105.5 105.7 102.2 101.4 101.2 89.4 106.1 79.4 126.5 52.9 145.5 36 170.5 20.1 187.5 12.1 213.5 4.1ZM335.5 39.1 342.5 39.1 354.5 44 369.5 53 380.5 61.9 388.5 70 391.9 76.4 391.9 85.4 389 90.4 380.5 94.8 374.5 93.8 354.5 78 329.1 64.4 324.1 55.4 325.1 47.4 329 42.4ZM776.5 41.1 845.5 40.9 853.5 43.1 866 53.4 869.9 60.4 872 68.4 869.9 81.4 862.5 91.8 852.5 97.8 845.5 99.8 776.5 99.9 769.5 97.8 763 94.4 754.1 85.4 750.1 75.4 750 67.4 755.1 54.4 760.5 48.9 769.5 43.1ZM239.5 64.1 274.5 64.9 301.5 71.1 319.5 78 347.5 94 373 116.4 393.9 143.4 403.9 165.4 403.9 173.4 400.9 181.4 395.5 186.8 389.5 188.8 385.5 188.8 378.5 185.8 374.1 181.4 359.9 159.4 351.5 150.1 325.5 128.1 307.5 118.1 276.5 108.1 252.5 104.9 235.5 104.9 229.5 101.8 222.2 93.4 221.2 80.4 224.1 74.4 231 67.4ZM66.5 75.1 75.5 75.1 80 77.4 83.8 84.4 83.8 92.4 67.2 124.4 61.1 140.4 55.9 161.4 48.5 166.8 39.5 166.8 32.1 161.4 30.3 154.4 34.1 126.4 39.1 111.4 46.1 97.4 55.5 84 63 76.4ZM180.5 81.1 187.5 81.1 195.9 87.4 198 93.4 195.9 102.4 192.5 106.8 173.5 120.1 162.5 131.9 151.1 149.4 144.8 166.4 140.5 171.9 133.5 174.9 123.5 172.8 120.1 169.4 117 160.4 120.2 147.4 129.1 126.4 138.5 113 149 101.4 167.5 87ZM413.5 107.1 422.5 110 430.9 119.4 439.9 133.4 448.9 153.4 453.9 172.4 455 186.4 452.5 192.9 443.5 199.8 433.5 198.8 427.1 192.4 413.9 152.4 400.1 126.4 401.1 116.4 404.1 111.4ZM1165.5 122.1 1196.5 125.1 1211.5 130.1 1223.5 136 1232 142.4 1235.9 147.4 1240 159.4 1238.8 170.4 1234.9 178.4 1223.5 189.8 1214.5 193.8 1203.5 194.9 1181.5 187.1 1158.5 188.1 1148.5 192 1138 200.4 1132.1 207.4 1126.2 221.4 1125 237.4 1129.2 251.4 1136 261.4 1147.5 270.8 1163.5 276.8 1179.5 276.9 1185.5 275.8 1200.5 268.1 1211.5 267.1 1225.5 273.1 1232.5 279 1236.8 285.4 1240 296.4 1238.8 306.4 1234.9 315.4 1229.5 320.9 1209.5 332.8 1180.5 339.9 1158.5 339.9 1135.5 335.8 1113.5 326.8 1095.5 315.8 1077.5 298.9 1066.1 283.4 1056.2 261.4 1052 243.4 1052 219.4 1056.2 201.4 1065.1 180.4 1076 165.4 1098.5 145 1119.5 133.1 1147.5 124.1ZM1583.5 122.1 1610.5 121.9 1622.5 124.1 1628.5 127 1636.9 135.4 1641.9 144.4 1643 150.4 1641.9 161.4 1636.9 171.4 1628.5 179.8 1611.5 186.8 1590.5 186.9 1578.5 190.1 1570 195.4 1561.1 204.4 1553.2 218.4 1550 230.4 1550 307.4 1547.8 315.4 1541.5 325.9 1533.5 332.8 1520.5 337.9 1505.5 336.8 1497.5 332.8 1488.5 323.9 1483.2 314.4 1482 309.4 1481 222.4 1483.2 204.4 1488.2 186.4 1495.1 172.4 1505.5 157.9 1524.5 141 1545.5 130.1 1557.5 126.1ZM632.5 124.1 656.5 123.9 683.5 131.1 706.5 144 728.9 166.4 739.9 185.4 744.9 198.4 748 213.4 748 240.4 740.9 267.4 727.9 290.4 711 309.4 695.5 320.8 667.5 332.8 649.5 335.9 634.5 335.9 620.5 333.8 598.5 325.8 581.5 314.3 581 373.4 575.9 389.4 567 399.4 559.5 403.8 546.5 406.9 532.5 404.8 523 399.4 514.1 389.4 510.1 381.4 508 370.4 508 222.4 509 197.4 514.1 174.4 520.1 160.4 526.5 150.9 538.5 139 553.5 130.1 564.5 126.9 570.5 127.1 577.5 130 583.9 136.4 584.5 146.5 607.5 132.1ZM788.5 124.1 801.5 124.1 814.5 129 824.5 137.9 830.9 149.4 833 158.4 833 264.4 838 273.4 848.5 277.9 858.5 275.8 864 271.4 907.9 228.4 900 218.4 856.5 173.9 853.1 168.4 851 160.4 852.1 148.4 857.1 138.4 864.5 131 878.5 124.9 897.5 127.1 911 138.4 952.5 182.6 1008.5 132 1019.5 127.1 1032.5 125.9 1037.5 127.1 1047.5 133 1053.9 140.4 1057.8 150.4 1058 162.4 1054.9 170.4 1049.8 177.4 997 228.4 1006 239.4 1048.5 283 1054.9 291.4 1057.8 300.4 1058 311.4 1052.9 324.4 1044.5 332.8 1036.5 336.8 1031.5 337.9 1014.5 336.8 1004.5 330.9 948.5 274.3 899.5 318.8 872.5 333.8 863.5 336.8 848.5 339.9 820.5 338.8 805.5 334.8 791.5 327.8 781.5 320.8 766.1 303.4 761.1 293.4 758 282.4 758 153.4 762.1 142.4 770.5 132.9 781.5 126.1ZM1335.5 124.1 1352.5 123.9 1369.5 127.1 1387.5 135 1401.5 145.8 1403.9 144.4 1408 137.4 1417.5 129 1427.5 125.1 1440.5 124.9 1454.5 131 1464.9 142.4 1468 151.4 1468 309.4 1462.9 322.4 1456 330.4 1449.5 334.8 1440.5 337.9 1423.5 336.8 1411 328.4 1402.5 315.4 1384.5 329.8 1367.5 336.8 1352.5 339.9 1331.5 339.9 1318.5 337.8 1301.5 332.8 1276.5 318.8 1261.5 305.9 1246.1 285.4 1237.2 266.4 1231 240.4 1231 226.4 1234.2 208.4 1244.1 183.4 1260 161.4 1283.5 142 1305.5 131.1 1321.5 126.1ZM87.5 135.1 91.5 135.1 96 137.4 99.9 141.4 102 147.4 97 179.4 97 202.4 100.2 220.4 103.8 231.4 104 240.4 100.5 247.9 92.5 252.9 81.5 251.8 74.1 245.4 67.2 228.4 62 202.4 63.1 179.4 71.2 150.4 78.5 138.9ZM326.5 155.1 336.5 157 345 165.4 355.9 180.4 361.9 192.4 365.9 205.4 367 217.4 364.9 223.4 359.5 227.8 351.5 228.8 343.5 223.9 331.9 195.4 317.1 175.4 316 170.4 317.1 163.4 320.1 158.4ZM625.5 181.1 613.5 184.1 605.5 188 592.5 198.9 587.1 206.4 582.1 218.4 581 234.4 587.1 251.4 599.5 264.8 609.5 270.8 618.5 273.8 635.5 274.9 647.5 271.8 655.5 267.8 670.5 253.9 677.9 238.4 679 220.4 673.9 205.4 661.5 191 642.5 182.1ZM1337.5 187.1 1322.5 193 1314 199.4 1308.1 206.4 1303.2 214.4 1300.2 224.4 1300.2 240.4 1307.1 256.4 1315.5 265.9 1323.5 271.8 1341.5 277.9 1359.5 276.8 1377.5 267.8 1390.9 252.4 1396 236.4 1394.8 222.4 1385.9 204.4 1374.5 194 1364.5 189.1 1356.5 187.1ZM13.5 189.1 22.5 190.1 28.9 195.4 37.1 219.4 45.1 235.4 63.5 259.9 76 271.4 90.5 281.8 103.5 288.8 126.5 296.8 145.5 300.1 155 306.4 158.8 314.4 159 321.4 157.8 325.4 153.5 330.9 145.5 334.8 130.5 334.9 112.5 331.8 90.5 324.8 63.5 309.8 49 298.4 33 282.4 20.1 264.4 10.1 245.4 1.1 218.4 0 211.4 1.1 199.4 5.5 193.1ZM390.5 209.1 401.5 210 408.5 215.9 410.9 221.4 416 248.4 416 273.4 412.9 294.4 403.9 323.4 388.9 351.4 377 366.4 359.9 382.4 353.5 384.8 347.5 384.8 337.1 378.4 334.1 372.4 334.1 364.4 337.1 357.4 351.5 340.9 359.9 328.4 371.9 304.4 378.9 280.4 381 264.4 381 246.4 378 231.4 378.1 221.4 382 214.4ZM337.5 250.2 345 252.4 349.9 257.4 351.9 263.4 353 284.4 349.9 302.4 345.9 314.4 337.9 330.4 330.5 340.9 319.5 349.8 311.5 349.8 302.1 342.4 301.1 330.4 313.9 308.4 318.9 294.4 324.1 258.4 330.5 252ZM35.5 309.1 46 312.4 57.5 325.9 79.9 344.4 81.8 349.4 81.8 356.4 75.5 364.8 68.5 366.8 59.5 363.8 43 352.4 27.1 335.4 23.1 328.4 23.1 318.4 29.5 311.1ZM254.5 314.1 263.5 314.1 272.5 320 276.9 328.4 275.9 338.4 271 346.4 255.5 358.8 245.5 365.8 224.5 376.8 189.5 387.8 164.5 390.9 144.5 390.9 112.5 385.8 108 383.4 102.2 376.4 101 372.4 102.2 360.4 108 353.4 112.5 351.1 119.5 349.2 140.5 351.9 155.5 351.9 177.5 349.9 192.5 346.8 221.5 335.8ZM291.5 368.1 297.5 369.1 304.5 374 306.9 377.4 308 386.4 303.5 396.9 289.5 409.8 263.5 424.8 234.5 433.8 217.5 433.8 212.5 431.8 206.1 425.4 204.2 420.4 204.2 413.4 206.1 408.4 212.5 402.1 223.5 399.8 249.5 390.8 268.5 380.8 282.5 371.1Z"/></symbol>
+<symbol id="m-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6" /></symbol>
+<symbol id="m-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6z" /><path d="m8 12 3 3 5-6" /></symbol>
+<symbol id="m-tag" viewBox="0 0 24 24"><path d="M3 3h8l10 10-8 8L3 11z" /><circle cx="7.5" cy="7.5" r="1" /></symbol>
+<symbol id="m-chart" viewBox="0 0 24 24"><path d="M4 3v17h17M8 16v-5m5 5V6m5 10v-8" /></symbol>
+<symbol id="m-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></symbol>
+<symbol id="m-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M7 3v4m10-4v4M3 11h18" /></symbol>
+<symbol id="m-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 11v6m0-10h.01" /></symbol>
+<symbol id="m-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9 8a3 3 0 0 1 6 1c0 2-3 2-3 4m0 4h.01" /></symbol>
+<symbol id="m-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 6 9 7 9-7" /></symbol>
+<symbol id="m-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></symbol>
+<symbol id="i-at" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.6" /><path d="M15.6 12v1.6a2.4 2.4 0 0 0 4.8 0V12a8.4 8.4 0 1 0-3.3 6.7" /></symbol>
+<symbol id="i-sms" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.2" /><path d="M10.5 18.5h3" /></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.6 3 8.4 7 10 4-1.6 7-5.4 7-10V6z" /><path d="m9 12 2.2 2.2L15.5 10" /></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5m6-6-6 6 6 6" /></symbol>
+<symbol id="i-next" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6" /></symbol>
+<symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2" /><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" /></symbol>
+<symbol id="i-garage" viewBox="0 0 24 24"><path d="M3 10.5 12 4l9 6.5V20H3z" /><path d="M7 20v-6h10v6M7 17h10" /></symbol>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7" /><path d="M6 9.5V20h12V9.5" /></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.5 12.5 12 4h7.5v7.5L11 20z" /><circle cx="15.5" cy="8" r="1.4" /></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+<symbol id="i-left" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6" /></symbol>
+<symbol id="i-right" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6" /></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="m9 3-1 3-3 1-2 4 2 3 1 4 4 3 4-1 4-1 3-4-1-4-3-3-4-1Z" /><circle cx="12" cy="12" r="3" /></symbol>
+<symbol id="i-tool" viewBox="0 0 24 24"><path d="m14 5 5-2-1 6-4 2-8 9-3-3 9-8Z" /></symbol>
+<symbol id="i-sliders" viewBox="0 0 24 24"><path d="M3 5h18M6 12h12M9 19h6" /><circle cx="8" cy="5" r="2" fill="currentColor" /><circle cx="16" cy="12" r="2" fill="currentColor" /></symbol>
+<symbol id="i-full" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /></symbol>
+<symbol id="i-unfull" viewBox="0 0 24 24"><path d="M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5" /></symbol>
+<symbol id="i-find" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6" /><path d="m15 15 6 6" /></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" /></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 4v16h16" /><path d="M8 16v-4M12 16V8M16 16v-6" /></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" /></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" /></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><path d="M21 16.5v3a2 2 0 0 1-2.2 2A18 18 0 0 1 2.5 5.2 2 2 0 0 1 4.5 3h3a2 2 0 0 1 2 1.7l.5 2.6a2 2 0 0 1-.6 1.8L8 10.5a15 15 0 0 0 5.5 5.5l1.4-1.4a2 2 0 0 1 1.8-.6l2.6.5a2 2 0 0 1 1.7 2z" /></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2" /><path d="M3.5 10h17M8 3v4M16 3v4" /></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3.5 13.5 6 5h12l2.5 8.5V19a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19z" /><path d="M3.5 13.5H8l1.5 2.5h5l1.5-2.5h4.5" /></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="18.5" cy="12" r="1.3" /></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" /></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5" /></symbol>
+<symbol id="i-panel" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><path d="M9.5 4.5v15" /></symbol>
+<symbol id="i-planning" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2" /><path d="M8 3v4M16 3v4M7 11h6M10 15h7" /></symbol>
+<symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4.5 17a8 8 0 1 1 15 0" /><path d="m12 13 3.5-4" /></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3" /><path d="M3.5 19c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5" /><circle cx="16.5" cy="9.5" r="2.4" /><path d="M16.5 14.3c2.1 0 3.7 1.3 4.1 3.7" /></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 3 19.5h18z" /><path d="M12 10v4.5M12 17.2v.3" /></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 5.5h16l-6.2 7.3v5.4l-3.6 1.8v-7.2z" /></symbol>
+<symbol id="i-wrench" viewBox="0 0 24 24"><path d="M15.5 3.5a4.5 4.5 0 0 0-4.2 6.1l-7.1 7.1a2 2 0 0 0 2.8 2.8l7.1-7.1a4.5 4.5 0 0 0 6.1-4.2l-2.7 2.7-2.6-.6-.6-2.6z" /></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3 5.5 13.5H12L11 21l7.5-10.5H12z" /></symbol>
+<symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.2" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.2" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.2" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.2" /></symbol>
+<symbol id="i-tyre" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><path d="M12 4v5M12 15v5M4 12h5M15 12h5" /></symbol>
+<symbol id="i-screen" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="1.5" /><path d="M2.5 19h19" /></symbol>
+<symbol id="i-car" viewBox="0 0 24 24"><path d="M4 16.5V12l2-5h12l2 5v4.5M4 16.5h16M4 16.5V19h3v-2.5M17 16.5V19h3v-2.5M4 12h16" /><circle cx="7.5" cy="14" r=".6" /><circle cx="16.5" cy="14" r=".6" /></symbol>
+</svg>
+<a class="skip" href="#main">Aller au contenu</a>
+<header class="pro-top">
+<div class="m-nav">
+<div class="m-lockup">
+<a class="m-brand" href="../" aria-label="Pixcar : retour au comparateur"><svg viewBox="0 0 1643 433.8" aria-hidden="true"><use href="#px-logo" /></svg></a>
+<span class="m-pro-label">ESPACE PRO</span>
+</div>
+<p class="m-crumb" id="crumb" hidden></p>
+<nav class="m-links" id="proNav" aria-label="Espace Pro" hidden>
+<a class="m-opt" href="#fonctionnement">Comment ça marche</a>
+<a href="#faq">Questions fréquentes</a>
+<a class="m-login" href="#connexion">Se connecter</a>
+<a class="m-btn m-primary m-small" href="#inscription">Gérer mon garage<svg class="m-ico" aria-hidden="true"><use href="#m-arrow" /></svg></a>
+</nav>
+<nav class="m-links m-help" id="authNav" aria-label="Aide" hidden>
+<button type="button" class="m-hl" data-help>Besoin d’aide ?</button>
+<a class="m-hl" href="#accueil">Retour à l’accueil<svg class="m-ico" aria-hidden="true"><use href="#m-arrow" /></svg></a>
+</nav>
+<div class="pro-account" id="account" hidden>
+<span class="pro-who" id="accountEmail"></span>
+<button type="button" class="link-btn on-dark" id="signOut">Se déconnecter</button>
+<button type="button" class="m-icon-btn" data-help aria-label="Aide"><svg class="m-ico" aria-hidden="true"><use href="#m-help" /></svg></button>
+</div>
+</div>
+</header>
+<main id="main" class="pro-main" tabindex="-1">
+<noscript><p class="pro-alert">L'Espace Pro a besoin de JavaScript.</p></noscript>
+<div class="pro-alert" id="alert" role="alert" hidden></div>
+<ol class="steps" id="steps" aria-label="Étapes" hidden>
+<li data-step="garage"><span class="step-n">1</span><span class="step-l">Votre garage</span></li>
+<li data-step="you"><span class="step-n">2</span><span class="step-l">Vous</span></li>
+<li data-step="verify"><span class="step-n">3</span><span class="step-l">Vérification</span></li>
+<li data-step="done"><span class="step-n">4</span><span class="step-l">Vos premiers prix</span></li>
+</ol>
+<p class="pro-loading" data-screen="loading">Chargement…</p>
+<section class="m-home" data-screen="welcome" hidden aria-labelledby="welcomeTitle">
+<section class="m-hero-b m-wrap">
+<div>
+<span class="m-eyebrow"><span class="m-dot" aria-hidden="true"></span>Pixcar · Votre espace atelier</span>
+<h1 id="welcomeTitle" tabindex="-1">L’essentiel<br>de votre atelier.<br>Au même endroit.</h1>
+<p class="m-hero-copy">Votre planning, vos tarifs et votre visibilité dans un même espace. Retrouvez l’essentiel, puis reprenez le fil de votre journée.</p>
+<div class="m-actions">
+<a class="m-btn m-primary" href="#inscription">Découvrir mon espace<svg class="m-ico" aria-hidden="true"><use href="#m-arrow" /></svg></a>
+<a class="m-btn m-text" href="#outils">Explorer les outils <svg class="m-ico" aria-hidden="true"><use href="#m-arrow" /></svg></a>
+</div>
+<div class="m-quiet-note"><svg class="m-ico" aria-hidden="true"><use href="#m-shield" /></svg>Un espace réservé aux professionnels vérifiés</div>
+</div>
+<div class="m-visual-b" role="group" aria-label="Exemple : une semaine du planning d'un garage">
+<div class="m-accent-text"><svg class="m-ico" aria-hidden="true"><use href="#m-calendar" /></svg>UNE SEMAINE, EN UN COUP D’ŒIL</div>
+<div class="m-planner-window">
+<div class="m-planner-head"><div><p class="m-h3">Votre planning</p><small>19 — 23 octobre 2026 · Vue Essentiel</small></div><span class="m-btn m-primary" aria-hidden="true">+ Rendez-vous</span></div>
+<div class="m-mini-planning" aria-hidden="true">
+<div class="m-mini-times"><span>09:00</span><span>10:00</span><span>11:00</span><span>12:00</span></div>
+<div class="m-mini-day"><div class="m-mini-day-head">Mer. 21</div><div class="m-mini-day-body"><div class="m-mini-event">09:00 · 🛠️<strong>Révision</strong><small>Mickaël · Golf</small></div><div class="m-mini-event gray m-t155">11:30<strong>Créneau bloqué</strong><small>Livraison de pièces</small></div></div></div>
+<div class="m-mini-day"><div class="m-mini-day-head">Jeu. 22</div><div class="m-mini-day-body"><div class="m-mini-event m-t76">10:00 · 📱<strong>Vidange + filtre</strong><small>Mickaël · Clio</small></div></div></div>
+<div class="m-mini-day"><div class="m-mini-day-head active">Ven. 23</div><div class="m-mini-day-body"><div class="m-mini-event">09:00 · 🛠️<strong>Diagnostic</strong><small>Sarah · C3</small></div><div class="m-mini-event pending m-t80">10:00 · 📱<strong>Freinage avant</strong><small>À confirmer · 208</small></div></div></div>
+</div>
+<div class="m-planner-legend" aria-hidden="true"><span>📱 Réservé sur Pixcar</span><span>🛠️ Hors Pixcar</span></div>
+</div>
+<div class="m-connection-card"><svg class="m-ico" aria-hidden="true"><use href="#m-check" /></svg><div><b>Vos rendez-vous réunis.</b><small>Pixcar, téléphone ou accueil : gardez vos repères.</small></div></div>
+</div>
+</section>
+<div class="m-ribbon m-wrap"><span><svg class="m-ico" aria-hidden="true"><use href="#m-calendar" /></svg>Planning Essentiel</span><span><svg class="m-ico" aria-hidden="true"><use href="#m-tag" /></svg>Tarifs publiés sur votre fiche</span><span><svg class="m-ico" aria-hidden="true"><use href="#m-shield" /></svg>Garage vérifié</span><span><svg class="m-ico" aria-hidden="true"><use href="#m-chart" /></svg>Suivi de votre visibilité</span></div>
+<section class="m-b-section" id="outils" aria-labelledby="usesTitle">
+<div class="m-wrap">
+<span class="m-eyebrow">Un espace, trois usages</span>
+<h2 class="m-mt12" id="usesTitle">Ce dont vous avez besoin.<br>Quand vous en avez besoin.</h2>
+<div class="m-product-tabs w-tabs" role="tablist" aria-label="Outils de l’atelier">
+<button type="button" role="tab" id="wTab1" aria-selected="true" aria-controls="wPanel1">01 · Organiser</button>
+<button type="button" role="tab" id="wTab2" aria-selected="false" aria-controls="wPanel2" tabindex="-1">02 · Publier</button>
+<button type="button" role="tab" id="wTab3" aria-selected="false" aria-controls="wPanel3" tabindex="-1">03 · Comprendre</button>
+</div>
+<div class="m-product-panel" role="tabpanel" id="wPanel1" aria-labelledby="wTab1">
+<div class="m-product-detail">
+<div><span class="m-eyebrow">Le planning</span><h3>Une vue claire.<br>Vos repères habituels.</h3><p>Repérez la provenance des rendez-vous, filtrez par mécanicien ou par poste et passez en plein écran pour vous concentrer sur la journée.</p></div>
+<div class="m-product-demo" role="group" aria-label="Exemple : la journée d'un garage">
+<div class="m-garage-head"><span class="m-garage-avatar"><svg class="m-ico" aria-hidden="true"><use href="#m-calendar" /></svg></span><div><h3>Aujourd’hui</h3><small class="m-small-muted">Vendredi 23 octobre · Exemple</small></div></div>
+<div class="m-price-line"><span>09:00 · Diagnostic 🛠️</span><span class="m-verified">Confirmé</span></div>
+<div class="m-price-line"><span>10:00 · Freinage 📱</span><span class="m-due">À confirmer</span></div>
+<div class="m-price-line"><span>14:00 · Absence de Sarah</span><small>2 heures</small></div>
+</div>
+</div>
+</div>
+<div class="m-product-panel" role="tabpanel" id="wPanel2" aria-labelledby="wTab2" hidden>
+<div class="m-product-detail">
+<div><span class="m-eyebrow">Les tarifs</span><h3>Des prix que vous<br>pouvez tenir à jour.</h3><p>Forfaits, prix à partir de ou prestations sur devis : publiez les informations qui correspondent à votre atelier.</p><p class="m-free">Gestion des tarifs gratuite.</p></div>
+<div class="m-product-demo" role="group" aria-label="Exemple : la fiche d'un garage">
+<div class="m-garage-head"><span class="m-garage-avatar">AD</span><div><h3>Atelier Démo Auto</h3><span class="m-verified"><svg class="m-ico" aria-hidden="true"><use href="#m-shield" /></svg>Garage vérifié</span></div></div>
+<div class="m-prices"><div class="m-price-line"><span>Vidange · huile + filtre</span><b>89 €</b></div><div class="m-price-line"><span>Plaquettes de frein avant</span><b><small>dès</small> 119 €</b></div><div class="m-price-line"><span>Recharge de climatisation</span><b>69 €</b></div></div>
+</div>
+</div>
+</div>
+<div class="m-product-panel" role="tabpanel" id="wPanel3" aria-labelledby="wTab3" hidden>
+<div class="m-product-detail">
+<div><span class="m-eyebrow">La visibilité</span><h3>Observez l’intérêt.<br>Gardez une vue simple.</h3><p>Consultez les vues de votre fiche et les clics sur le bouton « Appeler ». Des repères concrets pour suivre votre présence sur Pixcar.</p></div>
+<div class="m-product-demo" role="group" aria-label="Exemple : les statistiques d'une fiche">
+<span class="m-demo-label">Exemple · Données fictives</span>
+<div class="m-metrics-pair"><div><b>248</b><span>vues de la fiche</span></div><div><b>31</b><span>clics sur « Appeler »</span></div></div>
+<div class="m-bar-chart" aria-hidden="true"><i class="m-h25"></i><i class="m-h42"></i><i class="m-h32"></i><i class="m-h56"></i><i class="m-h46"></i><i class="m-h62"></i><i class="m-h55"></i><i class="m-h73"></i><i class="m-h64"></i><i class="m-h82"></i><i class="m-h74"></i><i class="m-h100"></i></div>
+<div class="m-chart-note"><span>30 derniers jours</span><span>Données fictives</span></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="m-section m-wrap" id="fonctionnement" aria-labelledby="howTitle">
+<div class="m-section-heading"><div><span class="m-eyebrow">Comment ça marche</span><h2 id="howTitle">Votre espace pro.<br>Un accès vérifié.</h2></div><p>Un parcours simple pour prendre la main sur les informations de votre garage.</p></div>
+<div class="m-steps">
+<article class="m-step"><div class="m-step-no">01</div><h3>Retrouvez votre garage</h3><p>Identifiez votre établissement avec son numéro SIRET.</p></article>
+<article class="m-step"><div class="m-step-no">02</div><h3>Vérifiez votre accès</h3><p>Recevez un code à une adresse e-mail connue de votre garage.</p></article>
+<article class="m-step"><div class="m-step-no">03</div><h3>Publiez vos tarifs</h3><p>Renseignez vos prestations et mettez vos prix à jour depuis votre téléphone.</p></article>
+</div>
+<aside class="m-integrity"><svg class="m-ico" aria-hidden="true"><use href="#m-info" /></svg><div><h3>Vos tarifs et les prix payés restent distincts.</h3><p>Les prix déclarés par les clients ne peuvent être ni modifiés ni supprimés par le garage. Vos tarifs sont affichés séparément et ne sont pas intégrés aux prix médians de Pixcar.</p></div></aside>
+</section>
+<section class="m-faq-section" id="faq" tabindex="-1" aria-labelledby="faqTitle">
+<div class="m-faq-layout m-wrap">
+<div><h2 id="faqTitle">Tout simplement.</h2><p>Les réponses aux questions que vous vous posez avant de commencer.</p></div>
+<div class="m-faq">
+<details><summary>Combien ça coûte ?</summary><p>Gérer les tarifs de votre garage sur Pixcar est gratuit.</p></details>
+<details><summary>Que signifie « Garage vérifié » ?</summary><p>Ce badge confirme que le compte représente bien l’établissement. Il ne constitue pas une certification de la qualité des prestations.</p></details>
+<details><summary>Puis-je modifier les prix déclarés par les clients ?</summary><p>Non. Ces prix restent ceux déclarés par vos clients. Vos propres tarifs apparaissent séparément et n’entrent pas dans le calcul des prix médians.</p></details>
+<details><summary>Comment retrouver mon garage ?</summary><p>Le parcours commence avec votre SIRET. Un code est ensuite envoyé à une adresse e-mail connue de votre garage pour vérifier votre accès.</p></details>
+</div>
+</div>
+</section>
+<section class="m-closing m-wrap" aria-labelledby="finalTitle">
+<div><h2 id="finalTitle">Votre prochaine journée,<br>un peu plus simple.</h2><p>Publiez vos tarifs là où vos clients comparent.</p></div>
+<a class="m-btn m-primary" href="#inscription">Gérer mon garage<svg class="m-ico" aria-hidden="true"><use href="#m-arrow" /></svg></a>
+</section>
+<footer class="m-footer">
+<div class="m-footer-inner m-wrap">
+<a class="m-brand m-ink" href="../" aria-label="Pixcar : le comparateur"><svg viewBox="0 0 1643 433.8" aria-hidden="true"><use href="#px-logo" /></svg></a>
+<span>Les bons prix. Les bonnes informations.</span>
+<div class="m-footer-right"><span>Pixcar · Espace professionnel</span><a class="m-footer-login" href="#connexion">Se connecter</a></div>
+</div>
+</footer>
+</section>
+<section class="m-auth" data-screen="login" hidden aria-labelledby="loginTitle">
+<div class="m-guided-shell">
+<div class="m-guided-top"><b><svg class="m-ico" aria-hidden="true"><use href="#m-calendar" /></svg>Votre espace Atelier</b><span>Étape 1 sur 3</span></div>
+<div class="m-guided-body">
+<div class="m-guided-form">
+<div class="m-auth-eyebrow"><span data-when="login">Mon espace professionnel</span><span data-when="signup">Bienvenue sur Pixcar</span></div>
+<h1 id="loginTitle" tabindex="-1" data-when="login">Ravi de vous retrouver.</h1>
+<h1 id="signupTitle" tabindex="-1" data-when="signup">Créer mon accès.</h1>
+<p class="m-auth-subtitle" data-when="login">Connectez-vous à votre atelier avec un code reçu par e-mail. Aucun mot de passe à retenir.</p>
+<p class="m-auth-subtitle" data-when="signup">Commencez avec votre e-mail professionnel. Vous recevrez un code pour confirmer votre adresse.</p>
+<form class="m-form-section" id="loginForm" novalidate>
+<label for="email">E-mail professionnel</label>
+<div class="m-field"><svg class="m-ico" aria-hidden="true"><use href="#m-mail" /></svg><input id="email" type="email" autocomplete="email" inputmode="email" spellcheck="false" placeholder="vous@votre-garage.fr" aria-describedby="emailHint emailErr" required></div>
+<p class="m-field-help" id="emailHint"><span data-when="login">Utilisez l’adresse associée à votre compte Pixcar.</span><span data-when="signup">Utilisez une adresse e-mail à laquelle vous avez accès.</span></p>
+<p class="m-error field-err" id="emailErr" hidden></p>
+<button class="m-btn m-primary m-full" type="submit" id="loginBtn"><span data-when="login">Recevoir mon code</span><span data-when="signup">Créer mon accès</span><svg class="m-ico" aria-hidden="true"><use href="#m-arrow" /></svg></button>
+</form>
+<div class="m-trust"><svg class="m-ico" aria-hidden="true"><use href="#m-lock" /></svg>Un accès par code, sans mot de passe.</div>
+<div class="m-mode-switch" data-when="login"><span>Première visite ?</span><button type="button" data-mode="signup">Créer mon accès</button></div>
+<div class="m-mode-switch" data-when="signup"><span>Déjà un accès ?</span><button type="button" data-mode="login">Se connecter</button></div>
+<p class="m-provider">Connexion gérée par notre prestataire d'identité (Amazon Cognito). Votre code vous est envoyé par e-mail, sans être conservé.</p>
+</div>
+<aside class="m-guided-side" aria-label="Étapes de connexion">
+<h2 class="m-side-title">Un accès en toute simplicité.</h2>
+<ol class="m-guide-steps"><li class="m-step-row active" aria-current="step"><span class="m-step-dot" aria-hidden="true">1</span><div><b>Votre e-mail</b><p>L’adresse liée à votre compte professionnel.</p></div></li><li class="m-step-row"><span class="m-step-dot" aria-hidden="true">2</span><div><b>Votre code</b><p>Un code reçu directement dans votre boîte mail.</p></div></li><li class="m-step-row"><span class="m-step-dot" aria-hidden="true">3</span><div><b>Votre atelier</b><p>Retrouvez vos outils et poursuivez votre journée.</p></div></li></ol>
+<p class="m-guide-note">Aucun mot de passe à créer ni à mémoriser.</p>
+</aside>
+</div>
+</div>
+</section>
+<section class="m-auth" data-screen="otp" hidden aria-labelledby="otpTitle">
+<div class="m-guided-shell">
+<div class="m-guided-top"><b><svg class="m-ico" aria-hidden="true"><use href="#m-calendar" /></svg>Votre espace Atelier</b><span>Étape 2 sur 3</span></div>
+<div class="m-guided-body">
+<div class="m-guided-form">
+<div class="m-auth-eyebrow">Vérifier mon adresse</div>
+<h1 id="otpTitle" tabindex="-1">Un code, et c’est parti.</h1>
+<p class="m-auth-subtitle">Saisissez le code reçu à l’adresse :</p>
+<strong class="m-address" id="otpTo"></strong>
+<button type="button" class="m-edit-email" data-go="login" id="otpEdit">Modifier mon adresse<span class="sr-only" id="otpEmail"></span></button>
+<form class="m-form-section" id="otpForm" novalidate>
+<label for="otp">Code de vérification</label>
+<div class="m-field m-code-input"><input id="otp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="11" spellcheck="false" placeholder="000000" aria-describedby="otpErr" required></div>
+<p class="m-error field-err" id="otpErr" hidden></p>
+<button class="m-btn m-primary m-full" type="submit"><span data-flow="signup">Confirmer mon adresse</span><span data-flow="signin">Accéder à mon atelier</span><svg class="m-ico" aria-hidden="true"><use href="#m-arrow" /></svg></button>
+</form>
+<div class="m-code-actions"><button type="button" id="otpResend">Renvoyer un code</button><button type="button" data-help>Besoin d’aide ?</button></div>
+<p class="m-delivery-help">Pensez à vérifier vos courriers indésirables. Utilisez le code le plus récent.</p>
+</div>
+<aside class="m-guided-side" aria-label="Étapes de connexion">
+<h2 class="m-side-title">Un accès en toute simplicité.</h2>
+<ol class="m-guide-steps"><li class="m-step-row done"><span class="m-step-dot" aria-hidden="true">1</span><div><b>Votre e-mail</b><p>L’adresse liée à votre compte professionnel.</p></div></li><li class="m-step-row active" aria-current="step"><span class="m-step-dot" aria-hidden="true">2</span><div><b>Votre code</b><p>Un code reçu directement dans votre boîte mail.</p></div></li><li class="m-step-row"><span class="m-step-dot" aria-hidden="true">3</span><div><b>Votre atelier</b><p>Retrouvez vos outils et poursuivez votre journée.</p></div></li></ol>
+<p class="m-guide-note">Aucun mot de passe à créer ni à mémoriser.</p>
+</aside>
+</div>
+</div>
+</section>
+<section class="wide" data-screen="home" hidden aria-labelledby="homeTitle">
+<h1 id="homeTitle" tabindex="-1">Vos garages</h1>
+<ul class="garage-list" id="garageList"></ul>
+<p class="empty" id="noGarage" hidden>Aucun garage n'est encore rattaché à votre compte. Rattachez le vôtre en deux minutes : SIRET, puis un code reçu par e-mail ou SMS.</p>
+<button type="button" class="btn primary" data-go="garage"><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg>Rattacher un garage</button>
+</section>
+<section class="split" data-screen="garage" hidden aria-labelledby="garageTitle">
+<div>
+<h1 id="garageTitle" tabindex="-1">Quel est votre garage ?</h1>
+<p class="lead">Le numéro SIRET figure sur vos factures et sur votre extrait Kbis.</p>
+<form id="siretForm" novalidate>
+<label for="siret">SIRET de l'établissement</label>
+<input id="siret" type="text" inputmode="numeric" autocomplete="off" maxlength="20" spellcheck="false" aria-describedby="siretHelp siretErr" required>
+<p class="help" id="siretHelp">14 chiffres. Vous avez plusieurs ateliers ? Commencez par l'un d'eux, vous ajouterez les autres ensuite.</p>
+<p class="field-err" id="siretErr" hidden></p>
+<button class="btn primary" type="submit">Rechercher</button>
+</form>
+<p class="note"><svg class="ic" aria-hidden="true"><use href="#i-info" /></svg><span>Nous vérifions le SIRET dans le répertoire public des entreprises (SIRENE, Insee). Aucun document à envoyer.</span></p>
+</div>
+<div class="card" id="siretResult" hidden>
+<h2 class="etab-name" id="etabName"></h2>
+<p class="etab-addr" id="etabAddr"></p>
+<ul class="checks">
+<li><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg><span>Établissement actif<small>Répertoire SIRENE</small></span></li>
+<li><svg class="ic" aria-hidden="true"><use href="#i-check" /></svg><span>Activité <span id="etabNaf"></span><small>Entretien, réparation ou équipement automobile</small></span></li>
+</ul>
+<fieldset class="choices" id="garageChoice">
+<legend>Votre garage sur la carte Pixcar</legend>
+<div id="garageOptions"></div>
+</fieldset>
+<p class="warn" id="noCandidate" hidden></p>
+<button type="button" class="btn primary" id="pickGarage">C'est mon garage<svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></button>
+<p class="switch">Ce n'est pas lui ? <button type="button" class="link-btn" id="changeSiret">Modifier le SIRET</button></p>
+</div>
+</section>
+<section class="card narrow" data-screen="you" hidden aria-labelledby="youTitle">
+<h1 id="youTitle" tabindex="-1">Qui êtes-vous ?</h1>
+<p class="lead">Pour <b id="youGarage"></b>.</p>
+<form id="youForm" novalidate>
+<div class="row2">
+<div><label for="firstName">Prénom</label><input id="firstName" type="text" autocomplete="given-name" maxlength="60" required></div>
+<div><label for="lastName">Nom</label><input id="lastName" type="text" autocomplete="family-name" maxlength="60" required></div>
+</div>
+<fieldset class="chips">
+<legend>Votre fonction</legend>
+<label class="chip"><input type="radio" name="role" value="manager" checked><span>Gérant(e)</span></label>
+<label class="chip"><input type="radio" name="role" value="employee"><span>Salarié(e)</span></label>
+<label class="chip"><input type="radio" name="role" value="other"><span>Autre</span></label>
+</fieldset>
+<label for="youEmail">E-mail</label>
+<input id="youEmail" type="email" readonly>
+<label class="check"><input type="checkbox" id="certify" aria-describedby="youErr"><span>Je certifie être habilité(e) à représenter cet établissement. Une fausse déclaration entraîne la fermeture de l'accès.</span></label>
+<p class="field-err" id="youErr" hidden></p>
+<button class="btn primary" type="submit">Continuer : vérification</button>
+</form>
+</section>
+<section class="card narrow" data-screen="verify" hidden aria-labelledby="verifyTitle">
+<h1 id="verifyTitle" tabindex="-1">Recevez votre code</h1>
+<p class="lead">Un code à 6 chiffres part vers une adresse ou un numéro <b>connu du garage</b>. Choisissez celui que vous consultez.</p>
+<form id="channelForm" novalidate>
+<fieldset class="choices">
+<legend>Où recevoir le code ?</legend>
+<div id="channelOptions"></div>
+</fieldset>
+<p class="field-err" id="channelErr" hidden></p>
+<button class="btn primary" type="submit">Envoyer le code</button>
+</form>
+<p class="note"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg><span>Nous n'écrivons jamais à une adresse ni à un numéro saisi ici. Trois codes par jour au plus pour ce garage.</span></p>
+</section>
+<section class="card narrow" data-screen="code" hidden aria-labelledby="codeTitle">
+<h1 id="codeTitle" tabindex="-1">Saisissez le code</h1>
+<p class="lead">Envoyé <span id="codeWhere"></span>.</p>
+<form id="codeForm" novalidate>
+<label for="code">Code reçu</label>
+<input id="code" class="code-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" spellcheck="false" aria-describedby="codeHelp codeErr" required>
+<p class="help" id="codeHelp">Valable 10 minutes.</p>
+<p class="field-err" id="codeErr" hidden></p>
+<button class="btn primary" type="submit">Valider le code</button>
+</form>
+<p class="switch">
+<button type="button" class="link-btn" id="resend">Recevoir un nouveau code</button><span class="muted" id="resendIn"></span>
+<span aria-hidden="true"> · </span><button type="button" class="link-btn" data-go="verify">Choisir un autre moyen</button>
+</p>
+</section>
+<section class="card narrow" data-screen="done" hidden aria-labelledby="doneTitle">
+<p class="ok-badge"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>Garage vérifié</p>
+<h1 id="doneTitle" tabindex="-1">C'est fait</h1>
+<p class="lead"><b id="doneGarage"></b> est rattaché à votre compte.</p>
+<p>Prochaine étape : vos premiers prix. Les automobilistes les verront sur Pixcar avec la mention « Annoncé », à côté des prix payés par vos clients, qui restent la référence.</p>
+<button type="button" class="btn primary" id="doneDash">Annoncer mes prix<svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></button>
+</section>
+<section class="dash" data-screen="dash" hidden aria-labelledby="dashTitle">
+<div class="dash-busy" id="dashBusy" aria-hidden="true" hidden></div>
+<nav class="dash-nav" id="dashNav" aria-label="Espace Pro">
+<div class="m-side-logo"><svg viewBox="0 0 1643 433.8" role="img" aria-label="Pixcar"><use href="#px-logo" /></svg></div>
+<div class="m-garage-label"><span class="m-loc" aria-hidden="true">⌖</span><div><b id="navGarage"></b><small>Espace professionnel</small></div></div>
+<p class="m-nav-label">MON ATELIER</p>
+<button type="button" class="dash-link" data-panel="top" aria-current="true"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg><span>Tableau de bord</span></button>
+<button type="button" class="dash-link" data-panel="planning" data-rdv hidden><svg class="ic" aria-hidden="true"><use href="#i-planning" /></svg><span>Gestion d'atelier</span></button>
+<button type="button" class="dash-link" data-panel="requests" data-rdv hidden><svg class="ic" aria-hidden="true"><use href="#i-inbox" /></svg><span>Demandes</span><span class="dash-count" id="rqCount" hidden></span></button>
+<div class="m-nav-bottom">
+<p class="m-nav-label">MON ESPACE</p>
+<button type="button" class="dash-link more-item" data-panel="garage"><svg class="ic" aria-hidden="true"><use href="#i-settings" /></svg><span>Mon garage</span><span class="dash-count" id="dashDueCount" hidden></span></button>
+<button type="button" class="dash-link more-item" data-go="home"><svg class="ic" aria-hidden="true"><use href="#i-list" /></svg><span>Mes garages</span></button>
+<button type="button" class="dash-link more-btn" id="dashMore" aria-expanded="false" hidden><svg class="ic" aria-hidden="true"><use href="#i-more" /></svg><span>Plus</span></button>
+<button type="button" class="dash-link rail-toggle" id="dashRail" aria-expanded="true"><svg class="ic" aria-hidden="true"><use href="#i-panel" /></svg><span id="dashRailText">Replier le menu</span></button>
+<div class="m-profile"><span class="m-avatar" id="navInitials" aria-hidden="true"></span><div><b id="navName"></b><small id="navRole"></small></div><span class="m-pro-tag" aria-hidden="true">PRO</span></div>
+</div>
+</nav>
+<div class="dash-body db" id="dash-top">
+<div class="pv-head">
+<div class="pv-head-copy">
+<p class="ok-badge small" id="dashVerified"></p>
+<h1 id="dashTitle" tabindex="-1">Tableau de bord</h1>
+<p class="pv-hello" id="dashGarage"></p>
+</div>
+<div class="pv-period" id="dbPeriod" role="group" aria-label="Période du tableau de bord">
+<div class="pv-gran" id="dbGran" data-gran="day" role="group" aria-label="Afficher">
+<span class="pv-pill" aria-hidden="true"></span>
+<button type="button" data-gran="day" aria-pressed="true">Jour</button>
+<button type="button" data-gran="week" aria-pressed="false">Semaine</button>
+<button type="button" data-gran="month" aria-pressed="false">Mois</button>
+</div>
+<div class="pv-nav">
+<button type="button" class="pv-arrow" id="dbPrev" aria-label="Jour précédent"><svg class="ic" aria-hidden="true"><use href="#i-back" /></svg></button>
+<button type="button" class="pv-picker" id="dbPicker" aria-expanded="false" aria-controls="dbCal" aria-label="Choisir un jour" aria-describedby="dbToday"><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg><span id="dbToday"></span><svg class="ic pv-chev" aria-hidden="true"><use href="#i-chevron" /></svg></button>
+<button type="button" class="pv-arrow" id="dbNext" aria-label="Jour suivant"><svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></button>
+</div>
+<button type="button" class="pv-now" id="dbNow">Aujourd'hui</button>
+</div>
+</div>
+<section class="pv-cal" id="dbCal" aria-labelledby="dbCalTitle" data-open="false" aria-hidden="true" inert>
+<div class="pv-cal-clip"><div class="pv-cal-surface" id="dbCalBody"></div></div>
+</section>
+<div class="pv-content" id="dbBody">
+<div class="pv-quick" id="dbActions"></div>
+<div class="pv-layout">
+<section class="pv-card pv-capa" id="dbCapa" aria-labelledby="dbCapaTitle"></section>
+<ul class="pv-metrics" id="dbKpis" aria-label="La période en chiffres"></ul>
+</div>
+<div class="pv-resources" id="dbResources" hidden>
+<section class="pv-card" id="dbTeamCard" aria-labelledby="dbTeamTitle">
+<div class="pv-card-h">
+<h2 id="dbTeamTitle"><svg class="ic" aria-hidden="true"><use href="#i-users" /></svg>Équipe &amp; charge</h2>
+<button type="button" class="pv-link" data-goto="team"><svg class="ic" aria-hidden="true"><use href="#i-next" /></svg>Gérer l'équipe</button>
+</div>
+<div class="pv-card-b">
+<ul class="pv-team" id="dbTeam"></ul>
+<p class="pv-foot" id="dbTeamFoot"></p>
+</div>
+</section>
+<section class="pv-card" id="dbPostsCard" aria-labelledby="dbPostsTitle">
+<div class="pv-card-h">
+<h2 id="dbPostsTitle"><svg class="ic" aria-hidden="true"><use href="#i-tool" /></svg>Postes &amp; équipements</h2>
+<button type="button" class="pv-link" data-goto="team"><svg class="ic" aria-hidden="true"><use href="#i-next" /></svg>Gérer les postes</button>
+</div>
+<div class="pv-card-b"><ul class="pv-posts" id="dbPosts"></ul></div>
+</section>
+</div>
+<div class="pv-bottom" id="dbBottom">
+<section class="pv-card pv-today" id="dbTodayCard" aria-labelledby="dbTodayTitle">
+<div class="pv-card-h">
+<h2 id="dbTodayTitle" tabindex="-1"><svg class="ic" aria-hidden="true"><use href="#i-calendar" /></svg><span id="dbTodayText">Aujourd'hui à l'atelier</span></h2>
+<button type="button" class="pv-link" id="dbPlanLink"><svg class="ic" aria-hidden="true"><use href="#i-next" /></svg>Planning complet</button>
+</div>
+<p class="db-filter" id="dbFilter" hidden></p>
+<ul class="db-list" id="dbList"></ul>
+<div class="pv-empty" id="dbListEmpty" hidden>
+<h3 id="dbListEmptyTitle"></h3>
+<p id="dbListEmptyText"></p>
+<button type="button" class="pv-link" id="dbListEmptyGo"><svg class="ic" aria-hidden="true"><use href="#i-next" /></svg><span></span></button>
+</div>
+<div class="pv-more-rows" id="dbListMore" hidden>
+<span id="dbListCount"></span>
+<button type="button" class="pv-link" id="dbMoreRows" aria-expanded="false" aria-controls="dbList"><svg class="ic" aria-hidden="true"><use href="#i-next" /></svg><span></span></button>
+</div>
+</section>
+<section class="pv-card" id="dbRqCard" aria-labelledby="dbRqTitle" hidden>
+<div class="pv-card-h">
+<h2 id="dbRqTitle"><svg class="ic" aria-hidden="true"><use href="#i-inbox" /></svg>Demandes à traiter<span class="pv-count" id="dbRqCount" hidden></span></h2>
+<button type="button" class="pv-link" id="dbRqLink"><svg class="ic" aria-hidden="true"><use href="#i-next" /></svg>Tout voir</button>
+</div>
+<ul class="pv-card-b db-rq" id="dbRq"></ul>
+<div class="pv-empty" id="dbRqEmpty" hidden>
+<h3>Aucune demande en attente.</h3>
+<p>Les prochaines demandes Pixcar apparaîtront ici.</p>
+</div>
+</section>
+<section class="pv-card pv-attention" id="dbAlertsCard" aria-labelledby="dbAlertsTitle">
+<div class="pv-card-h">
+<h2 id="dbAlertsTitle" tabindex="-1"><svg class="ic" aria-hidden="true"><use href="#i-alert" /></svg>Points d'attention</h2>
+<span class="pv-count is-warn" id="dbAlertsCount" hidden></span>
+</div>
+<div class="pv-card-b">
+<div class="pv-alert-top" id="dbAlertTop" hidden></div>
+<button type="button" class="pv-others" id="dbAlertsMore" aria-expanded="false" aria-controls="dbAlerts" hidden><span></span><svg class="ic" aria-hidden="true"><use href="#i-next" /></svg></button>
+<ul class="db-alerts" id="dbAlerts" hidden></ul>
+<p class="pv-calm" id="dbAlertsEmpty" hidden>Rien à signaler : tout est en ordre.</p>
+</div>
+</section>
+</div>
+</div>
+<p class="sr-only" id="dbLive" role="status" aria-live="polite"></p>
+</div>
+<div class="dash-body mg-page" id="dash-garage" hidden>
+<div class="mg-top">
+<div>
+<p class="mg-eyebrow">Configuration de l'établissement</p>
+<h1 id="mgTitle" tabindex="-1">Mon garage</h1>
+<p class="mg-subtitle">Organisez votre établissement et définissez vos règles de réservation.</p>
+</div>
+<button type="button" class="btn small mg-back" id="mgBack"><svg class="ic" aria-hidden="true"><use href="#i-left" /></svg>Retour à l'atelier</button>
+</div>
+<section class="mg-identity" aria-label="Établissement">
+<span class="mg-mark" aria-hidden="true"><svg class="ic"><use href="#i-settings" /></svg></span>
+<div class="mg-id-text">
+<b id="mgIdName"></b>
+<p id="mgIdSub"></p>
+<p class="ok-badge small" id="mgVerified"></p>
+</div>
+<span class="mg-scope" id="mgScope"></span>
+</section>
+<div class="mg-layout">
+<div class="mg-tabs" id="mgTabs" role="tablist" aria-label="Rubriques de mon garage" aria-orientation="vertical">
+<button type="button" role="tab" id="mgTab-hours" data-tab="hours" aria-controls="mgPanel-hours" aria-selected="true"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg><span><b>Horaires</b><small>Ouverture et capacité</small></span><svg class="ic mg-tab-go" aria-hidden="true"><use href="#i-right" /></svg></button>
+<button type="button" role="tab" id="mgTab-services" data-tab="services" aria-controls="mgPanel-services" aria-selected="false" tabindex="-1"><svg class="ic" aria-hidden="true"><use href="#i-tool" /></svg><span><b>Prestations</b><small>Prix, durées et plages autorisées</small></span><span class="dash-count" id="mgDueCount" hidden></span><svg class="ic mg-tab-go" aria-hidden="true"><use href="#i-right" /></svg></button>
+<button type="button" role="tab" id="mgTab-resources" data-tab="resources" data-rdv aria-controls="mgPanel-resources" aria-selected="false" tabindex="-1" hidden><svg class="ic" aria-hidden="true"><use href="#i-users" /></svg><span><b>Ressources</b><small>Équipe et équipements</small></span><svg class="ic mg-tab-go" aria-hidden="true"><use href="#i-right" /></svg></button>
+<button type="button" role="tab" id="mgTab-modules" data-tab="modules" data-rdv aria-controls="mgPanel-modules" aria-selected="false" tabindex="-1" hidden><svg class="ic" aria-hidden="true"><use href="#i-settings" /></svg><span><b>Modules</b><small>Outils du mode avancé</small></span><svg class="ic mg-tab-go" aria-hidden="true"><use href="#i-right" /></svg></button>
+<button type="button" role="tab" id="mgTab-profile" data-tab="profile" aria-controls="mgPanel-profile" aria-selected="false" tabindex="-1"><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg><span><b>Fiche Pixcar</b><small>Coordonnées et registre</small></span><svg class="ic mg-tab-go" aria-hidden="true"><use href="#i-right" /></svg></button>
+</div>
+<div class="mg-content">
+<div class="mg-panelset" role="tabpanel" id="mgPanel-hours" aria-labelledby="mgTab-hours">
+<section class="mg-panel" aria-labelledby="mgHoursTitle">
+<div class="mg-head">
+<h2 id="mgHoursTitle">Horaires d'ouverture</h2>
+<button type="button" class="btn small" id="mgHoursEdit"><svg class="ic" aria-hidden="true"><use href="#i-edit" /></svg>Modifier</button>
+</div>
+<div class="mg-hours" id="mgHours"></div>
+<p class="mg-note"><svg class="ic" aria-hidden="true"><use href="#i-info" /></svg><span>Communs aux modes simple et avancé. Publiés tout de suite sur votre fiche Pixcar, avec la mention « Communiqué par le garage ».</span></p>
+</section>
+<section class="mg-panel" id="agOnline" data-rdv aria-labelledby="agOnlineTitle" hidden>
+<div class="mg-head">
+<div>
+<h2 id="agOnlineTitle">Rendez-vous en ligne</h2>
+<p class="sub" id="agLead"></p>
+</div>
+<div class="rv-switch">
+<button type="button" class="tgl" role="switch" id="agEnabled" aria-checked="false" aria-labelledby="agOnlineTitle" aria-describedby="agStateText"></button>
+<b id="agStateText"></b>
+</div>
+</div>
+<div class="rv-alert" id="agMissing" hidden></div>
+<div class="ag-link" id="agLinkBox">
+<h3 id="agLinkTitle">Votre mini-site de réservation</h3>
+<p class="help" id="agLinkHelp">Une page à votre nom, à partager sur votre site, votre fiche Google ou vos réseaux : vos clients réservent selon vos disponibilités, sans passer par la recherche Pixcar.</p>
+<div class="ag-inline">
+<input id="agLink" type="text" readonly spellcheck="false" aria-labelledby="agLinkTitle" aria-describedby="agLinkState">
+<button type="button" class="btn small" id="agLinkCopy"><svg class="ic" aria-hidden="true"><use href="#i-copy" /></svg>Copier le lien</button>
+<a class="btn small" id="agLinkTry" target="_blank" rel="noopener">Ouvrir<span class="sr-only"> le mini-site (nouvel onglet)</span></a>
+</div>
+<p class="help" id="agLinkState"></p>
+</div>
+</section>
+<section class="mg-panel" id="agWeekBox" data-rdv aria-labelledby="agWeekTitle" hidden>
+<div class="mg-head">
+<div>
+<h2 id="agWeekTitle">Ma semaine type</h2>
+<p class="sub">Elle se répète chaque semaine, sauf fermetures : chaque créneau dit combien de voitures vous prenez en même temps.</p>
+</div>
+<button type="button" class="btn primary small" id="agAddSlot" aria-label="Ajouter un créneau"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter<span class="wide-only">&nbsp;un créneau</span></button>
+</div>
+<ul class="ag-legend" id="agLegend"></ul>
+<div class="ag-week" id="agWeek"></div>
+<ul class="ag-days" id="agDays"></ul>
+</section>
+<section class="mg-panel" id="agClosBox" data-rdv aria-labelledby="agClosTitle" hidden>
+<div class="mg-head">
+<h2 id="agClosTitle">Fermetures et congés</h2>
+<button type="button" class="btn small" id="agAddClosure"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter</button>
+</div>
+<ul class="ag-closures" id="agClosures"></ul>
+<div class="ag-row">
+<svg class="ic" aria-hidden="true"><use href="#i-flag" /></svg>
+<span><b id="agHolLabel">Jours fériés</b><small id="agHolText"></small></span>
+<button type="button" class="tgl" role="switch" id="agHolidays" aria-checked="true" aria-labelledby="agHolLabel" aria-describedby="agHolText"></button>
+</div>
+</section>
+<section class="mg-panel" id="agRulesBox" data-rdv aria-labelledby="agRulesTitle" hidden>
+<h2 id="agRulesTitle">Règles de réservation</h2>
+<div class="ag-rule"><label for="agDelay">Délai minimum<small>avant un rendez-vous</small></label><select id="agDelay" data-setting="minDelayH"><option value="0">Aucun</option><option value="2">2 heures</option><option value="4">4 heures</option><option value="24">24 heures</option><option value="48">48 heures</option></select></div>
+<div class="ag-rule"><label for="agHorizon">Jusqu'à<small>combien de temps à l'avance</small></label><select id="agHorizon" data-setting="horizonDays"><option value="7">1 semaine</option><option value="14">2 semaines</option><option value="21">3 semaines</option><option value="28">4 semaines</option></select></div>
+<div class="ag-rule"><label for="agStep">Horaires proposés<small>pour les rendez-vous à l'heure</small></label><select id="agStep" data-setting="stepMin"><option value="15">toutes les 15 min</option><option value="30">toutes les 30 min</option><option value="60">toutes les heures</option></select></div>
+<p class="mg-note"><svg class="ic" aria-hidden="true"><use href="#i-info" /></svg><span>Vous confirmez chaque demande : vous avez jusqu'à midi le jour d'ouverture suivant. Sans réponse, la demande est annulée et l'automobiliste prévenu.</span></p>
+</section>
+<div class="mg-cal" id="mgCalHours"></div>
+<section class="mg-panel" id="agNotifyBox" data-rdv aria-labelledby="agNotifyTitle" hidden>
+<h2 id="agNotifyTitle">Où recevoir les demandes</h2>
+<p class="sub">Une adresse e-mail de l'atelier, privée : les automobilistes ne la voient jamais. Chaque demande y arrive avec les coordonnées du client et deux boutons, Accepter et Refuser.</p>
+<p class="ag-notify-now" id="agNotifyNow" hidden></p>
+<form class="ag-notify" id="agNotifyForm" novalidate>
+<label for="agNotifyEmail">Adresse e-mail</label>
+<div class="ag-inline"><input id="agNotifyEmail" type="email" autocomplete="email" inputmode="email" spellcheck="false" aria-describedby="agNotifyErr"><button class="btn small" type="submit" id="agNotifySend">Recevoir un code</button></div>
+</form>
+<form class="ag-notify" id="agNotifyCodeForm" novalidate hidden>
+<label for="agNotifyCode">Code reçu à <b id="agNotifyTo"></b></label>
+<div class="ag-inline"><input id="agNotifyCode" class="code-input small" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" spellcheck="false" aria-describedby="agNotifyErr"><button class="btn primary small" type="submit" id="agNotifyCheck">Valider</button></div>
+</form>
+<p class="field-err" id="agNotifyErr" hidden></p>
+</section>
+</div>
+<div class="mg-panelset" role="tabpanel" id="mgPanel-services" aria-labelledby="mgTab-services" hidden>
+<section class="mg-panel" id="mgPrices" aria-labelledby="pricesTitle">
+<div class="mg-head">
+<div>
+<h2 id="pricesTitle">Prix annoncés sur Pixcar</h2>
+<p class="sub">À côté des prix payés par vos clients, avec les visites de votre fiche.</p>
+</div>
+<button type="button" class="btn primary small" id="addPrice" aria-label="Ajouter une prestation"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Ajouter<span class="wide-only">&nbsp;une prestation</span></button>
+</div>
+<div class="due" id="dashDue" role="status" hidden>
+<svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg>
+<div><b id="dashDueTitle"></b><span id="dashDueText"></span></div>
+<button type="button" class="btn small dark" id="confirmAll">Tout confirmer</button>
+</div>
+<ul class="stats" aria-label="En chiffres">
+<li><span class="stat-l">Vues de la fiche · 30 j</span><b class="stat-v" id="statViews"></b><span class="stat-d" id="statViewsDelta"></span></li>
+<li><span class="stat-l">Clics « Appeler » · 30 j</span><b class="stat-v" id="statCalls"></b><span class="stat-d" id="statCallsDelta"></span></li>
+<li><span class="stat-l">Prix à jour</span><b class="stat-v" id="statFresh"></b></li>
+<li><span class="stat-l">Payé par vos clients</span><b class="stat-v" id="statPaid"></b><span class="stat-d" id="statPaidNote"></span></li>
+</ul>
+<p class="empty" id="noPrice" hidden>Aucun prix annoncé pour l'instant. Ajoutez une première prestation : les automobilistes verront « Annoncé » à côté des prix payés par vos clients.</p>
+<table class="prices" id="priceTable" hidden>
+<caption class="sr-only">Vos prix annoncés</caption>
+<thead><tr><th scope="col">Prestation</th><th scope="col">Type</th><th scope="col">Prix TTC</th><th scope="col">Inclus</th><th scope="col">Payé par vos clients</th><th scope="col">Mis à jour</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
+<tbody id="priceRows"></tbody>
+</table>
+<p class="note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>« Payé par vos clients » vient des factures que vos clients déclarent sur Pixcar : vous ne pouvez ni le modifier ni le retirer. Vos prix annoncés restent à part et n'entrent pas dans les moyennes.</span></p>
+</section>
+<section class="mg-panel" aria-labelledby="mgSvcTitle">
+<div class="mg-head">
+<div>
+<h2 id="mgSvcTitle">Prestations effectuées</h2>
+<p class="sub" id="mgSvcSummary"></p>
+</div>
+</div>
+<table class="svc" id="mgServices">
+<caption class="sr-only">Les prestations que vous faites, leur temps moyen et votre prix annoncé</caption>
+<thead><tr><th scope="col">Prestation</th><th scope="col">Je la fais</th><th scope="col">Temps moyen</th><th scope="col">Prix annoncé</th></tr></thead>
+<tbody id="mgSvcRows"></tbody>
+</table>
+<p class="note"><svg class="ic" aria-hidden="true"><use href="#i-clock" /></svg><span><b>Temps moyen</b> : le temps pendant lequel la voiture occupe votre atelier, pour une voiture courante. Il servira à proposer des horaires de rendez-vous ; les automobilistes ne le voient pas.</span></p>
+</section>
+<div class="mg-cal" id="mgCalServices"></div>
+</div>
+<div class="mg-panelset" role="tabpanel" id="mgPanel-resources" aria-labelledby="mgTab-resources" hidden>
+<section class="mg-panel mg-empty" id="mgResSimple" aria-labelledby="mgResSimpleTitle">
+<h2 id="mgResSimpleTitle">Équipe et équipements</h2>
+<p class="sub">Vos mécaniciens et vos postes servent au mode avancé : Pixcar propose alors des horaires selon leurs disponibilités, leurs compétences et le temps de chaque prestation.</p>
+<div class="info-box">En mode simple, la semaine type (Horaires) suffit : rien à renseigner ici.</div>
+<button type="button" class="btn small" data-mg-tab="modules">Voir les modules</button>
+</section>
+<div class="mg-cal" id="mgCalResources"></div>
+</div>
+<div class="mg-panelset" role="tabpanel" id="mgPanel-modules" aria-labelledby="mgTab-modules" hidden>
+<section class="mg-panel cal-mode" id="agMode" aria-labelledby="agModeTitle">
+<div class="mg-head">
+<div>
+<h2 id="agModeTitle">Calcul des disponibilités en ligne</h2>
+<p class="sub" id="agModeText"></p>
+</div>
+<button type="button" class="btn small" id="agModeGo"></button>
+</div>
+<p class="help" id="agModeHelp"></p>
+</section>
+<section class="mg-panel" aria-labelledby="mgModTitle">
+<h2 id="mgModTitle">Modules de l'affichage avancé</h2>
+<p class="sub">Les outils que Gestion d'atelier propose en affichage avancé, pour tout le garage. Couper un module le masque : ses données restent enregistrées.</p>
+<ul class="mg-modules" id="mgModules"></ul>
+<div class="info-box">Affichage Simple ou Avancé : chacun le choisit dans Gestion d'atelier. Il ne change ni vos rendez-vous, ni vos affectations, ni les horaires proposés en ligne. Ces horaires ne changent qu'avec le calcul des disponibilités, ci-dessus, par une action à part.</div>
+</section>
+<div class="mg-cal" id="mgCalModules"></div>
+</div>
+<div class="mg-panelset" role="tabpanel" id="mgPanel-profile" aria-labelledby="mgTab-profile" hidden>
+<section class="mg-panel" aria-labelledby="mgCoordTitle">
+<h2 id="mgCoordTitle">Coordonnées</h2>
+<ul class="mg-kv" id="mgCoords"></ul>
+</section>
+<section class="mg-panel soft" aria-labelledby="mgRegTitle">
+<h2 id="mgRegTitle">Registre officiel</h2>
+<dl class="mg-reg" id="mgRegistry"></dl>
+<p class="mg-note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>Répertoire SIRENE de l'Insee. Ces informations ne se modifient pas ici.</span></p>
+</section>
+</div>
+</div>
+</div>
+<p class="sr-only" id="mgLive" role="status" aria-live="polite"></p>
+<p class="sr-only" id="agLive" role="status" aria-live="polite"></p>
+</div>
+<div class="dash-body" id="dash-requests" hidden>
+<div class="rv-top">
+<div>
+<h1 id="rqTitle" tabindex="-1">Demandes de rendez-vous</h1>
+<p class="lead">Répondez avant l'heure indiquée : sans réponse, la demande est annulée et le client prévenu.</p>
+</div>
+<button type="button" class="rv-state" id="rqState" data-goto="agenda"></button>
+</div>
+<div class="rv-tabs" role="tablist" aria-label="Demandes">
+<button type="button" role="tab" id="rqTab-todo" data-view="todo" aria-selected="true" aria-controls="rqList">À traiter<span class="dash-count" id="rqTodoCount" hidden></span></button>
+<button type="button" role="tab" id="rqTab-upcoming" data-view="upcoming" aria-selected="false" aria-controls="rqList" tabindex="-1">À venir</button>
+<button type="button" role="tab" id="rqTab-past" data-view="past" aria-selected="false" aria-controls="rqList" tabindex="-1">Passées</button>
+</div>
+<div id="rqList" role="tabpanel" aria-labelledby="rqTab-todo"></div>
+<p class="rv-tools" id="rqTools" hidden><button type="button" class="btn small" id="rqExport"><svg class="ic" aria-hidden="true"><use href="#i-download" /></svg>Exporter vers mon agenda</button></p>
+<p class="note"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg><span>Les coordonnées d'un client restent visibles jusqu'à 30 jours après son rendez-vous, puis sont effacées. Vous ne voyez jamais les automobilistes qui n'ont pas envoyé de demande.</span></p>
+<p class="sr-only" id="rqLive" role="status" aria-live="polite"></p>
+</div>
+<div class="dash-body" id="dash-planning" hidden>
+<div class="pl-top">
+<div class="pl-titles">
+<h1 id="planTitle" tabindex="-1">Gestion d'atelier</h1>
+<p class="pl-sub" id="planSub"></p>
+</div>
+<div class="pl-head-acts">
+<div class="pl-mode" id="planMode" role="radiogroup" aria-label="Affichage">
+<button type="button" role="radio" aria-checked="true" data-display="simple">Simple</button>
+<button type="button" role="radio" aria-checked="false" data-display="advanced" tabindex="-1">Avancé</button>
+</div>
+<div class="pl-new">
+<div class="pl-split">
+<button type="button" class="btn primary small" id="planNewRdv"><svg class="ic" aria-hidden="true"><use href="#i-plus" /></svg>Nouveau rendez-vous</button>
+<button type="button" class="btn primary small pl-split-more" id="planNew" aria-expanded="false" aria-controls="planNewMenu" aria-label="Autres ajouts"><svg class="ic" aria-hidden="true"><use href="#i-chevron" /></svg></button>
+</div>
+<div class="pl-menu" id="planNewMenu" hidden>
+<button type="button" data-new="job"><svg class="ic" aria-hidden="true"><use href="#i-phone" /></svg>Rendez-vous (téléphone, comptoir)</button>
+<button type="button" data-new="arrived"><svg class="ic" aria-hidden="true"><use href="#i-car" /></svg>Client déjà sur place</button>
+<button type="button" data-new="hold"><svg class="ic" aria-hidden="true"><use href="#i-lock" /></svg>Créneau bloqué</button>
+<button type="button" data-new="staff" data-res><svg class="ic" aria-hidden="true"><use href="#i-user" /></svg>Absence d'un mécanicien</button>
+<button type="button" data-new="resource" data-res><svg class="ic" aria-hidden="true"><use href="#i-garage" /></svg>Indisponibilité d'un poste</button>
+</div>
+</div>
+<button type="button" class="pl-btn" id="planFocus" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-full" /></svg><span id="planFocusText">Plein écran</span></button>
+</div>
+</div>
+<div class="pl-spaces" id="planSpaces" role="group" aria-label="Espace" hidden></div>
+<section class="pl-summary" id="planSummary" aria-labelledby="planSumTitle"></section>
+<div class="pl-bar">
+<div class="pl-nav">
+<button type="button" class="pl-icon" id="planPrev" aria-label="Période précédente"><svg class="ic" aria-hidden="true"><use href="#i-left" /></svg></button>
+<button type="button" class="pl-icon" id="planNext" aria-label="Période suivante"><svg class="ic" aria-hidden="true"><use href="#i-right" /></svg></button>
+<h2 id="planRange"></h2>
+<button type="button" class="pl-btn" id="planToday">Aujourd'hui</button>
+</div>
+<span class="pl-spacer"></span>
+<div class="pl-views" id="planViews" role="group" aria-label="Vue"></div>
+<button type="button" class="pl-btn pl-ftoggle" id="planFToggle" aria-expanded="false" aria-controls="planFilters"><svg class="ic" aria-hidden="true"><use href="#i-sliders" /></svg>Filtres<span class="pl-fcount" id="planFCount" aria-hidden="true" hidden></span></button>
+<label class="pl-search"><svg class="ic" aria-hidden="true"><use href="#i-find" /></svg><span class="sr-only">Rechercher dans la période affichée</span><input id="planSearch" type="search" placeholder="Client, véhicule, immatriculation…" autocomplete="off" spellcheck="false"></label>
+</div>
+<div class="pl-tools">
+<div class="pl-pickbox" id="planPick"></div>
+<ul class="pl-chips" id="planChips" aria-label="Filtres actifs"></ul>
+<button type="button" class="pl-btn" id="planWeekend" hidden>Afficher le week-end</button>
+</div>
+<div class="pl-layout" id="planLayout">
+<aside class="pl-filters" id="planFilters" aria-labelledby="planFTitle" hidden></aside>
+<div class="pl-wrap" id="planGrid"></div>
+<dialog class="pl-side" id="planDlg" aria-labelledby="planDlgTitle">
+<form id="planForm" novalidate></form>
+</dialog>
+</div>
+<ul class="pl-legend" id="planLegend" aria-label="Légende"></ul>
+<p class="sr-only" id="planLive" role="status" aria-live="polite"></p>
+</div>
+<div class="dash-body" id="dash-calendar" hidden>
+<p class="cal-back"><button type="button" class="link-btn" id="calBack"><svg class="ic" aria-hidden="true"><use href="#i-left" /></svg>Mon garage › Modules</button></p>
+<h1 id="calTitle" tabindex="-1">Calendrier avancé</h1>
+<p class="lead" id="calLead"></p>
+<ol class="cal-steps" id="calSteps" aria-label="Étapes"></ol>
+<div class="cal-body" id="calBody"></div>
+<div class="cal-foot" id="calFoot"></div>
+<p class="sr-only" id="calLive" role="status" aria-live="polite"></p>
+</div>
+</section>
+<section class="card narrow" data-screen="manual" hidden aria-labelledby="manualTitle">
+<h1 id="manualTitle" tabindex="-1">Vérification manuelle</h1>
+<p class="lead" id="manualWhy"></p>
+<p>Écrivez-nous à <a id="manualMail" href="mailto:contact@pixcar.fr">contact@pixcar.fr</a> avec le SIRET de l'établissement : nous vérifions à la main et vous répondons sous quelques jours.</p>
+<button type="button" class="btn" data-go="garage">Essayer un autre SIRET</button>
+</section>
+</main>
+<div class="curtain" id="curtain" hidden aria-hidden="true">
+<div class="curtain-surface"></div>
+<div class="curtain-logo"><svg viewBox="0 0 1643 433.8"><use href="#px-logo" /></svg></div>
+</div>
+<dialog class="sheet" id="priceDlg" aria-labelledby="priceDlgTitle">
+<form id="priceForm" novalidate>
+<div class="sheet-head">
+<div>
+<p class="eyebrow" id="priceDlgKind">Modifier un prix</p>
+<h2 id="priceDlgTitle"></h2>
+</div>
+<button type="button" class="icon-btn" id="priceClose" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button>
+</div>
+<div id="pickService">
+<label for="priceService">Prestation</label>
+<select id="priceService"></select>
+</div>
+<fieldset class="seg">
+<legend class="sr-only">Type de prix</legend>
+<label><input type="radio" name="kind" value="fixed" checked><span>Forfait</span></label>
+<label><input type="radio" name="kind" value="from"><span>À partir de</span></label>
+<label><input type="radio" name="kind" value="quote"><span>Sur devis</span></label>
+</fieldset>
+<div id="priceBox">
+<label for="priceValue">Prix TTC</label>
+<div class="money"><input id="priceValue" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-describedby="priceErr"><span aria-hidden="true">€</span></div>
+</div>
+<fieldset class="chips" id="priceVehicles">
+<legend>Pour quels véhicules ?</legend>
+</fieldset>
+<fieldset class="ticks" id="priceIncludes">
+<legend>Ce qui est compris</legend>
+</fieldset>
+<p class="field-err" id="priceErr" hidden></p>
+<div class="preview" aria-live="polite">
+<span class="eyebrow">Aperçu sur Pixcar</span>
+<p><b id="previewPrice"></b> <span class="annonce">Annoncé</span> <span class="muted" id="previewDetail"></span></p>
+</div>
+<button class="btn primary" type="submit" id="priceSave">Enregistrer</button>
+<p class="switch"><button type="button" class="link-btn danger" id="priceDelete">Retirer ce prix</button></p>
+<p class="help center">Publié aussitôt. Un prix très éloigné de ceux payés dans le secteur est relu avant publication.</p>
+</form>
+</dialog>
+<dialog class="sheet" id="fieldDlg" aria-labelledby="fieldDlgTitle">
+<form id="fieldForm" novalidate>
+<div class="sheet-head">
+<div>
+<p class="eyebrow">Modifier</p>
+<h2 id="fieldDlgTitle"></h2>
+</div>
+<button type="button" class="icon-btn" id="fieldClose" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button>
+</div>
+<div class="mg-field" id="fieldOne">
+<label for="fieldValue" id="fieldLabel"></label>
+<input id="fieldValue" type="text" autocomplete="off" spellcheck="false" aria-describedby="fieldHelp fieldErr">
+</div>
+<div class="mg-field" id="fieldAddr" hidden>
+<label for="addrStreet">Numéro et rue</label>
+<input id="addrStreet" type="text" autocomplete="off" aria-describedby="fieldHelp fieldErr">
+<div class="mg-row2">
+<span><label for="addrPc">Code postal</label><input id="addrPc" type="text" inputmode="numeric" maxlength="5" autocomplete="off"></span>
+<span><label for="addrCity">Ville</label><input id="addrCity" type="text" autocomplete="off"></span>
+</div>
+</div>
+<p class="help" id="fieldHelp"></p>
+<p class="field-err" id="fieldErr" hidden></p>
+<button class="btn primary" type="submit" id="fieldSave">Enregistrer</button>
+<p class="switch" id="fieldClearBox"><button type="button" class="link-btn danger" id="fieldClear">Effacer</button></p>
+</form>
+</dialog>
+<dialog class="sheet" id="hoursDlg" aria-labelledby="hoursDlgTitle">
+<form id="hoursForm" novalidate>
+<div class="sheet-head">
+<div>
+<p class="eyebrow">Modifier</p>
+<h2 id="hoursDlgTitle">Horaires d'ouverture</h2>
+</div>
+<button type="button" class="icon-btn" id="hoursClose" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button>
+</div>
+<p class="help">Deux plages au plus par jour, au quart d'heure. Laissez la seconde vide si vous ne fermez pas à midi.</p>
+<div class="mg-days" id="hoursDays"></div>
+<p class="switch"><button type="button" class="link-btn" id="hoursCopy">Copier les horaires du lundi sur les jours de mardi à vendredi</button></p>
+<p class="field-err" id="hoursErr" hidden></p>
+<button class="btn primary" type="submit" id="hoursSave">Enregistrer</button>
+</form>
+</dialog>
+<dialog class="sheet" id="untickDlg" aria-labelledby="untickTitle">
+<form method="dialog" id="untickForm">
+<div class="sheet-head"><h2 id="untickTitle">Retirer aussi votre prix annoncé ?</h2></div>
+<p id="untickText"></p>
+<button class="btn primary" value="yes" id="untickYes">Décocher et retirer le prix</button>
+<p class="switch"><button class="link-btn" value="no" id="untickNo">Garder la prestation</button></p>
+</form>
+</dialog>
+<dialog class="sheet wide" id="slotDlg" aria-labelledby="slotDlgTitle">
+<form id="slotForm" novalidate>
+<div class="sheet-head">
+<h2 id="slotDlgTitle">Nouveau créneau</h2>
+<button type="button" class="icon-btn" id="slotClose" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button>
+</div>
+<label for="slotName">Nom du créneau</label>
+<input id="slotName" type="text" maxlength="40" autocomplete="off" placeholder="Entretien courant" aria-describedby="slotNameHelp">
+<p class="help" id="slotNameHelp">Pour vous seulement.</p>
+<fieldset class="ag-daypick" id="slotDays"><legend>Jours</legend></fieldset>
+<p class="help" id="slotDaysHelp"></p>
+<div class="ag-times">
+<span><label for="slotStart">De</label><select id="slotStart"></select></span>
+<span><label for="slotEnd">à</label><select id="slotEnd"></select></span>
+</div>
+<fieldset class="ag-modes">
+<legend>L'automobiliste vient</legend>
+<label><input type="radio" name="slotMode" value="hour" checked><span><b>À une heure précise</b><small>Pixcar propose des heures d'arrivée selon le temps moyen de la prestation.</small></span></label>
+<label><input type="radio" name="slotMode" value="drop"><span><b>En déposant sa voiture</b><small id="slotDropHelp">Arrivée dans la première heure du créneau, voiture rendue à la fin.</small></span></label>
+</fieldset>
+<div class="ag-cap">
+<label for="slotCap">Voitures en même temps</label>
+<div class="ag-stepper"><button type="button" class="icon-btn" id="slotCapMinus" aria-label="Une voiture de moins">−</button><input id="slotCap" type="text" inputmode="numeric" maxlength="1" value="1" aria-describedby="slotCapHelp"><button type="button" class="icon-btn" id="slotCapPlus" aria-label="Une voiture de plus">+</button></div>
+<p class="help" id="slotCapHelp">Ponts ou mécaniciens libres pour ce créneau.</p>
+</div>
+<fieldset class="ag-svcs" id="slotSvcs"><legend id="slotSvcsTitle">Prestations acceptées</legend></fieldset>
+<div class="ag-preview" id="slotPreview" aria-live="polite"></div>
+<p class="field-err" id="slotErr" hidden></p>
+<div class="sheet-actions">
+<button class="btn primary" type="submit" id="slotSave">Enregistrer</button>
+<button class="btn" type="button" id="slotCancel">Annuler</button>
+<button class="link-btn danger" type="button" id="slotDelete" hidden>Supprimer le créneau</button>
+</div>
+</form>
+</dialog>
+<dialog class="sheet wide" id="calDlg" aria-labelledby="calDlgTitle">
+<form id="calForm" novalidate></form>
+</dialog>
+<dialog class="sheet" id="closDlg" aria-labelledby="closDlgTitle">
+<form id="closForm" novalidate>
+<div class="sheet-head">
+<h2 id="closDlgTitle">Fermeture</h2>
+<button type="button" class="icon-btn" id="closClose" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button>
+</div>
+<div class="mg-row2">
+<span><label for="closFirst">Du</label><input id="closFirst" type="date" required></span>
+<span><label for="closLast">au</label><input id="closLast" type="date"></span>
+</div>
+<label for="closLabel">Libellé <small>facultatif</small></label>
+<input id="closLabel" type="text" maxlength="60" placeholder="Congés" autocomplete="off">
+<p class="help">Aucun rendez-vous n'est proposé pendant une fermeture. Les demandes et rendez-vous déjà pris sur la période sont annulés et les clients prévenus.</p>
+<p class="field-err" id="closErr" hidden></p>
+<button class="btn primary" type="submit" id="closSave">Enregistrer</button>
+<p class="switch" id="closDeleteBox" hidden><button type="button" class="link-btn danger" id="closDelete">Retirer cette fermeture</button></p>
+</form>
+</dialog>
+<dialog class="sheet" id="whyDlg" aria-labelledby="whyDlgTitle">
+<form id="whyForm" novalidate>
+<div class="sheet-head">
+<div>
+<p class="eyebrow" id="whyDlgKind"></p>
+<h2 id="whyDlgTitle"></h2>
+</div>
+<button type="button" class="icon-btn" id="whyClose" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button>
+</div>
+<fieldset class="ag-reasons" id="whyReasons"><legend>Motif</legend></fieldset>
+<label for="whyNote">Un mot pour le client <small>facultatif</small></label>
+<textarea id="whyNote" rows="3" maxlength="300" placeholder="Ex. Appelez-nous pour un autre horaire."></textarea>
+<p class="help">Transmis au client par e-mail avec le motif.</p>
+<p class="field-err" id="whyErr" hidden></p>
+<button class="btn primary" type="submit" id="whySave"></button>
+</form>
+</dialog>
+<dialog class="sheet" id="workDlg" aria-labelledby="workDlgTitle">
+<form id="workForm" novalidate>
+<div class="sheet-head">
+<div>
+<p class="eyebrow">Voiture prête</p>
+<h2 id="workDlgTitle"></h2>
+</div>
+<button type="button" class="icon-btn" id="workClose" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button>
+</div>
+<p id="workDlgText"></p>
+<label class="check"><input type="checkbox" id="workNotify" checked><span>Prévenir le client par e-mail que sa voiture est prête</span></label>
+<p class="help">L'e-mail donne l'adresse du garage et ses prochaines heures d'ouverture. Il ne part qu'une fois par rendez-vous.</p>
+<p class="field-err" id="workErr" role="alert" hidden></p>
+<button class="btn primary" type="submit" id="workSave">Voiture prête</button>
+</form>
+</dialog>
+<footer class="pro-foot">
+<span class="m-foot-l" id="footLabel">Pixcar · L’espace des professionnels de l’automobile</span>
+<div class="m-footer-links"><button type="button" data-privacy>Vos données</button><button type="button" data-help class="m-foot-help">Aide à la connexion</button><a href="mailto:contact@pixcar.fr">Contact</a></div>
+</footer>
+<dialog class="sheet pro-privacy" id="privacyDlg" aria-labelledby="privacyTitle">
+<div class="sheet-in">
+<div class="sheet-head"><h2 id="privacyTitle">Vos données dans l'Espace Pro</h2><button type="button" class="icon-btn" data-close aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button></div>
+<ul>
+<li><b>Votre compte</b> : votre adresse e-mail, gérée par Amazon Cognito (Amazon Web Services, région Europe, Stockholm). Pas de mot de passe : un code à usage unique vous est envoyé à chaque connexion.</li>
+<li><b>Le rattachement d'un garage</b> : le SIRET, le garage, vos prénom, nom et fonction, la case de certification cochée, le moyen de vérification choisi (montré masqué) et les dates. Ils prouvent que vous gérez le garage et servent en cas de contestation ; ils sont gardés tant que le garage est rattaché à votre compte. Une demande qui n'aboutit pas est effacée après 30 jours, le journal des envois après 90 jours.</li>
+<li><b>Les coordonnées des garages</b> (e-mail public, site, portable) viennent de données publiques (Overture Maps) ; elles ne servent qu'à envoyer le code de vérification et ne sont jamais affichées en clair.</li>
+<li><b>Vos prix annoncés</b> : publiés sur Pixcar avec la mention « Annoncé », sous votre responsabilité, avec leur date de mise à jour. Les statistiques de votre fiche (visites, clics « Appeler ») ne sont que des totaux : vous ne voyez jamais qui a consulté votre fiche.</li>
+<li><b>Votre fiche</b> (« Mon garage ») : les coordonnées et horaires que vous déclarez sont publiés sur Pixcar avec la mention « communiqués par le garage » ; un changement du nom, de l'adresse ou du téléphone est d'abord relu par Pixcar. Les temps moyens de vos prestations ne sont jamais montrés aux automobilistes. Tout est effacé quand le garage n'est plus rattaché à votre compte ; une demande de changement relue ou annulée, après 90 jours.</li>
+<li><b>Les rendez-vous en ligne</b> : vos créneaux, fermetures et règles servent à proposer des horaires aux automobilistes ; l'adresse qui reçoit les demandes n'est jamais montrée. Les coordonnées des clients qui vous demandent un rendez-vous vous sont transmises pour ce rendez-vous seulement, et effacées 30 jours après lui (7 jours après un refus, une annulation ou une expiration).</li>
+<li><b>Gestion d'atelier</b> : vos mécaniciens (un prénom suffit), leurs compétences et absences, vos postes, l'affectation des rendez-vous et ce que vous saisissez vous-même (rendez-vous pris par téléphone ou au comptoir, créneaux bloqués) ne sont visibles que de vous. Pour un rendez-vous que vous saisissez, le nom du client, son téléphone, son véhicule, l'immatriculation et votre commentaire interne sont effacés 30 jours après le rendez-vous, le rendez-vous lui-même 24 mois après ; l'historique des changements, après 12 mois. Ces clients ne reçoivent rien de Pixcar. L'état des interventions (voiture reçue, en cours, prête, restituée, client absent) suit le rendez-vous ; un client qui a réservé sur Pixcar voit l'avancement sur sa page de suivi (jamais « Client absent ») et reçoit l'e-mail « voiture prête » si vous laissez la case cochée. Votre affichage (simple ou avancé) et les raccourcis du tableau de bord sont gardés sur votre compte pour ce garage. Pour ces données (votre personnel, les clients que vous saisissez), Pixcar agit pour votre compte, comme sous-traitant (article 28 du RGPD).</li>
+<li>Accès, rectification, effacement : <a href="mailto:contact@pixcar.fr">contact@pixcar.fr</a>.</li>
+</ul>
+</div>
+</dialog>
+<dialog class="sheet" id="helpDlg" aria-labelledby="helpTitle">
+<div class="sheet-in">
+<div class="sheet-head"><h2 id="helpTitle">Un coup de main ?</h2><button type="button" class="icon-btn" data-close aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="#i-close" /></svg></button></div>
+<p><b>Vous ne recevez pas le code ?</b><br>Vérifiez l’adresse saisie et vos courriers indésirables, puis demandez un nouvel envoi.</p>
+<p><b>Vous avez changé d’adresse ?</b><br>Revenez à l’étape précédente pour la corriger.</p>
+<p>Toujours bloqué ? Écrivez-nous à <a href="mailto:contact@pixcar.fr">contact@pixcar.fr</a>.</p>
+</div>
+</dialog>
+<script src="../assets/pro.911b753a75.js" defer></script>
+</body>
+</html>
