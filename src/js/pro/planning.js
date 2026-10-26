@@ -66,7 +66,8 @@ function toneOf(it) {
   if (it.work === "received" || it.work === "in_progress") return "live";
   return "confirmed";
 }
-export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, goPanel }) {
+// accountView() : l'affichage enregistré pour ce compte (préférence « view » de GET /v1/pro/garages/:id) ; onView(v) : l'affichage choisi
+export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, goPanel, accountView = () => null, onView = () => {} }) {
   let garageId = null;
   let data = null; // réponse de GET …/calendar/agenda
   let st = null; // réponse de GET …/calendar (horaires des mécaniciens et postes, fenêtre de réservation, motifs d'absence)
@@ -106,6 +107,8 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
   const advanced = () => display === "advanced";
   // des mécaniciens ou des postes à montrer (calcul par ressources, ou fiches saisies pour l'affichage avancé)
   const hasRes = () => !!data && (data.staff.length > 0 || data.resources.length > 0);
+  // calcul des disponibilités par ressources : seul cas où l'on choisit un mécanicien ou un poste (l'API le refuse sinon)
+  const byRes = () => !!st && st.mode === "advanced";
 
   // ================================================================= ouverture et chargement
   // space : un espace de l'affichage avancé à ouvrir (Mon garage › Modules › « Ouvrir ») ; l'affichage passe alors en avancé
@@ -125,19 +128,19 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     focusMode(false);
     closeSide({ now: true, refocus: false });
     anchor ||= today();
-    // l'affichage du compte (gardé dans ce navigateur) ; à la première visite, celui qui va avec le calcul des disponibilités du garage
-    // (par ressources : avancé ; par créneaux : simple), d'où les réglages lus d'abord
+    // l'affichage du compte (préférence enregistrée par l'API, sinon celle gardée dans ce navigateur) ; à la première visite, celui qui
+    // va avec le calcul des disponibilités du garage (par ressources : avancé ; par créneaux : simple), d'où les réglages lus d'abord
     if (!display) {
-      display = readDisplay();
+      const mine = accountView();
+      display = mine === "simple" || mine === "advanced" ? mine : readDisplay();
       if (!display) {
         st = await api.calendar(id);
         display = st.mode === "advanced" ? "advanced" : "simple";
       }
     }
     if (want) {
-      display = "advanced";
       space = want;
-      writeDisplay("advanced");
+      if (display !== "advanced") remember((display = "advanced"));
     }
     view ||= narrow() ? (display === "simple" ? "list" : "day") : "week";
     if (!viewsOf().some(([k]) => k === view)) view = viewsOf()[0][0];
@@ -163,11 +166,17 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       // stockage refusé : le choix ne vaut que pour cette visite
     }
   }
+  // le choix d'affichage suit le compte (d'un ordinateur ou d'un téléphone à l'autre) ; s'il ne s'enregistre pas, il vaut dans ce navigateur
+  function remember(v) {
+    writeDisplay(v);
+    onView(v);
+    Promise.resolve(api.putPrefs(garageId, { view: v })).catch(() => {});
+  }
   // changer d'affichage ne touche à rien d'autre que l'écran : ni rendez-vous, ni affectations, ni horaires proposés en ligne
   async function setDisplay(v) {
     if (v === display) return;
     display = v;
-    writeDisplay(v);
+    remember(v);
     if (v === "simple") {
       filters.staff = filters.post = "";
       if (filters.state === "unassigned") filters.state = "";
@@ -707,9 +716,10 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       .map((x) => {
         const l = byStaff ? staffLoad(x, d, all) : postLoad(x, d, all);
         const text = l.avail ? `${byStaff ? "" : "occupé "}${loadText(l)}` : l.absent || l.down ? (byStaff ? "Absent" : "Indisponible") : x.active ? "Hors horaires" : "inactif";
-        return { key: x.id, head: x.name, sub: "", load: { ...l, text }, day: d, [byStaff ? "staff" : "post"]: x.id, avail: hoursFor(x, d), away: awayOn(x.id, d), segs: rowsFor((r) => r.target === target && r.id === x.id && r.day === d && (!byStaff || r.role === "labour")) };
+        const whole = list.filter((it) => it.whole && it.day === d).map(spanOf); // tout l'atelier : dans chaque colonne
+        return { key: x.id, head: x.name, sub: "", load: { ...l, text }, day: d, [byStaff ? "staff" : "post"]: x.id, avail: hoursFor(x, d), away: awayOn(x.id, d), segs: [...rowsFor((r) => r.target === target && r.id === x.id && r.day === d && (!byStaff || r.role === "labour")), ...whole] };
       });
-    const loose = list.filter((it) => it.day === d && !it.plan.some((r) => r.target === target && r.day === d));
+    const loose = list.filter((it) => it.day === d && !it.whole && !it.plan.some((r) => r.target === target && r.day === d));
     if (loose.length) cols.push({ key: "none", head: "À affecter", sub: "", load: null, day: d, avail: openOn(d), segs: loose.map((it) => ({ item: it, a: it.start, b: it.end > it.start ? it.end : 1440 })) });
     return cols;
   }
@@ -974,7 +984,8 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     const station = change.auto ? null : change.post;
     if (it.type === "rdv") return { day: change.day, time: hm(change.start), staff, station, ...(confirm ? { confirm: true } : {}) };
     const k = it.src;
-    if (it.type === "job") return { kind: "job", label: k.label || "Rendez-vous", services: k.services.map((s) => ({ id: s.id, qty: s.qty })), vehicle: k.vehicle || null, day: change.day, time: hm(change.start), staff, station, ...(confirm ? { confirm: true } : {}) };
+    // rendez-vous saisi : le jour, l'heure et l'affectation ; le client, le véhicule, la durée et le commentaire restent (l'API les garde)
+    if (it.type === "job") return { kind: "job", services: k.services.map((s) => ({ id: s.id, qty: s.qty })), vehicle: k.vehicle || null, day: change.day, time: hm(change.start), staff, station, ...(confirm ? { confirm: true } : {}) };
     const len = it.end - it.start;
     const people = change.swapStaff ? swap(idsOf(it, "staff"), ...change.swapStaff) : idsOf(it, "staff");
     const resources = change.swapPost ? swap(idsOf(it, "resource"), ...change.swapPost) : idsOf(it, "resource");
@@ -1163,8 +1174,10 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
   function moveForm(it, { change = null, problem = null } = {}) {
     const ch = change || { day: it.day, start: it.start, staff: currentStaff(it), post: currentPost(it) };
     // confirm : le client sera prévenu ; shifted : les travaux attendent que le mécanicien (ou le poste) se libère
-    const confirmAsk = problem && (problem.code === "confirm" || problem.code === "shifted");
+    // full : la place du créneau est prise à cette heure-là (rendez-vous saisi, calcul par créneaux) : enregistrer quand même
+    const confirmAsk = problem && (problem.code === "confirm" || problem.code === "shifted" || problem.code === "full");
     const shifted = problem && problem.code === "shifted";
+    const fullAsk = problem && problem.code === "full";
     // assign : réaffectation glissée dans la grille (même heure), à valider ; le formulaire non retouché garde exactement ce qui a été glissé
     const assign = problem && problem.code === "assign";
     const reasons = (problem && problem.details && problem.details.reasons) || [];
@@ -1175,7 +1188,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     const body = [
       el("p", { class: "help", text: it.type === "rdv" ? "Même heure, autre mécanicien ou poste : le client n'est pas dérangé. Autre heure : il est prévenu par e-mail, après votre confirmation." : "Pixcar vérifie que les mécaniciens et postes sont libres." }),
       el("div", { class: "mg-row2" }, el("span", {}, el("label", { for: "planMvDay", text: "Jour" }), el("input", { id: "planMvDay", type: "date", value: ch.day, min: data.today, required: true })), el("span", {}, el("label", { for: "planMvTime", text: hold ? "De" : "Dépôt à" }), el("input", { id: "planMvTime", type: "time", step: "300", value: hm(ch.start), required: true }))),
-      hold || !advanced() || !hasRes() ? null : el("div", { class: "mg-row2" }, el("span", {}, el("label", { for: "planMvStaff", text: "Mécanicien" }), staffSel), el("span", {}, el("label", { for: "planMvPost", text: "Poste" }), postSel)),
+      hold || !advanced() || !byRes() || !hasRes() ? null : el("div", { class: "mg-row2" }, el("span", {}, el("label", { for: "planMvStaff", text: "Mécanicien" }), staffSel), el("span", {}, el("label", { for: "planMvPost", text: "Poste" }), postSel)),
       problem && !confirmAsk && !assign ? el("div", { class: "pl-conflict", role: "alert" }, el("p", {}, icon("i-flag"), el("b", { text: problem.message })), reasons.length > 1 ? el("ul", {}, ...reasons.slice(1).map((t) => el("li", { text: t }))) : null) : null,
       assign ? el("p", { class: "pl-ask is-info", role: "status" }, icon("i-user"), problem.message) : null,
       alts.length
@@ -1193,10 +1206,10 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
             ),
           )
         : null,
-      confirmAsk ? el("p", { class: "pl-ask", role: "alert" }, icon(shifted ? "i-clock" : "i-mail"), problem.message || "Le client sera prévenu par e-mail du nouvel horaire.") : null,
+      confirmAsk ? el("p", { class: "pl-ask", role: "alert" }, icon(shifted ? "i-clock" : fullAsk ? "i-alert" : "i-mail"), problem.message || "Le client sera prévenu par e-mail du nouvel horaire.") : null,
     ];
-    frame(it.title, "Déplacer ou réaffecter", body, [
-      el("button", { type: "submit", class: "btn primary", id: "planMvSave" }, shifted ? "Confirmer ces horaires" : confirmAsk ? "Confirmer et prévenir le client" : assign ? "Enregistrer l'affectation" : "Enregistrer"),
+    frame(it.title, advanced() ? "Déplacer ou réaffecter" : "Changer l'horaire", body, [
+      el("button", { type: "submit", class: "btn primary", id: "planMvSave" }, shifted ? "Confirmer ces horaires" : fullAsk ? "Enregistrer quand même" : confirmAsk ? "Confirmer et prévenir le client" : assign ? "Enregistrer l'affectation" : "Enregistrer"),
       el("button", { type: "button", class: "btn", onclick: () => openSheet(it) }, "Retour"),
     ], it.id);
     const pickable = () => !!$("planMvStaff");
@@ -1274,7 +1287,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     const k = item ? item.src : null;
     const d = draft || {
       kind: k ? k.kind : at.kind || "job",
-      label: k ? k.label : "",
+      label: k ? (k.kind === "job" && k.client !== undefined ? k.client : k.label) : "",
       day: k ? k.when.day : at.day,
       start: k ? minOf(k.when.start) : at.start,
       end: k ? minOf(k.when.end) : Math.min(1440, at.start + 60),
@@ -1282,7 +1295,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
       vehicle: k ? k.vehicle : "",
       staff: k ? (k.kind === "hold" ? idsOf(item, "staff") : currentStaff(item)) : at.staff ? [at.staff] : [],
       posts: k ? (k.kind === "hold" ? idsOf(item, "resource") : [currentPost(item)].filter(Boolean)) : at.post ? [at.post] : [],
-      phone: (k && k.phone) || "",
+      phone: k && k.phone ? phoneText(k.phone) || k.phone : "",
       car: (k && k.car) || "",
       plate: (k && k.plate) || "",
       channel: (k && k.channel) || (at && at.arrived ? "walkin" : "phone"),
@@ -1311,9 +1324,10 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
     const reasons = (problem && problem.details && problem.details.reasons) || [];
     const alts = (problem && problem.details && problem.details.alternatives) || [];
     const shifted = problem && problem.code === "shifted";
-    const full = problem && problem.code === "full";
+    // full : la place du créneau est prise ; overlap : des rendez-vous sont déjà là pendant le blocage. Le garage peut confirmer.
+    const full = problem && (problem.code === "full" || problem.code === "overlap");
     const durations = [...new Set([...DURATIONS, minutes])].sort((x, y) => x - y);
-    const pickRes = advanced() && hasRes();
+    const pickRes = advanced() && byRes() && hasRes();
     const field = (id, labelText, input, hint = null) => el("span", {}, el("label", { for: id }, labelText, hint ? el("small", { text: ` ${hint}` }) : null), input);
     const body = [
       item || (at && at.arrived) ? null : el("fieldset", { class: "pl-seg pl-kind" }, el("legend", { class: "sr-only", text: "Quoi ?" }), radio("job", "Rendez-vous"), radio("hold", "Créneau bloqué")),
@@ -1350,7 +1364,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
             field("planStaff", "Mécanicien", el("select", { id: "planStaff" }, el("option", { value: "", text: "Au choix de Pixcar" }), ...activeStaff().map((m) => el("option", { value: m.id, text: m.name, selected: d.staff[0] === m.id })))),
             field("planPost", "Poste", el("select", { id: "planPost" }, el("option", { value: "", text: "Au choix de Pixcar" }), ...activePosts().map((x) => el("option", { value: x.id, text: x.name, selected: d.posts[0] === x.id })))))
         : null,
-      !job && pickRes ? el("fieldset", { class: "chips pl-who" }, el("legend", { text: "Qui ou quoi est bloqué ?" }), ...checks("planHoldStaff", activeStaff(), d.staff), ...checks("planHoldPost", activePosts(), d.posts)) : null,
+      !job && pickRes ? el("fieldset", { class: "chips pl-who" }, el("legend", { text: "Qui ou quoi est bloqué ? (aucun choix : tout l'atelier)" }), ...checks("planHoldStaff", activeStaff(), d.staff), ...checks("planHoldPost", activePosts(), d.posts)) : null,
       !job && !pickRes ? el("p", { class: "pl-ask is-info" }, icon("i-lock"), "Tout l'atelier est bloqué sur cette plage : aucun horaire n'y est proposé en ligne.") : null,
       problem && !shifted ? el("div", { class: full ? "pl-ask" : "pl-conflict", role: "alert" }, el("p", {}, icon(full ? "i-alert" : "i-flag"), el("b", { text: problem.message })), reasons.length > 1 ? el("ul", {}, ...reasons.slice(1).map((t) => el("li", { text: t }))) : null) : null,
       shifted ? el("p", { class: "pl-ask", role: "alert" }, icon("i-clock"), problem.message) : null,
@@ -1361,9 +1375,9 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
             $("planSave").focus();
           } }, `${x.label}${x.back ? ` · rendue vers ${timeLabel(minOf(x.back))}` : ""}`)))
         : null,
-      el("p", { class: "help", text: job ? "Il prend sa place dans l'agenda et réduit les horaires proposés en ligne, comme une réservation Pixcar. Aucun e-mail n'est envoyé au client." : pickRes ? "Refusé si un rendez-vous ou un autre bloc occupe déjà ces mécaniciens ou postes. Pour une absence ou une maintenance, utilisez « Nouveau »." : "Refusé s'il chevauche un rendez-vous." }),
+      el("p", { class: "help", text: job ? "Il prend sa place dans l'agenda et réduit les horaires proposés en ligne, comme une réservation Pixcar. Aucun e-mail n'est envoyé au client." : pickRes ? "Refusé si un rendez-vous ou un autre bloc occupe déjà ces mécaniciens ou postes. Pour une absence ou une maintenance, utilisez « Nouveau »." : byRes() ? "Refusé si un rendez-vous occupe déjà un mécanicien ou un poste pendant la plage." : "Les rendez-vous déjà prévus restent à leur place ; vous êtes prévenu s'il y en a." }),
     ];
-    const saveText = shifted ? "Confirmer ces horaires" : full ? "Enregistrer quand même" : "Enregistrer";
+    const saveText = shifted ? "Confirmer ces horaires" : full ? (problem.code === "overlap" ? "Bloquer quand même" : "Enregistrer quand même") : "Enregistrer";
     frame(item ? item.title : at && at.arrived ? "Client déjà sur place" : job ? "Nouveau rendez-vous" : "Créneau bloqué", item ? (job ? "Modifier le rendez-vous" : "Modifier le créneau bloqué") : "Gestion d'atelier", body, [
       el("button", { type: "submit", class: "btn primary", id: "planSave" }, saveText),
       el("button", { type: "button", class: "btn", onclick: () => (item ? openSheet(item) : closeSide()) }, item ? "Retour" : "Annuler"),
@@ -1398,7 +1412,7 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
           alertBox(`${what} ${item ? "modifié" : "ajouté"} : ${dayLabel(v.day, { short: true })} à ${timeLabel(v.start)}${w ? `, travaux de ${timeLabel(minOf(w.start))} à ${timeLabel(minOf(w.end))}` : ""}.`, "info");
           await reload(`${what} enregistré.`);
         } catch (e) {
-          if (e.status === 409 && (e.code === "conflict" || e.code === "shifted" || e.code === "full")) return blockForm({ item, at, draft: { ...v, ref: d.ref }, problem: e, refocus: e.code === "shifted" || e.code === "full" ? "#planSave" : null });
+          if (e.status === 409 && ["conflict", "shifted", "full", "overlap"].includes(e.code)) return blockForm({ item, at, draft: { ...v, ref: d.ref }, problem: e, refocus: e.code === "conflict" ? null : "#planSave" });
           if (e.status === 409 || e.status === 422) return err(e.message);
           closeSide();
           fail(e);

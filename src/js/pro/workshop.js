@@ -91,6 +91,7 @@ export function itemsOf(data, deadlines = new Map()) {
       id: k.id, type: k.kind, origin: k.kind, channel: job ? CHANNELS.includes(k.channel) ? k.channel : "phone" : "hold", state: job ? "confirmed" : null, conflict: conf.get(k.id) || null,
       day: k.when.day, start: minOf(k.when.start), end: minOf(k.when.end), title: k.label || (job ? "Rendez-vous hors Pixcar" : "Créneau bloqué"),
       services: k.services, plan: k.plan.map(rowOf), work: job ? workState(k.work) : null, workAt: (k.work && k.work.at) || null, noShow: !!(k.work && k.work.noShow), deadline: null, src: k,
+      whole: !job && !!k.whole, // créneau bloqué de tout l'atelier : sur chaque mécanicien et chaque poste
     });
   }
   return out;

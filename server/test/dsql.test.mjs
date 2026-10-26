@@ -241,18 +241,20 @@ describe("migrate on DSQL", () => {
     expected.forEach((re, i) => assert.match(steps[i], re, `étape ${i + 1}`));
   });
 
-  test("a migration already recorded is skipped; the real migrations produce 30 tables and 47 index jobs", async () => {
-    const { s, db } = dsqlSession({ applied: ["001_init.sql", "002_pro.sql", "003_pro_prices.sql", "004_pro_garage.sql", "005_rdv.sql", "006_calendar.sql", "007_calendar_blocks.sql", "008_pro_prefs.sql"] });
+  test("a migration already recorded is skipped; the real migrations produce 30 tables, 47 index jobs and 9 added columns", async () => {
+    const { s, db } = dsqlSession({ applied: ["001_init.sql", "002_pro.sql", "003_pro_prices.sql", "004_pro_garage.sql", "005_rdv.sql", "006_calendar.sql", "007_calendar_blocks.sql", "008_pro_prefs.sql", "009_atelier.sql"] });
     assert.deepEqual(await migrate(db, MIGRATIONS_DIR, () => {}, fast), []);
     assert.ok(!s.log.some((l) => /CREATE TABLE IF NOT EXISTS (garages|repairs)/.test(l)));
 
     const fresh = dsqlSession();
-    assert.deepEqual(await migrate(fresh.db, MIGRATIONS_DIR, () => {}, fast), ["001_init.sql", "002_pro.sql", "003_pro_prices.sql", "004_pro_garage.sql", "005_rdv.sql", "006_calendar.sql", "007_calendar_blocks.sql", "008_pro_prefs.sql"]);
+    assert.deepEqual(await migrate(fresh.db, MIGRATIONS_DIR, () => {}, fast), ["001_init.sql", "002_pro.sql", "003_pro_prices.sql", "004_pro_garage.sql", "005_rdv.sql", "006_calendar.sql", "007_calendar_blocks.sql", "008_pro_prefs.sql", "009_atelier.sql"]);
     assert.equal(
       fresh.s.log.filter((l) => /^exec: CREATE TABLE IF NOT EXISTS (garages|repairs|write_log|upstream_cache|garage_contacts|pro_claims|pro_events|pro_prices|pro_visits|pro_profiles|pro_profile_changes|pro_services|rdv_settings|rdv_slots|rdv_closures|rdv_requests|rdv_events|rdv_mails|rdv_calendar|rdv_staff|rdv_skills|rdv_staff_skills|rdv_resources|rdv_service_reqs|rdv_unavail|rdv_assignments|rdv_work_orders|rdv_history|rdv_blocks|pro_prefs) /.test(l)).length,
       30,
     );
     assert.equal(fresh.s.log.filter((l) => /^query: CREATE (UNIQUE )?INDEX ASYNC IF NOT EXISTS/.test(l)).length, 47);
+    // 009 : des colonnes ajoutées une par une, sans défaut ni contrainte (ce que DSQL accepte), relançables
+    assert.equal(fresh.s.log.filter((l) => /^exec: ALTER TABLE \w+ ADD COLUMN IF NOT EXISTS \w+ (uuid|text|smallint|jsonb)$/.test(l)).length, 9);
   });
 
   test("a failed index build stops the migration with the reason, and nothing is recorded", async () => {

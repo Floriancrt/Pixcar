@@ -125,7 +125,8 @@ const NOTIFY = "atelier@garage-demo.fr";
   };
   await tab(page, "modules");
   const mods0 = await page.$$eval("#mgModules li", (ls) => ls.map((l) => l.innerText.replace(/\s+/g, " ").trim()));
-  check("Mon garage › Modules, simple mode: the mode box explains both modes and offers the switch; the four tools of the advanced mode, inactive", /^Simple : votre semaine type en créneaux/.test(await text(page, "#agModeText")) && (await text(page, "#agModeGo")) === "Passer au mode avancé" && mods0.length === 4 && mods0.every((m) => / Inactif$/.test(m)) && /^Mécaniciens Affectations/.test(mods0[0]), mods0.join(" | "));
+  // les modules de l'affichage avancé ne dépendent pas du calcul des disponibilités (docs/gestion-atelier.md 2.1) : actifs d'emblée
+  check("Mon garage › Modules, slot calculation: the box explains both calculations and offers the switch; the four modules of the advanced display active, analyses to come", /^Par créneaux : votre semaine type/.test(await text(page, "#agModeText")) && (await text(page, "#agModeGo")) === "Calculer par ressources" && mods0.length === 5 && mods0.slice(0, 4).every((m) => / Actif .+ Ouvrir$/.test(m)) && /Bientôt/.test(mods0[4]) && /^Mécaniciens Planning de l'équipe/.test(mods0[0]), mods0.join(" | "));
   check("simple mode: Ressources says they belong to the advanced mode; Horaires has the week and the rules", (await page.$eval("#mgResSimple", (e) => !e.hidden)) && (await page.$eval("#agWeekBox", (e) => !e.hidden)) && (await page.$eval("#agRulesBox", (e) => !e.hidden)) && (await page.$eval("#mgCalResources", (e) => !e.children.length)));
   await axe(page, "Mon garage · Modules (simple)");
   await shot(page, "0-modules-simple");
@@ -239,9 +240,9 @@ const NOTIFY = "atelier@garage-demo.fr";
   await shot(page, "6-verification");
   await page.click("#calActivate");
   await page.waitForSelector("#dash-garage:not([hidden]):not([aria-busy]) #mgPanel-modules:not([hidden]) #calChkTitle");
-  check("activated: back in Mon garage › Modules, the alert says how many appointments were affected; the wizard is put away", /Mode avancé actif\. 1 rendez-vous à venir affecté\./.test(await text(page, "#alert")) && (await state()).mode === "advanced" && (await page.evaluate(() => document.activeElement.id)) === "mgTitle" && !(await page.$("#calBody > *")), await text(page, "#alert"));
+  check("activated: back in Mon garage › Modules, the alert says how many appointments were affected; the wizard is put away", /Calcul par ressources actif\. 1 rendez-vous à venir affecté\./.test(await text(page, "#alert")) && (await state()).mode === "advanced" && (await page.evaluate(() => document.activeElement.id)) === "mgTitle" && !(await page.$("#calBody > *")), await text(page, "#alert"));
   const mods1 = await page.$$eval("#mgModules li", (ls) => ls.map((l) => l.innerText.replace(/\s+/g, " ").trim()));
-  check("Modules in advanced mode: the four tools active, each with « Ouvrir »; controls, no conflict, recompute and back to simple", mods1.every((m) => /Actif Ouvrir$/.test(m)) && /^Avancé :/.test(await text(page, "#agModeText")) && (await text(page, "#agModeGo")) === "Mécaniciens et postes" && /Conflits · 0/.test(await text(page, "#mgCalModules")) && (await page.isVisible("#calToSimple")) && (await page.isVisible("#calRecompute")), mods1.join(" | "));
+  check("Modules in advanced mode: the four tools active, each with « Ouvrir », analyses to come; controls, no conflict, recompute and back to slots", mods1.length === 5 && mods1.slice(0, 4).every((m) => / Actif .+ Ouvrir$/.test(m)) && /revenez d'abord au calcul par créneaux/.test(mods1[0]) && /Bientôt/.test(mods1[4]) && /^Par ressources :/.test(await text(page, "#agModeText")) && (await text(page, "#agModeGo")) === "Mécaniciens et postes" && /Conflits · 0/.test(await text(page, "#mgCalModules")) && (await page.isVisible("#calToSimple")) && (await page.isVisible("#calRecompute")), mods1.join(" | "));
   check("the Planning is in the menu", await page.isVisible('.dash-link[data-panel="planning"]'));
   await axe(page, "Mon garage · Modules (avancé)");
   await shot(page, "7-modules-avance");
@@ -295,10 +296,11 @@ const NOTIFY = "atelier@garage-demo.fr";
   // ---- retour au mode simple (Mon garage › Modules)
   await tab(page, "modules");
   await page.click("#calToSimple");
-  check("going back to simple asks to confirm", (await text(page, "#calToSimple")) === "Confirmer le retour au mode simple");
+  check("going back to slots asks to confirm", (await text(page, "#calToSimple")) === "Confirmer le retour au calcul par créneaux");
   await page.click("#calToSimple");
-  await page.waitForFunction(() => /^Simple/.test(document.getElementById("agModeText").textContent));
-  check("back in simple mode: still on Modules, the tools inactive, the week and the rules back, the advanced settings put away, the request kept its slot", (await page.isVisible("#mgPanel-modules")) && (await page.$eval("#agWeekBox", (e) => !e.hidden)) && (await page.$eval("#agRulesBox", (e) => !e.hidden)) && !(await page.$("#mgCalResources > *")) && (await page.isHidden('.dash-link[data-panel="planning"]')) && (await state()).mode === "simple" && (await text(page, "#alert")).startsWith("Mode simple"));
+  await page.waitForFunction(() => /^Par créneaux/.test(document.getElementById("agModeText").textContent));
+  // Gestion d'atelier reste dans le menu : son agenda marche aussi en calcul par créneaux
+  check("back to the slot calculation: still on Modules, the week and the rules back, the resource settings put away, Gestion d'atelier still in the menu", (await page.isVisible("#mgPanel-modules")) && (await page.$eval("#agWeekBox", (e) => !e.hidden)) && (await page.$eval("#agRulesBox", (e) => !e.hidden)) && !(await page.$("#mgCalResources > *")) && (await page.isVisible('.dash-link[data-panel="planning"]')) && (await state()).mode === "simple" && (await text(page, "#alert")).startsWith("Calcul par créneaux"));
   check("no console error, no page error", !logs.length, logs.join("\n"));
 
   await ctx.close();

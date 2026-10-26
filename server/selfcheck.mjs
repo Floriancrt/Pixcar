@@ -439,6 +439,41 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     const prefs = await pro.getPrefs(proGarage2, acc("c"));
     expect(prefs && prefs.shortcuts.join() === "site,planning,prices", "préférences relues (jsonb, ON CONFLICT sur la clé double) : " + JSON.stringify(prefs));
   });
+  // Gestion d'atelier (009) : tout dans une transaction annulée, rien ne reste ; pas d'effacement ici (la purge vise toute la base)
+  await check("Gestion d'atelier : rendez-vous saisi (colonnes de 009) compté dans son créneau, créneau bloqué de tout l'atelier (UNION ALL, NOT EXISTS), modules (jsonb), affichage du compte", async () => {
+    if (!calIds) throw new Error("le contrôle du calendrier n'a pas abouti");
+    const q0 = await rdv.getRequest(rdvId);
+    const ROLLBACK = new Error("annulation voulue");
+    const jobId = crypto.randomUUID();
+    let seen = null;
+    await rdv
+      .tx(async (r) => {
+        const span = (a, b) => ({ day: q0.day, start: a, end: b, startsAt: parisInstant(q0.day, a), endsAt: parisInstant(q0.day, b) });
+        const job = await r.cal.saveBlock(proGarage2, acc("c"), null, { kind: "job", label: "Auto-contrôle", services: [{ id: "vidange", qty: 1 }], vehicle: "", mode: "hour", ...span(600, 660), fixed: false, slotId: q0.slot_id, channel: "walkin", minutes: 45, car: "Auto", plate: "AA-000-AA", phone: "0600000000", note: "essai" }, { newId: jobId });
+        const whole = await r.cal.saveBlock(proGarage2, acc("c"), null, { kind: "hold", label: "Auto-contrôle", services: [], vehicle: "", mode: "hour", ...span(960, 1020), fixed: true });
+        await r.saveSettings(proGarage2, acc("c"), { modules: JSON.stringify({ staff: true, equip: false, track: true, load: true }) });
+        seen = { job, whole, bookings: await r.bookings(proGarage2, q0.day, q0.day), block: await r.cal.getBlock(proGarage2, job), byId: await r.cal.blockById(job), holds: await r.cal.wholeHolds(proGarage2, q0.day, q0.day), settings: await r.getSettings(proGarage2) };
+        throw ROLLBACK;
+      })
+      .catch((e) => {
+        if (e !== ROLLBACK) throw e;
+      });
+    const k = seen.block;
+    expect(seen.job === jobId && seen.byId.garageId === proGarage2, "identifiant choisi par l'écran gardé, retrouvé sans le garage");
+    expect(k.channel === "walkin" && k.minutes === 45 && k.car === "Auto" && k.plate === "AA-000-AA" && k.phone === "0600000000" && k.note === "essai" && k.slotId === q0.slot_id, "rendez-vous saisi relu (colonnes de 009) : " + JSON.stringify(k));
+    const b = seen.bookings;
+    expect(b.some((x) => x.id === jobId && x.slotId === q0.slot_id && x.start === 600 && x.end === 645 && x.status === "confirmed" && !x.hold), "compté dans son créneau pour ses 45 min (UNION ALL) : " + JSON.stringify(b));
+    expect(b.some((x) => x.id === seen.whole && x.hold && x.start === 960 && x.end === 1020) && !b.some((x) => x.id === calIds.hold) && b.some((x) => x.id === rdvId && !x.hold), "blocage de tout l'atelier compté, celui du pont non (NOT EXISTS)");
+    expect(seen.holds.length === 1 && seen.holds[0].blockId === seen.whole, "blocage de tout l'atelier vu par le calcul par ressources");
+    expect(seen.settings.modules && seen.settings.modules.equip === false && seen.settings.modules.track === true, "modules relus (jsonb) : " + JSON.stringify(seen.settings.modules));
+    expect((await count("SELECT count(*) AS n FROM rdv_blocks WHERE id = $1", [jobId])) === 0, "rien ne reste après l'annulation");
+    await pro.savePrefs(proGarage2, acc("c"), { view: "advanced" }, ["planning"]);
+    let prefs = await pro.getPrefs(proGarage2, acc("c"));
+    expect(prefs.view === "advanced" && prefs.shortcuts.join() === "site,planning,prices", "affichage enregistré, raccourcis gardés : " + JSON.stringify(prefs));
+    await pro.savePrefs(proGarage2, acc("c"), { shortcuts: ["site"] });
+    prefs = await pro.getPrefs(proGarage2, acc("c"));
+    expect(prefs.view === "advanced" && prefs.shortcuts.join() === "site", "raccourcis changés, affichage gardé : " + JSON.stringify(prefs));
+  });
   await check("Rendez-vous : heure limite passée (expiration, série sans réponse), effacement des coordonnées, purge par lots", async () => {
     rdvClock = parisInstant(addDays(nextMonday, 1), 725); // mardi 12:05
     const due = await rdv.dueExpiries(10);

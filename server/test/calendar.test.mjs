@@ -447,14 +447,13 @@ describe("Calendrier avancé", () => {
       [{ kind: "job", label: "Essai", services: [{ id: "plaq_av" }], day: "2026-10-19", time: "08:00" }, "time"],
       [{ kind: "job", label: "Essai", services: [{ id: "plaq_av" }], day: WED, time: "15:02" }, "time"],
       [{ kind: "hold", label: "Essai", day: WED, time: "15:00", to: "14:00", staff: [paul] }, "to"],
-      [{ kind: "hold", label: "Essai", day: WED, time: "15:00", to: "16:00" }, "staff"],
       [{ kind: "hold", label: "Essai", day: WED, time: "15:00", to: "16:00", staff: ["aaaaaaaa-0000-4000-8000-000000000099"] }, "staff"],
     ])
       assert.equal((await pro("POST", "/rdv/calendar/blocks", body)).body.error.field, field, JSON.stringify(body));
     // un autre garage n'y touche pas ; supprimé : le pont redevient libre ; une seconde fois : introuvable
     await own("bob", PETIT);
     assert.equal((await proOf(PETIT)("DELETE", `/rdv/calendar/blocks/${hold.body.saved}`)).status, 404);
-    assert.equal((await proOf(PETIT)("PUT", `/rdv/calendar/blocks/${hold.body.saved}`, { kind: "hold", label: "Volé", day: WED, time: "16:00", to: "17:00", resources: [lift] })).status, 409, "PETIT est en mode simple");
+    assert.equal((await proOf(PETIT)("PUT", `/rdv/calendar/blocks/${hold.body.saved}`, { kind: "hold", label: "Volé", day: WED, time: "16:00", to: "17:00" })).status, 404);
     assert.equal((await pro("DELETE", `/rdv/calendar/blocks/${hold.body.saved}`)).status, 200);
     assert.equal((await pro("DELETE", `/rdv/calendar/blocks/${hold.body.saved}`)).status, 404);
     assert.ok(timesOn(await times()).includes("14:00"));
@@ -567,26 +566,32 @@ describe("Calendrier avancé", () => {
     clock = at("2026-11-21", "10:00");
     r = await work(one.id, "returned");
     assert.deepEqual([r.status, r.body.error.code], [409, "too_late"]);
-    // mode simple (un autre garage) ; un autre compte ne voit rien
+    // un autre garage (en calcul par créneaux) ne touche pas aux rendez-vous de celui-ci ; un autre compte ne voit rien
     const petit = proOf(PETIT);
     await openGarage(petit, PETIT, "bob");
     r = await petit("POST", `/rdv/calendar/work/${one.id}`, { status: "returned" });
-    assert.deepEqual([r.status, r.body.error.code], [409, "simple_mode"]);
+    assert.deepEqual([r.status, r.body.error.code], [404, "not_found"]);
     assert.equal((await pro("POST", `/rdv/calendar/work/${one.id}`, { status: "returned" }, "bob")).status, 404);
   });
 
   test("lot 3c · dashboard shortcuts: defaults, saved per account and garage, validated, gone with the claim", async () => {
     await own("alice", DUPONT);
     let r = await pro("GET", "");
-    assert.deepEqual(r.body.prefs, { shortcuts: ["planning", "prices", "agenda"] });
+    assert.deepEqual(r.body.prefs, { shortcuts: ["planning", "prices", "agenda"], view: null });
+    // affichage de Gestion d'atelier seul : les raccourcis par défaut sont gardés ; puis les raccourcis seuls : l'affichage reste
+    r = await pro("PUT", "/prefs", { view: "advanced" });
+    assert.deepEqual([r.status, r.body], [200, { shortcuts: ["planning", "prices", "agenda"], view: "advanced" }]);
     r = await pro("PUT", "/prefs", { shortcuts: ["requests", "planning", "site"] });
-    assert.deepEqual([r.status, r.body], [200, { shortcuts: ["requests", "planning", "site"] }]);
-    assert.deepEqual((await pro("GET", "")).body.prefs, { shortcuts: ["requests", "planning", "site"] });
+    assert.deepEqual([r.status, r.body], [200, { shortcuts: ["requests", "planning", "site"], view: "advanced" }]);
+    assert.deepEqual((await pro("GET", "")).body.prefs, { shortcuts: ["requests", "planning", "site"], view: "advanced" });
+    assert.deepEqual((await pro("PUT", "/prefs", { view: null })).body.view, null);
+    for (const bad of ["avancé", 1, true]) assert.deepEqual([(r = await pro("PUT", "/prefs", { view: bad })).status, r.body.error.field], [422, "view"], JSON.stringify(bad));
+    assert.deepEqual([(r = await pro("PUT", "/prefs", {})).status, r.body.error.field], [422, "shortcuts"]);
     for (const bad of [["planning", "planning"], ["nope"], ["planning", "prices", "agenda", "garage", "team", "new", "site"], "planning", null]) {
       r = await pro("PUT", "/prefs", { shortcuts: bad });
       assert.deepEqual([r.status, r.body.error.field], [422, "shortcuts"], JSON.stringify(bad));
     }
-    assert.deepEqual((await pro("PUT", "/prefs", { shortcuts: [] })).body, { shortcuts: [] });
+    assert.deepEqual((await pro("PUT", "/prefs", { shortcuts: [] })).body, { shortcuts: [], view: null });
     assert.equal((await pro("PUT", "/prefs", { shortcuts: ["site"] }, "bob")).status, 404);
     assert.equal((await pro("GET", "/prefs")).status, 405);
     // retrait du rattachement : les préférences partent avec lui

@@ -372,13 +372,18 @@ export function createProRepo(db) {
 
     // ---- « Mon garage » : fiche déclarée, changements relus, prestations (le garage est rattaché au compte : vérifié par l'appelant)
     // préférences d'un compte pour un garage (lot 3c) : raccourcis du tableau de bord ; null tant que rien n'a été choisi
+    // et affichage de Gestion d'atelier (view, 009 : simple ou advanced, null tant que rien n'a été choisi)
     getPrefs: (garageId, accountId) =>
-      one("SELECT shortcuts FROM pro_prefs WHERE garage_id = $1 AND account_id = $2", [garageId, accountId]).then((r) => (r ? { shortcuts: Array.isArray(r.shortcuts) ? r.shortcuts : [] } : null)),
-    savePrefs: (garageId, accountId, prefs) =>
+      one("SELECT shortcuts, view FROM pro_prefs WHERE garage_id = $1 AND account_id = $2", [garageId, accountId]).then((r) =>
+        r ? { shortcuts: Array.isArray(r.shortcuts) ? r.shortcuts : [], view: r.view === "simple" || r.view === "advanced" ? r.view : null } : null,
+      ),
+    // prefs : { shortcuts?, view? } ; ce qui manque ne change pas (une première ligne prend les raccourcis par défaut : defaults)
+    savePrefs: (garageId, accountId, prefs, defaults = []) =>
       db.query(
-        `INSERT INTO pro_prefs (garage_id, account_id, shortcuts, updated_at) VALUES ($1, $2, $3::jsonb, now())
-         ON CONFLICT (garage_id, account_id) DO UPDATE SET shortcuts = EXCLUDED.shortcuts, updated_at = EXCLUDED.updated_at`,
-        [garageId, accountId, JSON.stringify(prefs.shortcuts)],
+        `INSERT INTO pro_prefs (garage_id, account_id, shortcuts, view, updated_at) VALUES ($1, $2, coalesce($3::jsonb, $5::jsonb), $4, now())
+         ON CONFLICT (garage_id, account_id) DO UPDATE SET shortcuts = coalesce($3::jsonb, pro_prefs.shortcuts),
+           view = CASE WHEN $6 THEN $4 ELSE pro_prefs.view END, updated_at = EXCLUDED.updated_at`,
+        [garageId, accountId, prefs.shortcuts ? JSON.stringify(prefs.shortcuts) : null, prefs.view ?? null, JSON.stringify(defaults), prefs.view !== undefined],
       ),
     getProfile: (garageId) => one(`SELECT ${PROFILE_COLUMNS} FROM pro_profiles WHERE garage_id = $1`, [garageId]),
     // Site, e-mail affiché, horaires : seuls les champs présents dans fields sont écrits (null efface les horaires, "" le reste).

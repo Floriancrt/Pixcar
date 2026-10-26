@@ -18,6 +18,10 @@ const snap = (m) => Math.round(m / SNAP) * SNAP;
 const LANE_PX = 54; // hauteur d'un couloir d'une ligne (Équipe, Équipements)
 const nowMin = () => parisParts(Date.now()).min;
 
+// l'étape suivante du chemin ordinaire (prévue → reçue → en cours → prête → restituée ; reprise après une attente), pour un bouton seul
+const NEXT = { planned: "received", received: "in_progress", in_progress: "done", waiting_parts: "in_progress", suspended: "in_progress", done: "returned" };
+const nextStep = (state) => workActions(state).find((x) => x.to === NEXT[state]) || null;
+
 // ================================================================= liste
 // h.days() : les jours de la période ; h.items() : rendez-vous et blocs filtrés
 export function listView(h) {
@@ -60,7 +64,7 @@ function listRow(h, it) {
     it.conflict ? el("span", { class: "pl-li-alert" }, icon("i-flag"), "Conflit") : null,
   );
   const acts = [];
-  const next = h.workable(it) ? workActions(it.work).find((x) => !x.back && x.to !== "no_show") : null;
+  const next = h.workable(it) ? nextStep(it.work) : null;
   if (next) acts.push(el("button", { type: "button", class: "pl-li-act", "data-work": next.to, onclick: (ev) => h.setWork(it, next.to, ev.currentTarget, { quick: true }) }, next.label));
   const phone = h.phoneOf(it);
   if (phone) acts.push(el("a", { class: "pl-li-icon", href: `tel:${phone}`, "aria-label": `Appeler ${it.title}`, title: "Appeler" }, icon("i-phone")));
@@ -86,7 +90,9 @@ function resourceDay(h, kind, pool) {
   const day = h.anchor();
   const target = kind === "staff" ? "staff" : "resource";
   const list = h.items();
-  const segsOf = (id) => list.flatMap((it) => it.plan.filter((r) => r.target === target && r.id === id && r.day === day && (target !== "staff" || r.role === "labour")).map((r) => ({ item: it, row: r, a: r.a, b: Math.max(r.b, r.a + 5) })));
+  // créneau bloqué de tout l'atelier : sur chaque ligne (sans affectation propre, il ne se glisse pas d'une ligne à l'autre)
+  const whole = list.filter((it) => it.whole && it.day === day).map((it) => ({ item: it, a: it.start, b: Math.max(it.end, it.start + 5) }));
+  const segsOf = (id) => [...list.flatMap((it) => it.plan.filter((r) => r.target === target && r.id === id && r.day === day && (target !== "staff" || r.role === "labour")).map((r) => ({ item: it, row: r, a: r.a, b: Math.max(r.b, r.a + 5) }))), ...whole];
   const used = new Set(list.flatMap((it) => it.plan.filter((r) => r.target === target && r.day === day).map((r) => r.id)));
   const skill = kind === "staff" ? h.skillFilter() : "";
   const hasSkill = (m) => !skill || ((h.st() && h.st().staff.find((x) => x.id === m.id)) || { skills: [] }).skills.some((k) => k.id === skill && (!k.until || k.until >= day));

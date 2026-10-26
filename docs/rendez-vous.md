@@ -164,6 +164,9 @@ limite est passée ne retient plus l'horaire et ne peut plus être acceptée, m�
 - Dépôt : une proposition par jour, arrivée entre le début du créneau et une heure après (ou la fin, si elle vient avant), voiture rendue
   en fin de créneau ; le temps nécessaire doit tenir dans le créneau ; capacité : nombre de demandes du créneau ce jour-là.
 - Deux créneaux qui proposent la même heure n'en font qu'une ; à l'envoi, l'API prend le premier qui a encore de la place.
+- Gestion d'atelier (26 octobre 2026, `docs/gestion-atelier.md` 5.2) : un rendez-vous saisi par le garage compte comme une demande
+  confirmée dans le créneau qui contient son heure, pendant sa durée estimée ; un créneau bloqué de tout l'atelier retire toute arrivée
+  et tous travaux qui le chevaucheraient (pour un dépôt : la fenêtre d'arrivée).
 - Jours fériés de métropole : 1er janvier, lundi de Pâques, 1er et 8 mai, Ascension, lundi de Pentecôte, 14 juillet, 15 août, 1er et
   11 novembre, 25 décembre.
 

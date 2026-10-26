@@ -1,4 +1,5 @@
-// Espace Pro, écran Planning (docs/calendrier-avance.md, lot 3b) de bout en bout : page construite pour de bon, vraie API (PGlite), un garage
+// Espace Pro, écran Gestion d'atelier en affichage avancé (docs/gestion-atelier.md ; à l'origine le Planning du lot 3b de
+// docs/calendrier-avance.md) de bout en bout : page construite pour de bon, vraie API (PGlite), un garage
 // en mode avancé (deux mécaniciens, deux ponts), une demande confirmée, une à confirmer, un rendez-vous pris hors Pixcar, un créneau bloqué
 // et une absence. Parcours : la barre latérale (repliable, choix mémorisé) → le menu (Planning seulement en mode avancé) → semaine (vue
 // d'ensemble, charge par jour, blocs enrichis : confirmation, provenance et alerte séparées, légende, créneaux libres / pas proposés en
@@ -147,12 +148,12 @@ const NOTIFY = "atelier@garage-planning.fr";
     await page.mouse.up();
   }
 
-  // ---- mode simple : pas de Planning
+  // ---- calcul par créneaux : Gestion d'atelier est déjà là (son agenda n'a pas besoin de mécaniciens ; tests/pro-atelier.js)
   {
     const { ctx, page } = await newPage();
     await page.goto(`${srv.url}/pro/`);
     await page.waitForSelector('[data-screen="dash"]:not([hidden])');
-    check("simple mode: no Planning in the menu, Mon garage is there", (await page.isHidden('.dash-link[data-panel="planning"]')) && (await page.isVisible('.dash-link[data-panel="garage"]')));
+    check("slot calculation: Gestion d'atelier is in the menu, Mon garage too", (await page.isVisible('.dash-link[data-panel="planning"]')) && (await page.isVisible('.dash-link[data-panel="garage"]')));
     await ctx.close();
   }
 
@@ -183,7 +184,7 @@ const NOTIFY = "atelier@garage-planning.fr";
   const { ctx, page, logs } = await newPage({ width: 1440, height: 1000 });
   await page.goto(`${srv.url}/pro/`);
   await page.waitForSelector('[data-screen="dash"]:not([hidden])');
-  check("advanced mode: Planning is in the menu, next to Demandes", await page.isVisible('.dash-link[data-panel="planning"]'));
+  check("resource calculation: Gestion d'atelier is in the menu, next to Demandes", await page.isVisible('.dash-link[data-panel="planning"]'));
   // ---- barre latérale : fixée tout à gauche sur toute la hauteur, repliable en icônes, choix mémorisé
   const rail = () => page.evaluate(() => {
     const n = document.querySelector(".dash-nav").getBoundingClientRect(), m = document.querySelector(".pro-main").getBoundingClientRect(), t = document.querySelector(".pro-top").getBoundingClientRect();
@@ -199,7 +200,7 @@ const NOTIFY = "atelier@garage-planning.fr";
   await page.waitForFunction(() => document.querySelector(".dash-nav").getBoundingClientRect().width <= 80);
   const r1 = await rail();
   check("rail: folded to icons only, the content takes the room", r1.width <= 80 && r1.label <= 1 && r1.main < r0.main && (await page.getAttribute("#dashRail", "aria-expanded")) === "false" && (await words(page, "#dashRail")) === "Déplier le menu", JSON.stringify(r1));
-  check("rail folded: each link keeps its name (for screen readers, and as a tooltip)", await page.$eval('.dash-link[data-panel="planning"]', (a) => a.textContent.trim() === "Planning" && a.title === "Planning"), await page.$eval('.dash-link[data-panel="planning"]', (a) => a.outerHTML));
+  check("rail folded: each link keeps its name (for screen readers, and as a tooltip)", await page.$eval('.dash-link[data-panel="planning"]', (a) => a.textContent.trim() === "Gestion d'atelier" && a.title === "Gestion d'atelier"), await page.$eval('.dash-link[data-panel="planning"]', (a) => a.outerHTML));
   await axe(page, "barre latérale repliée");
   await shot(page, "0-rail-replie");
   await page.reload();
@@ -214,7 +215,7 @@ const NOTIFY = "atelier@garage-planning.fr";
     await page.click("#planNext");
     await page.waitForFunction((d) => !!document.querySelector(`.pl-col[data-day="${d}"]`), D1);
   }
-  check("the menu points at Planning, the week view is the default on a computer", (await page.getAttribute('.dash-link[data-panel="planning"]', "aria-current")) === "true" && (await page.getAttribute('.pl-view[aria-pressed="true"]', "aria-pressed")) === "true" && (await text(page, '.pl-view[aria-pressed="true"]')) === "Semaine");
+  check("the menu points at Gestion d'atelier, shown in the advanced display (first visit, resource calculation), the week view is the default on a computer", (await page.getAttribute('#planMode [data-display="advanced"]', "aria-checked")) === "true" && (await page.getAttribute('.dash-link[data-panel="planning"]', "aria-current")) === "true" && (await page.getAttribute('.pl-view[aria-pressed="true"]', "aria-pressed")) === "true" && (await text(page, '.pl-view[aria-pressed="true"]')) === "Semaine");
   const weekCols = await page.$$eval(".pl-col", (c) => c.map((x) => x.dataset.day));
   check("week: today's column says so", !weekColsHaveToday() || (await text(page, ".pl-colhead.is-today small")) === "Aujourd'hui");
   check("the page carries the published security policy (no inline style attribute allowed)", /(^|; )style-src 'self'(;|$)/.test(await page.$eval('meta[http-equiv="Content-Security-Policy"]', (m) => m.content)));
@@ -239,7 +240,7 @@ const NOTIFY = "atelier@garage-planning.fr";
   const label = (id) => page.getAttribute(ev(id), "aria-label");
   check("week: the confirmed request, in words (work time and length, service, car, client and who, origin, confirmation, drop-off and return)", /^8:00–8:45 \(45 min\), Vidange.*, Peugeot 208 · EZ-108-BC, Julien Roux · (Paul|Léa) · Pont n°\d, Pixcar, Confirmé, Dépôt 8:00 · restitution 9:00$/.test(await label(julien)), await label(julien));
   check("week: the pending request says « À confirmer »", /Marie Curie.*, Pixcar, À confirmer, Dépôt 10:00 · restitution 11:00$/.test(await label(marie)), await label(marie));
-  check("week: the phone booking says « Hors Pixcar », the blocked slot « Créneau bloqué »", /^14:00–14:45 \(45 min\), .*, M\. Martin \(tél\.\) · Paul.*, Hors Pixcar, Confirmé, Dépôt 14:00 · restitution 15:00$/.test(await label(job.saved)) && /^10:00–11:00 \(1 h\), Livraison pièces, Pont n°2, Créneau bloqué$/.test(await label(hold.saved)), [await label(job.saved), await label(hold.saved)].join(" / "));
+  check("week: the phone booking says « Téléphone », the blocked slot « Créneau bloqué »", /^14:00–14:45 \(45 min\), .*, M\. Martin \(tél\.\) · Paul.*, Téléphone, Confirmé, Dépôt 14:00 · restitution 15:00$/.test(await label(job.saved)) && /^10:00–11:00 \(1 h\), Livraison pièces, Pont n°2, Créneau bloqué$/.test(await label(hold.saved)), [await label(job.saved), await label(hold.saved)].join(" / "));
   check("week: the tooltip carries the same detail, one line each", (await page.getAttribute(ev(julien), "title")) === (await label(julien)).split(", ").join("\n"), await page.getAttribute(ev(julien), "title"));
   const lines = await page.$eval(ev(julien), (b) => [...b.children].map((c) => c.className + ":" + [...c.childNodes].map((n) => n.textContent.trim()).filter(Boolean).join(" ")));
   // présentation de la maquette « Gestion d'atelier » : horaires et provenance (icône), prestation, voiture et avancement, puis les personnes
@@ -251,7 +252,7 @@ const NOTIFY = "atelier@garage-planning.fr";
   check("week: each block is tinted by its state, with a 3 px left edge (to confirm orange, upcoming blue, blocked slot grey)", /^tone-confirmed 3px rgb\(6, 89, 229\) rgb\(237, 243, 255\)$/.test(await tone(julien)) && /^tone-pending 3px rgb\(252, 73, 22\) rgb\(255, 240, 233\)$/.test(await tone(marie)) && /^tone-hold 3px rgb\(165, 171, 182\)/.test(await tone(hold.saved)), [await tone(julien), await tone(marie), await tone(hold.saved)].join(" / "));
   const holdLines = await page.$eval(ev(hold.saved), (b) => [...b.children].map((c) => c.className + ":" + c.textContent.trim()));
   check("week: a one-hour blocked slot shows its hours (padlock), its label and what it holds, no state", (await page.$eval(`${ev(hold.saved)} .pl-ev-h use`, (u) => u.getAttribute("href"))) === "#i-lock" && holdLines.join(" | ") === "pl-ev-h:10:00–11:00 | pl-ev-t:Livraison pièces | pl-ev-w:Pont n°2", holdLines.join(" | "));
-  check("the legend sits under the grid, as in the maquette: states, slots, then origins and the count", /^À confirmer À venir En cours En attente Prête En conflit Créneau bloqué Pas proposé en ligne Fermé Absence ou maintenance Pixcar · Hors Pixcar · 3 rendez-vous$/.test(await words(page, "#planLegend")) && (await page.evaluate(() => !!(document.getElementById("planGrid").compareDocumentPosition(document.getElementById("planLegend")) & Node.DOCUMENT_POSITION_FOLLOWING))), await words(page, "#planLegend"));
+  check("the legend sits under the grid, as in the maquette: states, slots, then origins and the count", /^À confirmer À venir En cours En attente Prête En conflit Créneau bloqué Pas proposé en ligne Fermé Absence ou maintenance Pixcar · Téléphone · 3 rendez-vous$/.test(await words(page, "#planLegend")) && (await page.evaluate(() => !!(document.getElementById("planGrid").compareDocumentPosition(document.getElementById("planLegend")) & Node.DOCUMENT_POSITION_FOLLOWING))), await words(page, "#planLegend"));
   const top = async (id) => page.$eval(ev(id), (e) => parseFloat(e.style.top));
   const k0 = await ppm(page);
   check("week: blocks sit at their hour (68 px per hour, as in the maquette, from the first hour shown)", Math.abs(k0 * 60 - 68) < 0.01 && near((await top(job.saved)) - (await top(julien)), 360 * k0), `${await top(julien)} → ${await top(job.saved)}`);
@@ -425,8 +426,11 @@ const NOTIFY = "atelier@garage-planning.fr";
   check("validated: the other mechanic does it, same time, no e-mail to the client", reassigned.when.start === "11:00" && reassigned.plan.some((r) => r.id === other && r.role === "labour") && !outbox.slice(mailsAssign).some((m) => m.target === "marie.curie@example.com"), JSON.stringify(reassigned.plan));
 
   // ---- menu « Nouveau » (clavier), puis création rapide
+  // les choix d'une liste (boutons à bascule) se cochent par leur libellé, comme à la souris
+  const pick = (name, value) => page.click(`label:has(> input[name="${name}"][value="${value}"])`);
   await page.click("#planNew");
-  check("« Nouveau » opens a menu of four choices, focus on the first", (await page.getAttribute("#planNew", "aria-expanded")) === "true" && (await page.$$eval("#planNewMenu button", (b) => b.map((x) => x.textContent.trim()).join(" | "))) === "Rendez-vous pris hors Pixcar | Créneau bloqué | Absence d'un mécanicien | Indisponibilité d'un poste" && (await page.evaluate(() => document.activeElement.dataset.new)) === "job");
+  check("the arrow next to « Nouveau rendez-vous » opens a menu of five choices, focus on the first", (await page.getAttribute("#planNew", "aria-expanded")) === "true" && (await page.$$eval("#planNewMenu button:not([hidden])", (b) => b.map((x) => x.textContent.trim()).join(" | "))) === "Rendez-vous (téléphone, comptoir) | Client déjà sur place | Créneau bloqué | Absence d'un mécanicien | Indisponibilité d'un poste" && (await page.evaluate(() => document.activeElement.dataset.new)) === "job");
+  await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
   check("the menu: arrows move between the choices", (await page.evaluate(() => document.activeElement.dataset.new)) === "staff");
@@ -442,16 +446,16 @@ const NOTIFY = "atelier@garage-planning.fr";
   await axe(page, "création rapide");
   await page.click("#planSave");
   await page.waitForFunction(() => !document.getElementById("planErr").hidden);
-  check("an empty label is refused with the API's reason", /Libellé/.test(await text(page, "#planErr")), await text(page, "#planErr"));
+  check("an empty booking is refused, saying what is missing", /Choisissez au moins une prestation/.test(await text(page, "#planErr")), await text(page, "#planErr"));
   // un créneau bloqué sur Paul pendant la demande de Julien (15:00) : refusé, avec la cause
-  await page.check('input[name="planKind"][value="hold"]');
+  await pick("planKind", "hold");
   await page.waitForSelector("#planTo");
   check("switching to a blocked slot keeps the focus on the choice", (await page.evaluate(() => document.activeElement.value)) === "hold");
   await page.fill("#planLabel", "Réunion fournisseur");
   const jWho = (await agenda()).appointments.find((a) => a.id === julien).plan.find((r) => r.role === "labour").id;
   await page.fill("#planTime", "15:00");
   await page.fill("#planTo", "15:30");
-  await page.check(`input[name="planHoldStaff"][value="${jWho}"]`);
+  await pick("planHoldStaff", jWho);
   await page.click("#planSave");
   await page.waitForSelector("#planForm .pl-conflict");
   check("a blocked slot over a booking is refused, with who is busy", /déjà occupé/.test(await text(page, "#planForm .pl-conflict")), await text(page, "#planForm .pl-conflict"));
@@ -468,7 +472,7 @@ const NOTIFY = "atelier@garage-planning.fr";
   await page.waitForSelector("#planDlg[open] #planLabel");
   check("a click on an empty cell opens the creation at that time, for that mechanic", (await page.inputValue("#planTime")) === "09:00" && (await page.inputValue("#planStaff")) === paul);
   await page.fill("#planLabel", "Mme Petit (comptoir)");
-  await page.check('input[name="planSvc"][value="vidange"]');
+  await pick("planSvc", "vidange");
   check("a service ticked keeps the focus", (await page.evaluate(() => document.activeElement.value)) === "vidange");
   await page.click("#planSave");
   await closed(page);
@@ -482,7 +486,7 @@ const NOTIFY = "atelier@garage-planning.fr";
   await page.fill("#planLabel", "M. Leroy (tél.)");
   await page.fill("#planDay", D1);
   await page.fill("#planTime", "09:00");
-  await page.check('input[name="planSvc"][value="vidange"]');
+  await pick("planSvc", "vidange");
   await page.selectOption("#planStaff", paul);
   await page.click("#planSave");
   await page.waitForSelector("#planForm .pl-ask");
@@ -512,24 +516,24 @@ const NOTIFY = "atelier@garage-planning.fr";
   await page.waitForFunction((sel) => !document.querySelector(sel), ev(leroy.id));
   check("filters: folded by default, one « Filtres » button", (await page.isHidden("#planFilters")) && (await page.getAttribute("#planFToggle", "aria-expanded")) === "false" && (await page.$$eval(".pl-chip", (c) => c.length)) === 0);
   await page.click("#planFToggle");
-  check("filters: the button unfolds five filters (mechanic, post, service, origin, confirmation)", (await page.isVisible("#planFilters")) && (await page.$$eval("#planFilters select", (x) => x.map((s) => s.id).join())) === "planFStaff,planFPost,planFService,planFOrigin,planFState");
-  await page.selectOption("#planFOrigin", "hold");
+  check("filters: the button unfolds the panel on the left: state and origin as choices, then service, mechanic and post as lists", (await page.isVisible("#planFilters")) && (await page.$$eval("#planFilters legend", (x) => x.map((l) => l.textContent).join())) === "État,Origine" && (await page.$$eval("#planFilters select", (x) => x.map((s) => s.id).join())) === "planFService,planFStaff,planFPost");
+  await pick("planFOrigin", "hold");
   await live(page, /Filtre appliqué/);
   const shown = await page.$$eval(".pl-ev", (e) => e.map((x) => x.dataset.id).sort());
   check("filter « Créneau bloqué »: only the blocked slots", shown.join() === [hold.saved, meeting.id].sort().join(), shown.join());
-  check("an active filter shows as a chip, and the button counts it", (await words(page, "#planChips")) === "Provenance : Créneau bloqué" && (await words(page, "#planFCount")) === "1" && (await page.getAttribute("#planFToggle", "aria-label")) === "Filtres, 1 actif");
-  await page.selectOption("#planFOrigin", "");
+  check("an active filter shows as a chip, and the button counts it", (await words(page, "#planChips")) === "Origine : Créneau bloqué" && (await words(page, "#planFCount")) === "1" && (await page.getAttribute("#planFToggle", "aria-label")) === "Filtres, 1 actif");
+  await pick("planFOrigin", "");
   await page.selectOption("#planFStaff", lea);
   const leaOnly = await page.$$eval(".pl-ev", (e) => e.map((x) => x.dataset.id));
   check("filter « Léa »: only what Léa does", leaOnly.includes(job.saved) && !leaOnly.includes(petit.id), leaOnly.join());
-  await page.selectOption("#planFState", "pending");
-  check("filter « À confirmer » with Léa: both apply", (await page.$$eval(".pl-ev", (e) => e.map((x) => x.dataset.id))).every((id) => id === marie) && (await page.$$eval(".pl-chip", (c) => c.length)) === 2);
+  await pick("planFState", "pending");
+  check("filter « À confirmer » with Léa: both apply, two chips and « Tout retirer »", (await page.$$eval(".pl-ev", (e) => e.map((x) => x.dataset.id))).every((id) => id === marie) && (await page.$$eval(".pl-chip:not(.is-reset)", (c) => c.length)) === 2 && (await page.isVisible(".pl-chip.is-reset")));
   await axe(page, "planning · filtres");
   await shot(page, "5-filtres");
   await page.click('.pl-chip:has-text("État")');
   check("a chip removes its filter, focus back on the « Filtres » button", (await page.$$eval(".pl-chip", (c) => c.length)) === 1 && (await page.evaluate(() => document.activeElement.id)) === "planFToggle");
-  await page.click('#planFilters .link-btn:has-text("Retirer les filtres")');
-  check("filters removed: everything is back, focus on the first filter", (await page.$$eval(".pl-ev", (e) => e.length)) === 6 && (await page.evaluate(() => document.activeElement.id)) === "planFStaff" && (await page.$$eval(".pl-chip", (c) => c.length)) === 0);
+  await page.click("#planFReset");
+  check("filters reset: everything is back, focus on the « Filtres » button", (await page.$$eval(".pl-ev", (e) => e.length)) === 6 && (await page.evaluate(() => document.activeElement.id)) === "planFToggle" && (await page.$$eval(".pl-chip", (c) => c.length)) === 0);
   await page.click("#planFToggle");
   check("filters: folded again", await page.isHidden("#planFilters"));
 
@@ -583,7 +587,8 @@ const NOTIFY = "atelier@garage-planning.fr";
   // ---- mois
   await page.click('.pl-view:has-text("Mois")');
   await page.waitForSelector(".pl-month");
-  const cell = page.locator(".pl-mday", { hasText: "" }).filter({ has: page.locator("b", { hasText: new RegExp(`^${Number(D1.slice(8))}$`) }) }).first();
+  // les jours du mois voisin (« is-out ») portent aussi un numéro : le 28 septembre ouvre la grille d'octobre 2026
+  const cell = page.locator(".pl-mday:not(.is-out)").filter({ has: page.locator("b", { hasText: new RegExp(`^${Number(D1.slice(8))}$`) }) }).first();
   check("month: six weeks of days, the busy day counts its bookings", (await page.$$eval(".pl-mday", (c) => c.length)) === 42 && /5 éléments/.test(await cell.innerText()), await cell.innerText());
   await axe(page, "planning · mois");
   await shot(page, "5-mois");
@@ -591,19 +596,30 @@ const NOTIFY = "atelier@garage-planning.fr";
   await page.waitForSelector("#planBy");
   check("a day of the month opens that day", (await text(page, '.pl-view[aria-pressed="true"]')) === "Jour" && !!(await page.$(`.pl-col[data-day="${D1}"]`)));
 
-  // ---- par mécanicien (absence de Léa) et par poste
-  await page.click('.pl-view:has-text("Par mécanicien")');
-  await page.waitForSelector("#planWho");
-  await page.selectOption("#planWho", lea);
-  check("by mechanic: the focus stays on the list after a choice", (await page.evaluate(() => document.activeElement.id)) === "planWho");
-  check("by mechanic: Léa's week in hours (planned over available)", /^Semaine : .+ planifiées sur 32 h \(\d+ %\)$/.test(await text(page, ".pl-picksum")), await text(page, ".pl-picksum"));
-  check("by mechanic: Léa's absence is drawn on her day off, in words", /Formation/.test(await text(page, `.pl-col[data-day="${D2}"] .pl-away`)));
-  await shot(page, "6-mecanicien");
-  await page.click('.pl-view:has-text("Par poste")');
-  await page.waitForSelector("#planWhich");
-  await page.selectOption("#planWhich", lift2);
-  check("by post: the delivery blocks Pont n°2", !!(await page.$(`.pl-col[data-day="${D2}"] ${ev(hold.saved)}`)));
-  await axe(page, "planning · par poste");
+  // ---- espaces Équipe (absence de Léa) et Équipements (livraison sur le pont n°2), le jour D2, en lignes
+  const space = async (name) => {
+    await page.click(`#planSpaces .pl-space:has-text("${name}")`);
+    await page.waitForSelector(`#planSpaces .pl-space[aria-pressed="true"]:has-text("${name}")`);
+  };
+  await space("Équipe");
+  check("spaces: Agenda, Équipe, Équipements, Suivi, Charge (the four modules of Mon garage are on)", (await page.$$eval("#planSpaces .pl-space", (b) => b.map((x) => x.textContent.trim()).join())) === "Agenda,Équipe,Équipements,Suivi,Charge");
+  if ((await page.$eval(".pl-view[aria-pressed=true]", (b) => b.textContent)) !== "Jour") await page.click('.pl-view:has-text("Jour")');
+  // aujourd'hui, puis jour après jour jusqu'à D2
+  const dayTitle = (d) => R.dayLabel(d, { year: true }).replace(/^./, (c) => c.toUpperCase());
+  await page.click("#planToday");
+  await page.waitForFunction((t) => document.getElementById("planRange").textContent === t, dayTitle(today));
+  for (let d = today; d < D2; ) {
+    d = R.addDays(d, 1);
+    await page.click("#planNext");
+    await page.waitForFunction((t) => document.getElementById("planRange").textContent === t && !document.getElementById("dash-planning").hasAttribute("aria-busy"), dayTitle(d));
+  }
+  await page.waitForSelector(`.pl-tl-track[data-staff="${lea}"]`);
+  check("Équipe: one row per mechanic, Léa's training drawn on her row, in words", /Formation/.test(await text(page, `.pl-tl-track[data-staff="${lea}"] .pl-away`)), await page.$eval(`.pl-tl-track[data-staff="${lea}"]`, (t) => t.innerText));
+  await shot(page, "6-equipe");
+  await space("Équipements");
+  await page.waitForSelector(`.pl-tl-track[data-post="${lift2}"]`);
+  check("Équipements: the delivery blocks Pont n°2 on its row", !!(await page.$(`.pl-tl-track[data-post="${lift2}"] ${ev(hold.saved)}`)));
+  await axe(page, "gestion d'atelier · équipements");
 
   // ---- supprimer un bloc, annuler un rendez-vous
   await page.click(ev(hold.saved));
@@ -614,6 +630,7 @@ const NOTIFY = "atelier@garage-planning.fr";
   await closed(page);
   await live(page, /Supprimé/);
   check("the blocked slot is gone", !(await agenda()).blocks.some((k) => k.id === hold.saved) && !(await page.$(ev(hold.saved))));
+  await space("Agenda");
   await page.click('.pl-view:has-text("Semaine")');
   await page.waitForSelector(ev(julien));
   await page.click(ev(julien));
@@ -625,7 +642,7 @@ const NOTIFY = "atelier@garage-planning.fr";
   await page.click("#planWhySave");
   await closed(page);
   check("cancelled: gone from the planning, the client is told", !(await agenda()).appointments.some((a) => a.id === julien) && /Rendez-vous annulé/.test(await text(page, "#alert")));
-  check("the Espace Pro privacy note tells how long a block's label is kept", /Le libellé d'un bloc, qui peut contenir un nom, est effacé 30 jours après lui, le bloc 24 mois après/.test(await page.$eval(".pro-privacy", (d) => d.textContent)));
+  check("the Espace Pro privacy note tells how long what the garage types about a client is kept, and that Pixcar acts on its behalf", /Pour un rendez-vous que vous saisissez, le nom du client, son téléphone, son véhicule, l'immatriculation et votre commentaire interne sont effacés 30 jours après le rendez-vous, le rendez-vous lui-même 24 mois après/.test(await page.$eval(".pro-privacy", (d) => d.textContent)) && /comme sous-traitant \(article 28 du RGPD\)/.test(await page.$eval(".pro-privacy", (d) => d.textContent)));
   // ---- barre latérale sans latence (demande du 25 octobre 2026) : avec une API lente (1,5 s pour la fiche du garage), l'écran change dès
   // le clic, une barre fine dit le chargement, le contenu arrive ensuite ; un écran quitté entre-temps ne reprend ni l'affichage ni le focus
   await page.route("**/profile", async (route) => {
@@ -665,7 +682,7 @@ const NOTIFY = "atelier@garage-planning.fr";
     if (name === "telephone") {
       // depuis la maquette « Parcours Atelier » (24 octobre 2026) : rail d'icônes de 64 px à gauche, plus de barre du bas ni de « Plus »
       const rail = await m.page.evaluate(() => ({ w: Math.round(document.getElementById("dashNav").getBoundingClientRect().width), left: Math.round(document.getElementById("dashNav").getBoundingClientRect().left) }));
-      check("phone: the 64 px icon rail on the left shows Planning and Mon garage, no « Plus » menu", rail.w === 64 && rail.left === 0 && (await m.page.isVisible('.dash-link[data-panel="planning"]')) && (await m.page.isVisible('.dash-link[data-panel="garage"]')) && (await m.page.isHidden("#dashMore")), JSON.stringify(rail));
+      check("phone: the 64 px icon rail on the left shows Gestion d'atelier and Mon garage, no « Plus » menu", rail.w === 64 && rail.left === 0 && (await m.page.isVisible('.dash-link[data-panel="planning"]')) && (await m.page.isVisible('.dash-link[data-panel="garage"]')) && (await m.page.isHidden("#dashMore")), JSON.stringify(rail));
     }
     await m.page.click('.dash-link[data-panel="planning"]');
     await m.page.waitForSelector("#dash-planning:not([hidden]):not([aria-busy]) .pl-grid");
@@ -673,8 +690,7 @@ const NOTIFY = "atelier@garage-planning.fr";
     check(`${name}: no page-wide horizontal scroll (the grid scrolls inside its box)`, (await overflow(m.page)) <= 0, await overflow(m.page));
     await axe(m.page, `planning · ${name}`);
     await shot(m.page, `7-${name}`);
-    await m.page.click("#planNew");
-    await m.page.click('#planNewMenu [data-new="job"]');
+    await m.page.click("#planNewRdv");
     await m.page.waitForSelector("#planDlg[open] #planLabel");
     await m.page.waitForFunction(() => !document.getAnimations().length);
     // pas la place à côté : le panneau se place au-dessus de la grille, qui reste visible en dessous (rien n'est recouvert)

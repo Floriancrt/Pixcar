@@ -12,7 +12,7 @@ const placeholders = (n, from = 1) => Array.from({ length: n }, (_, i) => `$${i 
 const ms = (v) => (v === null || v === undefined ? null : new Date(v).getTime());
 
 const SETTINGS_COLUMNS =
-  "garage_id, enabled, paused, missed, min_delay_h, horizon_days, step_min, holidays, notify_email, notify_pending, notify_code_hash, notify_code_expires_at, notify_attempts, notify_sends, notify_window_at, notify_last_sent_at, version, updated_at";
+  "garage_id, enabled, paused, missed, min_delay_h, horizon_days, step_min, holidays, notify_email, notify_pending, notify_code_hash, notify_code_expires_at, notify_attempts, notify_sends, notify_window_at, notify_last_sent_at, version, modules, updated_at";
 const SLOT_COLUMNS = "id, garage_id, name, days, start_min, end_min, mode, capacity, services, updated_at";
 const CLOSURE_COLUMNS = "id, garage_id, first_day::text AS first, last_day::text AS last, label";
 export const REQUEST_COLUMNS =
@@ -37,6 +37,7 @@ export const settingsOf = (r) =>
     notifyWindowAt: ms(r.notify_window_at),
     notifyLastSentAt: ms(r.notify_last_sent_at),
     version: r.version,
+    modules: r.modules && typeof r.modules === "object" && !Array.isArray(r.modules) ? r.modules : null, // Gestion d'atelier (009)
   };
 export const slotOf = (r) => ({ id: r.id, name: r.name, days: String(r.days).split(",").filter(Boolean), start: r.start_min, end: r.end_min, mode: r.mode, capacity: r.capacity, services: Array.isArray(r.services) ? r.services : [] });
 export const requestOf = (r) =>
@@ -56,7 +57,7 @@ export const requestOf = (r) =>
     anonymized_at: ms(r.anonymized_at),
   };
 // Une demande telle que le moteur des horaires la compte (src/js/shared/rdv.js)
-export const bookingOf = (r) => ({ slotId: r.slot_id, day: r.day, start: r.start_min, end: r.end_min, status: r.status, deadline: ms(r.deadline) });
+export const bookingOf = (r) => ({ id: r.id, slotId: r.slot_id, day: r.day, start: r.start_min, end: r.end_min, status: r.status, deadline: ms(r.deadline), ...(r.hold ? { hold: true } : {}) });
 
 // now() : horloge de l'application (ms). Toutes les comparaisons d'heure passent par elle ($n::timestamptz), jamais par now() de la base :
 // heure limite, heure du rendez-vous et validité d'un code se jugent à la même horloge que le calcul des horaires (et les tests la fixent).
@@ -101,10 +102,19 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
         const offered = PRO_IDS.filter((id) => services.some((s) => s.offered && s.service_id === id));
         return { garageId, accountId: claim.account_id, settings: settingsOf(settings), slots: slots.map(slotOf), closures, profile, minutes, offered, contact, calendar };
       },
-      // demandes qui peuvent retenir un horaire, du jour fromIso au jour toIso
+      // ce qui retient un horaire du calcul par créneaux, du jour fromIso au jour toIso : les demandes qui peuvent encore le retenir, les
+      // rendez-vous saisis par le garage rattachés à un créneau (sur leur durée de travaux, ou jusqu'à la restitution s'ils n'en ont pas)
+      // et les créneaux bloqués de tout l'atelier (sans affectation : docs/gestion-atelier.md 2.4)
       bookings: (garageId, fromIso, toIso) =>
         all(
-          "SELECT slot_id, day::text AS day, start_min, end_min, status, deadline FROM rdv_requests WHERE garage_id = $1 AND day BETWEEN $2::date AND $3::date AND status IN ('pending', 'confirmed')",
+          `SELECT id, slot_id, day::text AS day, start_min, end_min, status, deadline, false AS hold FROM rdv_requests
+           WHERE garage_id = $1 AND day BETWEEN $2::date AND $3::date AND status IN ('pending', 'confirmed')
+           UNION ALL
+           SELECT k.id, k.slot_id, k.day::text AS day, k.start_min, CASE WHEN k.kind = 'job' AND k.minutes IS NOT NULL THEN LEAST(k.start_min + k.minutes, 1440) ELSE k.end_min END AS end_min,
+             'confirmed' AS status, NULL::timestamptz AS deadline, k.kind = 'hold' AS hold
+           FROM rdv_blocks k
+           WHERE k.garage_id = $1 AND k.day BETWEEN $2::date AND $3::date
+             AND ((k.kind = 'job' AND k.slot_id IS NOT NULL) OR (k.kind = 'hold' AND NOT EXISTS (SELECT 1 FROM rdv_assignments a WHERE a.block_id = k.id AND a.garage_id = $1)))`,
           [garageId, fromIso, toIso],
         ).then((rows) => rows.map(bookingOf)),
 
@@ -262,11 +272,12 @@ export function createRdvRepo(db, { now = Date.now } = {}) {
       },
 
       // Le garage change l'heure d'un rendez-vous (mode avancé) : le client est prévenu ; le rappel de la veille repart.
-      async reschedule(id, garageId, { day, start, end, startsAt, endsAt }) {
+      // slotId : nouveau créneau (calcul par créneaux, Gestion d'atelier) ; absent, le créneau ne change pas
+      async reschedule(id, garageId, { day, start, end, startsAt, endsAt, slotId = null }) {
         const r = await one(
-          `UPDATE rdv_requests SET day = $3::date, start_min = $4, end_min = $5, starts_at = $6::timestamptz, ends_at = $7::timestamptz, reminded_at = NULL
+          `UPDATE rdv_requests SET day = $3::date, start_min = $4, end_min = $5, starts_at = $6::timestamptz, ends_at = $7::timestamptz, slot_id = coalesce($8::uuid, slot_id), reminded_at = NULL
            WHERE id = $1 AND garage_id = $2 AND status IN ('pending', 'confirmed') RETURNING ${REQUEST_COLUMNS}`,
-          [id, garageId, day, start, end, new Date(startsAt).toISOString(), new Date(endsAt).toISOString()],
+          [id, garageId, day, start, end, new Date(startsAt).toISOString(), new Date(endsAt).toISOString(), slotId],
         );
         if (!r) return null;
         await enqueue([{ requestId: id, garageId, kind: "client_moved" }]);

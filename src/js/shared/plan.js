@@ -2,7 +2,7 @@
 // postes et équipements, absences, rendez-vous déjà affectés) et de ce que demande chaque prestation. Une seule définition, partagée par
 // l'API (dernier mot, dans la transaction de la prise d'horaire) et la page Pro (aperçus, explications). Fonctions pures : l'heure vient
 // de l'appelant. Les calculs se font en minutes de la journée (heure murale de Paris), puis sont convertis en instants (parisInstant).
-import { parseHours } from "./garage-profile.js";
+import { parseHours, parsePhone } from "./garage-profile.js";
 import { PRO_SERVICES, VEHICLES } from "./pro-prices.js";
 import { addDays, earliestStart, isIsoDay, isOpenDay, openRanges, parisInstant, parisParts, timeLabel } from "./rdv.js";
 
@@ -780,14 +780,18 @@ export function parseUnavail(b, { staffIds, resourceIds, nowMs }) {
   return { value: { target: b.target, targetId: b.targetId.toLowerCase(), start, end, kind: kind.id, label } };
 }
 
-// ---------------------------------------------------------------- blocs internes (lot 3b)
-// « job » : rendez-vous pris hors Pixcar, planifié comme une demande (sans les règles de la réservation en ligne) ;
-// « hold » : créneau bloqué sur des mécaniciens ou des postes.
+// ---------------------------------------------------------------- blocs internes (lot 3b, Gestion d'atelier)
+// « job » : rendez-vous saisi par le garage (téléphone, comptoir…), compté comme une demande (sans les règles de la réservation en
+// ligne) ; « hold » : créneau bloqué sur des mécaniciens ou des postes, ou sur tout l'atelier (aucun des deux choisi).
 export const BLOCK_KINDS = ["job", "hold"];
 export const BLOCK_LABEL_MAX = 40;
 export const MAX_BLOCK_SERVICES = 8;
 export const MAX_BLOCK_TARGETS = 10;
 export const MAX_BLOCKS = 1000; // blocs à venir par garage
+// origine d'un rendez-vous saisi (Gestion d'atelier) ; les demandes Pixcar ont la leur (« pixcar »)
+export const CHANNELS = ["phone", "walkin", "other"];
+export const JOB_FIELDS_MAX = { client: BLOCK_LABEL_MAX, car: 40, plate: 15, phone: 20, note: 300 };
+export const JOB_MINUTES_MAX = 1440;
 const hhmm = (t) => {
   const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(t ?? ""));
   return m && Number(m[2]) % 5 === 0 ? Number(m[1]) * 60 + Number(m[2]) : null;
@@ -802,17 +806,55 @@ const ids = (v, known, max, what) => {
   }
   return { value: out };
 };
-// → { value: { kind, label, day, start, … } } ou { error, field }. job : services, vehicle, staff (imposés), station ; hold : end, staff, resources.
-export function parseBlock(b, { staffIds, resourceIds, serviceIds, nowMs }) {
+// Champs d'un rendez-vous saisi que la modification garde quand ils sont absents du corps (un glisser-déposer ne les envoie pas) :
+// → { value: { client?, car?, plate?, phone?, note?, channel?, minutes?, back? } } (clé absente : non fournie ; back null : à calculer)
+function jobFields(b) {
+  const out = {};
+  const client = b.client !== undefined ? b.client : b.label; // « label » : ancien nom du champ (lot 3b)
+  for (const [k, raw] of [["client", client], ["car", b.car], ["plate", b.plate], ["phone", b.phone], ["note", b.note]]) {
+    if (raw === undefined) continue;
+    if (raw !== null && typeof raw !== "string") return { error: "Texte attendu.", field: k === "client" ? "label" : k };
+    let v = k === "note" ? String(raw ?? "").normalize("NFC").replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, " ").replace(/[ \t]+/g, " ").trim() : clean(raw);
+    if (k === "plate") v = v.toUpperCase();
+    if (chars(v) > JOB_FIELDS_MAX[k]) return { error: `${{ client: "Client", car: "Véhicule", plate: "Immatriculation", phone: "Téléphone", note: "Commentaire" }[k]} : ${JOB_FIELDS_MAX[k]} caractères au plus.`, field: k === "client" ? "label" : k };
+    if (k === "plate" && v && !/^[A-Z0-9][A-Z0-9 -]*$/.test(v)) return { error: "Immatriculation : lettres, chiffres, tirets.", field: "plate" };
+    // téléphone : un numéro, gardé comme ceux des demandes Pixcar (+33…), pour l'appeler d'un clic et l'afficher pareil partout
+    if (k === "phone" && v) {
+      const p = parsePhone(v);
+      if (p.error) return { error: "Téléphone : un numéro, par exemple 06 12 34 56 78.", field: "phone" };
+      v = p.value;
+    }
+    out[k] = v;
+  }
+  if (b.channel !== undefined && b.channel !== null) {
+    if (!CHANNELS.includes(b.channel)) return { error: "Origine : téléphone, sur place ou autre.", field: "channel" };
+    out.channel = b.channel;
+  }
+  if (b.minutes !== undefined) {
+    if (b.minutes !== null && (!Number.isInteger(b.minutes) || b.minutes < 5 || b.minutes > JOB_MINUTES_MAX || b.minutes % 5)) return { error: "Durée estimée : de 5 min à 24 h, par 5 min.", field: "minutes" };
+    out.minutes = b.minutes;
+  }
+  if (b.back !== undefined) {
+    const back = b.back === null || b.back === "" ? null : b.back === "24:00" ? 1440 : hhmm(b.back);
+    if (back === null && b.back !== null && b.back !== "") return { error: "Restitution : HH:MM, par 5 min.", field: "back" };
+    out.back = back;
+  }
+  return { value: out };
+}
+// → { value: { kind, day, start, … } } ou { error, field }.
+//  job : services, vehicle, staff (imposés), station, et les champs de jobFields (absents : gardés en modification) ;
+//  hold : label, end, staff, resources (aucun des deux : tout l'atelier, whole: true).
+// staffIds / resourceIds vides : affectation refusée (calcul par créneaux) ; serviceText : la phrase quand une prestation est inconnue.
+export function parseBlock(b, { staffIds, resourceIds, serviceIds, nowMs, serviceText = "Prestation inconnue ou sans exigences (Calendrier › Prestations)." }) {
   if (!b || typeof b !== "object" || Array.isArray(b)) return { error: "Objet attendu.", field: "block" };
   if (!BLOCK_KINDS.includes(b.kind)) return { error: "Rendez-vous ou créneau bloqué ?", field: "kind" };
-  const label = clean(b.label);
-  if (chars(label) < 2 || chars(label) > BLOCK_LABEL_MAX) return { error: `Libellé : de 2 à ${BLOCK_LABEL_MAX} caractères.`, field: "label" };
   if (!isIsoDay(b.day)) return { error: "Jour : AAAA-MM-JJ.", field: "day" };
   const start = hhmm(b.time);
   if (start === null) return { error: "Heure : HH:MM, par 5 min.", field: "time" };
   if (parisInstant(b.day, start) <= nowMs) return { error: "Cet horaire est passé.", field: "time" };
   if (parisInstant(b.day, start) > nowMs + 366 * 864e5) return { error: "Dans l'année qui vient seulement.", field: "day" };
+  const assignable = staffIds.size + resourceIds.size > 0;
+  const noAssign = (v) => (Array.isArray(v) ? v.length : v) && !assignable;
   if (b.kind === "job") {
     const raw = b.services;
     if (!Array.isArray(raw) || !raw.length || raw.length > MAX_BLOCK_SERVICES) return { error: "Choisissez au moins une prestation.", field: "services" };
@@ -820,26 +862,32 @@ export function parseBlock(b, { staffIds, resourceIds, serviceIds, nowMs }) {
     for (const s of raw) {
       const id = s && typeof s === "object" ? s.id : s;
       const qty = s && typeof s === "object" && s.qty !== undefined ? s.qty : 1;
-      if (!serviceIds.has(id)) return { error: "Prestation inconnue ou sans exigences (Calendrier › Prestations).", field: "services" };
+      if (!serviceIds.has(id)) return { error: serviceText, field: "services" };
       if (!Number.isInteger(qty) || qty < 1 || qty > 4) return { error: "Quantité : de 1 à 4.", field: "services" };
       if (!services.some((x) => x.id === id)) services.push({ id, qty });
     }
     const vehicle = b.vehicle === undefined || b.vehicle === null ? "" : b.vehicle;
     if (vehicle !== "" && !VEHICLE_IDS.includes(vehicle)) return { error: "Type de véhicule inconnu.", field: "vehicle" };
+    if (noAssign(b.staff) || noAssign(b.station)) return { error: "Choisir un mécanicien ou un poste demande le calcul par ressources.", field: "staff" };
     const staff = ids(b.staff, staffIds, 3, "Mécanicien");
     if (staff.error) return { error: staff.error, field: "staff" };
     if (b.station !== undefined && b.station !== null && (!isUuid(b.station) || !resourceIds.has(b.station.toLowerCase()))) return { error: "Poste : inconnu.", field: "station" };
-    return { value: { kind: "job", label, day: b.day, start, services, vehicle, staff: staff.value, station: b.station ? b.station.toLowerCase() : null } };
+    const extra = jobFields(b);
+    if (extra.error) return extra;
+    if (extra.value.back !== undefined && extra.value.back !== null && extra.value.back <= start) return { error: "Restitution : après l'heure du rendez-vous.", field: "back" };
+    return { value: { kind: "job", day: b.day, start, services, vehicle, staff: staff.value, station: b.station ? b.station.toLowerCase() : null, ...extra.value } };
   }
+  const label = clean(b.label);
+  if (chars(label) < 2 || chars(label) > BLOCK_LABEL_MAX) return { error: `Libellé : de 2 à ${BLOCK_LABEL_MAX} caractères.`, field: "label" };
   const end = b.to === "24:00" ? 1440 : hhmm(b.to);
   if (end === null || end <= start) return { error: "Fin : HH:MM, après le début.", field: "to" };
+  if (noAssign(b.staff) || noAssign(b.resources)) return { error: "Bloquer un mécanicien ou un poste demande le calcul par ressources : sans choix, tout l'atelier est bloqué.", field: "staff" };
   const staff = ids(b.staff, staffIds, MAX_BLOCK_TARGETS, "Mécanicien");
   if (staff.error) return { error: staff.error, field: "staff" };
   const resources = ids(b.resources, resourceIds, MAX_BLOCK_TARGETS, "Poste");
   if (resources.error) return { error: resources.error, field: "resources" };
-  if (!staff.value.length && !resources.value.length) return { error: "Choisissez au moins un mécanicien ou un poste.", field: "staff" };
   if (staff.value.length + resources.value.length > MAX_BLOCK_TARGETS) return { error: `${MAX_BLOCK_TARGETS} mécaniciens ou postes au plus.`, field: "staff" };
-  return { value: { kind: "hold", label, day: b.day, start, end, staff: staff.value, resources: resources.value } };
+  return { value: { kind: "hold", label, day: b.day, start, end, staff: staff.value, resources: resources.value, whole: !staff.value.length && !resources.value.length } };
 }
 // Créneau bloqué : ses ressources sont-elles libres (ni prises, ni absentes, ni en maintenance) ? → { ok } ou { fail: [raisons] }
 export function checkHold(w, { day, start, end, staff, resources }) {

@@ -1,7 +1,8 @@
 // Calendrier avancé (docs/calendrier-avance.md, lot 3a). Routes du garage, appelées par server/rdv.mjs (compte vérifié, garage rattaché) :
 //   GET    /v1/pro/garages/:id/rdv/calendar                  tout l'état (réglages, mécaniciens, compétences, postes, exigences, contrôles, conflits)
 //   POST   …/calendar/start                                   ouvre l'assistant (réglages, compétences proposées, exigences par défaut)
-//   PUT    …/calendar/settings                                { receptionMin?, returnMin?, loadPct?, maxDay?, autoAssign?, step? }
+//   PUT    …/calendar/settings                                { receptionMin?, returnMin?, loadPct?, maxDay?, autoAssign?, step?, modules? }
+//                                                             (modules : ceux de l'affichage avancé de Gestion d'atelier, pour le garage)
 //   POST   …/calendar/staff · PUT, DELETE …/staff/:id         mécaniciens
 //   POST   …/calendar/skills · PUT, DELETE …/skills/:id       compétences et habilitations
 //   POST   …/calendar/resources · PUT, DELETE …/resources/:id postes et équipements
@@ -11,10 +12,11 @@
 //   POST   …/calendar/activate                                { placements?: [{ requestId, staff: [ids], station }] } : mode avancé
 //   POST   …/calendar/simple                                  retour au mode simple
 //   GET    …/calendar/agenda?from=AAAA-MM-JJ&to=AAAA-MM-JJ    planning d'une période : rendez-vous, blocs, affectations, ouverture, absences, conflits
-//   POST   …/calendar/blocks · PUT, DELETE …/blocks/:id        blocs internes : rendez-vous hors Pixcar, créneaux bloqués (lot 3b)
+//   POST   …/calendar/blocks · PUT, DELETE …/blocks/:id        blocs internes : rendez-vous saisis par le garage, créneaux bloqués (lot 3b),
+//                                                             dans les deux calculs des disponibilités (Gestion d'atelier)
 //   POST   …/rdv/requests/:req/move                           { day, time, staff?, station?, confirm? } : déplacer ou réaffecter
 //   POST   …/calendar/work/:id                                { status, notify? } : état de l'intervention (lot 3c) d'un rendez-vous Pixcar
-//                                                             confirmé ou d'un rendez-vous hors Pixcar
+//                                                             confirmé ou d'un rendez-vous saisi, dans les deux calculs
 // Et pour server/rdv.mjs : world() (ce que lit le moteur, dans la transaction de la prise d'horaire), writePlan(), planInfo().
 import { apiError, json } from "./lib/http.mjs";
 import { isUuid } from "./lib/validate.mjs";
@@ -27,6 +29,7 @@ import { PRO_SERVICES, VEHICLES } from "../src/js/shared/pro-prices.js";
 const NO_STORE = { "cache-control": "no-store" };
 const SERVICE_BY_ID = new Map(PRO_SERVICES.map((s) => [s.id, s]));
 const AGENDA_MAX_DAYS = 42;
+const MODULE_NAMES = { staff: "Mécaniciens", equip: "Ponts et équipements", track: "Suivi des interventions", load: "Charge et capacité" };
 
 export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settingsOf, garageView }) {
   const today = () => R.parisParts(now()).iso;
@@ -48,6 +51,13 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
     const ex = exclude instanceof Set ? exclude : new Set(exclude ? [exclude] : []);
     // un client noté absent (lot 3c) ne retient plus ses ressources
     const busy = withBusy ? data.busy.filter((x) => !x.noShow && !ex.has(x.requestId) && !ex.has(x.blockId) && (x.blockId || (x.requestId && R.holds({ status: x.status, deadline: x.deadline }, nowMs)))) : [];
+    // créneau bloqué de tout l'atelier (Gestion d'atelier) : chaque mécanicien et chaque poste, y compris ceux ajoutés après lui
+    if (withBusy)
+      for (const h of (data.whole || []).filter((x) => !ex.has(x.blockId)))
+        busy.push(
+          ...data.staff.map((m) => ({ blockId: h.blockId, target: "staff", targetId: m.id, role: "labour", start: h.start, end: h.end })),
+          ...data.resources.map((x) => ({ blockId: h.blockId, target: "resource", targetId: x.id, role: "station", start: h.start, end: h.end })),
+        );
     const offered = new Set(b.offered || []);
     const reqs = Object.fromEntries(Object.entries(data.reqs).filter(([id]) => offered.has(id)));
     return P.makeWorld({ nowMs, ctx: ctxOf(b), settings: settingsOf(b), cal: b.calendar || DEFAULT_CAL, staff: data.staff, resources: data.resources, skills: data.skills, reqs, unavail: data.unavail, busy });
@@ -99,7 +109,6 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
   const when = (q) => ({ day: q.day, label: R.whenLabel(q.day, q.start_min), start: R.hm(q.start_min), end: R.hm(q.end_min), mode: q.mode });
   const reqView = (q) => ({ id: q.id, status: q.status, when: when(q), services: q.services.map((s) => ({ id: s.id, qty: s.qty, label: R.serviceText(s) })), client: q.name || "", car: q.car || "" });
   const altView = (a) => ({ day: a.day, time: R.hm(a.start), label: R.whenLabel(a.day, a.start, { short: true }), back: R.hm(a.end) });
-  const failView = (q, f) => ({ ...reqView(q), reasons: f.reasons.map((x) => x.text) });
 
   // conflits : rendez-vous à venir dont une affectation ne tient plus (rien n'est déplacé)
   async function conflictsOf(garageId, b, data, nowMs) {
@@ -139,6 +148,7 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
         started: !!b.calendar,
         settings: { receptionMin: cal.receptionMin, returnMin: cal.returnMin, loadPct: cal.loadPct, maxDay: cal.maxDay, autoAssign: cal.autoAssign },
         booking: settingsOf(b),
+        modules: W.modulesOf(b.settings && b.settings.modules),
         enabled: !!(b.settings && b.settings.enabled),
         notify: (b.settings && b.settings.notifyEmail) || "",
         hours: (b.profile && b.profile.hours) || null,
@@ -183,10 +193,28 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
     return state(garageId);
   }
 
+  // modules (Gestion d'atelier) : enregistrés avec les réglages des rendez-vous (rdv_settings), pas dans rdv_calendar, dont l'existence
+  // dit que l'assistant du calcul par ressources a été ouvert
   async function putSettings(garageId, sub, body) {
-    const p = P.parseCalendar(body);
-    if (p.error) return invalid(p);
-    await repo.cal.saveCalendar(garageId, sub, p.value);
+    const hasModules = !!body && typeof body === "object" && !Array.isArray(body) && body.modules !== undefined;
+    const rest = hasModules ? Object.fromEntries(Object.entries(body).filter(([k]) => k !== "modules")) : body;
+    const p = hasModules && !Object.keys(rest).length ? null : P.parseCalendar(rest);
+    if (p && p.error) return invalid(p);
+    if (hasModules) {
+      const out = await repo.tx(async (r) => {
+        await r.lockGarage(garageId);
+        const b = await r.bundle(garageId, today());
+        const was = W.modulesOf(b.settings && b.settings.modules);
+        const m = W.parseModules(body.modules, { current: b.settings && b.settings.modules, byResources: advanced(b) });
+        if (m.error) return m;
+        await r.saveSettings(garageId, sub, { modules: JSON.stringify(m.value) });
+        const changed = W.MODULE_KEYS.filter((k) => was[k] !== m.value[k]);
+        if (changed.length) await r.cal.log(garageId, sub, "modules", null, `Modules : ${changed.map((k) => `${MODULE_NAMES[k]} ${m.value[k] ? "activé" : "coupé"}`).join(", ")}.`);
+        return { ok: true };
+      });
+      if (out.error) return out.code ? apiError(409, out.code, out.error, { field: out.field }) : invalid(out);
+    }
+    if (p) await repo.cal.saveCalendar(garageId, sub, p.value);
     return state(garageId);
   }
 
@@ -334,6 +362,25 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
     return { value: out };
   }
 
+  // Tout ce qu'il faut placer pour passer au calcul par ressources : les demandes à venir, et les rendez-vous saisis à venir qui n'ont pas
+  // d'affectation (pris en calcul par créneaux), dans l'ordre des heures. viewOf(échec ou placement) : la ligne montrée au garage.
+  async function toPlace(r, garageId, fut, w, manual) {
+    const jobs = await r.cal.futureJobs(garageId);
+    const jrows = await r.cal.blockAssignments(garageId, jobs.map((k) => k.id));
+    const loose = jobs.filter((k) => !jrows.some((a) => a.blockId === k.id));
+    const items = [
+      ...(await itemsOf(r, garageId, fut, w, manual)),
+      ...loose.map((k) => ({ requestId: k.id, day: k.day, start: k.start, mode: "hour", job: P.buildJob(k.services, w.reqs, k.vehicle), forced: null, vehicle: k.vehicle, manual: false, block: k })),
+    ].sort((x, y) => (x.day < y.day ? -1 : x.day > y.day ? 1 : x.start - y.start));
+    const blockView0 = (k) => ({ id: k.id, block: true, status: "confirmed", when: { day: k.day, label: R.whenLabel(k.day, k.start), start: R.hm(k.start), end: R.hm(k.end), mode: "hour" }, services: k.services.map((x) => ({ id: x.id, qty: x.qty, label: R.serviceText(x) })), client: k.label || k.car, car: k.car });
+    const viewOf = (f) => {
+      const it = items.find((x) => x.requestId === f.requestId);
+      const base = it.block ? blockView0(it.block) : reqView(fut.find((q) => q.id === f.requestId));
+      return f.reasons ? { ...base, reasons: f.reasons.map((x) => x.text) } : base;
+    };
+    return { items, viewOf };
+  }
+
   async function check(garageId, body) {
     const nowMs = now();
     const b = await repo.bundle(garageId, today());
@@ -342,14 +389,14 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
     if (manual.error) return apiError(422, "validation", manual.error);
     const fut = await repo.cal.futureRequests(garageId);
     const w = await world(repo, b, nowMs, { exclude: new Set(fut.map((q) => q.id)) });
-    const out = P.placeExisting(w, await itemsOf(repo, garageId, fut, w, manual.value));
-    const byId = new Map(fut.map((q) => [q.id, q]));
+    const { items, viewOf } = await toPlace(repo, garageId, fut, w, manual.value);
+    const out = P.placeExisting(w, items);
     return json(
       200,
       {
         readiness: P.readiness(w, b.offered || []),
-        placed: out.placed.map((p) => ({ ...reqView(byId.get(p.requestId)), staff: p.plan.steps.flatMap((s) => s.staff).map((id) => w.names.get(id)), posts: p.plan.steps.map((s) => s.station).filter(Boolean).map((id) => w.names.get(id)), workStart: R.hm(p.plan.workStart), back: R.hm(p.plan.back) })),
-        failed: out.failed.map((f) => failView(byId.get(f.requestId), f)),
+        placed: out.placed.map((p) => ({ ...viewOf(p), staff: p.plan.steps.flatMap((s) => s.staff).map((id) => w.names.get(id)), posts: p.plan.steps.map((s) => s.station).filter(Boolean).map((id) => w.names.get(id)), workStart: R.hm(p.plan.workStart), back: R.hm(p.plan.back) })),
+        failed: out.failed.map((f) => viewOf(f)),
       },
       NO_STORE,
     );
@@ -368,14 +415,23 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
       const w = await world(r, b, nowMs, { exclude: new Set(fut.map((q) => q.id)) });
       const ready = P.readiness(w, b.offered || []);
       if (!ready.ok) return { kind: "not_ready", readiness: ready };
-      const items = await itemsOf(r, garageId, fut, w, manual.value);
+      const { items, viewOf } = await toPlace(r, garageId, fut, w, manual.value);
       const res = P.placeExisting(w, items);
-      if (res.failed.length) return { kind: "unplaced", failed: res.failed.map((f) => failView(fut.find((q) => q.id === f.requestId), f)) };
+      if (res.failed.length) return { kind: "unplaced", failed: res.failed.map((f) => viewOf(f)) };
       for (const p of res.placed) {
         const it = items.find((x) => x.requestId === p.requestId);
-        await writePlan(r, garageId, p.requestId, p.plan, it.vehicle, it.manual);
+        if (!it.block) {
+          await writePlan(r, garageId, p.requestId, p.plan, it.vehicle, it.manual);
+          continue;
+        }
+        const k = it.block, end = Math.max(k.end, p.plan.back);
+        await r.cal.saveBlock(garageId, sub, k.id, { ...k, end, endsAt: R.parisInstant(k.day, end), slotId: null });
+        await r.cal.replaceBlockAssignments(garageId, k.id, rowsOf(p.plan));
       }
       await r.cal.saveCalendar(garageId, sub, { mode: "advanced", step: 6, activated: true });
+      // le calcul par ressources s'appuie sur les mécaniciens et les postes : leurs modules reviennent s'ils avaient été coupés
+      const mods = W.modulesOf(b.settings && b.settings.modules);
+      if (!mods.staff || !mods.equip) await r.saveSettings(garageId, sub, { modules: JSON.stringify(Object.fromEntries(W.MODULE_KEYS.map((k) => [k, k === "staff" || k === "equip" ? true : mods[k]]))) });
       await r.cal.log(garageId, sub, "mode", null, `Mode avancé activé (${res.placed.length} rendez-vous à venir affectés).`);
       return { kind: "ok", placed: res.placed.length };
     });
@@ -421,6 +477,16 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
       }
       if (failed.length) return { kind: "unplaced", failed };
       for (const [id, slotId] of moves) await r.cal.setSlot(garageId, id, slotId);
+      // rendez-vous saisis : comptés dans le créneau qui contient leur heure (même plein : le garage les avait acceptés), sinon hors créneau
+      const t = today();
+      const bookings = await r.bookings(garageId, t, R.addDays(t, 400));
+      for (const k of await r.cal.futureJobs(garageId)) {
+        const minutes = k.minutes ?? Math.max(5, k.end - k.start);
+        const pl = R.placeInSlot({ slots: b.slots, bookings, nowMs: now(), day: k.day, start: k.start, minutes, services: k.services, exclude: k.id });
+        const slot = pl.slot || pl.full || null;
+        if ((slot ? slot.id : null) !== k.slotId) await r.cal.setBlockSlot(garageId, k.id, slot ? slot.id : null);
+        bookings.push({ id: k.id, slotId: slot ? slot.id : null, day: k.day, start: k.start, end: Math.min(1440, k.start + minutes), status: "confirmed", deadline: null });
+      }
       await r.cal.saveCalendar(garageId, sub, { mode: "simple" });
       await r.cal.log(garageId, sub, "mode", null, `Retour au mode simple (${moves.length} rendez-vous rattachés à un créneau).`);
       return { kind: "ok", moved: moves.length };
@@ -436,19 +502,55 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
   const planView = (names) => (a) => ({ target: a.target, id: a.targetId, name: names.get(a.targetId) || "", role: a.role, start: iso(a.start), end: iso(a.end), ...(a.fixed !== undefined ? { fixed: a.fixed } : {}) });
   // état de l'intervention (lot 3c) : null tant que rien n'a changé pour un rendez-vous hors Pixcar
   const workView = (o) => (o ? { status: o.status, at: iso(o.statusAt), noShow: o.noShow } : null);
-  const blockView = (k, rows, names, orders = []) => ({
-    id: k.id,
-    kind: k.kind,
-    label: k.label,
-    services: k.services.map((s) => ({ id: s.id, qty: s.qty, label: R.serviceText(s) })),
-    vehicle: k.vehicle,
-    when: { day: k.day, label: R.whenLabel(k.day, k.start), start: R.hm(k.start), end: R.hm(k.end) },
-    startsAt: iso(k.startsAt),
-    endsAt: iso(k.endsAt),
-    fixed: k.fixed,
-    ...(k.kind === "job" ? { work: workView(orders.find((o) => o.requestId === k.id)) } : {}),
-    plan: rows.filter((a) => a.blockId === k.id).map(planView(names)),
-  });
+  // rendez-vous saisi : label est le titre (client, sinon véhicule), client le nom tel que saisi ; back : restitution choisie par le
+  // garage (absente : à la fin des travaux) ; slot : le créneau qui le compte (calcul par créneaux)
+  const blockView = (k, rows, names, orders = [], slots = []) => {
+    const plan = rows.filter((a) => a.blockId === k.id).map(planView(names));
+    const job = k.kind === "job";
+    return {
+      id: k.id,
+      kind: k.kind,
+      label: job ? k.label || k.car || "Rendez-vous" : k.label,
+      services: k.services.map((s) => ({ id: s.id, qty: s.qty, label: R.serviceText(s) })),
+      vehicle: k.vehicle,
+      when: { day: k.day, label: R.whenLabel(k.day, k.start), start: R.hm(k.start), end: R.hm(k.end) },
+      startsAt: iso(k.startsAt),
+      endsAt: iso(k.endsAt),
+      fixed: k.fixed,
+      ...(job
+        ? {
+            client: k.label, car: k.car, plate: k.plate, phone: k.phone, note: k.note, channel: k.channel, minutes: k.minutes,
+            back: k.minutes !== null && k.end === Math.min(1440, k.start + k.minutes) ? null : R.hm(k.end),
+            slot: (slots.find((x) => x.id === k.slotId) || { name: null }).name,
+            work: workView(orders.find((o) => o.requestId === k.id)),
+          }
+        : { whole: !plan.length }),
+      plan,
+    };
+  };
+  // horaires encore proposés en ligne, jour par jour (calcul par créneaux) : les heures de début distinctes qu'au moins une prestation
+  // proposée trouve libres, avec les mêmes règles que la réservation en ligne (délai minimal, pas, rendez-vous et blocages comptés)
+  async function freeByDay(b, from, to, nowMs) {
+    const s = b.settings;
+    if (!s || !s.enabled || s.paused) return null;
+    const t = R.parisParts(nowMs).iso;
+    const settings = settingsOf(b);
+    const args = { nowMs, ctx: ctxOf(b), settings, slots: b.slots, bookings: await repo.bookings(b.garageId, t, R.addDays(t, settings.horizonDays + 1)) };
+    const seen = new Map();
+    for (const id of b.offered || []) {
+      const minutes = R.neededMinutes([{ id, qty: 1 }], b.minutes);
+      if (minutes === null) continue;
+      for (const d of R.freeTimes({ ...args, need: { services: [{ id, qty: 1 }], minutes } })) {
+        if (d.day < from || d.day > to) continue;
+        const set = seen.get(d.day) || new Set();
+        for (const x of d.times) set.add(`${x.mode}:${x.start}`);
+        seen.set(d.day, set);
+      }
+    }
+    const out = {};
+    for (let d = from; d <= to; d = R.addDays(d, 1)) out[d] = (seen.get(d) || new Set()).size;
+    return out;
+  }
   // blocs à venir dont une ressource n'est plus là (absence, fiche désactivée…) : signalés comme les rendez-vous, jamais déplacés
   function blockConflicts(w, brows, blocks, nowMs) {
     const fut = new Set(blocks.filter((k) => k.endsAt > nowMs).map((k) => k.id));
@@ -474,6 +576,8 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
     const w = worldFrom(b, data, nowMs, { withBusy: false });
     const days = [];
     for (let d = from; d <= to; d = R.addDays(d, 1)) days.push({ day: d, open: P.openOn(w, d).map(([a, z]) => [R.hm(a), R.hm(z)]) });
+    const adv = advanced(b);
+    const free = adv ? null : await freeByDay(b, from, to, nowMs);
     const fromMs = R.parisInstant(from, 0), toMs = R.parisInstant(R.addDays(to, 1), 0);
     return json(
       200,
@@ -484,16 +588,20 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
         days,
         staff: data.staff.map((m) => ({ id: m.id, name: m.name, active: m.active })),
         resources: data.resources.map((x) => ({ id: x.id, name: x.name, type: x.type, active: x.active })),
+        // calcul par ressources : les prestations qui ont leurs exigences ; par créneaux : celles que le garage fait, avec leur temps moyen
+        engine: adv ? "resources" : "slots",
         services: (b.offered || [])
-          .filter((id) => data.reqs[id])
-          .map((id) => ({ id, label: SERVICE_BY_ID.get(id).label, unit: SERVICE_BY_ID.get(id).unit || "", byVehicle: Object.keys(data.reqs[id].vehicles || {}).length > 0 })),
+          .filter((id) => !adv || data.reqs[id])
+          .map((id) => ({ id, label: SERVICE_BY_ID.get(id).label, unit: SERVICE_BY_ID.get(id).unit || "", byVehicle: adv && Object.keys(data.reqs[id].vehicles || {}).length > 0, ...(adv ? {} : { minutes: Number.isInteger(b.minutes[id]) ? b.minutes[id] : null }) })),
+        slots: adv ? [] : b.slots.map((x) => ({ id: x.id, name: x.name, days: x.days, start: R.hm(x.start), end: R.hm(x.end), mode: x.mode, capacity: x.capacity })),
+        ...(free ? { free } : {}),
         vehicles: VEHICLES,
         unavail: data.unavail.filter((u) => u.start < toMs && u.end > fromMs).map((u) => ({ ...unavailView(u), name: names.get(u.targetId) || "" })),
         conflicts: [
           ...conflicts.map((c) => ({ id: c.id, reasons: c.reasons })),
           ...blockConflicts(w, brows, blocks, nowMs),
         ],
-        blocks: blocks.map((k) => blockView(k, brows, names, jobOrders)),
+        blocks: blocks.map((k) => blockView(k, brows, names, jobOrders, b.slots)),
         appointments: list.map((q) => {
           const o = orders.find((x) => x.requestId === q.id);
           return {
@@ -510,60 +618,131 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
     );
   }
 
-  // ---------------------------------------------------------------- blocs internes (lot 3b)
-  // job : planifié par le moteur comme une demande, sans les règles de la réservation en ligne, travaux à l'heure du dépôt ; si les
-  // ressources sont prises à cette heure-là, travaux au premier moment libre après le dépôt, mais seulement après confirmation du
-  // garage (409 « shifted » : la cause, les horaires des travaux et de la restitution, d'autres horaires de dépôt sans attente).
-  // hold : ses ressources doivent être libres. Rien n'est forcé : en cas de conflit, la cause et d'autres horaires.
+  // ---------------------------------------------------------------- blocs internes (lot 3b, Gestion d'atelier)
+  // job, calcul par ressources : planifié par le moteur comme une demande, sans les règles de la réservation en ligne, travaux à l'heure
+  // du dépôt ; si les ressources sont prises à cette heure-là, travaux au premier moment libre après le dépôt, mais seulement après
+  // confirmation du garage (409 « shifted » : la cause, les horaires des travaux et de la restitution, d'autres horaires sans attente).
+  // job, calcul par créneaux (docs/gestion-atelier.md 2.4) : compté dans le créneau qui contient son heure (R.placeInSlot), sur sa
+  // durée estimée ; créneau plein : 409 « full » (la cause, d'autres heures du jour), enregistré quand même après confirmation.
+  // hold : ses mécaniciens et postes doivent être libres ; sans choix, tout l'atelier : en calcul par ressources tous doivent l'être,
+  // en calcul par créneaux les rendez-vous déjà là restent (409 « overlap », bloqué quand même après confirmation) et plus aucun
+  // horaire en ligne n'est proposé pendant la plage.
+  // ref : identifiant choisi par l'écran pour une création ; rejouée (double clic, reprise réseau), elle ne crée pas un second bloc.
+  // Modification : les champs du client absents du corps sont gardés (un glisser-déposer n'envoie que le jour, l'heure et l'affectation).
   const holdRows = (v) => P.holdAssignments(v).map((a) => ({ target: a.target, targetId: a.targetId, role: a.role, day: v.day, start: R.parisInstant(v.day, a.a), end: R.parisInstant(v.day, a.b) }));
+  const jobEnd = (k) => (k.minutes !== null && k.minutes !== undefined ? Math.min(1440, k.start + k.minutes) : k.end); // fin des travaux d'un rendez-vous saisi
+  // d'autres heures du même jour où le rendez-vous trouve une place dans un créneau (les plus proches de l'heure voulue)
+  function slotAlternatives(b, bookings, nowMs, v, minutes, exclude) {
+    const cands = [];
+    for (let t = 0; t < 1440; t += 15) if (t !== v.start && R.parisInstant(v.day, t) > nowMs) cands.push(t);
+    cands.sort((x, y) => Math.abs(x - v.start) - Math.abs(y - v.start) || x - y);
+    const out = [];
+    for (const t of cands) {
+      if (R.placeInSlot({ slots: b.slots, bookings, nowMs, day: v.day, start: t, minutes, services: v.services, exclude }).slot) out.push({ day: v.day, start: t, end: Math.min(1440, t + minutes) });
+      if (out.length >= 3) break;
+    }
+    return out.sort((x, y) => x.start - y.start);
+  }
+  const fullText = (slot, busy, start) =>
+    `« ${slot.name} » est complet à ${R.timeLabel(start)} : ${busy} ${busy > 1 ? "voitures déjà prévues" : "voiture déjà prévue"} pour ${slot.capacity} ${slot.capacity > 1 ? "places" : "place"}.`;
   async function saveBlock(garageId, sub, id, body) {
     const nowMs = now();
+    const ref = !id && body && typeof body.ref === "string" && isUuid(body.ref) ? body.ref.toLowerCase() : null;
     const out = await repo.tx(async (r) => {
       await r.lockGarage(garageId);
+      if (ref) {
+        const seen = await r.cal.blockById(ref);
+        if (seen) return seen.garageId === garageId ? { kind: "ok", saved: ref, replay: true } : { kind: "invalid", p: { error: "Identifiant de création déjà utilisé : rechargez la page.", field: "ref" } };
+      }
       const b = await r.bundle(garageId, R.parisParts(nowMs).iso);
-      if (!advanced(b)) return { kind: "simple" };
+      const adv = advanced(b);
       const prev = id ? await r.cal.getBlock(garageId, id) : null;
       if (id && !prev) return { kind: "not_found" };
       if (!id && (await r.cal.countBlocks(garageId)) >= P.MAX_BLOCKS) return { kind: "too_many" };
-      const w = await world(r, b, nowMs, { exclude: id });
-      const p = P.parseBlock(body, { staffIds: new Set(w.staff.map((m) => m.id)), resourceIds: new Set(w.resources.map((x) => x.id)), serviceIds: new Set(Object.keys(w.reqs)), nowMs });
+      const w = adv ? await world(r, b, nowMs, { exclude: id }) : null;
+      const p = P.parseBlock(
+        body,
+        adv
+          ? { staffIds: new Set(w.staff.map((m) => m.id)), resourceIds: new Set(w.resources.map((x) => x.id)), serviceIds: new Set(Object.keys(w.reqs)), nowMs }
+          : { staffIds: new Set(), resourceIds: new Set(), serviceIds: new Set(b.offered || []), nowMs, serviceText: "Prestation inconnue : cochez-la d'abord dans Mon garage › Prestations." },
+      );
       if (p.error) return { kind: "invalid", p };
       const v = p.value;
+      if (prev && prev.kind !== v.kind) return { kind: "invalid", p: { error: "Un rendez-vous ne devient pas un créneau bloqué, ni l'inverse : supprimez-le, puis créez l'autre.", field: "kind" } };
       // une intervention commencée ne change plus d'heure ni de jour (lot 3c)
       if (prev && (prev.day !== v.day || prev.start !== v.start) && W.workState(await r.cal.workOrder(prev.id)) !== "planned") return { kind: "started" };
-      // client déjà sur place (lot 3c) : rendez-vous hors Pixcar d'aujourd'hui, au plus tard au prochain quart d'heure, reçu aussitôt
+      // client déjà sur place (lot 3c) : rendez-vous saisi d'aujourd'hui, au plus tard au prochain quart d'heure, reçu aussitôt
       const arrived = body.received === true;
       if (arrived && (id || v.kind !== "job" || v.day !== R.parisParts(nowMs).iso || R.parisInstant(v.day, v.start) > nowMs + 15 * 60e3))
-        return { kind: "invalid", p: { error: "Client déjà sur place : un rendez-vous hors Pixcar d'aujourd'hui, à l'heure actuelle.", field: "time" } };
-      let row, rows;
+        return { kind: "invalid", p: { error: "Client déjà sur place : un rendez-vous d'aujourd'hui, à l'heure actuelle.", field: "time" } };
+      let row, rows = [];
       if (v.kind === "job") {
-        const job = P.buildJob(v.services, w.reqs, v.vehicle);
-        if (job.error) return { kind: "not_configured" };
-        if (job.needVehicle && !v.vehicle) return { kind: "invalid", p: { error: "Type de véhicule : une prestation en dépend.", field: "vehicle" } };
-        const forced = v.staff.length || v.station ? { staff: v.staff, station: v.station } : null;
-        const at = { day: v.day, start: v.start, mode: "hour", forced };
-        const exact = P.explain(w, job, { ...at, float: false });
-        let plan = exact.plan;
-        if (!plan) {
-          const later = P.explain(w, job, { ...at, float: true });
-          if (!later.plan) return { kind: "conflict", reasons: later.reasons.map((x) => x.text), alternatives: later.alternatives.map(altView) };
-          // une modification qui garde l'heure de dépôt (libellé, prestation…) ne redemande pas : l'attente était déjà acceptée
-          const kept = prev && prev.day === v.day && prev.start === v.start;
-          if (body.confirm !== true && !kept) return { kind: "shifted", plan: later.plan, reasons: exact.reasons.map((x) => x.text), alternatives: exact.alternatives.map(altView) };
-          plan = later.plan;
+        const was = prev;
+        const keep = (k, dflt) => (v[k] !== undefined ? v[k] : was ? was[k] : dflt);
+        const f = { client: v.client !== undefined ? v.client : was ? was.label : "", car: keep("car", ""), plate: keep("plate", ""), phone: keep("phone", ""), note: keep("note", ""), channel: keep("channel", "phone") };
+        if ([...f.client].length < 2 && [...f.car].length < 2) return { kind: "invalid", p: { error: "Indiquez le nom du client ou le véhicule.", field: "label" } };
+        const base = { kind: "job", label: f.client, services: v.services, vehicle: v.vehicle, mode: "hour", day: v.day, start: v.start, ...f };
+        if (adv) {
+          const job = P.buildJob(v.services, w.reqs, v.vehicle);
+          if (job.error) return { kind: "not_configured" };
+          if (job.needVehicle && !v.vehicle) return { kind: "invalid", p: { error: "Type de véhicule : une prestation en dépend.", field: "vehicle" } };
+          const forced = v.staff.length || v.station ? { staff: v.staff, station: v.station } : null;
+          const at = { day: v.day, start: v.start, mode: "hour", forced };
+          const exact = P.explain(w, job, { ...at, float: false });
+          let plan = exact.plan;
+          if (!plan) {
+            const later = P.explain(w, job, { ...at, float: true });
+            if (!later.plan) return { kind: "conflict", reasons: later.reasons.map((x) => x.text), alternatives: later.alternatives.map(altView) };
+            // une modification qui garde l'heure de dépôt (libellé, prestation…) ne redemande pas : l'attente était déjà acceptée
+            const kept = prev && prev.day === v.day && prev.start === v.start;
+            if (body.confirm !== true && !kept) return { kind: "shifted", plan: later.plan, reasons: exact.reasons.map((x) => x.text), alternatives: exact.alternatives.map(altView) };
+            plan = later.plan;
+          }
+          // restitution annoncée par le garage : gardée si elle vient après celle du moteur
+          const end = v.back !== undefined && v.back !== null && v.back > plan.back ? v.back : plan.back;
+          row = { ...base, end, startsAt: R.parisInstant(v.day, v.start), endsAt: R.parisInstant(v.day, end), fixed: !!forced, slotId: null, minutes: keep("minutes", null) ?? plan.labour };
+          rows = rowsOf(plan);
+        } else {
+          const minutes = keep("minutes", null) ?? R.neededMinutes(v.services, b.minutes) ?? 60;
+          // restitution : celle du corps ; sinon, en modification, le même écart avec l'heure de dépôt s'il avait été choisi ; sinon la fin des travaux
+          let back = v.back;
+          if (back === undefined) back = was && was.minutes !== null && was.end !== Math.min(1440, was.start + was.minutes) ? Math.min(1440, v.start + (was.end - was.start)) : null;
+          if (back !== null && back < v.start + minutes) {
+            if (v.back !== undefined) return { kind: "invalid", p: { error: `Restitution : après la fin des travaux (${R.timeLabel(Math.min(1440, v.start + minutes))}).`, field: "back" } };
+            back = null;
+          }
+          const end = back ?? Math.min(1440, v.start + minutes);
+          const bookings = await r.bookings(garageId, v.day, v.day);
+          const pl = R.placeInSlot({ slots: b.slots, bookings, nowMs, day: v.day, start: v.start, minutes, services: v.services, exclude: id });
+          // une modification qui ne change ni l'heure ni le jour et n'allonge pas les travaux ne redemande pas : le garage avait accepté
+          const kept = prev && prev.day === v.day && prev.start === v.start && minutes <= (prev.minutes ?? minutes);
+          if (pl.full && body.confirm !== true && !kept) return { kind: "full", text: fullText(pl.full, pl.busy, v.start), alternatives: slotAlternatives(b, bookings, nowMs, v, minutes, id).map(altView) };
+          row = { ...base, end, startsAt: R.parisInstant(v.day, v.start), endsAt: R.parisInstant(v.day, end), fixed: false, slotId: (pl.slot || pl.full || {}).id || null, minutes };
         }
-        row = { kind: "job", label: v.label, services: v.services, vehicle: v.vehicle, mode: "hour", day: v.day, start: v.start, end: plan.back, startsAt: R.parisInstant(v.day, v.start), endsAt: R.parisInstant(v.day, plan.back), fixed: !!forced };
-        rows = rowsOf(plan);
       } else {
-        const c = P.checkHold(w, v);
-        if (c.fail) return { kind: "conflict", reasons: c.fail.map((x) => x.text), alternatives: [] };
-        row = { kind: "hold", label: v.label, services: [], vehicle: "", mode: "hour", day: v.day, start: v.start, end: v.end, startsAt: R.parisInstant(v.day, v.start), endsAt: R.parisInstant(v.day, v.end), fixed: true };
-        rows = holdRows(v);
+        const hold = { kind: "hold", label: v.label, services: [], vehicle: "", mode: "hour", day: v.day, start: v.start, end: v.end, startsAt: R.parisInstant(v.day, v.start), endsAt: R.parisInstant(v.day, v.end), fixed: true };
+        if (adv) {
+          // tout l'atelier : chaque mécanicien et chaque poste actifs doivent être libres
+          const all = v.whole ? { ...v, staff: w.staff.filter((m) => m.active).map((m) => m.id), resources: w.resources.filter((x) => x.active).map((x) => x.id) } : v;
+          const c = P.checkHold(w, all);
+          if (c.fail) return { kind: "conflict", reasons: c.fail.map((x) => x.text), alternatives: [] };
+          rows = v.whole ? [] : holdRows(v);
+        } else {
+          const bookings = await r.bookings(garageId, v.day, v.day);
+          const jobs = (await r.cal.blocksBetween(garageId, v.day, v.day)).filter((k) => k.kind === "job" && k.id !== id && !k.slotId);
+          const there = [...bookings.filter((x) => !x.hold && x.id !== id && R.holds(x, nowMs)), ...jobs.map((k) => ({ id: k.id, start: k.start, end: jobEnd(k) }))].filter((x) => x.start < v.end && x.end > v.start);
+          const kept = prev && prev.day === v.day && prev.start <= v.start && prev.end >= v.end;
+          if (there.length && body.confirm !== true && !kept) {
+            const at = [...new Set(there.map((x) => x.start))].sort((x, y) => x - y).map(R.timeLabel);
+            return { kind: "overlap", text: `${there.length > 1 ? `${there.length} rendez-vous sont déjà prévus` : "Un rendez-vous est déjà prévu"} pendant cette plage (${at.slice(0, 4).join(", ")}${at.length > 4 ? "…" : ""}) : ${there.length > 1 ? "ils restent" : "il reste"} à ${there.length > 1 ? "leur" : "sa"} place.`, count: there.length };
+          }
+        }
+        row = hold;
       }
-      const saved = await r.cal.saveBlock(garageId, sub, id, row);
+      const saved = await r.cal.saveBlock(garageId, sub, id, row, { newId: ref });
       if (!saved) return { kind: "not_found" };
       await r.cal.replaceBlockAssignments(garageId, saved, rows);
-      await r.cal.log(garageId, sub, "block", saved, `${v.kind === "job" ? "Rendez-vous hors Pixcar" : "Créneau bloqué"} ${id ? "modifié" : "ajouté"} : ${R.whenLabel(v.day, v.start)}.`);
+      await r.cal.log(garageId, sub, "block", saved, `${v.kind === "job" ? "Rendez-vous hors Pixcar" : v.whole ? "Créneau bloqué (tout l'atelier)" : "Créneau bloqué"} ${id ? "modifié" : "ajouté"} : ${R.whenLabel(v.day, v.start)}.`);
       if (arrived) {
         await r.cal.setWork(garageId, saved, "received", nowMs);
         await r.cal.log(garageId, sub, "work", saved, `Intervention hors Pixcar du ${R.whenLabel(v.day, v.start)} : ${W.workLabel("received")}.`);
@@ -571,8 +750,6 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
       return { kind: "ok", saved };
     });
     switch (out.kind) {
-      case "simple":
-        return apiError(409, "simple_mode", "Les blocs du planning demandent le mode avancé.");
       case "not_found":
         return notFound("Bloc introuvable.");
       case "started":
@@ -585,6 +762,10 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
         return apiError(409, "not_configured", "Une prestation n'a pas ses exigences (Calendrier › Prestations).");
       case "conflict":
         return apiError(409, "conflict", out.reasons[0] || "Impossible à cette heure-là.", { reasons: out.reasons, alternatives: out.alternatives });
+      case "full":
+        return apiError(409, "full", `${out.text} Enregistrez quand même, ou choisissez une autre heure.`, { reasons: [out.text], alternatives: out.alternatives });
+      case "overlap":
+        return apiError(409, "overlap", `${out.text} Bloquez quand même pour ne plus rien proposer en ligne pendant cette plage, ou choisissez-en une autre.`, { reasons: [out.text], count: out.count });
       case "shifted": {
         const work = { start: R.hm(out.plan.workStart), end: R.hm(out.plan.workEnd) }, back = R.hm(out.plan.back);
         const cause = out.reasons[0] ? `${out.reasons[0]} ` : "";
@@ -596,8 +777,8 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
         );
       }
       default:
-        log({ level: "info", msg: id ? "calendrier : bloc modifié" : "calendrier : bloc ajouté", event: "cal_block", garageId });
-        return json(id ? 200 : 201, { saved: out.saved }, NO_STORE);
+        if (!out.replay) log({ level: "info", msg: id ? "calendrier : bloc modifié" : "calendrier : bloc ajouté", event: "cal_block", garageId });
+        return json(id || out.replay ? 200 : 201, { saved: out.saved, ...(out.replay ? { replay: true } : {}) }, NO_STORE);
     }
   }
   async function deleteBlock(garageId, sub, id) {
@@ -613,6 +794,22 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
   }
 
   // ---------------------------------------------------------------- déplacer ou réaffecter un rendez-vous
+  // Calcul par créneaux (Gestion d'atelier) : compté dans le créneau qui contient la nouvelle heure (R.placeInSlot) ; plein, le
+  // garage le déplace quand même s'il confirme (la confirmation est demandée de toute façon : le client est prévenu par e-mail).
+  async function moveInSlots(r, b, q, { day, start, forced, confirm, nowMs, sub }) {
+    if (forced) return { kind: "simple" };
+    if (W.workState(await r.cal.workOrder(q.id)) !== "planned") return { kind: "started" };
+    if (day === q.day && start === q.start_min) return { kind: "ok", moved: false };
+    if (R.parisInstant(day, start) <= nowMs) return { kind: "past" };
+    const minutes = q.minutes || q.end_min - q.start_min;
+    const pl = R.placeInSlot({ slots: b.slots, bookings: await r.bookings(b.garageId, day, day), nowMs, day, start, minutes, services: q.services, exclude: q.id });
+    const slot = pl.slot || pl.full || null;
+    const end = q.mode === "drop" && slot && slot.mode === "drop" ? slot.end : Math.min(1440, start + minutes);
+    if (!confirm) return { kind: "confirm", when: { label: R.whenLabel(day, start), back: R.hm(end) }, full: pl.full ? fullText(pl.full, pl.busy, start) : "" };
+    await r.reschedule(q.id, b.garageId, { day, start, end, startsAt: R.parisInstant(day, start), endsAt: R.parisInstant(day, end), slotId: slot ? slot.id : P.NIL_SLOT });
+    await r.cal.log(b.garageId, sub, "move", q.id, `Rendez-vous déplacé au ${R.whenLabel(day, start)}${slot ? ` (${slot.name}${pl.full ? ", complet" : ""})` : " (hors des créneaux)"}.`);
+    return { kind: "ok", moved: true };
+  }
   async function move(garageId, sub, id, body) {
     const b0 = body || {};
     if (!R.isIsoDay(b0.day) || !Number.isFinite(R.minOf(b0.time))) return apiError(422, "validation", "Choisissez un jour et une heure.", { field: "time" });
@@ -628,7 +825,7 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
       if (!q) return { kind: "not_found" };
       if (!R.holds(q, nowMs) || q.starts_at <= nowMs) return { kind: "state" };
       const b = await r.bundle(garageId, R.parisParts(nowMs).iso);
-      if (!advanced(b)) return { kind: "simple" };
+      if (!advanced(b)) return moveInSlots(r, b, q, { day: b0.day, start, forced, confirm: b0.confirm === true, nowMs, sub });
       const w = await world(r, b, nowMs, { exclude: id });
       if (forced && (forced.staff.some((x) => !w.staff.some((m) => m.id === x)) || (forced.station && !w.resources.some((x) => x.id === forced.station)))) return { kind: "unknown" };
       const order = await r.cal.workOrder(id);
@@ -654,7 +851,9 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
       case "started":
         return apiError(409, "started", "L'intervention a commencé : le rendez-vous ne se déplace plus.");
       case "simple":
-        return apiError(409, "simple_mode", "Le déplacement avec contrôle des ressources demande le mode avancé.");
+        return apiError(409, "simple_mode", "Choisir un mécanicien ou un poste demande le calcul par ressources.");
+      case "past":
+        return apiError(409, "conflict", "Cet horaire est passé.", { reasons: ["Cet horaire est passé."], alternatives: [] });
       case "unknown":
         return apiError(422, "validation", "Mécanicien ou poste inconnu.");
       case "not_configured":
@@ -662,7 +861,7 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
       case "conflict":
         return apiError(409, "conflict", out.reasons[0] || "Impossible à cette heure-là.", { reasons: out.reasons, alternatives: out.alternatives });
       case "confirm":
-        return apiError(409, "confirm", `Le client sera prévenu par e-mail du nouvel horaire : ${out.when.label} (restitution prévue vers ${R.timeLabel(R.minOf(out.when.back))}). Confirmez le déplacement.`, { when: out.when });
+        return apiError(409, "confirm", `${out.full ? `${out.full} ` : ""}Le client sera prévenu par e-mail du nouvel horaire : ${out.when.label} (restitution prévue vers ${R.timeLabel(R.minOf(out.when.back))}). Confirmez le déplacement.`, { when: out.when, ...(out.full ? { full: true } : {}) });
       default:
         break;
     }
@@ -672,8 +871,8 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
   }
 
   // ---------------------------------------------------------------- suivi des interventions (lot 3c, src/js/shared/work.js)
-  // id : une demande Pixcar confirmée, ou un rendez-vous hors Pixcar (bloc « job »). Passé « Prête », le client d'un rendez-vous Pixcar
-  // est prévenu par e-mail sauf notify: false (une seule fois par rendez-vous).
+  // id : une demande Pixcar confirmée, ou un rendez-vous saisi par le garage (bloc « job »), dans les deux calculs des disponibilités
+  // (Gestion d'atelier). Passé « Prête », le client d'un rendez-vous Pixcar est prévenu par e-mail sauf notify: false (une seule fois).
   async function setWork(garageId, sub, id, body) {
     const p = W.parseWork(body);
     if (p.error) return invalid(p);
@@ -681,8 +880,6 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
     const t = R.parisParts(nowMs).iso;
     const out = await repo.tx(async (r) => {
       await r.lockGarage(garageId);
-      const b = await r.bundle(garageId, t);
-      if (!advanced(b)) return { kind: "simple" };
       const q = await r.getForGarage(garageId, id);
       const k = q ? null : await r.cal.getBlock(garageId, id);
       if (!q && (!k || k.kind !== "job")) return { kind: "not_found" };
@@ -697,8 +894,6 @@ export function createCalendar({ repo, now, log = () => {}, drain, ctxOf, settin
       return { kind: "ok", notified, order: await r.cal.workOrder(id) };
     });
     switch (out.kind) {
-      case "simple":
-        return apiError(409, "simple_mode", "Le suivi des interventions demande le mode avancé.");
       case "not_found":
         return notFound("Rendez-vous introuvable.");
       case "not_confirmed":

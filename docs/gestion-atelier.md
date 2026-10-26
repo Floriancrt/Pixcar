@@ -255,3 +255,75 @@ alertes de retard avec tâches suivantes impactées ; suggestions de réorganisa
 Règles de disponibilité (unitaires), création et modification, conflits, transitions d'état, passage entre affichages (aucune donnée
 touchée), affectations, concurrence (deux réservations sur la dernière place, double clic), cloisonnement par garage (droits), formats
 d'écran (1280, 900, 390 px), non-régression (suites existantes : `npm test`, `npm run test:dist`, serveur, unitaires).
+
+## 5. Implémentation (P0, branche `gestion-atelier`, 25 et 26 octobre 2026)
+
+Livré : le P0 entier, plus les vues de l'affichage avancé du P1 qui existaient déjà côté écran (Équipe, Équipements, Suivi, Charge,
+modules réglables). Restent du P1 : les états de précision (accord client, contrôle final), les heures réelles, l'affectation à la main
+en calcul par créneaux, la recherche hors période, le redimensionnement, les types de poste supplémentaires, la replanification.
+
+### 5.1 Données (`db/migrations/009_atelier.sql`)
+
+Neuf colonnes ajoutées, nullables, sans défaut ni contrainte (seule forme qu'accepte `ALTER TABLE … ADD COLUMN` sur Aurora DSQL),
+`IF NOT EXISTS` pour qu'une migration interrompue se relance. Contrôles dans l'API (`parseBlock`, `parsePrefs`, `parseModules`).
+
+| Table | Colonnes | Écart avec le plan 0.1 |
+|---|---|---|
+| `rdv_blocks` | `slot_id`, `channel`, `minutes`, `car`, `plate`, `phone`, `note` | pas de `cancelled_at` : un rendez-vous saisi annulé est supprimé, comme avant (P1 si le garage veut garder une trace) |
+| `rdv_settings` | `modules` (jsonb) | **ajouté** : les modules sont un réglage du garage ; les mettre dans `rdv_calendar` aurait créé sa ligne, qui signifie « assistant du calcul par ressources ouvert » |
+| `pro_prefs` | `view` | — |
+
+`rdv_blocks.label` reste le nom du client d'un rendez-vous saisi (vide si seul le véhicule est connu) ; l'agenda renvoie `label` (le
+titre : le client, sinon le véhicule) et `client` (tel que saisi). Le téléphone est gardé au format `+33…` (même analyseur que les fiches
+des garages), affiché `06 12 34 56 78`. Purge : nom, téléphone, véhicule, immatriculation et commentaire effacés 30 jours après le jour,
+la ligne après 24 mois (comme avant pour le libellé).
+
+### 5.2 Règles retenues
+
+- **Place d'un rendez-vous saisi, calcul par créneaux** (`placeInSlot`, `src/js/shared/rdv.js`) : le créneau du jour qui contient son
+  heure de début ; de préférence celui qui propose ses prestations et où toute la durée tient ; il compte sur `[début, début + durée[`
+  (à l'heure) ou comme une voiture du jour (dépôt). Durée : celle saisie, sinon le temps moyen de Mon garage, sinon 60 min. Plein : 409
+  `full` avec la cause et trois autres heures du jour ; enregistré quand même après confirmation (le garage reste maître). Hors de tout
+  créneau : enregistré sans réduire aucun horaire en ligne.
+- **Créneau bloqué sans mécanicien ni poste = tout l'atelier**, dans les deux calculs : par créneaux, aucun horaire en ligne pendant la
+  plage (les rendez-vous déjà là restent, après confirmation : 409 `overlap`) ; par ressources, il occupe chaque mécanicien et chaque
+  poste, y compris ceux ajoutés plus tard (étendu à la lecture, rien n'est écrit dans `rdv_assignments`).
+- **Modification** : les champs du client absents du corps sont gardés ; un glisser-déposer n'envoie que le jour, l'heure et
+  l'affectation. Une restitution choisie garde son écart avec l'heure de dépôt quand le rendez-vous bouge.
+- **Doublons** : la création porte un identifiant choisi par l'écran (`ref`), qui devient celui du bloc ; rejouée, elle renvoie le même
+  bloc (200, `replay: true`). Deux créations simultanées sur la dernière place passent l'une après l'autre (verrou du garage).
+- **Déplacement d'une demande Pixcar en calcul par créneaux** : compté dans le créneau de la nouvelle heure ; la confirmation, déjà
+  demandée parce que le client est prévenu, dit aussi si le créneau est plein.
+- **Bascule du calcul** : vers les ressources, les rendez-vous saisis sans affectation sont placés comme les demandes (l'aperçu les
+  montre) et les modules Mécaniciens et Équipements reviennent ; vers les créneaux, chaque rendez-vous saisi à venir est rattaché au
+  créneau de son heure (même plein).
+- **Affichage** : préférence du compte (`pro_prefs.view`), le navigateur n'en garde qu'une copie de secours ; à la première visite,
+  celui qui va avec le calcul des disponibilités.
+
+### 5.3 Mise en ligne : deux temps obligatoires
+
+La nouvelle API lit les colonnes de 009 dans presque toutes les routes de rendez-vous, réservation publique comprise (`bookings`,
+`bundle`). Elle ne doit donc jamais servir avant la migration. Ordre : (1) paquet contenant la migration et l'ancien code, `migrate`,
+`selfcheck` ; (2) paquet du nouveau code ; (3) site. L'ancien code ignore les nouvelles colonnes (compatible). Détail dans
+`exploitation.md` le jour du déploiement ; rien n'est déployé sans le go de l'utilisateur.
+
+### 5.4 Textes à faire relire
+
+La politique de confidentialité (`src/partials/legal.html`) et la note de l'Espace Pro disent maintenant que Pixcar agit comme
+sous-traitant (article 28 du RGPD) pour les clients que le garage saisit. Les conditions de l'Espace Pro doivent contenir les clauses de
+sous-traitance (décision 2.8) : **à rédiger et faire relire par un juriste avant la mise en ligne** ; la date de mise à jour de la
+politique (`legal.json`) est à changer à la publication.
+
+## 6. Validation (P0)
+
+| Niveau | Fichier | Ce qui est vérifié |
+|---|---|---|
+| Unitaires | `tests/unit/atelier.test.mjs` | plages bloquées dans `freeTimes`, `placeInSlot` (préférences, plein, hors créneau, dépôt, demande expirée, exclusion), `parseBlock` (champs gardés absents, téléphone, immatriculation, tout l'atelier, refus des affectations), modules et préférence |
+| Serveur (PGlite) | `server/test/atelier.test.mjs` | place prise pour toute la durée, rejeu, plein puis confirmé, glisser sans perte, blocage de tout l'atelier, chevauchement confirmé, validations, effacement à 30 jours, états, déplacement d'une demande (plein, e-mail), concurrence, modules, bascules dans les deux sens |
+| Contrat | `server/test/openapi.test.mjs` | nouvelles réponses et formes (201, 200 rejeu, 409 `full` et `overlap`, 422, agenda `engine` / `slots` / `free`, modules, `view`) |
+| Base réelle | `server/selfcheck.mjs` | colonnes de 009, `UNION ALL` et `NOT EXISTS` de `bookings`, `jsonb` des modules, `view` — **à lancer sur Aurora DSQL au déploiement** |
+| Navigateur | `tests/pro-atelier.js` | affichage simple de bout en bout (création au clavier, place prise en ligne, plein, blocages, fiche, client sur place et avancement, liste, affichage gardé sur le compte, module coupé, téléphone, axe) |
+| Navigateur | `tests/pro-planning.js` | l'affichage avancé (ex-Planning) adapté : menu, origines, filtres en panneau, espaces Équipe et Équipements |
+
+Résultat du 26 octobre 2026 : tout passe (unitaires 273/273, serveur 374/374, `npm test` 35 suites, `npm run test:dist` 39 suites,
+`proatelier` 45/45) ; détail dans `docs/tests.md`. Reste le `selfcheck` sur Aurora DSQL, au déploiement.

@@ -185,9 +185,11 @@ function peak(bookings, start, end) {
   return max;
 }
 const within = (ranges, a, b) => ranges.some(([x, y]) => a >= x && b <= y);
+const overlaps = (list, a, b) => list.some((x) => x.start < b && x.end > a);
 
-// Les offres d'un créneau pour un jour : [{ start, end, slotId, mode, until }] (until : fin de la fenêtre d'arrivée d'un dépôt)
-function slotOffers(slot, iso, ranges, { minutes, stepMin, earliest, bookings }) {
+// Les offres d'un créneau pour un jour : [{ start, end, slotId, mode, until }] (until : fin de la fenêtre d'arrivée d'un dépôt).
+// blocked : créneaux bloqués de tout l'atelier ce jour-là (Gestion d'atelier) : aucune arrivée ni aucuns travaux pendant ces plages.
+function slotOffers(slot, iso, ranges, { minutes, stepMin, earliest, bookings, blocked = [] }) {
   const mine = bookings.filter((b) => b.slotId === slot.id && b.day === iso);
   const len = slot.end - slot.start;
   if (minutes > len) return [];
@@ -195,12 +197,14 @@ function slotOffers(slot, iso, ranges, { minutes, stepMin, earliest, bookings })
     const until = Math.min(slot.start + 60, slot.end);
     if (parisInstant(iso, slot.start) < earliest) return [];
     if (!ranges.some(([x, y]) => slot.start >= x && slot.start < y)) return []; // l'arrivée tombe pendant une plage d'ouverture
+    if (overlaps(blocked, slot.start, until)) return [];
     return mine.length < slot.capacity ? [{ start: slot.start, end: slot.end, slotId: slot.id, mode: "drop", until }] : [];
   }
   const out = [];
   for (let t = slot.start; t + minutes <= slot.end; t += stepMin) {
     if (!within(ranges, t, t + minutes)) continue;
     if (parisInstant(iso, t) < earliest) continue;
+    if (overlaps(blocked, t, t + minutes)) continue;
     if (peak(mine, t, t + minutes) >= slot.capacity) continue;
     out.push({ start: t, end: t + minutes, slotId: slot.id, mode: "hour" });
   }
@@ -210,11 +214,15 @@ function slotOffers(slot, iso, ranges, { minutes, stepMin, earliest, bookings })
 // Horaires libres, jour par jour : [{ day, times: [{ start, end, slotId, mode, until? }] }] (jours sans horaire omis).
 //  - ctx : { hours, closures, holidays } ; settings : { minDelayH, horizonDays, stepMin }
 //  - slots : [{ id, days: ["mo", …], start, end, mode, capacity, services: [ids] }] (minutes depuis minuit)
-//  - need : { services: [{ id, qty }], minutes } ; bookings : [{ slotId, day, start, end, status, deadline }] (deadline en ms)
+//  - need : { services: [{ id, qty }], minutes }
+//  - bookings : [{ slotId, day, start, end, status, deadline, hold? }] (deadline en ms) : demandes Pixcar, rendez-vous saisis par le
+//    garage (comptés dans leur créneau comme une demande confirmée) et créneaux bloqués de tout l'atelier (hold: true, sans créneau)
 //  - maxDays : ne pas regarder au-delà (14 pour l'étiquette du comparateur) ; first : s'arrêter au premier horaire trouvé
 export function freeTimes({ nowMs, ctx, settings, slots, need, bookings = [], maxDays = Infinity, first = false }) {
   const earliest = earliestStart(nowMs, ctx, settings.minDelayH);
-  const held = bookings.filter((b) => holds(b, nowMs));
+  const all = bookings.filter((b) => holds(b, nowMs));
+  const held = all.filter((b) => !b.hold);
+  const blockedOn = (iso) => all.filter((b) => b.hold && b.day === iso);
   const ids = need.services.map((s) => s.id);
   const fitting = slots.filter((s) => ids.every((id) => s.services.includes(id)));
   const out = [];
@@ -229,7 +237,7 @@ export function freeTimes({ nowMs, ctx, settings, slots, need, bookings = [], ma
     const seen = new Map();
     for (const slot of fitting) {
       if (!slot.days.includes(wd)) continue;
-      for (const o of slotOffers(slot, iso, ranges, { minutes: need.minutes, stepMin: settings.stepMin, earliest, bookings: held })) {
+      for (const o of slotOffers(slot, iso, ranges, { minutes: need.minutes, stepMin: settings.stepMin, earliest, bookings: held, blocked: blockedOn(iso) })) {
         const key = `${o.mode}:${o.start}`;
         if (!seen.has(key)) seen.set(key, o); // deux créneaux qui proposent la même heure n'en font qu'une : le premier qui a de la place
       }
@@ -244,6 +252,35 @@ export function freeTimes({ nowMs, ctx, settings, slots, need, bookings = [], ma
 export function pickOffer(args, { day, start, mode }) {
   const found = freeTimes(args).find((d) => d.day === day);
   return (found && found.times.find((t) => t.start === start && (!mode || t.mode === mode))) || null;
+}
+
+// Rendez-vous saisi par le garage, ou déplacé par lui (Gestion d'atelier, docs/gestion-atelier.md 2.4) : le créneau qui le compte.
+// Il est compté dans un créneau du jour qui contient son heure de début, sur toute sa durée (à l'heure : voitures en même temps
+// pendant [start, start + minutes[ ; dépôt : voitures du jour), comme une demande confirmée ; ni le délai minimal ni le pas des
+// horaires en ligne ne s'appliquent : c'est le garage qui décide. Ordre de préférence : un créneau qui propose ces prestations et où
+// toute la durée tient, puis qui les propose, puis où la durée tient, puis n'importe lequel ; le premier qui a encore de la place.
+//  → { slot, busy } : le créneau choisi et les voitures déjà là au plus fort de la durée
+//    { full: slot, busy } : tous ceux qui conviennent sont pleins (le garage peut confirmer quand même)
+//    { slot: null } : aucun créneau ce jour-là à cette heure (le rendez-vous ne réduit aucun horaire en ligne)
+// exclude : identifiant d'une réservation à ne pas compter (celle qu'on déplace)
+export function placeInSlot({ slots, bookings = [], nowMs, day, start, minutes, services = [], exclude = null }) {
+  const wd = weekday(day);
+  const held = bookings.filter((b) => !b.hold && b.day === day && holds(b, nowMs) && !(exclude && b.id === exclude));
+  const ids = services.map((s) => (typeof s === "string" ? s : s.id));
+  const rank = (s) => (ids.every((id) => s.services.includes(id)) ? 0 : 2) + (start + minutes <= s.end ? 0 : 1);
+  const covering = slots
+    .filter((s) => s.days.includes(wd) && s.start <= start && start < s.end)
+    .map((s, i) => ({ s, i, r: rank(s) }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((x) => x.s);
+  let full = null;
+  for (const s of covering) {
+    const mine = held.filter((b) => b.slotId === s.id);
+    const busy = s.mode === "drop" ? mine.length : peak(mine, start, start + minutes);
+    if (busy < s.capacity) return { slot: s, busy };
+    if (!full) full = { full: s, busy };
+  }
+  return full || { slot: null };
 }
 
 // ---------------------------------------------------------------- ce que règle le garage

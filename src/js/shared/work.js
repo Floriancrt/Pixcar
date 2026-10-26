@@ -91,15 +91,63 @@ export const SHORTCUTS = [
   { id: "site", label: "Voir Pixcar", sub: "Le comparateur, comme vos clients" },
 ];
 export const DEFAULT_SHORTCUTS = ["planning", "prices", "agenda"];
+
+// ---------------------------------------------------------------- Gestion d'atelier (docs/gestion-atelier.md 2.1)
+// Affichage de Gestion d'atelier choisi par un compte (préférence) : simple ou advanced ; null tant que rien n'a été choisi.
+export const VIEWS = ["simple", "advanced"];
+// Modules de l'affichage avancé, pour tout le garage. Couper un module masque son espace ; ses données restent. Les analyses (stats)
+// attendent les temps réellement passés : jamais actives pour l'instant.
+export const MODULE_KEYS = ["staff", "equip", "track", "load"];
+export const DEFAULT_MODULES = { staff: true, equip: true, track: true, load: true };
+export const modulesOf = (stored) => {
+  const out = { ...DEFAULT_MODULES };
+  if (stored && typeof stored === "object") for (const k of MODULE_KEYS) if (typeof stored[k] === "boolean") out[k] = stored[k];
+  return { ...out, stats: false };
+};
+// Ce qu'un interrupteur peut faire : mécaniciens et équipements servent au calcul par ressources (on ne les coupe qu'après être revenu
+// au calcul par créneaux) ; la charge demande l'un des deux. → { locked, why }
+export function moduleRule(key, on, m, { byResources = false } = {}) {
+  if (key === "stats") return { locked: true, why: "Prochainement : il faut d'abord noter les heures réelles de début et de fin des travaux." };
+  if ((key === "staff" || key === "equip") && on && byResources) return { locked: true, why: "Utilisé par le calcul de vos disponibilités en ligne : revenez d'abord au calcul par créneaux pour le couper." };
+  if (key === "load" && !on && !m.staff && !m.equip) return { locked: true, why: "Demande le module Mécaniciens ou Ponts et équipements." };
+  return { locked: false, why: "" };
+}
+// modules de PUT …/calendar/settings : { staff?, equip?, track?, load?, stats? } complétés par current (ceux du garage)
+// → { value } (sans stats) ou { error, field, code? } (code « in_use » : refus lié au calcul par ressources)
+export function parseModules(body, { current = null, byResources = false } = {}) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return { error: "modules : un objet.", field: "modules" };
+  for (const [k, v] of Object.entries(body)) {
+    if (!MODULE_KEYS.includes(k) && k !== "stats") return { error: `Module inconnu : ${String(k).slice(0, 20)}.`, field: "modules" };
+    if (typeof v !== "boolean") return { error: "Un module est actif (true) ou non (false).", field: "modules" };
+  }
+  if (body.stats === true) return { error: "Analyses : prochainement.", field: "modules" };
+  const was = modulesOf(current);
+  const m = { ...was };
+  for (const k of MODULE_KEYS) if (body[k] !== undefined) m[k] = body[k];
+  if (byResources && (!m.staff || !m.equip)) return { error: "Mécaniciens et Ponts et équipements servent au calcul de vos disponibilités en ligne : revenez d'abord au calcul par créneaux pour les couper.", field: "modules", code: "in_use" };
+  if (m.load && !m.staff && !m.equip) return { error: "Charge et capacité demande le module Mécaniciens ou Ponts et équipements.", field: "modules" };
+  return { value: Object.fromEntries(MODULE_KEYS.map((k) => [k, m[k]])) };
+}
 export const MAX_SHORTCUTS = 6;
 const SHORTCUT_IDS = new Set(SHORTCUTS.map((s) => s.id));
 
-// corps de PUT /v1/pro/garages/:id/prefs : { shortcuts: [identifiants] }
+// corps de PUT /v1/pro/garages/:id/prefs : { shortcuts?: [identifiants], view?: "simple" | "advanced" | null } (l'un des deux au moins ;
+// celui qui manque ne change pas)
 export function parsePrefs(body) {
-  const list = body && typeof body === "object" ? body.shortcuts : undefined;
-  if (!Array.isArray(list)) return { error: "shortcuts : une liste.", field: "shortcuts" };
-  if (list.length > MAX_SHORTCUTS) return { error: `${MAX_SHORTCUTS} raccourcis au plus.`, field: "shortcuts" };
-  if (!list.every((id) => SHORTCUT_IDS.has(id))) return { error: "Raccourci inconnu.", field: "shortcuts" };
-  if (new Set(list).size !== list.length) return { error: "Un raccourci en double.", field: "shortcuts" };
-  return { value: { shortcuts: list } };
+  if (!body || typeof body !== "object" || Array.isArray(body)) return { error: "Objet attendu.", field: "shortcuts" };
+  const out = {};
+  if (body.shortcuts !== undefined) {
+    const list = body.shortcuts;
+    if (!Array.isArray(list)) return { error: "shortcuts : une liste.", field: "shortcuts" };
+    if (list.length > MAX_SHORTCUTS) return { error: `${MAX_SHORTCUTS} raccourcis au plus.`, field: "shortcuts" };
+    if (!list.every((id) => SHORTCUT_IDS.has(id))) return { error: "Raccourci inconnu.", field: "shortcuts" };
+    if (new Set(list).size !== list.length) return { error: "Un raccourci en double.", field: "shortcuts" };
+    out.shortcuts = list;
+  }
+  if (body.view !== undefined) {
+    if (body.view !== null && !VIEWS.includes(body.view)) return { error: "Affichage : simple ou avancé.", field: "view" };
+    out.view = body.view;
+  }
+  if (!Object.keys(out).length) return { error: "shortcuts : une liste.", field: "shortcuts" };
+  return { value: out };
 }

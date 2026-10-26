@@ -356,6 +356,24 @@ describe("docs/openapi.yaml ↔ API", () => {
       await app.call("POST", `${G}/notify/code`, { headers: me, body: { code: code("atelier@garage-dupont.fr") } });
       await call("GET", C, `${G}/calendar`, { headers: me, status: 200 });
       await call("GET", C, `${G}/calendar`, { status: 401 });
+      // Gestion d'atelier, calcul par créneaux : rendez-vous saisi, rejeu, créneau plein, blocage qui chevauche, agenda, modules, affichage
+      await app.call("POST", `${G}/slots`, { headers: me, body: { name: "Matin", days: ["mo", "tu", "we", "th", "fr"], start: "08:00", end: "12:00", mode: "hour", capacity: 1, services: ["plaq_av"] } });
+      await app.call("PUT", `${G}/settings`, { headers: me, body: { enabled: true, minDelayH: 0 } });
+      const SB = `${C}/blocks`;
+      const phone = { kind: "job", client: "M. Martin", phone: "06 12 34 56 78", car: "Clio", plate: "ab-123-cd", services: ["plaq_av"], day: "2026-10-22", time: "09:00", minutes: 60, channel: "phone", ref: crypto.randomUUID() };
+      const sj = JSON.parse((await call("POST", SB, `${G}/calendar/blocks`, { headers: me, body: phone, status: 201 })).text).saved;
+      await call("POST", SB, `${G}/calendar/blocks`, { headers: me, body: phone, status: 200 }); // rejeu
+      await call("POST", SB, `${G}/calendar/blocks`, { headers: me, body: { ...phone, ref: undefined, time: "09:30" }, status: 409 }); // complet
+      await call("POST", SB, `${G}/calendar/blocks`, { headers: me, body: { ...phone, ref: undefined, phone: "appeler" }, status: 422 });
+      await call("POST", SB, `${G}/calendar/blocks`, { headers: me, body: { kind: "hold", label: "Réunion", day: "2026-10-22", time: "09:00", to: "10:00" }, status: 409 }); // chevauche
+      const sh = JSON.parse((await call("POST", SB, `${G}/calendar/blocks`, { headers: me, body: { kind: "hold", label: "Réunion", day: "2026-10-22", time: "09:00", to: "10:00", confirm: true }, status: 201 })).text).saved;
+      await call("GET", `${C}/agenda`, `${G}/calendar/agenda?from=2026-10-19&to=2026-10-25`, { headers: me, status: 200 });
+      await call("PUT", `${C}/settings`, `${G}/calendar/settings`, { headers: me, body: { modules: { track: false } }, status: 200 });
+      await call("PUT", `${C}/settings`, `${G}/calendar/settings`, { headers: me, body: { modules: { staff: false, equip: false } }, status: 422 });
+      await call("PUT", "/v1/pro/garages/{id}/prefs", `/v1/pro/garages/${gid}/prefs`, { headers: me, body: { view: "advanced" }, status: 200 });
+      await call("PUT", "/v1/pro/garages/{id}/prefs", `/v1/pro/garages/${gid}/prefs`, { headers: me, body: { view: "expert" }, status: 422 });
+      await call("GET", "/v1/pro/garages/{id}", `/v1/pro/garages/${gid}`, { headers: me, status: 200 }); // rdv.modules, prefs.view
+      for (const k of [sj, sh]) await app.call("DELETE", `${G}/calendar/blocks/${k}`, { headers: me });
       await call("POST", `${C}/activate`, `${G}/calendar/activate`, { headers: me, status: 409 });
       const st = JSON.parse((await call("POST", `${C}/start`, `${G}/calendar/start`, { headers: me, status: 200 })).text);
       await call("PUT", `${C}/settings`, `${G}/calendar/settings`, { headers: me, body: { receptionMin: 0 }, status: 200 });

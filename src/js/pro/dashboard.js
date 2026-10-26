@@ -10,6 +10,7 @@ import { createCalendarViews } from "./calendar.js";
 import { createPlanning } from "./planning.js";
 import { createHome } from "./home.js";
 import { parisParts } from "../shared/rdv.js";
+import { moduleRule as ruleOf, modulesOf as modulesFrom } from "../shared/work.js";
 
 const LONG = { day: "numeric", month: "long", year: "numeric" };
 const DAY_MONTH = { day: "numeric", month: "long" };
@@ -48,7 +49,11 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
   // calendrier avancé (calendar.js) : l'assistant (mode simple), puis ses réglages dans Mon garage ; le planning (planning.js) n'existe
   // qu'en mode avancé
   const cal = createCalendarViews({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name) => panel(name), onMode: setMode });
-  const plan = createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name) => panel(name) });
+  const plan = createPlanning({
+    api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name) => panel(name),
+    accountView: () => (data && data.prefs ? data.prefs.view : null),
+    onView: (v) => data && data.prefs && (data.prefs.view = v),
+  });
   // tableau de bord (lot 3c) : ses liens ouvrent les autres écrans, parfois sur un jour, une fiche ou un formulaire
   const board = createHome({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name, opts) => panel(name, opts), decline: (id, r, done) => rdv.decline(id, r, done), onTodo: (n) => setTodo(n) });
   // mode avancé : « Planning » apparaît ; Mon garage montre les ressources et les modules actifs
@@ -209,15 +214,10 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     ["load", "Charge et capacité", "Heures disponibles, planifiées et restantes ; mécaniciens et postes comptés à part.", "load"],
     ["stats", "Analyses", "Durées réelles, écarts, rendez-vous honorés, répartition par canal.", null],
   ];
-  const modulesOf = () => ({ staff: true, equip: true, track: true, load: true, stats: false, ...((data && data.rdv && data.rdv.modules) || {}) });
+  const modulesOf = () => modulesFrom(data && data.rdv && data.rdv.modules);
   let armed = null; // module dont la désactivation attend sa confirmation
-  function moduleRule(key, on, m) {
-    const byRes = mode === "advanced";
-    if (key === "stats") return { locked: true, why: "Prochainement : il faut d'abord noter les heures réelles de début et de fin des travaux." };
-    if ((key === "staff" || key === "equip") && on && byRes) return { locked: true, why: "Utilisé par le calcul de vos disponibilités en ligne : revenez d'abord au calcul par créneaux pour le couper." };
-    if (key === "load" && !on && !m.staff && !m.equip) return { locked: true, why: "Demande le module Mécaniciens ou Ponts et équipements." };
-    return { locked: false, why: "" };
-  }
+  // la même règle que l'API (src/js/shared/work.js) : ce qu'un interrupteur peut faire
+  const moduleRule = (key, on, m) => ruleOf(key, on, m, { byResources: mode === "advanced" });
   function modules() {
     const m = modulesOf();
     $("mgModules").replaceChildren(
@@ -255,7 +255,8 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     }
     armed = null;
     try {
-      const out = await api.calSettings(data.garage.id, { modules: { ...modulesOf(), [key]: on } });
+      const { stats, ...current } = modulesOf();
+      const out = await api.calSettings(data.garage.id, { modules: { ...current, [key]: on } });
       data.rdv.modules = out.modules;
       plan.reset();
       modules();

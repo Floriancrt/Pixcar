@@ -380,24 +380,26 @@ paths:
                     properties:
                       views: { $ref: "#/components/schemas/ProVisitCounts" }
                       calls: { $ref: "#/components/schemas/ProVisitCounts" }
-                  rdv: { type: object, description: "Rendez-vous en ligne ouverts côté API : demandes à traiter, mode du calendrier (l'écran Planning n'existe qu'en mode avancé).", required: [todo, mode], properties: { todo: { type: integer, minimum: 0 }, mode: { type: string, enum: [simple, advanced] } } }
+                  rdv: { type: object, description: "Rendez-vous en ligne ouverts côté API : demandes à traiter, calcul des disponibilités (par créneaux : simple ; par ressources : advanced) et modules de l'affichage avancé de Gestion d'atelier.", required: [todo, mode, modules], properties: { todo: { type: integer, minimum: 0 }, mode: { type: string, enum: [simple, advanced] }, modules: { $ref: "#/components/schemas/CalModules" } } }
                   prefs: { $ref: "#/components/schemas/ProPrefs" }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { description: "Garage introuvable ou pas rattaché à ce compte (`not_found`), ou Espace Pro fermé (`pro_disabled`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   /v1/pro/garages/{id}/prefs:
     put:
       tags: [Espace Pro]
-      summary: "Raccourcis du tableau de bord de ce compte pour ce garage (lot 3c) : `{ shortcuts }`"
+      summary: "Préférences de ce compte pour ce garage : raccourcis du tableau de bord (lot 3c) et affichage de Gestion d'atelier : `{ shortcuts?, view? }`"
       description: |
-        Six au plus, sans doublon, parmi les identifiants de `src/js/shared/work.js` (planning, requests, prices, agenda, garage, team,
-        new, closure, site). Une liste vide est permise. Effacés avec le rattachement.
+        `shortcuts` : six au plus, sans doublon, parmi les identifiants de `src/js/shared/work.js` (planning, requests, prices, agenda,
+        garage, team, new, closure, site) ; une liste vide est permise. `view` : affichage de Gestion d'atelier (`simple`, `advanced`, ou
+        `null` pour revenir au choix par défaut, celui du calcul des disponibilités). L'un des deux au moins ; celui qui manque ne change
+        pas. Effacées avec le rattachement.
       operationId: proPrefs
       security: [{ cognito: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProPrefs" } } } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProPrefsInput" } } } }
       responses:
-        "200": { description: Les raccourcis enregistrés., content: { application/json: { schema: { $ref: "#/components/schemas/ProPrefs" } } } }
+        "200": { description: Les préférences enregistrées (toutes)., content: { application/json: { schema: { $ref: "#/components/schemas/ProPrefs" } } } }
         "400": { description: "JSON illisible (`bad_json`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { description: "Garage pas rattaché à ce compte.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
@@ -910,11 +912,14 @@ paths:
   /v1/pro/garages/{id}/rdv/requests/{request}/move:
     post:
       tags: [Calendrier]
-      summary: "Déplacer ou réaffecter un rendez-vous (mode avancé) : `{ day, time, staff?, station?, confirm? }`"
+      summary: "Déplacer ou réaffecter un rendez-vous : `{ day, time, staff?, station?, confirm? }`"
       description: |
         Même heure, autre mécanicien ou autre poste : sans prévenir le client. Autre heure : refusé tant que `confirm` n'est pas `true`
-        (409 `confirm`), puis le client reçoit un e-mail avec le nouveau fichier d'agenda. Un conflit (ressource prise, absente, hors de ses
-        heures…) renvoie 409 `conflict` avec `reasons` et `alternatives` ; rien n'est modifié.
+        (409 `confirm`), puis le client reçoit un e-mail avec le nouveau fichier d'agenda.
+        Calcul par ressources : un conflit (ressource prise, absente, hors de ses heures…) renvoie 409 `conflict` avec `reasons` et
+        `alternatives` ; rien n'est modifié. Calcul par créneaux (Gestion d'atelier) : la demande est comptée dans le créneau qui contient
+        la nouvelle heure ; s'il est plein, la réponse `confirm` le dit (`full: true`, la cause en tête du message) et le garage peut
+        confirmer quand même ; `staff` ou `station` y sont refusés (409 `simple_mode`).
       operationId: calMove
       security: [{ cognito: [] }]
       parameters:
@@ -925,7 +930,7 @@ paths:
         "200": { description: La demande à jour., content: { application/json: { schema: { $ref: "#/components/schemas/RdvGarageRequest" } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
-        "409": { description: "Conflit (`conflict`, avec `reasons` et `alternatives`), confirmation du changement d'heure attendue (`confirm`), rendez-vous passé ou clos (`state`), intervention commencée (`started`, lot 3c), mode simple (`simple_mode`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Conflit (`conflict`, avec `reasons` et `alternatives` ; heure passée), confirmation du changement d'heure attendue (`confirm`, avec `when` et, créneau plein, `full: true`), rendez-vous passé ou clos (`state`), intervention commencée (`started`, lot 3c), mécanicien ou poste choisi en calcul par créneaux (`simple_mode`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
   /v1/pro/garages/{id}/rdv/calendar:
     get:
@@ -954,7 +959,12 @@ paths:
   /v1/pro/garages/{id}/rdv/calendar/settings:
     put:
       tags: [Calendrier]
-      summary: "Réglages : `{ receptionMin?, returnMin?, loadPct?, maxDay?, autoAssign?, step? }`"
+      summary: "Réglages : `{ receptionMin?, returnMin?, loadPct?, maxDay?, autoAssign?, step?, modules? }`"
+      description: |
+        `modules` : ceux de l'affichage avancé de Gestion d'atelier, pour tout le garage (docs/gestion-atelier.md 2.1), complétés par les
+        valeurs déjà enregistrées. Charge et capacité demande Mécaniciens ou Ponts et équipements (422) ; en calcul par ressources, ces deux
+        derniers ne se coupent pas (409 `in_use`). Les analyses (`stats`) ne s'activent pas encore. Enregistrer les modules seuls n'ouvre
+        pas l'assistant du calcul par ressources (`started` reste faux).
       operationId: calSettings
       security: [{ cognito: [] }]
       parameters:
@@ -964,6 +974,7 @@ paths:
         "200": { $ref: "#/components/responses/CalState" }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
+        "409": { description: "Mécaniciens ou Ponts et équipements coupés pendant le calcul par ressources (`in_use`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
   /v1/pro/garages/{id}/rdv/calendar/staff:
     post:
@@ -1184,11 +1195,14 @@ paths:
   /v1/pro/garages/{id}/rdv/calendar/agenda:
     get:
       tags: [Calendrier]
-      summary: "Planning d'une période (42 jours au plus) : rendez-vous avec leurs affectations, blocs internes, absences, conflits"
+      summary: "Gestion d'atelier d'une période (42 jours au plus) : rendez-vous avec leurs affectations, rendez-vous saisis et créneaux bloqués, absences, conflits"
       description: |
-        Lu par l'écran Planning (docs/calendrier-avance.md, lot 3b). `days` donne les heures d'ouverture de chaque jour (vide : fermé),
-        `staff`, `resources`, `services` et `vehicles` ce qu'il faut pour les filtres et la création rapide, `conflicts` les rendez-vous et
-        les blocs à venir dont une affectation ne tient plus (`block: true` pour un bloc).
+        Lu par l'écran Gestion d'atelier (docs/gestion-atelier.md ; à l'origine le Planning du lot 3b), dans les deux calculs des
+        disponibilités (`engine`). `days` donne les heures d'ouverture de chaque jour (vide : fermé), `staff`, `resources`, `services` et
+        `vehicles` ce qu'il faut pour les filtres et la création rapide, `conflicts` les rendez-vous et les blocs à venir dont une
+        affectation ne tient plus (`block: true` pour un bloc). Calcul par créneaux : `services` donne le temps moyen de chaque prestation,
+        `slots` la semaine type, et `free` (si les rendez-vous en ligne sont ouverts) le nombre d'horaires encore proposés en ligne chaque
+        jour (heures de début distinctes, toutes prestations confondues, avec les règles de la réservation en ligne).
       operationId: calAgenda
       security: [{ cognito: [] }]
       parameters:
@@ -1203,21 +1217,29 @@ paths:
   /v1/pro/garages/{id}/rdv/calendar/blocks:
     post:
       tags: [Calendrier]
-      summary: "Bloc interne : rendez-vous hors Pixcar (`job`, placé par le moteur) ou créneau bloqué (`hold`, ressources libres exigées)"
+      summary: "Bloc : rendez-vous saisi par le garage (`job` : téléphone, comptoir…) ou créneau bloqué (`hold`), dans les deux calculs des disponibilités"
       description: |
-        Mode avancé seulement. Un `job` occupe mécanicien et poste comme une demande, sans les règles de la réservation en ligne (délai, plafond,
-        prestations proposées) et sans aucun e-mail. Un `hold` réserve des mécaniciens ou des postes de `time` à `to`. Rien n'est forcé :
-        un conflit renvoie 409 `conflict` avec `reasons` et, pour un `job`, `alternatives`.
+        Gestion d'atelier (docs/gestion-atelier.md 2.4). Un `job` se compte comme une demande confirmée, sans les règles de la
+        réservation en ligne (délai, plafond, prestations proposées) et sans aucun e-mail.
+        Calcul par ressources : il occupe mécanicien et poste (placés par le moteur) ; un conflit renvoie 409 `conflict` avec `reasons`
+        et `alternatives`. Calcul par créneaux : il prend une place dans le créneau qui contient son heure, pendant sa durée estimée
+        (`minutes`, sinon le temps moyen de Mon garage, sinon 60) ; créneau plein : 409 `full` (la cause, d'autres heures du jour dans
+        `alternatives`), enregistré quand même avec `confirm: true` ; ni mécanicien ni poste ne s'y choisissent (422).
+        Un `hold` bloque des mécaniciens ou des postes de `time` à `to`, ou tout l'atelier sans choix (`whole` dans l'agenda) : plus aucun
+        horaire en ligne n'est proposé pendant la plage ; en calcul par créneaux, s'il chevauche des rendez-vous déjà là, 409 `overlap`
+        (avec `count`), bloqué quand même avec `confirm: true` (les rendez-vous restent).
+        `ref` (identifiant choisi par l'écran) : une création rejouée renvoie 200 et le même `saved` (`replay: true`), sans second bloc.
       operationId: calBlockCreate
       security: [{ cognito: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockInput" } } } }
       responses:
+        "200": { description: "Création rejouée (même `ref`) : le bloc déjà créé (`saved`, `replay: true`).", content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockSaved" } } } }
         "201": { description: "Bloc créé (`saved`).", content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockSaved" } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
-        "409": { description: "Mode simple (`simple_mode`), 1 000 blocs au plus (`too_many`), prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`), travaux qui attendraient (`shifted` : la cause, `work` { start, end }, `back`, et des horaires de dépôt sans attente dans `alternatives` ; renvoyer avec `confirm: true` pour accepter).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "1 000 blocs au plus (`too_many`), prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`), travaux qui attendraient (`shifted` : la cause, `work` { start, end }, `back`, et des horaires de dépôt sans attente dans `alternatives`), créneau plein (`full`, avec `reasons` et `alternatives`), rendez-vous déjà là pendant un blocage (`overlap`, avec `count`) ; pour ces trois derniers, renvoyer avec `confirm: true` pour accepter.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
   /v1/pro/garages/{id}/rdv/calendar/blocks/{block}:
     put:
@@ -1233,7 +1255,7 @@ paths:
         "200": { description: "Bloc enregistré (`saved`).", content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockSaved" } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
-        "409": { description: "Mode simple (`simple_mode`), prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`), travaux qui attendraient (`shifted`, comme à la création ; une modification qui garde l'heure de dépôt ne redemande pas), intervention commencée qui changerait de jour ou d'heure (`started`, lot 3c).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`), travaux qui attendraient (`shifted`), créneau plein (`full`), rendez-vous déjà là pendant un blocage (`overlap`), comme à la création (une modification qui garde l'heure et n'allonge pas les travaux ne redemande pas), intervention commencée qui changerait de jour ou d'heure (`started`, lot 3c). Les champs du client absents du corps sont gardés.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
     delete:
       tags: [Calendrier]
@@ -1250,9 +1272,9 @@ paths:
   /v1/pro/garages/{id}/rdv/calendar/work/{ref}:
     post:
       tags: [Calendrier]
-      summary: "État de l'intervention (lot 3c) d'un rendez-vous Pixcar confirmé ou d'un rendez-vous hors Pixcar : `{ status, notify? }`"
+      summary: "État de l'intervention (lot 3c) d'un rendez-vous Pixcar confirmé ou d'un rendez-vous saisi par le garage : `{ status, notify? }`"
       description: |
-        Mode avancé. Passages possibles (`src/js/shared/work.js`) : prévue → voiture reçue ou client absent (une fois l'heure de dépôt
+        Dans les deux calculs des disponibilités (Gestion d'atelier). Passages possibles (`src/js/shared/work.js`) : prévue → voiture reçue ou client absent (une fois l'heure de dépôt
         passée) ; reçue → en cours, prête (ou retour à prévue) ; en cours → en attente de pièces, suspendue, prête ; en attente de
         pièces ou suspendue → en cours, prête ; prête → restituée (ou retour à en cours) ; restituée → prête ; client absent → prévue.
         Du jour du rendez-vous à 30 jours après. Un client absent ne retient plus ses ressources. Passée à « Prête », une demande Pixcar
@@ -1286,7 +1308,7 @@ paths:
                   notified: { type: boolean, description: "L'e-mail « Votre voiture est prête » vient d'être mis en file." }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
-        "409": { description: "Passage impossible ou demande pas confirmée (`state`), jour à venir ou heure de dépôt pas passée pour un absent (`too_early`), plus de 30 jours après (`too_late`), mode simple (`simple_mode`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Passage impossible ou demande pas confirmée (`state`), jour à venir ou heure de dépôt pas passée pour un absent (`too_early`), plus de 30 jours après (`too_late`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
   /v1/rdv/garages/{id}/times:
     get:
@@ -1598,6 +1620,17 @@ components:
         maxDay: { type: integer, minimum: 0, maximum: 50, description: "Rendez-vous en ligne par jour (0 : sans limite)." }
         autoAssign: { type: boolean, description: "Faux : l'affectation des mécaniciens est proposée, à confirmer." }
         step: { type: integer, minimum: 0, maximum: 6, description: Dernière étape de l'assistant enregistrée. }
+        modules: { type: object, description: "Modules de l'affichage avancé (Gestion d'atelier) : ceux donnés changent, les autres restent.", properties: { staff: { type: boolean }, equip: { type: boolean }, track: { type: boolean }, load: { type: boolean }, stats: { type: boolean, enum: [false] } } }
+    CalModules:
+      type: object
+      required: [staff, equip, track, load, stats]
+      description: "Modules de l'affichage avancé de Gestion d'atelier (tous actifs par défaut ; les analyses viendront plus tard)."
+      properties:
+        staff: { type: boolean, description: Mécaniciens (espace Équipe). }
+        equip: { type: boolean, description: Ponts et équipements (espace Équipements). }
+        track: { type: boolean, description: Suivi des interventions. }
+        load: { type: boolean, description: Charge et capacité. }
+        stats: { type: boolean, enum: [false], description: Analyses (prochainement). }
     CalStaffInput:
       type: object
       required: [name]
@@ -1725,19 +1758,28 @@ components:
         fixed: { type: boolean, description: Choisi par le garage (absent pour un bloc). }
     CalBlockInput:
       type: object
-      required: [kind, label, day, time]
+      required: [kind, day, time]
       properties:
-        kind: { type: string, enum: [job, hold], description: "`job` : rendez-vous hors Pixcar ; `hold` : créneau bloqué." }
-        label: { type: string, minLength: 2, maxLength: 40, description: "Court et sans donnée sensible (effacé 30 jours après le bloc)." }
+        kind: { type: string, enum: [job, hold], description: "`job` : rendez-vous saisi par le garage ; `hold` : créneau bloqué." }
+        label: { type: string, minLength: 2, maxLength: 40, description: "`hold` : libellé (exigé). `job` : ancien nom du champ `client`, lu quand `client` manque." }
+        client: { type: string, maxLength: 40, description: "`job` : nom du client (lui ou `car`, 2 caractères au moins). Effacé 30 jours après le rendez-vous." }
+        car: { type: string, maxLength: 40, description: "`job` : véhicule (marque, modèle). Effacé 30 jours après." }
+        plate: { type: string, maxLength: 15, description: "`job` : immatriculation (lettres, chiffres, tirets ; gardée en majuscules). Effacée 30 jours après." }
+        phone: { type: string, maxLength: 20, description: "`job` : téléphone du client (un numéro, gardé au format +33…). Effacé 30 jours après." }
+        note: { type: string, maxLength: 300, description: "`job` : commentaire interne, vu du garage seulement. Effacé 30 jours après." }
+        channel: { type: string, enum: [phone, walkin, other], description: "`job` : origine (téléphone par défaut)." }
+        minutes: { type: integer, minimum: 5, maximum: 1440, nullable: true, description: "`job` : durée estimée des travaux, par 5 min (null : temps moyen de Mon garage)." }
+        back: { type: string, nullable: true, example: "17:00", description: "`job` : restitution prévue, après la fin des travaux (null : à la fin des travaux)." }
+        ref: { type: string, format: uuid, description: "Création : identifiant choisi par l'écran (une création rejouée ne fait pas de second bloc)." }
         day: { type: string, format: date }
         time: { type: string, example: "08:00", description: Début (dépôt pour un `job`), par 5 minutes. }
         to: { type: string, example: "12:00", description: "Fin d'un `hold` (24:00 admis)." }
         services: { type: array, maxItems: 8, items: { oneOf: [{ type: string }, { type: object, required: [id], properties: { id: { type: string }, qty: { type: integer, minimum: 1, maximum: 4 } } }] }, description: "`job` : 1 à 8 prestations dont les exigences sont saisies." }
         vehicle: { type: string, description: "`job` : type de véhicule (exigé si une prestation en dépend)." }
-        staff: { type: array, items: { type: string, format: uuid }, description: "`job` : 3 mécaniciens choisis au plus (sinon le moteur choisit) ; `hold` : mécaniciens bloqués." }
+        staff: { type: array, items: { type: string, format: uuid }, description: "Calcul par ressources seulement. `job` : 3 mécaniciens choisis au plus (sinon le moteur choisit) ; `hold` : mécaniciens bloqués (ni mécanicien ni poste : tout l'atelier)." }
         station: { type: string, format: uuid, nullable: true, description: "`job` : poste choisi." }
         resources: { type: array, items: { type: string, format: uuid }, description: "`hold` : postes bloqués (10 mécaniciens et postes au plus)." }
-        confirm: { type: boolean, description: "`job` : accepte que les travaux attendent le premier moment libre après le dépôt (réponse 409 `shifted` reçue avant)." }
+        confirm: { type: boolean, description: "Accepte ce qu'a annoncé la réponse 409 reçue avant : `shifted` (travaux qui attendent), `full` (créneau plein), `overlap` (rendez-vous déjà là pendant le blocage)." }
         received: { type: boolean, description: "Création d'un `job` seulement (lot 3c) : client déjà sur place, aujourd'hui, au plus tard au prochain quart d'heure ; l'intervention est aussitôt « Voiture reçue »." }
     CalWork:
       type: object
@@ -1752,13 +1794,24 @@ components:
       required: [saved]
       properties:
         saved: { type: string, format: uuid }
+        replay: { type: boolean, enum: [true], description: Création rejouée (même `ref`). }
     CalBlock:
       type: object
       required: [id, kind, label, services, vehicle, when, startsAt, endsAt, fixed, plan]
       properties:
         id: { type: string, format: uuid }
         kind: { type: string, enum: [job, hold] }
-        label: { type: string, description: Vide une fois effacé (30 jours après le bloc). }
+        label: { type: string, description: "`hold` : le libellé ; `job` : le titre (le client, sinon le véhicule). Vide une fois effacé (30 jours après)." }
+        client: { type: string, description: "`job` : le nom du client tel que saisi (vide : seul le véhicule est connu)." }
+        car: { type: string }
+        plate: { type: string }
+        phone: { type: string, description: "`job` : +33…" }
+        note: { type: string }
+        channel: { type: string, enum: [phone, walkin, other] }
+        minutes: { type: integer, nullable: true, description: "`job` : durée estimée des travaux." }
+        back: { type: string, nullable: true, description: "`job` : restitution choisie par le garage (null : à la fin des travaux)." }
+        slot: { type: string, nullable: true, description: "`job`, calcul par créneaux : le créneau qui le compte (null : hors de tout créneau)." }
+        whole: { type: boolean, description: "`hold` : tout l'atelier (ni mécanicien ni poste)." }
         services: { type: array, items: { type: object, required: [id, qty, label], properties: { id: { type: string }, qty: { type: integer }, label: { type: string } } } }
         vehicle: { type: string }
         when: { type: object, required: [day, label, start, end], properties: { day: { type: string, format: date }, label: { type: string }, start: { type: string }, end: { type: string } } }
@@ -1769,15 +1822,18 @@ components:
         plan: { type: array, items: { $ref: "#/components/schemas/CalPlanRow" } }
     CalAgenda:
       type: object
-      required: [from, to, today, days, staff, resources, services, vehicles, unavail, conflicts, blocks, appointments]
+      required: [from, to, today, days, engine, staff, resources, services, slots, vehicles, unavail, conflicts, blocks, appointments]
       properties:
+        engine: { type: string, enum: [slots, resources], description: "Calcul des disponibilités : par créneaux ou par ressources." }
+        slots: { type: array, description: "Semaine type (calcul par créneaux ; vide sinon).", items: { type: object, required: [id, name, days, start, end, mode, capacity], properties: { id: { type: string, format: uuid }, name: { type: string }, days: { type: array, items: { type: string } }, start: { type: string }, end: { type: string }, mode: { type: string, enum: [hour, drop] }, capacity: { type: integer } } } }
+        free: { type: object, additionalProperties: { type: integer, minimum: 0 }, description: "Jour (AAAA-MM-JJ) → horaires encore proposés en ligne (calcul par créneaux, rendez-vous en ligne ouverts)." }
         from: { type: string, format: date }
         to: { type: string, format: date }
         today: { type: string, format: date }
         days: { type: array, items: { type: object, required: [day, open], properties: { day: { type: string, format: date }, open: { type: array, items: { type: array, minItems: 2, maxItems: 2, items: { type: string } }, example: [["08:00", "12:00"], ["14:00", "18:00"]] } } } }
         staff: { type: array, items: { type: object, required: [id, name, active], properties: { id: { type: string, format: uuid }, name: { type: string }, active: { type: boolean } } } }
         resources: { type: array, items: { type: object, required: [id, name, type, active], properties: { id: { type: string, format: uuid }, name: { type: string }, type: { type: string }, active: { type: boolean } } } }
-        services: { type: array, items: { type: object, required: [id, label, unit, byVehicle], properties: { id: { type: string }, label: { type: string }, unit: { type: string }, byVehicle: { type: boolean } } } }
+        services: { type: array, items: { type: object, required: [id, label, unit, byVehicle], properties: { id: { type: string }, label: { type: string }, unit: { type: string }, byVehicle: { type: boolean }, minutes: { type: integer, nullable: true, description: "Calcul par créneaux : temps moyen saisi dans Mon garage." } } } }
         vehicles: { type: array, items: { type: object, required: [id, label], properties: { id: { type: string }, label: { type: string } } } }
         unavail: { type: array, items: { allOf: [{ $ref: "#/components/schemas/CalUnavail" }, { type: object, required: [name], properties: { name: { type: string } } }] } }
         conflicts: { type: array, items: { type: object, required: [id, reasons], properties: { id: { type: string, format: uuid }, block: { type: boolean }, reasons: { type: array, items: { type: string } } } } }
@@ -1785,7 +1841,7 @@ components:
         appointments: { type: array, items: { $ref: "#/components/schemas/CalAgendaItem" } }
     CalState:
       type: object
-      required: [today, mode, step, started, settings, booking, enabled, notify, hours, closures, staff, skills, resources, services, readiness, conflicts, catalogs]
+      required: [today, mode, step, started, settings, booking, modules, enabled, notify, hours, closures, staff, skills, resources, services, readiness, conflicts, catalogs]
       properties:
         today: { type: string, format: date }
         mode: { type: string, enum: [simple, advanced] }
@@ -1793,6 +1849,7 @@ components:
         started: { type: boolean }
         settings: { type: object, required: [receptionMin, returnMin, loadPct, maxDay, autoAssign], properties: { receptionMin: { type: integer }, returnMin: { type: integer }, loadPct: { type: integer }, maxDay: { type: integer }, autoAssign: { type: boolean } } }
         booking: { $ref: "#/components/schemas/RdvSettings" }
+        modules: { $ref: "#/components/schemas/CalModules" }
         enabled: { type: boolean }
         notify: { type: string, description: "Adresse vérifiée qui reçoit les demandes (vide : aucune)." }
         hours: { $ref: "#/components/schemas/ProHours" }
@@ -1930,9 +1987,15 @@ components:
             atText: { type: string, example: mercredi 21 octobre à 10:20 }
     ProPrefs:
       type: object
-      required: [shortcuts]
+      required: [shortcuts, view]
       properties:
         shortcuts: { type: array, maxItems: 6, items: { type: string, enum: [planning, requests, prices, agenda, garage, team, new, closure, site] } }
+        view: { type: string, enum: [simple, advanced], nullable: true, description: "Affichage de Gestion d'atelier choisi par ce compte (null : rien de choisi)." }
+    ProPrefsInput:
+      type: object
+      properties:
+        shortcuts: { type: array, maxItems: 6, items: { type: string, enum: [planning, requests, prices, agenda, garage, team, new, closure, site] } }
+        view: { type: string, enum: [simple, advanced], nullable: true }
     ProAddr:
       type: object
       required: [street, pc, city]

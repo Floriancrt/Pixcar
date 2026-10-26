@@ -22,8 +22,8 @@
 //   PUT    /v1/pro/garages/:id/services/:service  { offered, minutes } : prestation faite ou non, temps moyen ; décocher retire le prix annoncé
 //   GET    /v1/pro/garages/:id/registry           l'établissement rattaché dans le registre public (lecture seule)
 // Tableau de bord (docs/calendrier-avance.md, lot 3c) :
-//   PUT    /v1/pro/garages/:id/prefs              { shortcuts: [identifiants] } : raccourcis de ce compte pour ce garage (GET /v1/pro/garages/:id
-//                                                 les renvoie dans prefs)
+//   PUT    /v1/pro/garages/:id/prefs              { shortcuts?: [identifiants], view?: "simple" | "advanced" | null } : raccourcis et affichage de
+//                                                 Gestion d'atelier de ce compte pour ce garage (GET /v1/pro/garages/:id les renvoie dans prefs)
 // Rendez-vous en ligne (docs/rendez-vous.md, lot 2) : /v1/pro/garages/:id/rdv/… et /v1/rdv/… (server/rdv.mjs).
 // Sans compte (le comparateur) :
 //   GET    /v1/pro/public/garages?ids=a,b,…       garages vérifiés parmi ces identifiants (100 au plus), leurs prix publiés, leur fiche déclarée
@@ -520,7 +520,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
         prices: prices.map((p) => priceView(p, nowMs)),
         paid,
         visits: { views: visits.view, calls: visits.call },
-        prefs: prefs || { shortcuts: DEFAULT_SHORTCUTS },
+        prefs: prefs || { shortcuts: DEFAULT_SHORTCUTS, view: null },
         ...(config.rdv.enabled ? { rdv: await rdv.summary(id) } : {}),
       },
       NO_STORE,
@@ -561,8 +561,8 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
     const parsed = parsePrefs(body.value);
     if (parsed.error) return apiError(422, "validation", parsed.error, { field: parsed.field });
     if (!(await repo.ownedGarage(id, sub))) return noGarage();
-    await repo.savePrefs(id, sub, parsed.value);
-    return json(200, parsed.value, NO_STORE);
+    await repo.savePrefs(id, sub, parsed.value, DEFAULT_SHORTCUTS);
+    return json(200, (await repo.getPrefs(id, sub)) || { shortcuts: DEFAULT_SHORTCUTS, view: null }, NO_STORE);
   }
 
   async function postConfirm(sub, id) {

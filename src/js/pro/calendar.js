@@ -825,7 +825,7 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
         st = await api.calSimple(garageId);
         onMode(st.mode);
         await goPanel("garage", { tab: "modules" });
-        alertBox("Mode simple : les horaires proposés viennent de nouveau de votre semaine type.", "info");
+        alertBox("Calcul par créneaux : les horaires proposés viennent de nouveau de votre semaine type.", "info");
       } catch (e) {
         if (e.status === 409 && e.details && e.details.failed) {
           $("calSimpleFail").replaceChildren(el("p", { class: "warn", text: e.message }), el("ul", { class: "cal-conflicts" }, ...e.details.failed.map((f) => el("li", {}, el("b", { text: whenText(f) }), el("span", { text: f.reasons.join(" ") })))));

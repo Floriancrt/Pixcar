@@ -124,6 +124,11 @@ il le faut ; chaque horaire du mode avancé porte `end` (restitution prévue) et
 
 ## Lot 3b : planning, glisser-déposer, blocs internes
 
+> Depuis le 26 octobre 2026 (branche `gestion-atelier`), le Planning est devenu l'écran **Gestion d'atelier**, visible dans les deux
+> calculs des disponibilités, avec un affichage simple et un affichage avancé ; les blocs, les états d'intervention et le déplacement
+> marchent aussi en calcul par créneaux, et un créneau bloqué sans mécanicien ni poste vaut pour tout l'atelier. Ce qui suit décrit
+> le lot 3b tel qu'il a été livré ; les règles actuelles sont dans `docs/gestion-atelier.md` (sections 2 et 5).
+
 Choix faits au début du lot (19 octobre 2026), dans le cadre des décisions ci-dessus ; à revoir sur retour de l'utilisateur.
 
 **Écran « Planning »** (menu de l'Espace Pro, visible en mode avancé ; sur téléphone il prend la place de « Créneaux », qui passe sous

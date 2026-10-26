@@ -883,10 +883,10 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
     publicRoute,
     openServices,
     todo: (garageId) => (cfg.enabled ? repo.countTodo(garageId) : Promise.resolve(null)),
-    // résumé pour le tableau de bord : demandes à traiter et mode du calendrier (l'écran Planning n'existe qu'en mode avancé)
+    // résumé pour le tableau de bord : demandes à traiter, calcul des disponibilités et modules de Gestion d'atelier
     summary: async (garageId) => {
-      const [todo, c] = await Promise.all([repo.countTodo(garageId), repo.cal.getCalendar(garageId)]);
-      return { todo, mode: (c && c.mode) || "simple" };
+      const [todo, c, s] = await Promise.all([repo.countTodo(garageId), repo.cal.getCalendar(garageId), repo.getSettings(garageId)]);
+      return { todo, mode: (c && c.mode) || "simple", modules: W.modulesOf(s && s.modules) };
     },
     tick,
     drain,

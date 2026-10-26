@@ -27,12 +27,14 @@ const workOrderOf = (r) =>
     statusAt: ms(r.status_at), noShow: !!r.no_show_at,
   };
 
+// rendez-vous saisi (lot 3b, puis Gestion d'atelier, 009) : label est le nom du client (vide si seul le véhicule est connu)
 const blockOf = (r) =>
   r && {
     id: r.id, kind: r.kind, label: r.label, services: Array.isArray(r.services) ? r.services : [], vehicle: r.vehicle, mode: r.mode, day: r.day, start: r.start_min, end: r.end_min,
     startsAt: ms(r.starts_at), endsAt: ms(r.ends_at), fixed: r.fixed,
+    slotId: r.slot_id || null, channel: r.channel || (r.kind === "job" ? "phone" : ""), minutes: r.minutes ?? null, car: r.car || "", plate: r.plate || "", phone: r.phone || "", note: r.note || "",
   };
-const BLOCK_COLUMNS = "id, kind, label, services, vehicle, mode, day::text AS day, start_min, end_min, starts_at, ends_at, fixed";
+const BLOCK_COLUMNS = "id, kind, label, services, vehicle, mode, day::text AS day, start_min, end_min, starts_at, ends_at, fixed, slot_id, channel, minutes, car, plate, phone, note";
 
 // inTx : lié à la connexion d'une transaction (les requêtes passent l'une après l'autre), sinon au pool (en parallèle)
 export function bindCalendar(q, { now = Date.now, inTx = false } = {}) {
@@ -64,7 +66,7 @@ export function bindCalendar(q, { now = Date.now, inTx = false } = {}) {
 
     // ---- ce que le moteur lit pour un garage (src/js/shared/plan.js) ; fromIso / toIso : jours des affectations
     async load(garageId, fromIso, toIso) {
-      const [staff, skillRows, skills, resources, reqs, unavail, busy] = await each([
+      const [staff, skillRows, skills, resources, reqs, unavail, busy, whole] = await each([
         () => all("SELECT id, name, active, hours, services, position FROM rdv_staff WHERE garage_id = $1 ORDER BY position, created_at, id", [garageId]),
         () => all("SELECT staff_id, skill_id, until::text AS until FROM rdv_staff_skills WHERE garage_id = $1", [garageId]),
         () => all("SELECT id, label, cert FROM rdv_skills WHERE garage_id = $1 ORDER BY created_at, id", [garageId]),
@@ -72,6 +74,7 @@ export function bindCalendar(q, { now = Date.now, inTx = false } = {}) {
         () => all("SELECT * FROM rdv_service_reqs WHERE garage_id = $1", [garageId]),
         () => all("SELECT id, target, target_id, starts_at, ends_at, kind, label FROM rdv_unavail WHERE garage_id = $1 AND ends_at > $2::timestamptz ORDER BY starts_at, id", [garageId, T()]),
         () => this.busy(garageId, fromIso, toIso),
+        () => this.wholeHolds(garageId, fromIso, toIso),
       ]);
       return {
         staff: staff.map((r) => staffOf(r, skillRows)),
@@ -80,8 +83,16 @@ export function bindCalendar(q, { now = Date.now, inTx = false } = {}) {
         reqs: Object.fromEntries(reqs.map((r) => [r.service_id, reqOf(r)])),
         unavail: unavail.map(unavailOf),
         busy,
+        whole,
       };
     },
+    // créneaux bloqués de tout l'atelier (sans affectation, Gestion d'atelier) : le moteur les étend à chaque mécanicien et à chaque poste
+    wholeHolds: (garageId, fromIso, toIso) =>
+      all(
+        `SELECT k.id, k.starts_at, k.ends_at FROM rdv_blocks k WHERE k.garage_id = $1 AND k.kind = 'hold' AND k.day BETWEEN $2::date AND $3::date
+           AND NOT EXISTS (SELECT 1 FROM rdv_assignments a WHERE a.block_id = k.id AND a.garage_id = $1)`,
+        [garageId, fromIso, toIso],
+      ).then((rows) => rows.map((r) => ({ blockId: r.id, start: ms(r.starts_at), end: ms(r.ends_at) }))),
     // Affectations du jour fromIso au jour toIso, avec l'état de leur demande (le moteur ne garde que celles qui retiennent encore) et le
     // client absent (lot 3c : sa place se reprend), noté sur l'intervention de la demande ou du rendez-vous hors Pixcar
     busy: (garageId, fromIso, toIso) =>
@@ -207,23 +218,36 @@ export function bindCalendar(q, { now = Date.now, inTx = false } = {}) {
           )
         : Promise.resolve([]),
 
-    // ---- blocs internes (lot 3b) : b = { kind, label, services, vehicle, mode, day, start, end, startsAt, endsAt, fixed }
+    // ---- blocs internes (lot 3b) : b = { kind, label, services, vehicle, mode, day, start, end, startsAt, endsAt, fixed,
+    //      slotId, channel, minutes, car, plate, phone, note } (ces derniers : rendez-vous saisi, Gestion d'atelier)
     countBlocks: (garageId) => one("SELECT count(*)::int AS n FROM rdv_blocks WHERE garage_id = $1 AND ends_at > $2::timestamptz", [garageId, T()]).then((r) => r.n),
-    async saveBlock(garageId, accountId, id, b) {
-      const vals = [b.kind, b.label, JSON.stringify(b.services || []), b.vehicle || "", b.mode || "hour", b.day, b.start, b.end, iso(b.startsAt), iso(b.endsAt), !!b.fixed];
+    // newId : identifiant choisi par l'écran pour une création (une reprise réseau ne crée pas deux rendez-vous : voir blockById)
+    async saveBlock(garageId, accountId, id, b, { newId = null } = {}) {
+      const job = b.kind === "job";
+      const vals = [
+        b.kind, b.label, JSON.stringify(b.services || []), b.vehicle || "", b.mode || "hour", b.day, b.start, b.end, iso(b.startsAt), iso(b.endsAt), !!b.fixed,
+        b.slotId || null, job ? b.channel || "phone" : null, job && Number.isInteger(b.minutes) ? b.minutes : null, job ? b.car || null : null, job ? b.plate || null : null, job ? b.phone || null : null, job ? b.note || null : null,
+      ];
       const row = id
         ? await one(
             `UPDATE rdv_blocks SET kind = $3, label = $4, services = $5::jsonb, vehicle = $6, mode = $7, day = $8::date, start_min = $9, end_min = $10, starts_at = $11::timestamptz,
-               ends_at = $12::timestamptz, fixed = $13, account_id = $14, updated_at = $15::timestamptz WHERE id = $1 AND garage_id = $2 RETURNING id`,
+               ends_at = $12::timestamptz, fixed = $13, slot_id = $14::uuid, channel = $15, minutes = $16, car = $17, plate = $18, phone = $19, note = $20, account_id = $21, updated_at = $22::timestamptz
+             WHERE id = $1 AND garage_id = $2 RETURNING id`,
             [id, garageId, ...vals, accountId || "", T()],
           )
         : await one(
-            `INSERT INTO rdv_blocks (id, garage_id, kind, label, services, vehicle, mode, day, start_min, end_min, starts_at, ends_at, fixed, account_id, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8::date, $9, $10, $11::timestamptz, $12::timestamptz, $13, $14, $15::timestamptz, $15::timestamptz) RETURNING id`,
-            [crypto.randomUUID(), garageId, ...vals, accountId || "", T()],
+            `INSERT INTO rdv_blocks (id, garage_id, kind, label, services, vehicle, mode, day, start_min, end_min, starts_at, ends_at, fixed, slot_id, channel, minutes, car, plate, phone, note, account_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8::date, $9, $10, $11::timestamptz, $12::timestamptz, $13, $14::uuid, $15, $16, $17, $18, $19, $20, $21, $22::timestamptz, $22::timestamptz) RETURNING id`,
+            [newId || crypto.randomUUID(), garageId, ...vals, accountId || "", T()],
           );
       return row && row.id;
     },
+    // un bloc de n'importe quel garage, par son identifiant (création rejouée : déjà là chez ce garage, ou identifiant pris ailleurs)
+    blockById: (id) => one("SELECT id, garage_id FROM rdv_blocks WHERE id = $1", [id]).then((r) => r && { id: r.id, garageId: r.garage_id }),
+    setBlockSlot: (garageId, id, slotId) => q.query("UPDATE rdv_blocks SET slot_id = $3::uuid WHERE id = $1 AND garage_id = $2", [id, garageId, slotId]),
+    // rendez-vous saisis à venir (bascule du calcul des disponibilités)
+    futureJobs: (garageId) =>
+      all(`SELECT ${BLOCK_COLUMNS} FROM rdv_blocks WHERE garage_id = $1 AND kind = 'job' AND starts_at > $2::timestamptz ORDER BY starts_at, id`, [garageId, T()]).then((rows) => rows.map(blockOf)),
     getBlock: (garageId, id) => one(`SELECT ${BLOCK_COLUMNS} FROM rdv_blocks WHERE id = $1 AND garage_id = $2`, [id, garageId]).then(blockOf),
     blocksBetween: (garageId, fromIso, toIso) =>
       all(`SELECT ${BLOCK_COLUMNS} FROM rdv_blocks WHERE garage_id = $1 AND day BETWEEN $2::date AND $3::date ORDER BY starts_at, id`, [garageId, fromIso, toIso]).then((rows) => rows.map(blockOf)),
@@ -312,9 +336,10 @@ export function bindCalendar(q, { now = Date.now, inTx = false } = {}) {
         calWorkOrders: await run(
           "DELETE FROM rdv_work_orders WHERE request_id IN (SELECT w.request_id FROM rdv_work_orders w LEFT JOIN rdv_requests r ON r.id = w.request_id LEFT JOIN rdv_blocks k ON k.id = w.request_id WHERE r.id IS NULL AND k.id IS NULL AND w.created_at < $2::timestamptz LIMIT $1)",
         ),
-        // blocs internes comme les demandes : libellé effacé 30 jours après le jour, ligne effacée après 24 mois
+        // blocs internes comme les demandes : libellé et données du client (nom, téléphone, véhicule, immatriculation, commentaire)
+        // effacés 30 jours après le jour, ligne effacée après 24 mois
         calBlocksAnonymized: await run(
-          "UPDATE rdv_blocks SET label = '', anonymized_at = $2::timestamptz WHERE id IN (SELECT id FROM rdv_blocks WHERE anonymized_at IS NULL AND ends_at < $2::timestamptz - interval '30 days' LIMIT $1)",
+          "UPDATE rdv_blocks SET label = '', car = NULL, plate = NULL, phone = NULL, note = NULL, anonymized_at = $2::timestamptz WHERE id IN (SELECT id FROM rdv_blocks WHERE anonymized_at IS NULL AND ends_at < $2::timestamptz - interval '30 days' LIMIT $1)",
         ),
         calBlocks: await run("DELETE FROM rdv_blocks WHERE id IN (SELECT id FROM rdv_blocks WHERE ends_at < $2::timestamptz - interval '24 months' LIMIT $1)"),
         calBlockAssignments: await run(
