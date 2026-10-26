@@ -17,7 +17,7 @@ main() {
   local repo="https://github.com/Floriancrt/Pixcar.git"
   local ref="${PIXCAR_REF:-main}" stack="${PIXCAR_STACK:-pixcar}" region="${PIXCAR_REGION:-eu-north-1}" dry="${PIXCAR_DRY_RUN:-}"
   local node_version="22.22.0"
-  local work
+  # globale (pas « local ») : le nettoyage en sortie la lit après la fin de main
   work="$(mktemp -d "${TMPDIR:-/tmp}/pixcar-deploy.XXXXXX")"
   trap 'rm -rf "$work"' EXIT
 

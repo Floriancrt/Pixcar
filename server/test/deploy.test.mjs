@@ -59,6 +59,10 @@ describe("the CloudShell command (scripts/cloudshell-deploy.sh)", () => {
     assert.match(sh, /^#!\/usr\/bin\/env bash\n/);
     assert.ok(sh.includes("set -euo pipefail"));
     assert.ok(/\nmain\(\) \{\n/.test(sh) && sh.trimEnd().endsWith('main "$@"'), "lu en entier avant d'être exécuté");
+    // le nettoyage en sortie s'exécute après main : il ne peut lire qu'une variable globale (set -u : « unbound variable » sinon)
+    const trapped = sh.match(/trap '[^']*"\$(\w+)"[^']*' EXIT/)[1];
+    const locals = [...sh.matchAll(/^\s*local\s+(.+)$/gm)].flatMap((m) => m[1].split(/\s+/).map((w) => w.split("=")[0]));
+    assert.ok(locals.length && !locals.includes(trapped), `${trapped} ne doit pas être locale`);
     const lines = sh.split("\n").map((l) => l.trim()).filter((l) => !l.startsWith("#") && !l.startsWith("echo "));
     for (const cmd of ["npm ci", "npm run -s test:server", "node scripts/deploy-api.mjs package", "node scripts/deploy-api.mjs deploy", "aws sts get-caller-identity", "git clone"]) {
       const found = lines.filter((l) => l.includes(cmd));
