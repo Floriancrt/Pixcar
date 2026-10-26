@@ -1252,7 +1252,8 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
           alertBox(`Rendez-vous annulé. ${it.title} est prévenu(e) par e-mail, avec votre motif.`, "info");
           await reload("Rendez-vous annulé.");
         } catch (e) {
-          if (e.status === 409 || e.status === 422) return err(e.message);
+          // 403 agreement_required : la fenêtre de l'accord s'est ouverte (api.js) ; le formulaire reste, pour réessayer une fois accepté
+          if (e.status === 409 || e.status === 422 || e.code === "agreement_required") return err(e.message);
           closeSide();
           fail(e);
         }
@@ -1413,7 +1414,8 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
           await reload(`${what} enregistré.`);
         } catch (e) {
           if (e.status === 409 && ["conflict", "shifted", "full", "overlap"].includes(e.code)) return blockForm({ item, at, draft: { ...v, ref: d.ref }, problem: e, refocus: e.code === "conflict" ? null : "#planSave" });
-          if (e.status === 409 || e.status === 422) return err(e.message);
+          // 403 agreement_required : la fenêtre de l'accord s'est ouverte (api.js) ; le formulaire reste, pour réessayer une fois accepté
+          if (e.status === 409 || e.status === 422 || e.code === "agreement_required") return err(e.message);
           closeSide();
           fail(e);
         }
@@ -1517,7 +1519,8 @@ export function createPlanning({ api, $, el, icon, alertBox, busy, apiProblem, g
           alertBox(n ? `${what} ${plural(n, "rendez-vous à venir est touché : il apparaît", "rendez-vous à venir sont touchés : ils apparaissent")} « En conflit » dans le planning.` : `${what} Aucun rendez-vous n'est touché.`, "info");
           await reload(what);
         } catch (e) {
-          if (e.status === 409 || e.status === 422) return err(e.message);
+          // 403 agreement_required : la fenêtre de l'accord s'est ouverte (api.js) ; le formulaire reste, pour réessayer une fois accepté
+          if (e.status === 409 || e.status === 422 || e.code === "agreement_required") return err(e.message);
           closeSide();
           fail(e);
         }

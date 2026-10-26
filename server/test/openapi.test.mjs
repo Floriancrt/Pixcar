@@ -5,6 +5,7 @@ import { after, before, describe, test } from "node:test";
 import YAML from "yaml";
 import { overpassQuery } from "../../src/js/shared/overpass.js";
 import { makeApp, repair } from "./helpers.mjs";
+import { AGREEMENT } from "../../src/js/shared/agreement.js";
 
 const doc = YAML.parse(await readFile(new URL("../../docs/openapi.yaml", import.meta.url), "utf8"));
 const resolve = (node) => {
@@ -335,7 +336,7 @@ describe("docs/openapi.yaml ↔ API", () => {
     const { parseContactRows } = await import("../lib/contact.mjs");
     const { parisInstant } = await import("../../src/js/shared/rdv.js");
     const clock = parisInstant("2026-10-19", 600);
-    const app = await makeApp({ env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1", RDV_ENABLED: "1", READ_LIMIT_PER_MINUTE: "100000" }, now: () => clock });
+    const app = await makeApp({ env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1", RDV_ENABLED: "1", PRO_AGREEMENT_REQUIRED: "1", READ_LIMIT_PER_MINUTE: "100000" }, now: () => clock });
     const keep = t;
     t = app;
     try {
@@ -361,6 +362,16 @@ describe("docs/openapi.yaml ↔ API", () => {
       await app.call("PUT", `${G}/settings`, { headers: me, body: { enabled: true, minDelayH: 0 } });
       const SB = `${C}/blocks`;
       const phone = { kind: "job", client: "M. Martin", phone: "06 12 34 56 78", car: "Clio", plate: "ab-123-cd", services: ["plaq_av"], day: "2026-10-22", time: "09:00", minutes: 60, channel: "phone", ref: crypto.randomUUID() };
+      // accord de sous-traitance : refus tant qu'il n'est pas accepté, lecture, case non cochée, version changée, acceptation, rejeu
+      await call("POST", SB, `${G}/calendar/blocks`, { headers: me, body: phone, status: 403 });
+      const A = "/v1/pro/garages/{id}/agreement", ag = `/v1/pro/garages/${gid}/agreement`;
+      await call("GET", A, ag, { headers: me, status: 200 });
+      await call("POST", A, ag, { headers: me, body: { version: AGREEMENT.version }, status: 422 });
+      await call("POST", A, ag, { headers: me, body: { version: "2000-01-01", accept: true }, status: 409 });
+      await call("POST", A, ag, { headers: me, body: { version: AGREEMENT.version, accept: true }, status: 201 });
+      await call("POST", A, ag, { headers: me, body: { version: AGREEMENT.version, accept: true }, status: 200 });
+      await call("GET", A, ag, { status: 401 });
+      await call("GET", "/v1/pro/garages/{id}", `/v1/pro/garages/${gid}`, { headers: me, status: 200 });
       const sj = JSON.parse((await call("POST", SB, `${G}/calendar/blocks`, { headers: me, body: phone, status: 201 })).text).saved;
       await call("POST", SB, `${G}/calendar/blocks`, { headers: me, body: phone, status: 200 }); // rejeu
       await call("POST", SB, `${G}/calendar/blocks`, { headers: me, body: { ...phone, ref: undefined, time: "09:30" }, status: 409 }); // complet
@@ -487,6 +498,9 @@ describe("docs/openapi.yaml ↔ API", () => {
     ]).concat([
       // lot 3c
       "POST /v1/pro/garages/{id}/rdv/calendar/work/{ref}", "PUT /v1/pro/garages/{id}/prefs",
+    ]).concat([
+      // accord de sous-traitance (docs/sous-traitance.md)
+      "GET /v1/pro/garages/{id}/agreement", "POST /v1/pro/garages/{id}/agreement",
     ]).sort());
     // et chaque méthode non documentée d'une route documentée est refusée en 405
     for (const [method, path] of [["PUT", "/v1/repairs"], ["DELETE", "/v1/repairs"], ["POST", "/v1/overpass"], ["POST", "/healthz"], ["GET", `/v1/repairs/${repair().id}`]]) {

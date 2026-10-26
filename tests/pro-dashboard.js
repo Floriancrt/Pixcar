@@ -28,7 +28,7 @@ const OUT = path.join(__dirname, ".out", "pro-dashboard-site");
 const SHOTS = path.join(__dirname, ".out", "shots");
 const SRC = process.env.PIXCAR_SRC || path.join(ROOT, "src");
 const BUILD = process.env.PIXCAR_BUILD ? path.resolve(ROOT, process.env.PIXCAR_BUILD) : path.join(ROOT, "scripts/build.mjs");
-const LEGAL = { editorLine: "Pixcar est édité à titre non professionnel par Jeanne Exemple, responsable du traitement des données décrites ici.", contact: "contact@exemple.test", hostPages: "GitHub, Inc. (GitHub Pages), États-Unis", hostApi: "Amazon Web Services EMEA SARL, Luxembourg (région Europe, Stockholm)", repairRetentionMonths: 24, updated: "3 octobre 2026" };
+const LEGAL = { editorName: "Jeanne Exemple", editorLine: "Pixcar est édité à titre non professionnel par Jeanne Exemple, responsable du traitement des données décrites ici.", contact: "contact@exemple.test", hostPages: "GitHub, Inc. (GitHub Pages), États-Unis", hostApi: "Amazon Web Services EMEA SARL, Luxembourg (région Europe, Stockholm)", repairRetentionMonths: 24, updated: "3 octobre 2026" };
 const HERE = { lat: 43.2174, lon: 1.1014 };
 const GARAGE = "aaaaaaaa-0000-4000-8000-000000000003";
 const CONTACTS = [{ id: GARAGE, name: "Garage Démo Atelier", addr: "14 rue de l'Exemple, 31220 Cazères", pc: "31220", ...HERE, emails: ["contact@garage-atelier.fr"], phones: ["+33561000003"] }];
@@ -134,7 +134,7 @@ const EARLY = "2026-11-02", PREV = "2026-11-03", D = "2026-11-04", NEXT = "2026-
   const src = path.join(OUT, "src");
   fs.cpSync(SRC, src, { recursive: true });
   fs.writeFileSync(path.join(src, "legal.json"), JSON.stringify(LEGAL));
-  const env = { ...process.env, PIXCAR_API_BASE: api.url, PIXCAR_PRO_POOL: "eu-north-1_PixcarTest1", PIXCAR_PRO_CLIENT: "4pro0test1client2id3", PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "" };
+  const env = { ...process.env, PIXCAR_ALLOW_DRAFT_AGREEMENT: "1", PIXCAR_API_BASE: api.url, PIXCAR_PRO_POOL: "eu-north-1_PixcarTest1", PIXCAR_PRO_CLIENT: "4pro0test1client2id3", PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "" };
   execFileSync(process.execPath, [BUILD, "--only", "dist", "--src", src, "--out", path.join(OUT, "site"), "--pages", "pixcar.fr"], { stdio: "pipe", env });
   srv.setRoot(path.join(OUT, "site", "dist"));
 

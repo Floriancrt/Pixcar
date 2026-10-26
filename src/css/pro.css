@@ -9774,3 +9774,70 @@ td.is-today .pl-mx-cell {
     transition: none;
   }
 }
+
+/* Accord de sous-traitance des données (agreement.js, docs/sous-traitance.md) : fenêtre, bandeau de Gestion d'atelier */
+.dpa-text {
+  max-height: min(52vh, 520px);
+  overflow: auto;
+  margin: 4px 0 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink-2);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+.dpa-text:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.dpa-text h3 {
+  margin: 16px 0 4px;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.dpa-text h3:first-of-type {
+  margin-top: 4px;
+}
+.dpa-text p,
+.dpa-text ul {
+  margin: 0 0 8px;
+}
+.dpa-text ul {
+  padding-left: 20px;
+}
+.dpa-text blockquote {
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--line);
+  font-style: italic;
+}
+.dpa-draft {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+}
+.dpa-done {
+  margin: 4px 0 0;
+  font-weight: 600;
+  color: var(--ink);
+}
+.pl-dpa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin: 0 0 14px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+  font-size: 0.9rem;
+}
+.pl-dpa p {
+  flex: 1 1 320px;
+  margin: 0;
+}

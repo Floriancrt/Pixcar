@@ -14,7 +14,7 @@ const { startApi } = require("./api-harness");
 
 const OUT = path.join(__dirname, ".out", "demo-atelier");
 const SRC = process.env.PIXCAR_SRC || path.join(ROOT, "src");
-const LEGAL = { editorLine: "Pixcar est édité à titre non professionnel par Jeanne Exemple, responsable du traitement des données décrites ici.", contact: "contact@exemple.test", hostPages: "GitHub, Inc. (GitHub Pages), États-Unis", hostApi: "Amazon Web Services EMEA SARL, Luxembourg (région Europe, Stockholm)", repairRetentionMonths: 24, updated: "3 octobre 2026" };
+const LEGAL = { editorName: "Jeanne Exemple", editorLine: "Pixcar est édité à titre non professionnel par Jeanne Exemple, responsable du traitement des données décrites ici.", contact: "contact@exemple.test", hostPages: "GitHub, Inc. (GitHub Pages), États-Unis", hostApi: "Amazon Web Services EMEA SARL, Luxembourg (région Europe, Stockholm)", repairRetentionMonths: 24, updated: "3 octobre 2026" };
 const GARAGE = "aaaaaaaa-0000-4000-8000-000000000027";
 const CONTACTS = [{ id: GARAGE, name: "Garage des Pyrénées", addr: "12 avenue de la Gare, 31220 Cazères", pc: "31220", lat: 43.2174, lon: 1.1014, emails: ["contact@garage-pyrenees.fr"], phones: ["+33561000027"] }];
 const ACCOUNT = "sub-demo";
@@ -154,7 +154,7 @@ async function demo({ log = console.log } = {}) {
   const src = path.join(OUT, "src");
   fs.cpSync(SRC, src, { recursive: true });
   fs.writeFileSync(path.join(src, "legal.json"), JSON.stringify(LEGAL));
-  const env = { ...process.env, PIXCAR_API_BASE: api.url, PIXCAR_PRO_POOL: "eu-north-1_PixcarTest1", PIXCAR_PRO_CLIENT: "4pro0test1client2id3", PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "" };
+  const env = { ...process.env, PIXCAR_ALLOW_DRAFT_AGREEMENT: "1", PIXCAR_API_BASE: api.url, PIXCAR_PRO_POOL: "eu-north-1_PixcarTest1", PIXCAR_PRO_CLIENT: "4pro0test1client2id3", PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "" };
   execFileSync(process.execPath, [path.join(ROOT, "scripts/build.mjs"), "--only", "dist", "--src", src, "--out", path.join(OUT, "site"), "--pages", "pixcar.fr"], { stdio: "pipe", env });
   srv.setRoot(path.join(OUT, "site", "dist"));
 

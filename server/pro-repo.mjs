@@ -3,6 +3,7 @@
 import { cellOf, cellsAround } from "./lib/geo.mjs";
 import { decideStatus } from "./repo.mjs";
 import { NEAR_M, pickRec } from "../src/js/modules/garages-table.js";
+import { AGREEMENT_PROOF_YEARS } from "../src/js/shared/agreement.js";
 
 export const IMPORT_BATCH_MAX = 500; // lignes de contacts par appel de l'op « import-contacts » (DSQL : 3 000 lignes au plus par transaction)
 const PURGE_BATCH = 1000;
@@ -254,6 +255,8 @@ export function createProRepo(db) {
           await t.query("DELETE FROM pro_profile_changes WHERE garage_id = $1", [garageId]);
           await t.query("DELETE FROM pro_services WHERE garage_id = $1", [garageId]);
           await t.query("DELETE FROM pro_prefs WHERE garage_id = $1", [garageId]); // raccourcis du tableau de bord (lot 3c)
+          // l'accord de sous-traitance prend fin ; sa preuve reste 5 ans (purge)
+          await t.query("UPDATE pro_agreements SET ended_at = now() WHERE garage_id = $1 AND ended_at IS NULL", [garageId]);
         }
         return r.rowCount;
       });
@@ -385,6 +388,17 @@ export function createProRepo(db) {
            view = CASE WHEN $6 THEN $4 ELSE pro_prefs.view END, updated_at = EXCLUDED.updated_at`,
         [garageId, accountId, prefs.shortcuts ? JSON.stringify(prefs.shortcuts) : null, prefs.view ?? null, JSON.stringify(defaults), prefs.view !== undefined],
       ),
+    // accord de sous-traitance (010, docs/sous-traitance.md) : l'acceptation en cours de cette version par le garage, ou null
+    agreementOf: (garageId, version) =>
+      one("SELECT accepted_at, signer FROM pro_agreements WHERE garage_id = $1 AND version = $2 AND ended_at IS NULL ORDER BY accepted_at LIMIT 1", [garageId, version]),
+    // enregistre l'acceptation ; une seule par version tant que le rattachement dure (la première fait foi). Renvoie celle qui vaut.
+    acceptAgreement: ({ garageId, version, accountId, signer }) =>
+      db.tx(async (t) => {
+        const seen = (await t.query("SELECT accepted_at, signer FROM pro_agreements WHERE garage_id = $1 AND version = $2 AND ended_at IS NULL ORDER BY accepted_at LIMIT 1", [garageId, version])).rows[0];
+        if (seen) return { row: seen, created: false };
+        const r = await t.query("INSERT INTO pro_agreements (id, garage_id, version, account_id, signer) VALUES ($1, $2, $3, $4, $5) RETURNING accepted_at, signer", [crypto.randomUUID(), garageId, version, accountId, signer]);
+        return { row: r.rows[0], created: true };
+      }),
     getProfile: (garageId) => one(`SELECT ${PROFILE_COLUMNS} FROM pro_profiles WHERE garage_id = $1`, [garageId]),
     // Site, e-mail affiché, horaires : seuls les champs présents dans fields sont écrits (null efface les horaires, "" le reste).
     saveProfile(garageId, accountId, fields) {
@@ -482,7 +496,7 @@ export function createProRepo(db) {
       db.query("UPDATE pro_prices SET status = $3 WHERE garage_id = $1 AND service_id = $2", [garageId, serviceId, status]).then((r) => r.rowCount > 0),
 
     // Entretien : journal de plus de 90 jours, demandes non abouties de plus de 30 jours, visites de plus de 60 jours, changements de fiche
-    // décidés ou annulés depuis plus de 90 jours.
+    // décidés ou annulés depuis plus de 90 jours, preuves d'acceptation de l'accord de sous-traitance closes depuis plus de 5 ans.
     async purge() {
       const run = async (sql) => {
         let total = 0;
@@ -500,6 +514,7 @@ export function createProRepo(db) {
         proChanges: await run(
           "DELETE FROM pro_profile_changes WHERE id IN (SELECT id FROM pro_profile_changes WHERE status <> 'pending' AND coalesce(decided_at, created_at) < now() - interval '90 days' LIMIT $1)",
         ),
+        proAgreements: await run(`DELETE FROM pro_agreements WHERE id IN (SELECT id FROM pro_agreements WHERE ended_at < now() - interval '${AGREEMENT_PROOF_YEARS} years' LIMIT $1)`),
       };
     },
   };

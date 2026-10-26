@@ -382,8 +382,54 @@ paths:
                       calls: { $ref: "#/components/schemas/ProVisitCounts" }
                   rdv: { type: object, description: "Rendez-vous en ligne ouverts côté API : demandes à traiter, calcul des disponibilités (par créneaux : simple ; par ressources : advanced) et modules de l'affichage avancé de Gestion d'atelier.", required: [todo, mode, modules], properties: { todo: { type: integer, minimum: 0 }, mode: { type: string, enum: [simple, advanced] }, modules: { $ref: "#/components/schemas/CalModules" } } }
                   prefs: { $ref: "#/components/schemas/ProPrefs" }
+                  agreement: { $ref: "#/components/schemas/ProAgreement" }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
         "404": { description: "Garage introuvable ou pas rattaché à ce compte (`not_found`), ou Espace Pro fermé (`pro_disabled`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/pro/garages/{id}/agreement:
+    get:
+      tags: [Espace Pro]
+      summary: "Accord de sous-traitance des données (article 28 du RGPD) : la version en vigueur et son acceptation par le garage"
+      description: |
+        docs/sous-traitance.md. Le texte est dans la page (src/partials/sous-traitance.html) ; l'API donne sa version et dit si le garage
+        l'a acceptée (date, nom déclaré au rattachement). `required` : l'API refuse les écritures qu'il couvre tant qu'il n'est pas
+        accepté (403 `agreement_required` sur les mécaniciens, les absences et les blocs du calendrier).
+      operationId: proAgreement
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: L'accord en vigueur et son acceptation., content: { application/json: { schema: { $ref: "#/components/schemas/ProAgreement" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Garage pas rattaché à ce compte.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    post:
+      tags: [Espace Pro]
+      summary: "Accepter l'accord au nom du garage : `{ version, accept: true }`"
+      description: |
+        `version` : celle que le garage a lue ; une autre (le texte a changé entre-temps) est refusée (409 `agreement_version`, avec la
+        version en vigueur). `accept` : la case cochée. Une seule acceptation par version tant que le rattachement dure : la première fait
+        foi (200 ensuite, avec la même date). Le retrait du rattachement clôt l'accord ; sa preuve est effacée 5 ans plus tard.
+      operationId: proAgreementAccept
+      security: [{ cognito: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, accept]
+              properties:
+                version: { type: string, example: "2026-10-26" }
+                accept: { type: boolean, enum: [true] }
+      responses:
+        "200": { description: Déjà acceptée (la première acceptation fait foi)., content: { application/json: { schema: { $ref: "#/components/schemas/ProAgreement" } } } }
+        "201": { description: Acceptation enregistrée., content: { application/json: { schema: { $ref: "#/components/schemas/ProAgreement" } } } }
+        "400": { description: "JSON illisible (`bad_json`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "404": { description: "Garage pas rattaché à ce compte.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: "Le texte a changé depuis sa lecture (`agreement_version`, avec `version`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "Case non cochée (`validation`, `field` : accept).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   /v1/pro/garages/{id}/prefs:
     put:
       tags: [Espace Pro]
@@ -988,6 +1034,7 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/CalSaved" }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "403": { $ref: "#/components/responses/AgreementRequired" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
         "409": { description: "Déjà 30 mécaniciens (`too_many`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
@@ -1004,6 +1051,7 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/CalSaved" }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "403": { $ref: "#/components/responses/AgreementRequired" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
         "422": { $ref: "#/components/responses/RdvInvalid" }
     delete:
@@ -1132,6 +1180,7 @@ paths:
       responses:
         "200": { description: "L'état, avec l'identifiant créé (`saved`) et les rendez-vous à venir touchés (`touched`).", content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/CalState" }, { type: object, required: [saved, touched], properties: { saved: { type: string, format: uuid }, touched: { type: array, items: { type: string, format: uuid } } } }] } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "403": { $ref: "#/components/responses/AgreementRequired" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
         "409": { description: "La période chevauche une absence ou indisponibilité déjà saisie pour ce mécanicien ou ce poste (`overlap` : le message la nomme, `overlap` la décrit) ; ou déjà 300 absences à venir (`too_many`).", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
@@ -1238,6 +1287,7 @@ paths:
         "200": { description: "Création rejouée (même `ref`) : le bloc déjà créé (`saved`, `replay: true`).", content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockSaved" } } } }
         "201": { description: "Bloc créé (`saved`).", content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockSaved" } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "403": { $ref: "#/components/responses/AgreementRequired" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
         "409": { description: "1 000 blocs au plus (`too_many`), prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`), travaux qui attendraient (`shifted` : la cause, `work` { start, end }, `back`, et des horaires de dépôt sans attente dans `alternatives`), créneau plein (`full`, avec `reasons` et `alternatives`), rendez-vous déjà là pendant un blocage (`overlap`, avec `count`) ; pour ces trois derniers, renvoyer avec `confirm: true` pour accepter.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
@@ -1254,6 +1304,7 @@ paths:
       responses:
         "200": { description: "Bloc enregistré (`saved`).", content: { application/json: { schema: { $ref: "#/components/schemas/CalBlockSaved" } } } }
         "401": { $ref: "#/components/responses/ProUnauthorized" }
+        "403": { $ref: "#/components/responses/AgreementRequired" }
         "404": { $ref: "#/components/responses/RdvNotFound" }
         "409": { description: "Prestation sans exigences (`not_configured`), conflit (`conflict`, avec `reasons` et `alternatives`), travaux qui attendraient (`shifted`), créneau plein (`full`), rendez-vous déjà là pendant un blocage (`overlap`), comme à la création (une modification qui garde l'heure et n'allonge pas les travaux ne redemande pas), intervention commencée qui changerait de jour ou d'heure (`started`, lot 3c). Les champs du client absents du corps sont gardés.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/RdvInvalid" }
@@ -1437,6 +1488,9 @@ components:
       bearerFormat: JWT
       description: Jeton d'accès du groupe d'utilisateurs Amazon Cognito de l'Espace Pro (signature RS256, émetteur, client et expiration vérifiés par l'API).
   responses:
+    AgreementRequired:
+      description: "Accord de sous-traitance pas encore accepté pour cette version (`agreement_required`, avec `version`) : le garage l'accepte d'abord (POST /v1/pro/garages/{id}/agreement). Lire et supprimer restent possibles."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     ProUnauthorized:
       description: "Jeton absent, invalide ou expiré (`unauthorized`)."
       headers: { WWW-Authenticate: { schema: { type: string } } }
@@ -1985,6 +2039,18 @@ components:
             label: { type: string, example: Travaux en cours }
             at: { type: string, format: date-time, nullable: true }
             atText: { type: string, example: mercredi 21 octobre à 10:20 }
+    ProAgreement:
+      type: object
+      description: "Accord de sous-traitance des données (docs/sous-traitance.md) : version en vigueur ; date et signataire une fois accepté."
+      required: [version, label, draft, accepted, required]
+      properties:
+        version: { type: string, example: "2026-10-26" }
+        label: { type: string, example: version du 26 octobre 2026 }
+        draft: { type: boolean, description: Projet pas encore relu par un juriste (jamais publié tel quel). }
+        accepted: { type: boolean }
+        acceptedAt: { type: string, format: date-time }
+        signer: { type: string, description: Nom déclaré au rattachement du garage par le compte qui a accepté. }
+        required: { type: boolean, description: "L'API refuse les écritures couvertes (403 `agreement_required`) tant que l'accord n'est pas accepté." }
     ProPrefs:
       type: object
       required: [shortcuts, view]

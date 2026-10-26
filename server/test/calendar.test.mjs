@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 import { parseContactRows } from "../lib/contact.mjs";
 import { makeApp } from "./helpers.mjs";
+import { AGREEMENT } from "../../src/js/shared/agreement.js";
 import { parisInstant } from "../../src/js/shared/rdv.js";
 
 const HERE = { lat: 43.2174, lon: 1.1014 };
@@ -47,6 +48,8 @@ describe("Calendrier avancé", () => {
   // garage ouvert en mode simple (lot 2) : horaires, prestations faites, adresse vérifiée, un créneau, rendez-vous ouverts
   async function openGarage(p = pro, garage = DUPONT, who = "alice") {
     await own(who, garage);
+    // l'accord de sous-traitance, sans lequel ni l'équipe ni les rendez-vous saisis ne s'enregistrent (agreement.test.mjs)
+    assert.equal((await p("POST", "/agreement", { version: AGREEMENT.version, accept: true })).status, 201);
     assert.equal((await p("PUT", "/profile", { hours: WEEK })).status, 200);
     for (const [s, m] of [["vidange", 45], ["plaq_av", 90], ["clim", 45], ["distribution", 270]]) assert.equal((await p("PUT", `/services/${s}`, { offered: true, minutes: m })).status, 200);
     const email = `atelier@${garage === DUPONT ? "garage-dupont" : "garage-petit"}.fr`;
@@ -82,7 +85,7 @@ describe("Calendrier avancé", () => {
   const timesOn = (r, day = WED) => ((r.body.days || []).find((d) => d.day === day) || { times: [] }).times.map((x) => x.t);
 
   before(async () => {
-    t = await makeApp({ env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1", RDV_ENABLED: "1", READ_LIMIT_PER_MINUTE: "100000", WRITE_LIMIT_PER_HOUR: "1000" }, now: () => clock });
+    t = await makeApp({ env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1", RDV_ENABLED: "1", PRO_AGREEMENT_REQUIRED: "1", READ_LIMIT_PER_MINUTE: "100000", WRITE_LIMIT_PER_HOUR: "1000" }, now: () => clock });
   });
   after(() => t.close());
   beforeEach(async () => {
@@ -365,6 +368,7 @@ describe("Calendrier avancé", () => {
     assert.equal((await pro("GET", "/rdv/calendar", undefined, "bob")).status, 404, "autre compte sur ce garage");
     assert.equal((await pro("PUT", `/rdv/calendar/staff/${paul}`, { name: "X" }, null)).status, 401);
     await own("bob", PETIT);
+    assert.equal((await bob("POST", "/agreement", { version: AGREEMENT.version, accept: true })).status, 201);
     await bob("POST", "/rdv/calendar/start");
     assert.equal((await bob("GET", "/rdv/calendar")).body.staff.length, 0);
     assert.equal((await bob("PUT", `/rdv/calendar/staff/${paul}`, { name: "Volé" })).status, 404);
@@ -452,6 +456,7 @@ describe("Calendrier avancé", () => {
       assert.equal((await pro("POST", "/rdv/calendar/blocks", body)).body.error.field, field, JSON.stringify(body));
     // un autre garage n'y touche pas ; supprimé : le pont redevient libre ; une seconde fois : introuvable
     await own("bob", PETIT);
+    assert.equal((await proOf(PETIT)("POST", "/agreement", { version: AGREEMENT.version, accept: true })).status, 201);
     assert.equal((await proOf(PETIT)("DELETE", `/rdv/calendar/blocks/${hold.body.saved}`)).status, 404);
     assert.equal((await proOf(PETIT)("PUT", `/rdv/calendar/blocks/${hold.body.saved}`, { kind: "hold", label: "Volé", day: WED, time: "16:00", to: "17:00" })).status, 404);
     assert.equal((await pro("DELETE", `/rdv/calendar/blocks/${hold.body.saved}`)).status, 200);

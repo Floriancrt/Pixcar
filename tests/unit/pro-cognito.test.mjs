@@ -119,4 +119,24 @@ describe("Pro API client", () => {
     const down = createProApi({ base: "https://api.test", token: async () => "t", fetchImpl: async () => { throw new TypeError("Failed to fetch"); } });
     assert.equal((await down.me().catch((e) => e)).code, "network");
   });
+
+  test("a write refused for want of the processing agreement calls the hook (its window opens), and still fails; other errors do not", async () => {
+    let asked = 0, sent = null;
+    const refuse = (code, status) => new Response(JSON.stringify({ error: { code, message: "…" } }), { status });
+    const api = createProApi({
+      base: "https://api.test",
+      token: async () => "t",
+      onAgreementRequired: () => asked++,
+      fetchImpl: async (url, init) => {
+        if (url.endsWith("/agreement")) return (sent = init.body), new Response(JSON.stringify({ accepted: true }), { status: 201 });
+        return url.includes("/staff") ? refuse("agreement_required", 403) : refuse("validation", 422);
+      },
+    });
+    const e = await api.saveStaff("g1", null, { name: "Paul" }).catch((x) => x);
+    assert.deepEqual([e.status, e.code, asked], [403, "agreement_required", 1]);
+    await api.saveBlock("g1", null, {}).catch(() => {});
+    assert.equal(asked, 1, "une autre erreur ne l'appelle pas");
+    assert.deepEqual(await api.acceptAgreement("g1", "2026-10-26"), { accepted: true });
+    assert.equal(sent, '{"version":"2026-10-26","accept":true}');
+  });
 });

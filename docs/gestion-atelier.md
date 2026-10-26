@@ -312,8 +312,10 @@ change (paramètre `OpsCodeKey`) ; puis le site (`exploitation.md`, 10.17).
 ### 5.4 Textes à faire relire
 
 La politique de confidentialité (`src/partials/legal.html`) et la note de l'Espace Pro disent maintenant que Pixcar agit comme
-sous-traitant (article 28 du RGPD) pour les clients que le garage saisit. Les conditions de l'Espace Pro doivent contenir les clauses de
-sous-traitance (décision 2.8) : **à rédiger et faire relire par un juriste avant la mise en ligne** ; la date de mise à jour de la
+sous-traitant (article 28 du RGPD) pour les clients que le garage saisit. Les clauses de sous-traitance (décision 2.8) : **projet
+rédigé le 26 octobre 2026** (« Rédige le projet »), avec l'écran d'acceptation et le refus par l'API des écritures qu'il couvre tant
+qu'il n'est pas accepté, sur la branche `clauses-rgpd` : voir [sous-traitance.md](sous-traitance.md) (questions pour le juriste, ce
+qui reste à vérifier, ordre de mise en ligne). **À faire relire par un juriste avant la mise en ligne** ; la date de mise à jour de la
 politique (`legal.json`) est à changer à la publication.
 
 ## 6. Validation (P0)

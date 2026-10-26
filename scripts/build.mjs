@@ -13,6 +13,8 @@
 //
 // Variable d'environnement : PIXCAR_API_BASE = URL de l'API des réparations (vide : stockage dans le navigateur).
 //                            PIXCAR_ALLOW_NO_LEGAL=1 : construire avec l'API même si src/legal.json est incomplet (essai seulement, voir legalParts).
+//                            PIXCAR_ALLOW_DRAFT_AGREEMENT=1 : construire la version publiée (--pages) de l'Espace Pro avec un accord de sous-traitance
+//                            encore en projet (essai seulement, voir agreementHtml).
 //                            PIXCAR_GA_ID = identifiant de mesure Google Analytics (« G-… ») : bandeau de consentement, texte de confidentialité
 //                            et politique de sécurité en tiennent compte. Sans cette variable, la version publiée (--pages) prend celui de
 //                            src/analytics.json ; les autres sorties n'en ont aucun. PIXCAR_GA_ID= (vide) le désactive même avec --pages.
@@ -38,6 +40,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile, copyFile, readdir } from "node
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { AGREEMENT } from "../src/js/shared/agreement.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const arg = (name) => {
@@ -523,18 +526,20 @@ async function buildPro(fonts) {
   const logo = /<symbol id="px-logo"[\s\S]*?<\/symbol>/.exec(await read(SRC, "partials/pro-logo.html"));
   if (!logo) throw new Error("Espace Pro : symbole px-logo introuvable dans partials/pro-logo.html");
   mark[0] += logo[0];
-  let contact = "";
+  let contact = "", legal = {};
   try {
-    contact = JSON.parse(await read(SRC, "legal.json")).contact || "";
+    legal = JSON.parse(await read(SRC, "legal.json"));
+    contact = legal.contact || "";
   } catch {}
   if (!/^[^\s@<>"]+@[^\s@<>"]+$/.test(contact)) throw new Error("Espace Pro : adresse de contact absente ou invalide dans src/legal.json (« contact ») : la vérification manuelle y renvoie");
+  const agreement = await agreementHtml(legal, contact);
   const headAssets = [
     `<link rel="icon" href="../favicon.ico" sizes="48x48">`,
     `<link rel="icon" type="image/svg+xml" href="../favicon.svg">`,
     `<link rel="preload" href="../assets/fonts/${fonts[0].name}" as="font" type="font/woff2" crossorigin>`,
     `<link rel="stylesheet" href="../assets/${cssName}">`,
   ].join("\n");
-  const fill = { API_BASE: apiBase, POOL: pro.pool, CLIENT: pro.client, CONTACT: contact, HEAD_ASSETS: headAssets, MARK: mark[0], SCRIPTS: `<script src="../assets/${jsName}" defer></script>` };
+  const fill = { API_BASE: apiBase, POOL: pro.pool, CLIENT: pro.client, CONTACT: contact, HEAD_ASSETS: headAssets, MARK: mark[0], SCRIPTS: `<script src="../assets/${jsName}" defer></script>`, AGREEMENT: agreement, AGREEMENT_LABEL: AGREEMENT.label };
   let html = squeeze((await read(SRC, "pro/index.html")).replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => (k in fill ? fill[k] : m)));
   if (/\{\{[A-Z_]+\}\}/.test(html)) throw new Error("Espace Pro : marque {{…}} non remplacée dans pro/index.html");
   if (pages) html = withPolicyMeta(html, "", PRO_CSP(pro.cognito));
@@ -559,6 +564,24 @@ async function buildRdvBook() {
 // version publiée : sa balise <meta> (connect-src : l'API seule). Pas de Cognito ici : on y entre par le jeton du lien.
 const RDV_CSP = () => ["default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data:", "font-src 'self'", `connect-src ${apiOrigin}`, "object-src 'none'", "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'"].join("; ");
 export const rdvContentSecurityPolicy = () => (pro ? RDV_CSP() : "");
+// Accord de sous-traitance des données (docs/sous-traitance.md) : src/partials/sous-traitance.html, rempli avec src/legal.json (éditeur,
+// hébergeur de l'API, contact). Un projet (AGREEMENT.draft) n'est jamais publié : la version publiée (--pages) refuse de se construire.
+async function agreementHtml(legal, contact) {
+  if (pages && AGREEMENT.draft && process.env.PIXCAR_ALLOW_DRAFT_AGREEMENT !== "1")
+    throw new Error("Espace Pro : l'accord de sous-traitance est encore un projet (src/js/shared/agreement.js, draft: true). Une fois le texte relu par un juriste, passer draft à false (docs/sous-traitance.md) ; d'ici là, rien n'est publié.");
+  let text = await read(SRC, "partials/sous-traitance.html");
+  if (createHash("sha256").update(text).digest("hex") !== AGREEMENT.sha256) throw new Error("partials/sous-traitance.html a changé : mettre à jour AGREEMENT.sha256 (et AGREEMENT.version si un garage l'a déjà accepté) dans src/js/shared/agreement.js");
+  text = text.replace(/<!--[\s\S]*?-->\s*/, "");
+  if (!AGREEMENT.draft) text = text.replace(/<p[^>]*data-dpa-draft[^>]*>[\s\S]*?<\/p>\s*/, "");
+  const fill = { CONTACT: contact, EDITOR: legal.editorName || "", HOST_API: legal.hostApi || "" };
+  for (const [k, v] of Object.entries(fill)) if (!v) throw new Error(`partials/sous-traitance.html : {{${k}}} sans valeur (src/legal.json : ${k === "EDITOR" ? "editorName" : k === "HOST_API" ? "hostApi" : "contact"})`);
+  text = text.replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => {
+    if (!(k in fill)) throw new Error(`partials/sous-traitance.html : {{${k}}} inconnu`);
+    return fill[k];
+  });
+  return text;
+}
+
 async function buildRdvPage({ cssName, mark, contact, fontName }) {
   const js = (await build({ entryPoints: [join(SRC, "js/rdv-page.js")], bundle: true, format: "iife", target: "es2020", minify: !dev, legalComments: "none", write: false, logLevel: "warning" })).outputFiles[0].text;
   const jsName = `rdv-page.${hash(js)}.js`;

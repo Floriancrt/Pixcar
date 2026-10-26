@@ -23,7 +23,7 @@ const OUT = path.join(__dirname, ".out", "rdv-book-site");
 const SHOTS = path.join(__dirname, ".out", "shots");
 const SRC = process.env.PIXCAR_SRC || path.join(ROOT, "src");
 const BUILD = process.env.PIXCAR_BUILD ? path.resolve(ROOT, process.env.PIXCAR_BUILD) : path.join(ROOT, "scripts/build.mjs");
-const LEGAL = { editorLine: "Pixcar est édité à titre non professionnel par Jeanne Exemple, responsable du traitement des données décrites ici.", contact: "contact@exemple.test", hostPages: "GitHub, Inc. (GitHub Pages), États-Unis", hostApi: "Amazon Web Services EMEA SARL, Luxembourg (région Europe, Stockholm)", repairRetentionMonths: 24, updated: "3 octobre 2026" };
+const LEGAL = { editorName: "Jeanne Exemple", editorLine: "Pixcar est édité à titre non professionnel par Jeanne Exemple, responsable du traitement des données décrites ici.", contact: "contact@exemple.test", hostPages: "GitHub, Inc. (GitHub Pages), États-Unis", hostApi: "Amazon Web Services EMEA SARL, Luxembourg (région Europe, Stockholm)", repairRetentionMonths: 24, updated: "3 octobre 2026" };
 const norm = (s) => String(s || "").replace(/\s+/g, " ").trim();
 const ACCOUNT = "sub-rdv";
 const TOKEN = `tok.${ACCOUNT}.1`;
@@ -95,7 +95,7 @@ async function tiles(ctx) {
   const src = path.join(OUT, "src");
   fs.cpSync(SRC, src, { recursive: true });
   fs.writeFileSync(path.join(src, "legal.json"), JSON.stringify(LEGAL));
-  const env = { ...process.env, PIXCAR_API_BASE: api.url, PIXCAR_PRO_POOL: "eu-north-1_PixcarTest1", PIXCAR_PRO_CLIENT: "4pro0test1client2id3", PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "" };
+  const env = { ...process.env, PIXCAR_ALLOW_DRAFT_AGREEMENT: "1", PIXCAR_API_BASE: api.url, PIXCAR_PRO_POOL: "eu-north-1_PixcarTest1", PIXCAR_PRO_CLIENT: "4pro0test1client2id3", PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "" };
   const build = (name, extra = [], e = env) => execFileSync(process.execPath, [BUILD, "--only", "dist", "--src", src, "--out", path.join(OUT, name), ...extra], { stdio: "pipe", env: e });
   build("site");
   const dist = path.join(OUT, "site", "dist");

@@ -3,6 +3,7 @@
 import { randomHex } from "./lib/crypto.mjs";
 import { isScwProjectId } from "./lib/scaleway.mjs";
 import { isSiret } from "./lib/sirene.mjs";
+import { AGREEMENT } from "../src/js/shared/agreement.js";
 
 const int = (v, d, min = 0) => {
   const n = v === undefined || v === "" ? d : Number(v);
@@ -114,6 +115,9 @@ export function loadConfig(env = process.env) {
       lookupsPerAccountPerHour: int(env.PRO_LOOKUPS_PER_ACCOUNT_PER_HOUR, 30, 1),
       maxDistanceM: int(env.PRO_MAX_DISTANCE_M, 300, 50),
       testEstablishments,
+      // accord de sous-traitance (docs/sous-traitance.md) : l'API refuse d'enregistrer le personnel, les absences et les rendez-vous saisis
+      // d'un garage qui ne l'a pas accepté. Par défaut, dès que le texte n'est plus un projet (AGREEMENT.draft) ; « 1 » ou « 0 » pour forcer.
+      agreementRequired: env.PRO_AGREEMENT_REQUIRED ? env.PRO_AGREEMENT_REQUIRED === "1" : !AGREEMENT.draft,
     },
     rdv: {
       enabled: rdvEnabled,

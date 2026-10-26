@@ -25,7 +25,7 @@ const BUILD = process.env.PIXCAR_BUILD ? path.resolve(ROOT, process.env.PIXCAR_B
 const POOL = "eu-north-1_PixcarTest1";
 const CLIENT = "4pro0test1client2id3";
 const COGNITO = "https://cognito-idp.eu-north-1.amazonaws.com/";
-const LEGAL = { editorLine: "Pixcar est édité à titre non professionnel par Jeanne Exemple, responsable du traitement des données décrites ici.", contact: "contact@exemple.test", hostPages: "GitHub, Inc. (GitHub Pages), États-Unis", hostApi: "Amazon Web Services EMEA SARL, Luxembourg (région Europe, Stockholm)", repairRetentionMonths: 24, updated: "3 octobre 2026" };
+const LEGAL = { editorName: "Jeanne Exemple", editorLine: "Pixcar est édité à titre non professionnel par Jeanne Exemple, responsable du traitement des données décrites ici.", contact: "contact@exemple.test", hostPages: "GitHub, Inc. (GitHub Pages), États-Unis", hostApi: "Amazon Web Services EMEA SARL, Luxembourg (région Europe, Stockholm)", repairRetentionMonths: 24, updated: "3 octobre 2026" };
 
 // ---- données : un garage avec e-mail public, site propre et portable ; un voisin déjà rattaché ; un établissement au registre
 const HERE = { lat: 43.2174, lon: 1.1014 };
@@ -142,7 +142,7 @@ function fakeCognito() {
   const src = path.join(OUT, "src");
   fs.cpSync(SRC, src, { recursive: true });
   fs.writeFileSync(path.join(src, "legal.json"), JSON.stringify(LEGAL));
-  const env = { ...process.env, PIXCAR_API_BASE: api.url, PIXCAR_PRO_POOL: POOL, PIXCAR_PRO_CLIENT: CLIENT, PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "" };
+  const env = { ...process.env, PIXCAR_ALLOW_DRAFT_AGREEMENT: "1", PIXCAR_API_BASE: api.url, PIXCAR_PRO_POOL: POOL, PIXCAR_PRO_CLIENT: CLIENT, PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "" };
   const build = (name, extra = [], e = env) => execFileSync(process.execPath, [BUILD, "--only", "dist", "--src", src, "--out", path.join(OUT, name), ...extra], { stdio: "pipe", env: e });
   build("site");
   const dist = path.join(OUT, "site", "dist");

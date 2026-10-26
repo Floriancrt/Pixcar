@@ -48,6 +48,8 @@ const links = (html) => html.match(/<button type="button" class="link-btn" data-
 describe("legal notice and privacy window: the text", () => {
   test("every {{legal.x}} of the text is a field of src/legal.json, and every field is used", () => {
     const used = new Set([...partial.matchAll(/\{\{legal\.([A-Za-z]+)\}\}/g)].map((m) => m[1]));
+    // editorName : le nom du sous-traitant dans l'accord de sous-traitance de l'Espace Pro ({{EDITOR}}, docs/sous-traitance.md)
+    if (read("src/partials/sous-traitance.html").includes("{{EDITOR}}")) used.add("editorName");
     assert.deepEqual([...used].sort(), Object.keys(config).sort());
   });
 

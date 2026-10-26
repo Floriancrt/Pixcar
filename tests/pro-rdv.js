@@ -25,7 +25,7 @@ const SRC = process.env.PIXCAR_SRC || path.join(ROOT, "src");
 const BUILD = process.env.PIXCAR_BUILD ? path.resolve(ROOT, process.env.PIXCAR_BUILD) : path.join(ROOT, "scripts/build.mjs");
 const POOL = "eu-north-1_PixcarTest1";
 const CLIENT = "4pro0test1client2id3";
-const LEGAL = { editorLine: "Pixcar est édité à titre non professionnel par Jeanne Exemple, responsable du traitement des données décrites ici.", contact: "contact@exemple.test", hostPages: "GitHub, Inc. (GitHub Pages), États-Unis", hostApi: "Amazon Web Services EMEA SARL, Luxembourg (région Europe, Stockholm)", repairRetentionMonths: 24, updated: "3 octobre 2026" };
+const LEGAL = { editorName: "Jeanne Exemple", editorLine: "Pixcar est édité à titre non professionnel par Jeanne Exemple, responsable du traitement des données décrites ici.", contact: "contact@exemple.test", hostPages: "GitHub, Inc. (GitHub Pages), États-Unis", hostApi: "Amazon Web Services EMEA SARL, Luxembourg (région Europe, Stockholm)", repairRetentionMonths: 24, updated: "3 octobre 2026" };
 
 const HERE = { lat: 43.2174, lon: 1.1014 };
 const GARAGE = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -75,7 +75,7 @@ const NOTIFY = "atelier@garage-demo.fr";
   const src = path.join(OUT, "src");
   fs.cpSync(SRC, src, { recursive: true });
   fs.writeFileSync(path.join(src, "legal.json"), JSON.stringify(LEGAL));
-  const env = { ...process.env, PIXCAR_API_BASE: api.url, PIXCAR_PRO_POOL: POOL, PIXCAR_PRO_CLIENT: CLIENT, PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "" };
+  const env = { ...process.env, PIXCAR_ALLOW_DRAFT_AGREEMENT: "1", PIXCAR_API_BASE: api.url, PIXCAR_PRO_POOL: POOL, PIXCAR_PRO_CLIENT: CLIENT, PIXCAR_GA_ID: "", PIXCAR_CS_ID: "", PIXCAR_MAPBOX_TOKEN: "" };
   execFileSync(process.execPath, [BUILD, "--only", "dist", "--src", src, "--out", path.join(OUT, "site")], { stdio: "pipe", env });
   srv.setRoot(path.join(OUT, "site", "dist"));
 

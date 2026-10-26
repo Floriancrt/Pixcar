@@ -497,11 +497,24 @@ export async function selfcheck(db, { log = () => {} } = {}) {
       expect((await count("SELECT count(*) AS n FROM rdv_work_orders WHERE garage_id = $1", [proGarage2])) === 0, "intervention retirée");
     }
   });
+  await check("Accord de sous-traitance : acceptation (la première fait foi), relue, preuve close depuis plus de 5 ans purgée", async () => {
+    const first = await pro.acceptAgreement({ garageId: proGarage, version: "selfcheck", accountId: acc("a"), signer: "Auto Contrôle" });
+    expect(first.created && first.row.signer === "Auto Contrôle" && !!first.row.accepted_at, "acceptation enregistrée");
+    expect(!(await pro.acceptAgreement({ garageId: proGarage, version: "selfcheck", accountId: acc("a"), signer: "Autre" })).created, "une seule par version");
+    expect((await pro.agreementOf(proGarage, "selfcheck")).signer === "Auto Contrôle", "relue");
+    await db.query("UPDATE pro_agreements SET ended_at = now() - interval '5 years 1 day' WHERE garage_id = $1", [proGarage]);
+    expect(!(await pro.agreementOf(proGarage, "selfcheck")), "close : plus en vigueur");
+    await pro.purge();
+    expect((await count("SELECT count(*) AS n FROM pro_agreements WHERE garage_id = $1", [proGarage])) === 0, "preuve de plus de 5 ans purgée");
+  });
+
   await check("Espace Pro : purge des visites de plus de 60 jours ; retrait d'un rattachement : ses prix et sa fiche partent avec lui", async () => {
     await pro.recordVisit({ garageId: proGarage2, day: new Date(Date.now() - 70 * 864e5).toISOString().slice(0, 10), kind: "view", visitor: randomHex(32) });
     await pro.purge();
     expect((await count("SELECT count(*) AS n FROM pro_visits WHERE garage_id = $1", [proGarage2])) === 4, "les 4 visites de moins de 60 jours restent");
+    await pro.acceptAgreement({ garageId: proGarage2, version: "selfcheck", accountId: acc("a"), signer: "Auto Contrôle" });
     expect((await pro.revoke(proGarage2)) === 1 && (await count("SELECT count(*) AS n FROM pro_prices WHERE garage_id = $1", [proGarage2])) === 0, "prix retirés");
+    expect((await count("SELECT count(*) AS n FROM pro_agreements WHERE garage_id = $1 AND ended_at IS NOT NULL", [proGarage2])) === 1, "accord de sous-traitance clos, preuve gardée");
     for (const table of ["pro_profiles", "pro_profile_changes", "pro_services", "pro_prefs"])
       expect((await count(`SELECT count(*) AS n FROM ${table} WHERE garage_id = $1`, [proGarage2])) === 0, `${table} vidée pour ce garage`);
   });
@@ -512,7 +525,7 @@ export async function selfcheck(db, { log = () => {} } = {}) {
     await db.query("DELETE FROM garage_contacts WHERE import_id = $1", [`selfcheck-${tag}`]);
     await db.query("DELETE FROM pro_prices WHERE garage_id IN ($1, $2)", [proGarage, proGarage2]);
     await db.query("DELETE FROM pro_visits WHERE garage_id IN ($1, $2)", [proGarage, proGarage2]);
-    for (const table of ["pro_profiles", "pro_profile_changes", "pro_services", "pro_prefs"]) await db.query(`DELETE FROM ${table} WHERE garage_id IN ($1, $2)`, [proGarage, proGarage2]);
+    for (const table of ["pro_profiles", "pro_profile_changes", "pro_services", "pro_prefs", "pro_agreements"]) await db.query(`DELETE FROM ${table} WHERE garage_id IN ($1, $2)`, [proGarage, proGarage2]);
     for (const table of ["rdv_settings", "rdv_slots", "rdv_closures", "rdv_requests", "rdv_mails"]) await db.query(`DELETE FROM ${table} WHERE garage_id IN ($1, $2)`, [proGarage, proGarage2]);
     for (const g of [proGarage, proGarage2]) await rdv.cal.revoke(g);
     await db.query("DELETE FROM rdv_events WHERE ip_hash = $1", [TEST_IP]);
@@ -527,6 +540,7 @@ export async function selfcheck(db, { log = () => {} } = {}) {
       (await count("SELECT count(*) AS n FROM write_log WHERE ip_hash = $1", [TEST_IP])) +
       (await count("SELECT count(*) AS n FROM pro_prices WHERE garage_id IN ($1, $2)", [proGarage, proGarage2])) +
       (await count("SELECT count(*) AS n FROM pro_visits WHERE garage_id IN ($1, $2)", [proGarage, proGarage2])) +
+      (await count("SELECT count(*) AS n FROM pro_agreements WHERE garage_id IN ($1, $2)", [proGarage, proGarage2])) +
       (await count("SELECT count(*) AS n FROM rdv_requests WHERE garage_id IN ($1, $2)", [proGarage, proGarage2])) +
       (await count("SELECT count(*) AS n FROM rdv_events WHERE ip_hash = $1", [TEST_IP]));
     expect(left === 0, "reste " + left);

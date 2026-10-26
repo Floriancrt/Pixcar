@@ -9,6 +9,7 @@ import { createRdvViews } from "./rdv.js";
 import { createCalendarViews } from "./calendar.js";
 import { createPlanning } from "./planning.js";
 import { createHome } from "./home.js";
+import { createAgreement } from "./agreement.js";
 import { parisParts } from "../shared/rdv.js";
 import { moduleRule as ruleOf, modulesOf as modulesFrom } from "../shared/work.js";
 
@@ -54,6 +55,8 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     accountView: () => (data && data.prefs ? data.prefs.view : null),
     onView: (v) => data && data.prefs && (data.prefs.view = v),
   });
+  // accord de sous-traitance des données (docs/sous-traitance.md) : Mon garage › Modules, bandeau de Gestion d'atelier, fenêtre
+  const agreement = createAgreement({ api, $, busy, apiProblem });
   // tableau de bord (lot 3c) : ses liens ouvrent les autres écrans, parfois sur un jour, une fiche ou un formulaire
   const board = createHome({ api, $, el, icon, alertBox, busy, apiProblem, goPanel: (name, opts) => panel(name, opts), decline: (id, r, done) => rdv.decline(id, r, done), onTodo: (n) => setTodo(n) });
   // mode avancé : « Planning » apparaît ; Mon garage montre les ressources et les modules actifs
@@ -93,6 +96,7 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     $("dashMore").hidden = !on;
     setTodo(on ? data.rdv.todo : 0);
     setMode(on ? data.rdv.mode : "simple");
+    agreement.set(garageId, on ? data.agreement : null);
     profile();
     render();
     await panel("top", { focus: false });
@@ -566,5 +570,5 @@ export function createDashboard({ api, $, el, icon, alertBox, busy, show, apiPro
     $("priceErr").hidden = true;
   });
 
-  return { open };
+  return { open, agreementRequired: () => agreement.open() };
 }

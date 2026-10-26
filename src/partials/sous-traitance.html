@@ -1,0 +1,75 @@
+<!-- Accord de sous-traitance des données (article 28 du RGPD) entre le garage et Pixcar, pour la gestion d'atelier
+     (docs/sous-traitance.md). Inséré dans la fenêtre « Accord de sous-traitance » de l'Espace Pro (scripts/build.mjs, buildPro).
+     Changer ce texte : mettre à jour AGREEMENT.sha256 dans src/js/shared/agreement.js (tests/unit/agreement.test.mjs le rappelle) et
+     AGREEMENT.version si un garage a déjà accepté l'ancien texte, pour le lui redemander. -->
+<p class="dpa-draft" data-dpa-draft><b>Projet</b> : ce texte doit être relu par un juriste. Il n'engage personne tant qu'il porte cette mention.</p>
+
+<h3>1. Les parties</h3>
+<p><b>Le garage</b> : l'entreprise qui exploite le garage rattaché à ce compte de l'Espace Pro, identifiée par son SIRET, représentée par la personne qui accepte cet accord et qui déclare avoir le pouvoir de l'engager. Il est <b>responsable du traitement</b>.</p>
+<p><b>Pixcar</b> : {{EDITOR}}, éditeur du site Pixcar, joignable à <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>. Il agit comme <b>sous-traitant</b>, pour le compte du garage (article 28 du RGPD).</p>
+
+<h3>2. Les données concernées</h3>
+<p>Cet accord couvre les données personnelles que le garage confie à Pixcar en utilisant la gestion d'atelier de l'Espace Pro :</p>
+<ul>
+  <li><b>son personnel</b> : les mécaniciens tels que le garage les nomme (un prénom suffit), leurs horaires, leurs compétences et certifications avec leur date de fin, leurs absences (type, dates, précision facultative ; aucun motif médical n'est demandé), l'affectation des rendez-vous ;</li>
+  <li><b>ses clients</b>, pour les rendez-vous qu'il note lui-même (par téléphone, au comptoir) : le nom du client ou son véhicule, et s'il le souhaite son téléphone, l'immatriculation, la durée estimée, l'origine du rendez-vous et un commentaire interne ; l'état de l'intervention (voiture reçue, en cours, prête…) ;</li>
+  <li>les libellés des créneaux bloqués et l'historique des changements (quoi, quand, par quel compte).</li>
+</ul>
+<p>Il ne couvre pas le compte de l'Espace Pro, la fiche publique du garage, ses prix annoncés ni les demandes de rendez-vous faites sur Pixcar par les automobilistes : ces données sont décrites dans « Vos données ».</p>
+
+<h3>3. Objet, nature et durée</h3>
+<p>Le traitement sert à une seule chose : permettre au garage d'organiser son atelier (agenda, places prises dans les créneaux qu'il propose en ligne, affectations, suivi des interventions). Pixcar enregistre ces données, les conserve, les affiche au garage, s'en sert pour calculer ses disponibilités et les efface. L'accord dure tant que le garage est rattaché à un compte de l'Espace Pro (article 11).</p>
+
+<h3>4. Les instructions du garage</h3>
+<p>Pixcar ne traite ces données que sur les instructions du garage : ses saisies, modifications et suppressions dans l'Espace Pro, et ce qu'il demande par écrit à <a href="mailto:{{CONTACT}}">{{CONTACT}}</a>. Il ne s'en sert pour rien d'autre : ni prospection, ni publicité, ni mesure d'audience, ni revente, et il n'écrit jamais aux clients que le garage saisit. Si la loi oblige Pixcar à un autre traitement, il en informe le garage avant de le faire, sauf si la loi l'interdit. Pixcar prévient le garage s'il estime qu'une instruction enfreint le RGPD.</p>
+
+<h3>5. Confidentialité</h3>
+<p>Seul l'éditeur de Pixcar accède à ces données, pour faire fonctionner et entretenir le service ; il est tenu au secret. Toute autre personne qui y aurait accès un jour s'engagerait par écrit à la même confidentialité.</p>
+
+<h3>6. Sécurité</h3>
+<p>Pixcar met en œuvre les mesures suivantes (article 32 du RGPD) :</p>
+<ul>
+  <li>les données d'un garage ne sont montrées qu'au compte qui lui est rattaché, connecté avec un code à usage unique envoyé par e-mail (pas de mot de passe) ; un garage ne voit jamais celles d'un autre ;</li>
+  <li>les échanges entre le navigateur et l'API sont chiffrés (HTTPS) ; la base de données et ses sauvegardes sont chiffrées par l'hébergeur ;</li>
+  <li>seules les données utiles sont demandées : aucune adresse e-mail des clients saisis, un prénom suffit pour un mécanicien, aucun motif d'absence ;</li>
+  <li>les données sont effacées automatiquement aux échéances de l'article 8 ; une sauvegarde quotidienne, gardée 30 jours, permet de les restaurer après un incident.</li>
+</ul>
+
+<h3>7. Sous-traitants ultérieurs</h3>
+<p>Le garage autorise Pixcar à confier l'hébergement de l'API, de la base de données, de ses sauvegardes et des comptes de l'Espace Pro à <b>{{HOST_API}}</b>. Les données restent dans l'Union européenne. Cet hébergeur est tenu, par ses conditions de traitement des données, à des obligations de protection équivalentes à celles de cet accord.</p>
+<p>Pixcar prévient le garage au moins 30 jours avant d'ajouter ou de remplacer un sous-traitant, par e-mail à l'adresse du compte et dans l'Espace Pro. Le garage peut s'y opposer en mettant fin à l'accord (article 11).</p>
+
+<h3>8. Durées de conservation</h3>
+<ul>
+  <li>Rendez-vous noté par le garage : le nom, le téléphone, le véhicule, l'immatriculation et le commentaire sont effacés 30 jours après le jour du rendez-vous ; le rendez-vous lui-même (jour, heures, prestations, état) est supprimé 24 mois après.</li>
+  <li>Créneau bloqué : son libellé est effacé 30 jours après le jour concerné.</li>
+  <li>Historique des changements : 12 mois.</li>
+  <li>Mécaniciens, absences et affectations : jusqu'à ce que le garage les supprime, et au plus tard à la fin de l'accord.</li>
+  <li>Sauvegardes : 30 jours. Une donnée effacée disparaît des sauvegardes au plus tard 30 jours après.</li>
+</ul>
+
+<h3>9. Les droits des personnes</h3>
+<p>Le garage consulte, corrige et supprime lui-même ces données dans l'Espace Pro. Si un client ou un membre de son personnel s'adresse à Pixcar pour exercer ses droits, Pixcar transmet la demande au garage dans les 5 jours ouvrés sans y répondre lui-même, et l'aide à y répondre, par exemple en lui remettant une copie des données de cette personne.</p>
+
+<h3>10. Violation de données</h3>
+<p>Pixcar notifie au garage toute violation de données couvertes par cet accord dans les meilleurs délais, et au plus tard 48 heures après en avoir eu connaissance, par e-mail à l'adresse du compte. Il indique la nature de la violation, les catégories et le nombre approximatif de personnes et de données concernées, les conséquences probables et les mesures prises ou proposées, puis complète ces informations dès qu'il les a. Il revient au garage de notifier la CNIL et d'informer les personnes s'il y a lieu ; Pixcar l'y aide. Pixcar aide aussi le garage, avec les informations dont il dispose, pour une analyse d'impact ou une consultation préalable de la CNIL (articles 35 et 36).</p>
+
+<h3>11. Fin de l'accord et sort des données</h3>
+<p>L'accord prend fin quand le garage n'est plus rattaché à ce compte (à sa demande, ou après une contestation du rattachement) ou que le compte est supprimé. Pixcar supprime alors toutes les données de gestion d'atelier du garage ; elles disparaissent des sauvegardes 30 jours plus tard. Avant la fin, le garage peut demander à <a href="mailto:{{CONTACT}}">{{CONTACT}}</a> une copie de ses données dans un fichier courant (CSV) : Pixcar la lui remet dans les 15 jours.</p>
+
+<h3>12. Preuves et audits</h3>
+<p>Pixcar tient à la disposition du garage les informations nécessaires pour démontrer qu'il respecte cet accord : ce texte, la description des mesures de sécurité et la liste des sous-traitants. Il permet un audit par le garage, ou par un auditeur tenu au secret qu'il mandate, au plus une fois par an, sur demande écrite reçue 30 jours avant, aux frais du garage. L'audit porte sur la documentation et les réglages du service, sans accès aux données des autres garages. Pixcar tient un registre des traitements faits pour le compte des garages (article 30, paragraphe 2, du RGPD).</p>
+
+<h3>13. Les engagements du garage</h3>
+<ul>
+  <li>Il traite ces données de façon licite, pour la seule organisation de son atelier.</li>
+  <li>Il informe son personnel et ses clients (articles 13 et 14 du RGPD) ; un modèle de mention figure à la fin de cet accord.</li>
+  <li>Il ne saisit aucune donnée sensible (santé, opinions, infractions…) dans les champs libres : commentaire, libellé, précision d'une absence.</li>
+  <li>Il garde l'accès à son compte pour lui : adresse e-mail à jour, codes de connexion jamais transmis.</li>
+</ul>
+
+<h3>14. Responsabilité, modifications, droit applicable</h3>
+<p>Chacun répond de ses manquements dans les conditions de l'article 82 du RGPD. Pixcar peut faire évoluer cet accord : la nouvelle version est présentée dans l'Espace Pro, et tant que le garage ne l'a pas acceptée, il peut consulter et supprimer ses données, mais plus en ajouter ni en modifier. Cet accord est régi par le droit français.</p>
+
+<h3>Modèle de mention pour vos clients</h3>
+<blockquote>« [Nom du garage] note les rendez-vous que vous prenez par téléphone ou au comptoir (votre nom, votre véhicule et, si vous les donnez, votre téléphone et l'immatriculation) dans l'outil de gestion d'atelier Pixcar, qui les héberge pour notre compte dans l'Union européenne. Ces informations servent seulement à organiser l'atelier et sont effacées 30 jours après le rendez-vous. Pour y accéder, les corriger ou les faire effacer, adressez-vous au garage. »</blockquote>

@@ -10,7 +10,8 @@ const $ = (id) => document.getElementById(id);
 const meta = document.querySelector('meta[name="pixcar-pro"]');
 const apiBase = (document.querySelector('meta[name="pixcar-api"]').content || "").replace(/\/+$/, "");
 const auth = createCognito({ userPoolId: meta.content, clientId: meta.dataset.client });
-const api = createProApi({ base: apiBase, token: () => auth.accessToken() });
+// un refus faute d'accord de sous-traitance rouvre sa fenêtre (dashboard.js, agreement.js)
+const api = createProApi({ base: apiBase, token: () => auth.accessToken(), onAgreementRequired: () => dashboard.agreementRequired() });
 const curtain = createCurtain($("curtain"));
 
 const STEPS = { garage: "garage", you: "you", verify: "verify", code: "verify", done: "done", manual: "garage" };

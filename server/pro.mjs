@@ -49,6 +49,7 @@ import { createRdv } from "./rdv.mjs";
 import { PRO_SERVICES, freshness, parseProPrice, staleAt } from "../src/js/shared/pro-prices.js";
 import { addrText, parseAddr, parseEmail, parseHours, parseMinutes, parseName, parsePhone, parseWebsite, phoneText } from "../src/js/shared/garage-profile.js";
 import { DEFAULT_SHORTCUTS, parsePrefs } from "../src/js/shared/work.js";
+import { AGREEMENT, agreementView } from "../src/js/shared/agreement.js";
 
 const NO_STORE = { "cache-control": "no-store" };
 const SIRENE_TTL_MS = 10 * 60_000;
@@ -467,7 +468,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
       if (!GARAGE_RE.test(id)) return noGarage();
       return rdv.garageRoute(request, sub, id, m[2] || "");
     }
-    if ((m = /^\/v1\/pro\/garages\/([^/]+)\/(profile|registry|changes|services|prefs)(?:\/([^/]+))?$/.exec(path))) {
+    if ((m = /^\/v1\/pro\/garages\/([^/]+)\/(profile|registry|changes|services|prefs|agreement)(?:\/([^/]+))?$/.exec(path))) {
       const id = m[1].toLowerCase();
       if (!GARAGE_RE.test(id)) return noGarage();
       const [what, sub2] = [m[2], m[3]];
@@ -478,6 +479,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
       if (what === "changes") return method === "DELETE" ? deleteChange(sub, id, sub2) : allow("DELETE");
       if (what === "services" && sub2) return method === "PUT" ? putService(request, sub, id, sub2) : allow("PUT");
       if (what === "prefs" && !sub2) return method === "PUT" ? putPrefs(request, sub, id) : allow("PUT");
+      if (what === "agreement" && !sub2) return method === "GET" ? getAgreement(sub, id) : method === "POST" ? postAgreement(request, sub, id) : allow("GET, POST");
       return apiError(404, "not_found", "Route inconnue.");
     }
     if ((m = /^\/v1\/pro\/garages\/([^/]+)(?:\/(confirm)|\/prices\/([^/]+))?$/.exec(path))) {
@@ -504,12 +506,13 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
     const owned = await repo.ownedGarage(id, sub);
     if (!owned) return noGarage();
     const nowMs = now();
-    const [prices, paid, visits, profile, prefs] = await Promise.all([
+    const [prices, paid, visits, profile, prefs, agreement] = await Promise.all([
       repo.listPrices(id),
       repo.paidPrices(owned.contact),
       repo.visitStats(id, { since30: isoDay(nowMs - 30 * DAY_MS), since60: isoDay(nowMs - 60 * DAY_MS) }),
       repo.getProfile(id),
       repo.getPrefs(id, sub),
+      agreementOf(id),
     ]);
     const c = owned.contact || {};
     const p = profileView(profile); // un nom ou une adresse relus par Pixcar remplacent ceux des données
@@ -521,6 +524,7 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
         paid,
         visits: { views: visits.view, calls: visits.call },
         prefs: prefs || { shortcuts: DEFAULT_SHORTCUTS, view: null },
+        agreement,
         ...(config.rdv.enabled ? { rdv: await rdv.summary(id) } : {}),
       },
       NO_STORE,
@@ -563,6 +567,31 @@ export function createPro({ db, config, fetchImpl = globalThis.fetch, now = Date
     if (!(await repo.ownedGarage(id, sub))) return noGarage();
     await repo.savePrefs(id, sub, parsed.value, DEFAULT_SHORTCUTS);
     return json(200, (await repo.getPrefs(id, sub)) || { shortcuts: DEFAULT_SHORTCUTS, view: null }, NO_STORE);
+  }
+
+  // ---- accord de sous-traitance des données (docs/sous-traitance.md) : la version en vigueur, son acceptation par le garage.
+  // required : l'API refuse les écritures qu'il couvre tant qu'il n'est pas accepté (config.pro.agreementRequired)
+  async function agreementOf(id) {
+    const row = await repo.agreementOf(id, AGREEMENT.version);
+    return { ...agreementView(row && { acceptedAt: isoOf(row.accepted_at), signer: row.signer }), required: pro.agreementRequired };
+  }
+  async function getAgreement(sub, id) {
+    if (!(await repo.ownedGarage(id, sub))) return noGarage();
+    return json(200, await agreementOf(id), NO_STORE);
+  }
+  // { version, accept: true } : la version lue (un texte changé entre-temps est refusé), la case cochée. Signataire : le nom déclaré au
+  // rattachement du garage, par le compte qui l'a vérifié.
+  async function postAgreement(request, sub, id) {
+    const body = await readJson(request, 256);
+    if (body.error) return apiError(400, "bad_json", "JSON attendu (256 octets au plus).");
+    const v = body.value && typeof body.value === "object" ? body.value : {};
+    if (v.accept !== true) return apiError(422, "validation", "Cochez la case pour accepter l'accord.", { field: "accept" });
+    const owned = await repo.ownedGarage(id, sub);
+    if (!owned) return noGarage();
+    if (v.version !== AGREEMENT.version) return apiError(409, "agreement_version", "L'accord a changé depuis que vous l'avez ouvert : relisez cette version avant de l'accepter.", { version: AGREEMENT.version });
+    const out = await repo.acceptAgreement({ garageId: id, version: AGREEMENT.version, accountId: sub, signer: owned.claim.holder_name });
+    if (out.created) log({ level: "info", msg: "accord de sous-traitance accepté", event: "pro_agreement", garageId: id, version: AGREEMENT.version });
+    return json(out.created ? 201 : 200, { ...agreementView({ acceptedAt: isoOf(out.row.accepted_at), signer: out.row.signer }), required: pro.agreementRequired }, NO_STORE);
   }
 
   async function postConfirm(sub, id) {

@@ -288,7 +288,8 @@ export function createCalendarViews({ api, $, el, icon, alertBox, busy, apiProbl
         try {
           await onsubmit();
         } catch (e) {
-          if (e.status === 422 || e.status === 409) return err(e.message);
+          // 403 agreement_required : la fenêtre de l'accord s'est ouverte (api.js) ; le formulaire reste, pour réessayer une fois accepté
+          if (e.status === 422 || e.status === 409 || e.code === "agreement_required") return err(e.message);
           $("calDlg").close();
           fail(e);
         }

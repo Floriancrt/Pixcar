@@ -11,7 +11,8 @@ export class ProApiError extends Error {
 
 const rdv = (id) => `/v1/pro/garages/${encodeURIComponent(id)}/rdv`;
 
-export function createProApi({ base, token, fetchImpl = (...a) => fetch(...a) }) {
+// onAgreementRequired : appelée quand l'API refuse une écriture faute d'accord de sous-traitance accepté (agreement.js ouvre sa fenêtre)
+export function createProApi({ base, token, fetchImpl = (...a) => fetch(...a), onAgreementRequired = () => {} }) {
   async function call(method, path, body) {
     const access = await token();
     if (!access) throw new ProApiError(401, { code: "unauthorized", message: "Connexion requise." });
@@ -26,7 +27,11 @@ export function createProApi({ base, token, fetchImpl = (...a) => fetch(...a) })
       throw new ProApiError(0, { code: "network", message: "Connexion impossible. Vérifiez votre réseau et réessayez." });
     }
     const out = await res.json().catch(() => null);
-    if (!res.ok) throw new ProApiError(res.status, (out && out.error) || {});
+    if (!res.ok) {
+      const error = (out && out.error) || {};
+      if (res.status === 403 && error.code === "agreement_required") onAgreementRequired();
+      throw new ProApiError(res.status, error);
+    }
     return out;
   }
   return {
@@ -82,5 +87,8 @@ export function createProApi({ base, token, fetchImpl = (...a) => fetch(...a) })
     // lot 3c : état d'une intervention, raccourcis du tableau de bord
     work: (id, ref, body) => call("POST", `${rdv(id)}/calendar/work/${encodeURIComponent(ref)}`, body),
     putPrefs: (id, body) => call("PUT", `/v1/pro/garages/${encodeURIComponent(id)}/prefs`, body),
+    // accord de sous-traitance des données (docs/sous-traitance.md)
+    agreement: (id) => call("GET", `/v1/pro/garages/${encodeURIComponent(id)}/agreement`),
+    acceptAgreement: (id, version) => call("POST", `/v1/pro/garages/${encodeURIComponent(id)}/agreement`, { version, accept: true }),
   };
 }

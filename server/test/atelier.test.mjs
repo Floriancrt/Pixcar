@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 import { parseContactRows } from "../lib/contact.mjs";
 import { makeApp } from "./helpers.mjs";
+import { AGREEMENT } from "../../src/js/shared/agreement.js";
 import { parisInstant } from "../../src/js/shared/rdv.js";
 
 const HERE = { lat: 43.2174, lon: 1.1014 };
@@ -46,6 +47,8 @@ describe("Gestion d'atelier", () => {
   const count = async (sql, params = []) => (await t.db.query(sql, params)).rows[0].n;
   async function openGarage(p = pro, garage = DUPONT, who = "alice") {
     await own(who, garage);
+    // l'accord de sous-traitance, sans lequel ni l'équipe ni les rendez-vous saisis ne s'enregistrent (agreement.test.mjs)
+    assert.equal((await p("POST", "/agreement", { version: AGREEMENT.version, accept: true })).status, 201);
     assert.equal((await p("PUT", "/profile", { hours: WEEK })).status, 200);
     for (const [s, m] of [["vidange", 45], ["plaq_av", 90]]) assert.equal((await p("PUT", `/services/${s}`, { offered: true, minutes: m })).status, 200);
     const email = `atelier@${garage === DUPONT ? "garage-dupont" : "garage-petit"}.fr`;
@@ -69,7 +72,7 @@ describe("Gestion d'atelier", () => {
   const phoneJob = (over = {}) => ({ kind: "job", client: "M. Martin", phone: "06 12 34 56 78", car: "Renault Clio", plate: "ab-123-cd", services: [{ id: "vidange" }], day: WED, time: "09:00", minutes: 60, channel: "phone", note: "Pneus dans le coffre", ...over });
 
   before(async () => {
-    t = await makeApp({ env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1", RDV_ENABLED: "1", READ_LIMIT_PER_MINUTE: "100000", WRITE_LIMIT_PER_HOUR: "1000" }, now: () => clock });
+    t = await makeApp({ env: { PRO_ENABLED: "1", PRO_DEV_AUTH: "1", RDV_ENABLED: "1", PRO_AGREEMENT_REQUIRED: "1", READ_LIMIT_PER_MINUTE: "100000", WRITE_LIMIT_PER_HOUR: "1000" }, now: () => clock });
   });
   after(() => t.close());
   beforeEach(async () => {

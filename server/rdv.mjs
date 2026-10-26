@@ -32,6 +32,11 @@ import * as W from "../src/js/shared/work.js";
 import { NIL_SLOT, buildJob, pickPlan, planTimes } from "../src/js/shared/plan.js";
 import { VEHICLES } from "../src/js/shared/pro-prices.js";
 import { createCalendar } from "./calendar.mjs";
+import { AGREEMENT } from "../src/js/shared/agreement.js";
+
+// écritures du calendrier couvertes par l'accord de sous-traitance : mécaniciens, absences (mécaniciens et postes), rendez-vous saisis
+// et créneaux bloqués
+const AGREEMENT_COVERS = new Set(["staff", "unavail", "blocks"]);
 
 const NO_STORE = { "cache-control": "no-store" };
 const GARAGE_RE = /^[0-9a-f-]{8,40}$/;
@@ -399,7 +404,14 @@ export function createRdv({ db, config, now = Date.now, log = () => {}, send, se
       if (act === "move") return calendar.move(garageId, sub, id.toLowerCase(), await body(1024));
       return decide(garageId, id.toLowerCase(), act, act === "accept" ? {} : (await body(1024)) || {});
     }
-    if (what === "calendar") return calendar.route(request, sub, garageId, parts.slice(1), body);
+    if (what === "calendar") {
+      // accord de sous-traitance (docs/sous-traitance.md) : le personnel, ses absences et les rendez-vous saisis (données du garage, de
+      // ses salariés et de ses clients) ne s'enregistrent qu'une fois l'accord accepté. Lire et supprimer restent possibles.
+      const [kind] = parts.slice(1);
+      if (config.pro.agreementRequired && (method === "POST" || method === "PUT") && AGREEMENT_COVERS.has(kind) && !(await proRepo.agreementOf(garageId, AGREEMENT.version)))
+        return apiError(403, "agreement_required", "Acceptez d'abord l'accord de sous-traitance des données (Mon garage › Modules) : il couvre votre équipe et les clients que vous notez.", { version: AGREEMENT.version });
+      return calendar.route(request, sub, garageId, parts.slice(1), body);
+    }
     return apiError(404, "not_found", "Route inconnue.");
   }
 

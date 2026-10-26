@@ -32,7 +32,7 @@ export async function makeApp({ config = {}, env = {}, fetchImpl, now, log, over
       }),
       { remoteIp: ip },
     );
-  const reset = () => db.exec("TRUNCATE repairs, garages, write_log, upstream_cache, garage_contacts, pro_claims, pro_events, pro_prices, pro_visits, pro_profiles, pro_profile_changes, pro_services, rdv_settings, rdv_slots, rdv_closures, rdv_requests, rdv_events, rdv_mails, rdv_calendar, rdv_staff, rdv_skills, rdv_staff_skills, rdv_resources, rdv_service_reqs, rdv_unavail, rdv_assignments, rdv_work_orders, rdv_history, rdv_blocks CASCADE");
+  const reset = () => db.exec("TRUNCATE repairs, garages, write_log, upstream_cache, garage_contacts, pro_claims, pro_events, pro_prices, pro_visits, pro_profiles, pro_profile_changes, pro_services, rdv_settings, rdv_slots, rdv_closures, rdv_requests, rdv_events, rdv_mails, rdv_calendar, rdv_staff, rdv_skills, rdv_staff_skills, rdv_resources, rdv_service_reqs, rdv_unavail, rdv_assignments, rdv_work_orders, rdv_history, rdv_blocks, pro_agreements CASCADE");
   return { app, db, config: cfg, call, reset, close: () => app.close() };
 }
 
