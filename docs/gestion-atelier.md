@@ -305,7 +305,9 @@ la ligne après 24 mois (comme avant pour le libellé).
 La nouvelle API lit les colonnes de 009 dans presque toutes les routes de rendez-vous, réservation publique comprise (`bookings`,
 `bundle`). Elle ne doit donc jamais servir avant la migration. Ordre : (1) paquet contenant la migration et l'ancien code, `migrate`,
 `selfcheck` ; (2) paquet du nouveau code ; (3) site. L'ancien code ignore les nouvelles colonnes (compatible). Détail dans
-`exploitation.md` le jour du déploiement ; rien n'est déployé sans le go de l'utilisateur.
+`exploitation.md` le jour du déploiement ; rien n'est déployé sans le go de l'utilisateur. **Fait le 26 octobre 2026** autrement, sans paquet
+intermédiaire : depuis CloudShell, la fonction d'opérations passe seule au nouveau code, migre et s'auto-contrôle avant que l'API ne
+change (paramètre `OpsCodeKey`) ; puis le site (`exploitation.md`, 10.17).
 
 ### 5.4 Textes à faire relire
 
