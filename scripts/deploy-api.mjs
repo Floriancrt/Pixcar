@@ -91,7 +91,30 @@ async function ensurePackage({ aws, bucket, key, zip }) {
 }
 
 function changeText(c) {
-  return `${c.Action} ${c.LogicalResourceId} (${c.ResourceType}${c.Replacement && c.Replacement !== "False" ? `, remplacement : ${c.Replacement}` : ""})`;
+  const why = [...new Set((c.Details || []).map((d) => [d.Evaluation, d.ChangeSource, d.CausingEntity || (d.Target && [d.Target.Attribute, d.Target.Name].filter(Boolean).join(" "))].filter(Boolean).join(" ")))];
+  return `${c.Action} ${c.LogicalResourceId} (${c.ResourceType}${c.Replacement && c.Replacement !== "False" ? `, remplacement : ${c.Replacement}` : ""}${why.length ? ` ; ${why.join(", ")}` : ""})`;
+}
+
+// Ce qu'un jeu de modifications peut faire : modifier sans remplacement les fonctions attendues ; et, par contrecoup, ce que
+// CloudFormation ne fait que réévaluer parce qu'elles changent (une ressource qui lit leur ARN : le rôle des tâches planifiées, les
+// tâches elles-mêmes, la permission qui la nomme), à condition que chacune de ses raisons soit une évaluation dynamique d'un attribut
+// (!GetAtt) ou du nom (!Ref) d'une ressource déjà admise : ni l'un ni l'autre ne change quand une fonction est modifiée sans remplacement.
+// Tout le reste (ajout, suppression, remplacement, modification directe d'une autre ressource) est refusé.
+export function admissible(list, expected) {
+  // chaque ligne est jugée pour elle-même (une ligne admise n'en couvre pas une autre au même nom)
+  const accepted = new Set(list.filter((c) => c.Action === "Modify" && expected.includes(c.LogicalResourceId) && c.ResourceType === "AWS::Lambda::Function" && c.Replacement === "False"));
+  const ids = () => new Set([...accepted].map((c) => c.LogicalResourceId));
+  const knockOn = (c, ok) =>
+    c.Action === "Modify" &&
+    c.Replacement === "False" &&
+    (c.Details || []).length > 0 &&
+    c.Details.every((d) => d.Evaluation === "Dynamic" && (d.ChangeSource === "ResourceAttribute" || d.ChangeSource === "ResourceReference") && ok.has(String(d.CausingEntity || "").split(".")[0]));
+  for (let grew = true; grew; ) {
+    grew = false;
+    const ok = ids();
+    for (const c of list) if (!accepted.has(c) && knockOn(c, ok)) (accepted.add(c), (grew = true));
+  }
+  return list.every((c) => accepted.has(c));
 }
 
 // Change des paramètres de la pile ; n'exécute le jeu de modifications que s'il ne touche que les fonctions attendues (modifiées sans
@@ -120,10 +143,9 @@ export async function changeParameters({ aws, stack, sleep = realSleep, log = ()
     throw new Error(`jeu de modifications refusé par CloudFormation : ${cs.StatusReason}`);
   }
   const list = (cs.Changes || []).map((c) => c.ResourceChange || {});
-  const ok = (c) => c.Action === "Modify" && expected.includes(c.LogicalResourceId) && c.ResourceType === "AWS::Lambda::Function" && c.Replacement === "False";
-  if ((!list.length && !template) || !list.every(ok)) {
+  if ((!list.length && !template) || !admissible(list, expected) || (!template && !list.some((c) => expected.includes(c.LogicalResourceId)))) {
     await drop();
-    throw new Error(`jeu de modifications inattendu, supprimé sans être exécuté (attendu : ${expected.join(", ")} modifiée sans remplacement) : ${list.map(changeText).join(" ; ") || "aucun changement"}`);
+    throw new Error(`jeu de modifications inattendu, supprimé sans être exécuté (attendu : ${expected.join(", ")} modifiée sans remplacement, et ce qui en dépend seulement réévalué) : ${list.map(changeText).join(" ; ") || "aucun changement"}`);
   }
   log(`  jeu de modifications ${name} : ${list.map(changeText).join(" ; ") || "modèle seulement, aucune ressource modifiée"}`);
   const since = now();

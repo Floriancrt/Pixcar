@@ -12,7 +12,7 @@ import { after, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { parse } from "yaml";
-import { awsCli, changeParameters, deploy, opsInvoker, packageTwice, parseArgs, summaryMarkdown } from "../../scripts/deploy-api.mjs";
+import { admissible, awsCli, changeParameters, deploy, opsInvoker, packageTwice, parseArgs, summaryMarkdown } from "../../scripts/deploy-api.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -342,6 +342,42 @@ describe("scripts/deploy-api.mjs against a fake AWS", () => {
     const ok = harness({ aws: { templateChanges: [{ Action: "Modify", LogicalResourceId: "OpsFunction", ResourceType: "AWS::Lambda::Function", Replacement: "False" }] } });
     delete ok.aws.stack.params.OpsCodeKey;
     assert.equal((await ok.run({ template: join(ROOT, "infra/pixcar-api.yaml") })).status, "deployed", "la fonction d'opérations réévaluée sans remplacement : admis");
+  });
+
+  test("what CloudFormation only re-evaluates because the operations function changes (the scheduler role, the schedules) is admitted; the 26 October refusal now passes", async () => {
+    // le jeu de modifications vu le 26 octobre 2026 dans CloudShell, avec les raisons que CloudFormation donne à chaque ligne
+    const dyn = (...causes) => causes.map((CausingEntity) => ({ Evaluation: "Dynamic", ChangeSource: "ResourceAttribute", CausingEntity, Target: { Attribute: "Properties" } }));
+    const seen = [
+      { Action: "Modify", LogicalResourceId: "OpsFunction", ResourceType: "AWS::Lambda::Function", Replacement: "False", Details: [{ Evaluation: "Static", ChangeSource: "DirectModification", Target: { Attribute: "Metadata" } }] },
+      { Action: "Modify", LogicalResourceId: "PurgeSchedule", ResourceType: "AWS::Scheduler::Schedule", Replacement: "False", Details: dyn("OpsFunction.Arn", "SchedulerRole.Arn") },
+      { Action: "Modify", LogicalResourceId: "RdvSchedule", ResourceType: "AWS::Scheduler::Schedule", Replacement: "False", Details: dyn("SchedulerRole.Arn") },
+      { Action: "Modify", LogicalResourceId: "SchedulerRole", ResourceType: "AWS::IAM::Role", Replacement: "False", Details: dyn("OpsFunction.Arn") },
+    ];
+    assert.equal(admissible(seen, ["OpsFunction"]), true);
+    const h = harness({ aws: { templateChanges: seen.slice(1) } }); // la fonction d'opérations : calculée par la fausse AWS
+    delete h.aws.stack.params.OpsCodeKey;
+    h.aws.templateChanges.unshift(seen[0]);
+    assert.equal((await h.run({ template: join(ROOT, "infra/pixcar-api.yaml") })).status, "deployed");
+    // ce qui reste refusé : une raison statique, une cause qui n'est pas admise, un remplacement possible, une ligne sans raison, rien d'attendu
+    const role = seen[3];
+    for (const [bad, why] of [
+      [{ ...role, Details: [...role.Details, { Evaluation: "Static", ChangeSource: "DirectModification", Target: { Attribute: "Properties", Name: "Policies" } }] }, "modification directe du rôle"],
+      [{ ...role, Details: dyn("Cluster.Endpoint") }, "causée par une ressource non admise"],
+      [{ ...role, Details: [{ Evaluation: "Static", ChangeSource: "ResourceAttribute", CausingEntity: "OpsFunction.Arn" }] }, "valeur qui change à coup sûr (évaluation statique)"],
+      [{ ...role, Details: [{ Evaluation: "Dynamic", ChangeSource: "ParameterReference", CausingEntity: "CodeKey" }] }, "un paramètre qui changerait une autre ressource"],
+      [{ ...role, Details: [{ Evaluation: "Dynamic", ChangeSource: "Automatic", CausingEntity: "OpsFunction" }] }, "une autre source que !GetAtt / !Ref, même causée par la fonction admise"],
+      [{ ...role, Replacement: "Conditional" }, "remplacement possible"],
+      [{ ...role, Details: [] }, "sans raison"],
+    ])
+      assert.equal(admissible([seen[0], bad], ["OpsFunction"]), false, why);
+    assert.equal(admissible(seen.slice(1), ["OpsFunction"]), false, "sans la fonction elle-même, ses contrecoups ne sont pas admis");
+    assert.equal(admissible([seen[0], { ...seen[0], Replacement: "True" }], ["OpsFunction"]), false, "une ligne admise n'en couvre pas une autre au même nom");
+    assert.equal(admissible([seen[0], ...seen.slice(1)], ["ApiFunction"]), false, "la fonction d'opérations n'était pas attendue");
+    // la permission d'appel nomme la fonction (!Ref) : son nom ne change pas non plus
+    const permission = { Action: "Modify", LogicalResourceId: "ApiPermission", ResourceType: "AWS::Lambda::Permission", Replacement: "False", Details: [{ Evaluation: "Dynamic", ChangeSource: "ResourceReference", CausingEntity: "ApiFunction" }] };
+    assert.equal(admissible([{ Action: "Modify", LogicalResourceId: "ApiFunction", ResourceType: "AWS::Lambda::Function", Replacement: "False" }, permission], ["ApiFunction"]), true);
+    // côté API : le rôle et la tâche horaire lisent aussi l'ARN de la fonction de l'API
+    assert.equal(admissible([{ Action: "Modify", LogicalResourceId: "ApiFunction", ResourceType: "AWS::Lambda::Function", Replacement: "False" }, { ...seen[2], Details: dyn("ApiFunction.Arn") }], ["ApiFunction"]), true);
   });
 
   test("changeParameters: every other parameter keeps its previous value; nothing to change is not an error", async () => {
