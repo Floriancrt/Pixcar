@@ -134,7 +134,7 @@ describe("CloudFormation template (infra/pixcar-api.yaml)", () => {
     }
   });
 
-  test("the two functions run the package that scripts/build-lambda.mjs produces: same code, runtime of the build target, handlers api / ops", () => {
+  test("the two functions run the package that scripts/build-lambda.mjs produces: same code (unless a deployment moves the operations first), runtime of the build target, handlers api / ops", () => {
     const build = readFileSync(join(ROOT, "scripts/build-lambda.mjs"), "utf8");
     const [api, ops] = [R.ApiFunction.Properties, R.OpsFunction.Properties];
     assert.equal(api.Runtime, `nodejs${build.match(/target: "node(\d+)"/)[1]}.x`);
@@ -142,8 +142,18 @@ describe("CloudFormation template (infra/pixcar-api.yaml)", () => {
     assert.deepEqual([api.Architectures, ops.Architectures], [["arm64"], ["arm64"]]);
     const handlers = build.match(/handlers: \{ api: "([^"]+)", ops: "([^"]+)"/);
     assert.deepEqual([api.Handler, ops.Handler], [handlers[1], handlers[2]]);
-    assert.deepEqual(api.Code, ops.Code);
     assert.deepEqual(api.Code, { S3Bucket: { Ref: "CodeBucket" }, S3Key: { Ref: "CodeKey" } });
+    assert.deepEqual(ops.Code.S3Bucket, api.Code.S3Bucket);
+    // OpsCodeKey vide (valeur par défaut, et toute pile d'avant) : l'archive de l'API ; rempli : la sienne (scripts/deploy-api.mjs)
+    assert.deepEqual(pick(ops.Code.S3Key), { Ref: "CodeKey" });
+    try {
+      overrides = { OpsCodeKey: "pixcar-lambda-0123456789abcdef.zip" };
+      assert.deepEqual(pick(ops.Code.S3Key), { Ref: "OpsCodeKey" });
+    } finally {
+      overrides = {};
+    }
+    const pattern = new RegExp(t.Parameters.OpsCodeKey.AllowedPattern);
+    assert.ok(pattern.test("") && pattern.test("pixcar-lambda-0123456789abcdef.zip") && !pattern.test("x.tar"));
     assert.deepEqual([api.Role, ops.Role], [{ "Fn::GetAtt": ["ApiRole", "Arn"] }, { "Fn::GetAtt": ["OpsRole", "Arn"] }]);
     // Lambda décompresse l'archive dans /var/task ; la fonction d'opérations y lit les migrations que le paquet embarque
     assert.ok(build.includes('"db/migrations"'));

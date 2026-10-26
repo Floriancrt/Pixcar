@@ -27,6 +27,11 @@ Parameters:
     Type: String
     Description: Clé de l'archive dans ce bucket (pixcar-lambda-<empreinte>.zip). Une nouvelle empreinte = une nouvelle version du code.
     AllowedPattern: '^[A-Za-z0-9._/-]+\.zip$'
+  OpsCodeKey:
+    Type: String
+    Default: ""
+    Description: Archive de la seule fonction d'opérations (vide = la même que l'API, CodeKey). Le déploiement automatique (scripts/deploy-api.mjs) y met d'abord le nouveau paquet pour migrer la base et l'auto-contrôler avant que l'API ne change.
+    AllowedPattern: '^([A-Za-z0-9._/-]+\.zip)?$'
   AllowedOrigins:
     Type: String
     Default: "https://pixcar.fr,https://www.pixcar.fr"
@@ -163,6 +168,7 @@ Conditions:
   HasProAlarm: !And [!Condition HasPro, !Condition HasAlarmEmail]
   HasProScaleway: !And [!Condition HasPro, !Equals [!Ref ProEmailProvider, scaleway]]
   HasRdv: !And [!Condition HasPro, !Equals [!Ref RdvEnabled, "true"]]
+  HasOpsCodeKey: !Not [!Equals [!Ref OpsCodeKey, ""]]
 
 Resources:
   # ---- base de données
@@ -399,8 +405,8 @@ Resources:
     Type: AWS::Lambda::Function
     Metadata:
       com.aws.cloudformation.Context:
-        why: "même archive que l'API, autre point d'entrée ; 300 s : la migration attend les index asynchrones de DSQL, l'auto-contrôle rejoue tous les cas"
-        must: ["MIGRATIONS_DIR = dossier où Lambda décompresse l'archive (/var/task/db/migrations)", "API_ROLE_ARN = rôle de l'API : « migrate » le lie au rôle de base pixcar_api"]
+        why: "même archive que l'API (ou, le temps d'un déploiement, la suivante : OpsCodeKey), autre point d'entrée ; 300 s : la migration attend les index asynchrones de DSQL, l'auto-contrôle rejoue tous les cas"
+        must: ["MIGRATIONS_DIR = dossier où Lambda décompresse l'archive (/var/task/db/migrations)", "API_ROLE_ARN = rôle de l'API : « migrate » le lie au rôle de base pixcar_api", "OpsCodeKey vide = CodeKey : une pile qui ne s'en sert pas reste comme avant"]
         mutable: free-to-tune
     Properties:
       FunctionName: !Sub "${AWS::StackName}-ops"
@@ -409,7 +415,7 @@ Resources:
       Architectures: [arm64]
       Handler: ops.handler
       Role: !GetAtt OpsRole.Arn
-      Code: { S3Bucket: !Ref CodeBucket, S3Key: !Ref CodeKey }
+      Code: { S3Bucket: !Ref CodeBucket, S3Key: !If [HasOpsCodeKey, !Ref OpsCodeKey, !Ref CodeKey] }
       MemorySize: 512
       Timeout: 300
       LoggingConfig: { LogGroup: !Ref OpsLogGroup, LogFormat: Text }
