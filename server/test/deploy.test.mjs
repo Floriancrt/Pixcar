@@ -1,10 +1,11 @@
-// Déploiement automatique de l'API (docs/exploitation.md) : le rôle que GitHub prend (infra/pixcar-deploy.yaml), le workflow
-// (.github/workflows/deploy-api.yml) et le script qui déploie (scripts/deploy-api.mjs), rejoué contre une fausse AWS : ordre des
-// étapes, jeux de modifications relus avant exécution, retours arrière. Rien ne parle au vrai AWS ici.
+// Déploiement de l'API (docs/exploitation.md, « Déployer l'API depuis CloudShell ») : le workflow qui teste et construit sans aucun
+// droit AWS (.github/workflows/api.yml), la commande à coller dans CloudShell (scripts/cloudshell-deploy.sh) et le script qui déploie
+// (scripts/deploy-api.mjs), rejoué contre une fausse AWS : ordre des étapes, jeux de modifications relus avant exécution, modèle de
+// la pile mis à jour une fois, retours arrière. Rien ne parle au vrai AWS ici.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, test } from "node:test";
@@ -14,82 +15,11 @@ import { parse } from "yaml";
 import { awsCli, changeParameters, deploy, opsInvoker, packageTwice, parseArgs, summaryMarkdown } from "../../scripts/deploy-api.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
-const FUNCTIONS = ["Sub", "If", "Equals", "Not", "And", "Or", "Join", "Select", "Split"];
-const customTags = [
-  { tag: "!Ref", resolve: (s) => ({ Ref: s }) },
-  { tag: "!Condition", resolve: (s) => ({ Condition: s }) },
-  { tag: "!GetAtt", resolve: (s) => ({ "Fn::GetAtt": s.split(/\.(.*)/s).slice(0, 2) }) },
-  ...FUNCTIONS.flatMap((f) => [
-    { tag: `!${f}`, resolve: (s) => ({ [`Fn::${f}`]: s }) },
-    { tag: `!${f}`, collection: "seq", resolve: (q) => ({ [`Fn::${f}`]: q.toJSON() }) },
-  ]),
-];
-const yaml = (file) => parse(readFileSync(join(ROOT, file), "utf8"), { customTags });
-const sub = (node, values) => String(node["Fn::Sub"]).replace(/\$\{([\w:]+)\}/g, (m, k) => (k in values ? values[k] : m));
 
-describe("the role GitHub takes (infra/pixcar-deploy.yaml)", () => {
-  const t = yaml("infra/pixcar-deploy.yaml");
-  const api = yaml("infra/pixcar-api.yaml");
-  const role = t.Resources.DeployRole.Properties;
-  const statements = role.Policies.flatMap((p) => p.PolicyDocument.Statement);
-  const defaults = Object.fromEntries(Object.entries(t.Parameters).map(([k, p]) => [k, p.Default]));
-  const values = { ...defaults, CodeBucket: "pixcar-code-essai", "AWS::Partition": "aws", "AWS::Region": "eu-north-1", "AWS::AccountId": "123456789012" };
-
-  test("only the production environment of the Pixcar repository, through GitHub's identity provider, may take it", () => {
-    assert.match(t.Metadata.AWSToolsMetrics.AWSAgentToolkit, /^aws-cloudformation@\d+$/);
-    assert.ok(Buffer.byteLength(t.Description) < 1024);
-    const trust = role.AssumeRolePolicyDocument.Statement;
-    assert.equal(trust.length, 1);
-    assert.equal(trust[0].Action, "sts:AssumeRoleWithWebIdentity");
-    assert.deepEqual(Object.keys(trust[0].Condition), ["StringEquals"], "aucun joker (StringLike) dans la condition");
-    const cond = trust[0].Condition.StringEquals;
-    assert.equal(cond["token.actions.githubusercontent.com:aud"], "sts.amazonaws.com");
-    assert.equal(sub(cond["token.actions.githubusercontent.com:sub"], values), "repo:Floriancrt/Pixcar:environment:production");
-    assert.deepEqual(trust[0].Principal.Federated, { "Fn::If": ["CreateOidcProvider", { Ref: "GitHubOidcProvider" }, { Ref: "ExistingOidcProviderArn" }] });
-    const provider = t.Resources.GitHubOidcProvider;
-    assert.equal(provider.Condition, "CreateOidcProvider");
-    assert.equal(provider.Properties.Url, "https://token.actions.githubusercontent.com");
-    assert.deepEqual(provider.Properties.ClientIdList, ["sts.amazonaws.com"]);
-    assert.ok(role.MaxSessionDuration <= 3600);
-  });
-
-  test("its rights stop at the package, the API stack's change sets and its two functions: no wildcard action, nothing on the database or the secrets", () => {
-    const actions = statements.flatMap((s) => [].concat(s.Action));
-    for (const a of actions) assert.ok(!a.includes("*"), a);
-    assert.ok(!actions.some((a) => /^(dsql|ssm|secretsmanager|kms|sts|cloudformation:UpdateStack|cloudformation:Delete(Stack)?$)/.test(a)), actions.join(", "));
-    assert.deepEqual(actions.filter((a) => a.startsWith("iam:")), ["iam:PassRole"]);
-    for (const s of statements) {
-      assert.equal(s.Effect, "Allow");
-      for (const r of [].concat(s.Resource)) {
-        assert.ok(r && r["Fn::Sub"], `${s.Sid} : ressource nommée`);
-        const arn = sub(r, values);
-        assert.match(arn, /^arn:aws:/, s.Sid);
-        assert.ok(arn.includes(":stack/pixcar/") || arn.includes(":changeSet/deploy-") || arn.includes(":::pixcar-code-essai") || /:function:pixcar-(api|ops)$/.test(arn) || /:role\/pixcar-(Api|Ops)Role-\*$/.test(arn), `${s.Sid} : ${arn}`);
-      }
-    }
-    const by = (sid) => statements.find((s) => s.Sid === sid);
-    assert.deepEqual(by("KeepTheFunctionsRoles").Condition, { StringEquals: { "iam:PassedToService": "lambda.amazonaws.com" } });
-    assert.deepEqual([].concat(by("MigrateAndSelfcheck").Resource).map((r) => sub(r, values)), ["arn:aws:lambda:eu-north-1:123456789012:function:pixcar-ops"]);
-    assert.ok([].concat(by("UpdateFunctionsThroughTheStack").Action).includes("lambda:UpdateFunctionCode"));
-    assert.equal(sub(by("UploadPackage").Resource, values), "arn:aws:s3:::pixcar-code-essai/pixcar-lambda-*.zip");
-    // les jeux de modifications : ceux du script (nom « deploy-… »), sans nouveau modèle déposé dans S3
-    assert.deepEqual(by("ChangeApiStackParameters").Condition, { StringLike: { "cloudformation:ChangeSetName": "deploy-*" }, Null: { "cloudformation:TemplateUrl": "true" } });
-  });
-
-  test("the names it trusts are those the API stack gives its functions and roles", () => {
-    assert.deepEqual([api.Resources.ApiFunction.Properties.FunctionName, api.Resources.OpsFunction.Properties.FunctionName], [{ "Fn::Sub": "${AWS::StackName}-api" }, { "Fn::Sub": "${AWS::StackName}-ops" }]);
-    for (const id of ["ApiRole", "OpsRole"]) assert.equal(api.Resources[id].Properties.RoleName, undefined, `${id} : nom donné par CloudFormation (<pile>-${id}-…)`);
-    assert.deepEqual(api.Outputs.OpsFunctionName.Value, { Ref: "OpsFunction" });
-    assert.ok(api.Outputs.ApiUrl);
-    assert.match(t.Outputs.DeployRoleArn.Description, /AWS_DEPLOY_ROLE_ARN/);
-  });
-});
-
-describe("the workflow (.github/workflows/deploy-api.yml)", () => {
-  const text = readFileSync(join(ROOT, ".github/workflows/deploy-api.yml"), "utf8");
+describe("the workflow (.github/workflows/api.yml)", () => {
+  const text = readFileSync(join(ROOT, ".github/workflows/api.yml"), "utf8");
   const w = parse(text);
   const on = w.on || w[true]; // « on » se lit true en YAML 1.1
-  const { build: b, deploy: d } = w.jobs;
 
   test("it runs on main, for every file the Lambda package is built from", async () => {
     assert.deepEqual(on.push.branches, ["main"]);
@@ -99,30 +29,58 @@ describe("the workflow (.github/workflows/deploy-api.yml)", () => {
     const sources = Object.keys(r.metafile.inputs).filter((f) => !f.startsWith("node_modules/"));
     assert.ok(sources.length > 20);
     for (const f of sources) assert.ok(covered(f), `${f} entre dans le paquet mais ne déclenche pas le workflow`);
-    for (const f of ["db/migrations/009_atelier.sql", "package-lock.json", "scripts/build-lambda.mjs", "scripts/deploy-api.mjs", ".github/workflows/deploy-api.yml"]) assert.ok(covered(f), f);
+    for (const f of ["db/migrations/009_atelier.sql", "infra/pixcar-api.yaml", "package-lock.json", "scripts/build-lambda.mjs", "scripts/deploy-api.mjs", "scripts/cloudshell-deploy.sh", ".github/workflows/api.yml"]) assert.ok(covered(f), f);
   });
 
-  test("tests and package without any AWS right; the deployment waits for the production environment and takes the role through OIDC, no key stored", () => {
+  test("tests and package only: no AWS right, no OIDC token, no secret; the summary gives the CloudShell command", () => {
     assert.deepEqual(w.permissions, { contents: "read" });
+    assert.deepEqual(Object.keys(w.jobs), ["build"]);
+    const b = w.jobs.build;
     assert.equal(b.permissions, undefined);
+    assert.equal(b.environment, undefined);
+    assert.ok(!/id-token|configure-aws-credentials|aws-access-key-id|aws-secret-access-key|secrets\./.test(text), "rien qui touche AWS ni aux secrets");
     assert.ok(b.steps.some((s) => /npm run -s test:unit && npm run -s test:server/.test(s.run || "")));
     assert.ok(b.steps.some((s) => /deploy-api\.mjs package/.test(s.run || "")));
-    assert.equal(d.needs, "build");
-    assert.equal(d.if, "needs.build.outputs.changed == 'true'");
-    assert.equal(d.environment.name, "production");
-    assert.deepEqual(d.permissions, { contents: "read", "id-token": "write" });
-    assert.deepEqual(d.concurrency, { group: "deploy-api", "cancel-in-progress": false });
-    const creds = d.steps.find((s) => String(s.uses || "").startsWith("aws-actions/configure-aws-credentials@"));
-    assert.equal(creds.with["role-to-assume"], "${{ vars.AWS_DEPLOY_ROLE_ARN }}");
-    assert.equal(creds.with["aws-region"], "eu-north-1");
-    assert.ok(!/secrets\.|aws-access-key-id|aws-secret-access-key/.test(text), "aucune clé AWS dans les secrets");
-    const upload = b.steps.find((s) => String(s.uses || "").startsWith("actions/upload-artifact@"));
-    const download = d.steps.find((s) => String(s.uses || "").startsWith("actions/download-artifact@"));
-    assert.equal(upload.with.name, download.with.name);
-    const run = d.steps.at(-1).run;
-    assert.match(run, /node scripts\/deploy-api\.mjs deploy --zip "dist-lambda\/\$FILE" --stack pixcar --region eu-north-1 --summary "\$GITHUB_STEP_SUMMARY"/);
-    assert.equal(d.steps.at(-1).env.FILE, "${{ needs.build.outputs.file }}");
-    for (const s of [...b.steps, ...d.steps]) if (s.uses) assert.match(s.uses, /@v\d+$/, `${s.uses} : version fixée`);
+    assert.ok(text.includes("curl -fsSL https://raw.githubusercontent.com/Floriancrt/Pixcar/main/scripts/cloudshell-deploy.sh | bash"));
+    for (const s of b.steps) if (s.uses) assert.match(s.uses, /@v\d+$/, `${s.uses} : version fixée`);
+    assert.ok(!existsSync(join(ROOT, "infra/pixcar-deploy.yaml")), "pas de rôle OIDC : l'organisation AWS interdit son fournisseur d'identité");
+  });
+});
+
+describe("the CloudShell command (scripts/cloudshell-deploy.sh)", () => {
+  const sh = readFileSync(join(ROOT, "scripts/cloudshell-deploy.sh"), "utf8");
+  const order = (...needles) => needles.map((n) => {
+    const i = sh.indexOf(n);
+    assert.ok(i >= 0, `absent : ${n}`);
+    return i;
+  });
+
+  test("safe to pipe into bash: strict mode, the whole script inside a function called on the last line, no command reading the script", () => {
+    assert.match(sh, /^#!\/usr\/bin\/env bash\n/);
+    assert.ok(sh.includes("set -euo pipefail"));
+    assert.ok(/\nmain\(\) \{\n/.test(sh) && sh.trimEnd().endsWith('main "$@"'), "lu en entier avant d'être exécuté");
+    const lines = sh.split("\n").map((l) => l.trim()).filter((l) => !l.startsWith("#") && !l.startsWith("echo "));
+    for (const cmd of ["npm ci", "npm run -s test:server", "node scripts/deploy-api.mjs package", "node scripts/deploy-api.mjs deploy", "aws sts get-caller-identity", "git clone"]) {
+      const found = lines.filter((l) => l.includes(cmd));
+      assert.ok(found.length, `absent : ${cmd}`);
+      for (const l of found) assert.ok(l.includes("</dev/null") || l.startsWith("quiet "), `${cmd} : entrée standard fermée (${l})`);
+    }
+  });
+
+  test("tests before anything is deployed, then the deploy script with the repository's template; nothing to deploy without AWS (dry run)", () => {
+    const [unit, server, pkg, dep] = order("npm run -s test:unit", "npm run -s test:server", "deploy-api.mjs package", "deploy-api.mjs deploy --zip");
+    assert.ok(unit < server && server < pkg && pkg < dep);
+    assert.match(sh, /--stack "\$stack" --region "\$region" --template infra\/pixcar-api\.yaml/);
+    assert.match(sh, /region="\$\{PIXCAR_REGION:-eu-north-1\}"/);
+    assert.match(sh, /repo="https:\/\/github\.com\/Floriancrt\/Pixcar\.git"/);
+    assert.ok(sh.indexOf('if [ -n "$dry" ]; then\n    step "Essai à blanc') < dep, "l'essai à blanc s'arrête avant le déploiement");
+  });
+
+  test("Node.js 22 when CloudShell has an older one: the version CI uses, checked against nodejs.org's checksums", () => {
+    const version = sh.match(/node_version="(\d+)\.(\d+)\.(\d+)"/);
+    assert.equal(version[1], "22");
+    assert.equal(parse(readFileSync(join(ROOT, ".github/workflows/api.yml"), "utf8")).jobs.build.steps.find((s) => s.with && s.with["node-version"]).with["node-version"], "22");
+    assert.ok(sh.includes("SHASUMS256.txt") && sh.includes("sha256sum -c"));
   });
 });
 
@@ -130,13 +88,14 @@ describe("the workflow (.github/workflows/deploy-api.yml)", () => {
 const KEY_OLD = "pixcar-lambda-d657cc183ab85893.zip";
 const KEY_NEW = "pixcar-lambda-58f88d3380662216.zip";
 class FakeAws {
-  constructor({ params = {}, status = "UPDATE_COMPLETE", objects = {}, extraChange = null, failExecute = false, pending = 1 } = {}) {
+  constructor({ params = {}, status = "UPDATE_COMPLETE", objects = {}, extraChange = null, failExecute = false, pending = 1, templateChanges = [] } = {}) {
     this.stack = { status, params: { CodeBucket: "pixcar-code-essai", CodeKey: KEY_OLD, OpsCodeKey: "", RdvEnabled: "true", ...params } };
     this.objects = new Map(Object.entries(objects));
     this.changeSets = new Map();
     this.calls = [];
     this.history = [];
-    Object.assign(this, { extraChange, failExecute, pending, polls: 0 });
+    this.templates = [];
+    Object.assign(this, { extraChange, failExecute, pending, templateChanges, polls: 0 });
   }
   resolved(p) {
     return { ApiFunction: p.CodeKey, OpsFunction: p.OpsCodeKey || p.CodeKey };
@@ -165,21 +124,24 @@ class FakeAws {
         return { ETag: `"${createHash("md5").update(body).digest("hex")}"` };
       }
       case "cloudformation create-change-set": {
-        assert.ok(args.includes("--use-previous-template"));
+        const body = this.opt(args, "--template-body");
+        assert.notEqual(args.includes("--use-previous-template"), !!body, "le modèle actuel, ou un fichier");
+        if (body) this.templates.push(readFileSync(body.replace(/^file:\/\//, ""), "utf8"));
         const name = this.opt(args, "--change-set-name");
         const next = { ...this.stack.params };
         for (const p of JSON.parse(this.opt(args, "--parameters"))) if (!p.UsePreviousValue) next[p.ParameterKey] = p.ParameterValue;
         const [a, b] = [this.resolved(this.stack.params), this.resolved(next)];
         const changes = Object.keys(a).filter((k) => a[k] !== b[k]).map((k) => ({ ResourceChange: { Action: "Modify", LogicalResourceId: k, ResourceType: "AWS::Lambda::Function", Replacement: "False" } }));
-        if (this.extraChange) changes.push({ ResourceChange: this.extraChange });
+        if (this.extraChange && !body) changes.push({ ResourceChange: this.extraChange });
+        if (body) changes.push(...this.templateChanges.map((ResourceChange) => ({ ResourceChange })));
         const id = `arn:aws:cloudformation:eu-north-1:123456789012:changeSet/${name}/1`;
-        this.changeSets.set(id, { name, next, changes, left: this.pending, deleted: false, executed: false });
+        this.changeSets.set(id, { name, next, changes, template: !!body, left: this.pending, deleted: false, executed: false });
         return { Id: id };
       }
       case "cloudformation describe-change-set": {
         const cs = this.changeSets.get(this.opt(args, "--change-set-name"));
         if (cs.left-- > 0) return { Status: "CREATE_PENDING" };
-        if (!cs.changes.length) return { Status: "FAILED", StatusReason: "The submitted information didn't contain changes. Submit different information to create a change set." };
+        if (!cs.changes.length && !cs.template) return { Status: "FAILED", StatusReason: "The submitted information didn't contain changes. Submit different information to create a change set." };
         return { Status: "CREATE_COMPLETE", Changes: cs.changes };
       }
       case "cloudformation delete-change-set":
@@ -342,6 +304,42 @@ describe("scripts/deploy-api.mjs against a fake AWS", () => {
     assert.deepEqual(h.opsCalls, ["migrate", "selfcheck"], "migration et auto-contrôle rejoués avant que l'API ne change");
   });
 
+  test("first deployment: the stack's template is swapped once for the repository's (only the OpsCodeKey parameter, no function changes code), then the usual order", async () => {
+    const h = harness();
+    delete h.aws.stack.params.OpsCodeKey;
+    await assert.rejects(h.run(), /n'a pas encore le paramètre OpsCodeKey .* --template infra\/pixcar-api\.yaml/, "sans modèle : refus, rien ne change");
+    assert.equal(h.aws.changeSets.size, 0);
+    const r = await h.run({ template: join(ROOT, "infra/pixcar-api.yaml") });
+    assert.equal(r.status, "deployed");
+    assert.deepEqual([...h.aws.changeSets.values()].map((c) => [c.name.replace(/-\d+$/, ""), c.template, c.executed]), [["deploy-template", true, true], ["deploy-ops", false, true], ["deploy-api", false, true]]);
+    assert.match(h.aws.templates[0], /\n  OpsCodeKey:\n/);
+    assert.deepEqual(h.aws.history[0], { ApiFunction: KEY_OLD, OpsFunction: KEY_OLD }, "le modèle seul : les deux fonctions gardent leur code");
+    assert.match(r.steps[0], /Modèle de la pile mis à jour depuis pixcar-api\.yaml/);
+    assert.deepEqual(h.opsCalls, ["migrate", "selfcheck"]);
+    // une pile qui a déjà le paramètre : le modèle n'est plus jamais remplacé
+    const again = harness();
+    await again.run({ template: join(ROOT, "infra/pixcar-api.yaml") });
+    assert.deepEqual(again.aws.templates, []);
+  });
+
+  test("the template swap is refused, without being executed, if it would do anything but leave the operations function as it is", async () => {
+    for (const change of [
+      { Action: "Add", LogicalResourceId: "NewTopic", ResourceType: "AWS::SNS::Topic" },
+      { Action: "Modify", LogicalResourceId: "ApiFunction", ResourceType: "AWS::Lambda::Function", Replacement: "False" },
+      { Action: "Remove", LogicalResourceId: "Cluster", ResourceType: "AWS::DSQL::Cluster" },
+    ]) {
+      const h = harness({ aws: { templateChanges: [change] } });
+      delete h.aws.stack.params.OpsCodeKey;
+      await assert.rejects(h.run({ template: join(ROOT, "infra/pixcar-api.yaml") }), /jeu de modifications inattendu, supprimé sans être exécuté/);
+      const [cs] = [...h.aws.changeSets.values()];
+      assert.deepEqual([cs.template, cs.executed, cs.deleted, h.aws.changeSets.size], [true, false, true, 1]);
+      assert.ok(!h.aws.calls.includes("s3api put-object") && !h.opsCalls.length);
+    }
+    const ok = harness({ aws: { templateChanges: [{ Action: "Modify", LogicalResourceId: "OpsFunction", ResourceType: "AWS::Lambda::Function", Replacement: "False" }] } });
+    delete ok.aws.stack.params.OpsCodeKey;
+    assert.equal((await ok.run({ template: join(ROOT, "infra/pixcar-api.yaml") })).status, "deployed", "la fonction d'opérations réévaluée sans remplacement : admis");
+  });
+
   test("changeParameters: every other parameter keeps its previous value; nothing to change is not an error", async () => {
     const aws = new FakeAws();
     let sent;
@@ -408,5 +406,6 @@ describe("scripts/deploy-api.mjs plumbing", () => {
     assert.equal(parseArgs(["publish"]).bad, "commande attendue : package ou deploy");
     assert.deepEqual(parseArgs(["deploy", "--zip", "x.zip", "--no-smoke", "--stack", "essai"]).smoke, false);
     assert.equal(parseArgs(["package", "--out", "d"]).out, "d");
+    assert.equal(parseArgs(["deploy", "--zip", "x.zip", "--template", "infra/pixcar-api.yaml"]).template, "infra/pixcar-api.yaml");
   });
 });

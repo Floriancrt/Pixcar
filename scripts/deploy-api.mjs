@@ -1,10 +1,13 @@
 #!/usr/bin/env node
-// Déploie l'API Pixcar sur sa pile CloudFormation dans l'ordre qui ne casse rien (docs/exploitation.md, « Déploiement automatique de
-// l'API »). Lancé par .github/workflows/deploy-api.yml ; marche aussi à la main avec des identifiants AWS.
+// Déploie l'API Pixcar sur sa pile CloudFormation dans l'ordre qui ne casse rien (docs/exploitation.md, « Déployer l'API depuis
+// CloudShell »). Lancé par scripts/cloudshell-deploy.sh ; marche partout où la ligne de commande « aws » a des identifiants.
 //   node scripts/deploy-api.mjs package [--out dist-lambda]
 //       construit le paquet deux fois (scripts/build-lambda.mjs), refuse si les deux archives diffèrent, garde la première dans --out ;
 //       écrit file=, hash= et md5= dans $GITHUB_OUTPUT quand il existe.
-//   node scripts/deploy-api.mjs deploy --zip <archive> [--stack pixcar] [--region eu-north-1] [--summary <fichier>] [--no-smoke]
+//   node scripts/deploy-api.mjs deploy --zip <archive> [--stack pixcar] [--region eu-north-1] [--template infra/pixcar-api.yaml]
+//                                      [--summary <fichier>] [--no-smoke]
+//       0. une fois, avec --template : si la pile n'a pas encore le paramètre OpsCodeKey, son modèle est remplacé par ce fichier
+//          (jeu de modifications relu : au plus la fonction d'opérations modifiée, sans remplacement ; rien d'autre) ;
 //       1. dépose l'archive dans le bucket du code (paramètre CodeBucket de la pile) si elle n'y est pas ;
 //       2. la fonction d'opérations seule passe au nouveau code (OpsCodeKey), puis {"op":"migrate"} et {"op":"selfcheck"} : l'API publique
 //          n'a pas encore bougé ; un auto-contrôle en échec rend aux opérations leur code d'avant et arrête tout ;
@@ -12,7 +15,7 @@
 //          fonctions reprennent leur code d'avant (les migrations restent : elles n'ajoutent que ce que l'ancien code ignore).
 //       Chaque changement passe par un jeu de modifications relu avant d'être exécuté : modèle actuel, seulement la fonction attendue,
 //       modifiée sans remplacement ; sinon il est supprimé sans avoir rien changé.
-// AWS par la ligne de commande « aws » et les identifiants de l'environnement (dans GitHub Actions : le rôle d'infra/pixcar-deploy.yaml).
+// AWS par la ligne de commande « aws » et les identifiants de l'environnement (dans CloudShell : ceux de la personne connectée).
 // Code de sortie : 0 déployé ou déjà en service, 1 échec (retour arrière fait quand il y avait de quoi), 2 ligne de commande incorrecte.
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -91,12 +94,15 @@ function changeText(c) {
   return `${c.Action} ${c.LogicalResourceId} (${c.ResourceType}${c.Replacement && c.Replacement !== "False" ? `, remplacement : ${c.Replacement}` : ""})`;
 }
 
-// Change des paramètres de la pile, modèle actuel gardé ; n'exécute le jeu de modifications que s'il ne touche que les fonctions attendues.
-export async function changeParameters({ aws, stack, sleep = realSleep, log = () => {}, now = Date.now }, current, changes, expected, label) {
-  for (const k of Object.keys(changes)) if (!Object.hasOwn(current, k)) throw new Error(`la pile ${stack} n'a pas de paramètre ${k} : mettre d'abord à jour son modèle (docs/exploitation.md)`);
-  const parameters = Object.keys(current).map((k) => (Object.hasOwn(changes, k) ? { ParameterKey: k, ParameterValue: changes[k] } : { ParameterKey: k, UsePreviousValue: true }));
+// Change des paramètres de la pile ; n'exécute le jeu de modifications que s'il ne touche que les fonctions attendues (modifiées sans
+// remplacement). Modèle actuel gardé, sauf avec { template } : ce fichier remplace le modèle (paramètres nouveaux admis, liste de
+// changements vide admise : un modèle qui n'ajoute qu'un paramètre).
+export async function changeParameters({ aws, stack, sleep = realSleep, log = () => {}, now = Date.now }, current, changes, expected, label, { template = null } = {}) {
+  if (!template) for (const k of Object.keys(changes)) if (!Object.hasOwn(current, k)) throw new Error(`la pile ${stack} n'a pas de paramètre ${k} : mettre d'abord à jour son modèle (docs/exploitation.md)`);
+  const parameters = [...new Set([...Object.keys(current), ...Object.keys(changes)])].map((k) => (Object.hasOwn(changes, k) ? { ParameterKey: k, ParameterValue: changes[k] } : { ParameterKey: k, UsePreviousValue: true }));
   const name = `deploy-${label}-${now()}`;
-  const { Id } = await aws(["cloudformation", "create-change-set", "--stack-name", stack, "--change-set-name", name, "--change-set-type", "UPDATE", "--use-previous-template", "--capabilities", "CAPABILITY_IAM", "--parameters", JSON.stringify(parameters)]);
+  const source = template ? ["--template-body", `file://${template}`] : ["--use-previous-template"];
+  const { Id } = await aws(["cloudformation", "create-change-set", "--stack-name", stack, "--change-set-name", name, "--change-set-type", "UPDATE", ...source, "--capabilities", "CAPABILITY_IAM", "--parameters", JSON.stringify(parameters)]);
   const drop = () => aws(["cloudformation", "delete-change-set", "--change-set-name", Id]).catch(() => {});
   let cs;
   for (let i = 0; ; i++) {
@@ -115,11 +121,11 @@ export async function changeParameters({ aws, stack, sleep = realSleep, log = ()
   }
   const list = (cs.Changes || []).map((c) => c.ResourceChange || {});
   const ok = (c) => c.Action === "Modify" && expected.includes(c.LogicalResourceId) && c.ResourceType === "AWS::Lambda::Function" && c.Replacement === "False";
-  if (!list.length || !list.every(ok)) {
+  if ((!list.length && !template) || !list.every(ok)) {
     await drop();
     throw new Error(`jeu de modifications inattendu, supprimé sans être exécuté (attendu : ${expected.join(", ")} modifiée sans remplacement) : ${list.map(changeText).join(" ; ") || "aucun changement"}`);
   }
-  log(`  jeu de modifications ${name} : ${list.map(changeText).join(" ; ")}`);
+  log(`  jeu de modifications ${name} : ${list.map(changeText).join(" ; ") || "modèle seulement, aucune ressource modifiée"}`);
   const since = now();
   await aws(["cloudformation", "execute-change-set", "--change-set-name", Id]);
   let st;
@@ -140,7 +146,7 @@ export async function changeParameters({ aws, stack, sleep = realSleep, log = ()
 }
 
 // Le déploiement entier. aws, ops et smoke sont injectables (tests) ; renvoie le compte rendu, ou lève une erreur qui le porte (e.report).
-export async function deploy({ zip, stack = "pixcar", aws, ops, smoke, sleep = realSleep, log = () => {}, now = Date.now, runSmoke = true }) {
+export async function deploy({ zip, stack = "pixcar", aws, ops, smoke, sleep = realSleep, log = () => {}, now = Date.now, runSmoke = true, template = null }) {
   const key = basename(zip);
   if (!PACKAGE.test(key)) throw new Error(`« ${key} » : une archive de scripts/build-lambda.mjs est attendue (pixcar-lambda-<16 chiffres hexadécimaux>.zip)`);
   const report = { key, stack, steps: [], rolledBack: [] };
@@ -150,9 +156,16 @@ export async function deploy({ zip, stack = "pixcar", aws, ops, smoke, sleep = r
   };
   const ctx = { aws, stack, sleep, log, now };
   try {
-    const st = await describeStack(aws, stack);
+    let st = await describeStack(aws, stack);
     if (!STABLE.has(st.status)) throw new Error(`pile ${stack} dans l'état ${st.status} : rien n'est lancé tant qu'elle n'est pas stable`);
-    if (!Object.hasOwn(st.params, "OpsCodeKey")) throw new Error(`la pile ${stack} n'a pas encore le paramètre OpsCodeKey : mettre une fois à jour son modèle (infra/pixcar-api.yaml, docs/exploitation.md)`);
+    if (!Object.hasOwn(st.params, "OpsCodeKey")) {
+      // une fois : le modèle du dépôt, qui déclare OpsCodeKey ; vide, la fonction d'opérations garde l'archive de l'API (même code)
+      if (!template) throw new Error(`la pile ${stack} n'a pas encore le paramètre OpsCodeKey : mettre une fois à jour son modèle (infra/pixcar-api.yaml, docs/exploitation.md), ou passer --template infra/pixcar-api.yaml`);
+      await changeParameters(ctx, st.params, { OpsCodeKey: "" }, ["OpsFunction"], "template", { template });
+      st = await describeStack(aws, stack);
+      if (!Object.hasOwn(st.params, "OpsCodeKey")) throw new Error(`le modèle ${template} ne déclare pas OpsCodeKey`);
+      step(`Modèle de la pile mis à jour depuis ${basename(template)} (paramètre OpsCodeKey, vide : aucune fonction ne change de code).`);
+    }
     for (const out of ["OpsFunctionName", "ApiUrl"]) if (!st.outputs[out]) throw new Error(`sortie ${out} absente de la pile ${stack}`);
     const before = { api: st.params.CodeKey, opsParam: st.params.OpsCodeKey };
     const opsBefore = before.opsParam || before.api;
@@ -257,7 +270,7 @@ export async function packageTwice({ out, build }) {
 
 export function parseArgs(argv) {
   const [cmd, ...rest] = argv;
-  const o = { cmd, out: "dist-lambda", zip: "", stack: "pixcar", region: "eu-north-1", summary: "", smoke: true, bad: "" };
+  const o = { cmd, out: "dist-lambda", zip: "", stack: "pixcar", region: "eu-north-1", summary: "", template: "", smoke: true, bad: "" };
   if (cmd !== "package" && cmd !== "deploy") o.bad = "commande attendue : package ou deploy";
   const value = (i, name) => (rest[i + 1] && !rest[i + 1].startsWith("--") ? rest[i + 1] : ((o.bad ||= `${name} attend une valeur`), ""));
   for (let i = 0; i < rest.length && !o.bad; i++) {
@@ -267,6 +280,7 @@ export function parseArgs(argv) {
     else if (a === "--stack") o.stack = value(i++, a);
     else if (a === "--region") o.region = value(i++, a);
     else if (a === "--summary") o.summary = value(i++, a);
+    else if (a === "--template") o.template = value(i++, a);
     else if (a === "--no-smoke") o.smoke = false;
     else o.bad = `option inconnue : ${a}`;
   }
@@ -278,7 +292,7 @@ export function parseArgs(argv) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const o = parseArgs(process.argv.slice(2));
   if (o.bad) {
-    console.error(`${o.bad}\nusage : node scripts/deploy-api.mjs package [--out dist-lambda]\n        node scripts/deploy-api.mjs deploy --zip <archive> [--stack pixcar] [--region eu-north-1] [--summary <fichier>] [--no-smoke]`);
+    console.error(`${o.bad}\nusage : node scripts/deploy-api.mjs package [--out dist-lambda]\n        node scripts/deploy-api.mjs deploy --zip <archive> [--stack pixcar] [--region eu-north-1] [--template <modèle>] [--summary <fichier>] [--no-smoke]`);
     process.exit(2);
   }
   if (o.cmd === "package") {
@@ -291,7 +305,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const aws = awsCli({ region: o.region });
     let report;
     try {
-      report = await deploy({ zip: resolve(o.zip), stack: o.stack, aws, smoke: (base) => smoke(base, { log: (l) => console.log(`    ${l}`) }), log: console.log, runSmoke: o.smoke });
+      report = await deploy({ zip: resolve(o.zip), stack: o.stack, aws, smoke: (base) => smoke(base, { log: (l) => console.log(`    ${l}`) }), log: console.log, runSmoke: o.smoke, template: o.template ? resolve(o.template) : null });
     } catch (e) {
       report = e.report || { key: basename(o.zip), stack: o.stack, steps: [], status: "failed", error: e.message };
       console.error(`ÉCHEC : ${e.message}`);

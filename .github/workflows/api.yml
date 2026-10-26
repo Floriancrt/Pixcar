@@ -1,0 +1,69 @@
+# API : tests et paquet Lambda à chaque push sur main qui touche ce qui entre dans le paquet. AUCUN droit AWS ici : le déploiement se
+# lance depuis AWS CloudShell, en une commande (scripts/cloudshell-deploy.sh, docs/exploitation.md, « Déployer l'API depuis
+# CloudShell »), qui refait ces mêmes tests avant de déployer. Ce workflow signale plus tôt un commit qui casserait l'API (croix rouge
+# sur le commit) et dit quel paquet le déploiement produira (même nom : le paquet est reproductible).
+name: API (tests et paquet)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - "db/**"
+      - "src/js/**"
+      - "infra/pixcar-api.yaml"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/build-lambda.mjs"
+      - "scripts/deploy-api.mjs"
+      - "scripts/cloudshell-deploy.sh"
+      - "scripts/smoke-api.mjs"
+      - ".github/workflows/api.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Tests et paquet
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1" # les suites du navigateur ne tournent pas ici
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Dépendances
+        run: npm ci
+      - name: Tests unitaires et serveur (base PGlite)
+        run: npm run -s test:unit && npm run -s test:server
+      - name: Paquet (construit deux fois, à l'identique)
+        id: pkg
+        run: node scripts/deploy-api.mjs package --out dist-lambda
+      - name: Résumé
+        env:
+          FILE: ${{ steps.pkg.outputs.file }}
+          MD5: ${{ steps.pkg.outputs.md5 }}
+        run: |
+          {
+            echo "Paquet de l'API : \`$FILE\` (MD5 \`$MD5\`), tests unitaires et serveur passés."
+            echo ""
+            echo "Pour le déployer : console AWS, compte de l'API, région eu-north-1, CloudShell :"
+            echo ""
+            echo '```'
+            echo 'curl -fsSL https://raw.githubusercontent.com/Floriancrt/Pixcar/main/scripts/cloudshell-deploy.sh | bash'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lambda-package
+          path: dist-lambda/${{ steps.pkg.outputs.file }}
+          retention-days: 30
+          if-no-files-found: error

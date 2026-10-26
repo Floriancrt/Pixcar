@@ -30,7 +30,7 @@ Parameters:
   OpsCodeKey:
     Type: String
     Default: ""
-    Description: Archive de la seule fonction d'opérations (vide = la même que l'API, CodeKey). Le déploiement automatique (scripts/deploy-api.mjs) y met d'abord le nouveau paquet pour migrer la base et l'auto-contrôler avant que l'API ne change.
+    Description: Archive de la seule fonction d'opérations (vide = la même que l'API, CodeKey). Le déploiement (scripts/deploy-api.mjs, lancé depuis CloudShell) y met d'abord le nouveau paquet pour migrer la base et l'auto-contrôler avant que l'API ne change.
     AllowedPattern: '^([A-Za-z0-9._/-]+\.zip)?$'
   AllowedOrigins:
     Type: String
